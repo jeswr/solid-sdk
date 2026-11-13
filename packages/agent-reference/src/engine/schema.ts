@@ -61,6 +61,7 @@ export const domainProfileSchema = z.strictObject({
   decisionsForPerson: strings,
   modelReadings: strings,
   vocabulary: z.record(z.string(), contentType),
+  identifiers: z.array(iri).default([]),
   operations: z.array(
     z.strictObject({
       ...ref.shape,

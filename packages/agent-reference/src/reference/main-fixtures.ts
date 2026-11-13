@@ -323,6 +323,9 @@ function statementDescription(roles: ("initiator" | "responder")[]): OperationDe
  * account holder, and only on an approval at the face-check level (CORE-IN-8).
  */
 export class BalanceStatementHandler implements OperationHandler {
+  get contentProfile() {
+    return { vocabulary: {}, identifiers: [this.statement.id] };
+  }
   readonly description = statementDescription(["responder"]);
   readonly requiresRepresentation = true;
   readonly requiredApproval = {

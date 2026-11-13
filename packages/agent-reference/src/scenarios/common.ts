@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Helpers shared by the extension scenarios: provision parties/agents with bounded
  * mandates, perform the reviewed introductions, pin issuers and source rules, start
@@ -210,7 +211,7 @@ export class Cast {
     handlers: OperationHandler[],
     effects: EffectAdapter[] = [],
     accepted: string[] = [CONFIG_ED25519],
-    extra: Pick<AgentRuntimeOptions, "gates" | "core"> = {},
+    extra: Pick<AgentRuntimeOptions, "gates" | "core" | "disclosureChecks"> = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);
     const ledger = new MemoryLedger();

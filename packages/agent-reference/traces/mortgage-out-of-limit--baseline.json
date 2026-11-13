@@ -44,7 +44,7 @@
     }
   ],
   "generated": {
-    "commit": "27f49668186cf9d030a6ba5d96b5f3c8911c6925",
+    "commit": "e0bafd2775189ecbec49b017bade7e1b489ac6a0",
     "core": "scripted"
   },
   "events": [
@@ -577,7 +577,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "No restricted item entered this task's context."
+      "caption": "The gate finds no personal data in this protocol message."
     },
     {
       "seq": 20,
@@ -595,7 +595,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The context rule permits this text."
+      "caption": "The gate finds no data terms to apply."
     },
     {
       "seq": 21,
@@ -665,7 +665,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:ce009070c33…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:36bf5434fbd…; never trusted."
         },
         "layers": {
           "header": {
@@ -695,7 +695,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:5967d782e4a827f81233d9cf60e029377b090bbd9471bb7c43cacf4b07fd3be9"
+            "digest": "sha-256:34294e7c9b8aab3e4b407c0b98c78ca0376866d0fd80510aa482ecc5d8d6f0e4"
           },
           "authority": {
             "present": false,
@@ -703,7 +703,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+            "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
             "raw": {
               "description": {
                 "type": "ImplementationDescription",
@@ -825,225 +825,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:32fca2b9c7eb0f603ce9605489fe07194a10ccdcad2f7b25ce8513a5c978bce1",
-            "untrusted": [
-              {
-                "path": "description.type",
-                "text": "ImplementationDescription"
-              },
-              {
-                "path": "description.describes",
-                "text": "https://northbank.example/agents/intake#agent"
-              },
-              {
-                "path": "description.onBehalfOf",
-                "text": "https://northbank.example/#org"
-              },
-              {
-                "path": "description.operator",
-                "text": "https://northbank.example/#org"
-              },
-              {
-                "path": "description.profile.id",
-                "text": "https://w3id.org/jeswr/awp/profile/pilot/0.1"
-              },
-              {
-                "path": "description.profile.version",
-                "text": "0.1.2"
-              },
-              {
-                "path": "description.acceptedProfiles.0.id",
-                "text": "https://w3id.org/jeswr/awp/profile/pilot/0.1"
-              },
-              {
-                "path": "description.acceptedProfiles.0.versions",
-                "text": "0.1.x"
-              },
-              {
-                "path": "description.vocabularies.0.iri",
-                "text": "http://www.w3.org/ns/prov#Agent"
-              },
-              {
-                "path": "description.vocabularies.0.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.1.iri",
-                "text": "http://www.w3.org/ns/prov#actedOnBehalfOf"
-              },
-              {
-                "path": "description.vocabularies.1.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.2.iri",
-                "text": "http://www.w3.org/ns/prov#Activity"
-              },
-              {
-                "path": "description.vocabularies.2.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.3.iri",
-                "text": "http://www.w3.org/ns/prov#wasDerivedFrom"
-              },
-              {
-                "path": "description.vocabularies.3.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.4.iri",
-                "text": "http://www.w3.org/ns/odrl/2/Policy"
-              },
-              {
-                "path": "description.vocabularies.4.relation",
-                "text": "narrower"
-              },
-              {
-                "path": "description.vocabularies.5.iri",
-                "text": "http://www.w3.org/ns/odrl/2/Agreement"
-              },
-              {
-                "path": "description.vocabularies.5.relation",
-                "text": "related"
-              },
-              {
-                "path": "description.vocabularies.6.iri",
-                "text": "http://www.w3.org/ns/dx/prof/Profile"
-              },
-              {
-                "path": "description.vocabularies.6.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.7.iri",
-                "text": "https://schema.org/Action"
-              },
-              {
-                "path": "description.vocabularies.7.relation",
-                "text": "related"
-              },
-              {
-                "path": "description.vocabularies.8.iri",
-                "text": "https://schema.org/Event"
-              },
-              {
-                "path": "description.vocabularies.8.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.9.iri",
-                "text": "https://w3id.org/dpv#hasPurpose"
-              },
-              {
-                "path": "description.vocabularies.9.relation",
-                "text": "uses"
-              },
-              {
-                "path": "description.vocabularies.10.iri",
-                "text": "http://www.w3.org/ns/dcat#DataService"
-              },
-              {
-                "path": "description.vocabularies.10.relation",
-                "text": "related"
-              },
-              {
-                "path": "description.configurations.implemented.0",
-                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
-              },
-              {
-                "path": "description.configurations.implemented.1",
-                "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
-              },
-              {
-                "path": "description.configurations.accepted.0",
-                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
-              },
-              {
-                "path": "description.operations.0.id",
-                "text": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
-              },
-              {
-                "path": "description.operations.0.version",
-                "text": "0.1"
-              },
-              {
-                "path": "description.operations.0.label",
-                "text": "Mortgage decision in principle with a bounded evidence request (synthetic)"
-              },
-              {
-                "path": "description.operations.0.pattern",
-                "text": "negotiate"
-              },
-              {
-                "path": "description.operations.0.access",
-                "text": "represented"
-              },
-              {
-                "path": "description.operations.0.roles.0",
-                "text": "responder"
-              },
-              {
-                "path": "description.operations.0.models.0.id",
-                "text": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series"
-              },
-              {
-                "path": "description.operations.0.models.0.version",
-                "text": "0.1"
-              },
-              {
-                "path": "description.operations.0.purposes.0",
-                "text": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
-              },
-              {
-                "path": "description.operations.0.purposes.1",
-                "text": "https://w3id.org/jeswr/awp#purpose/credit-assessment"
-              },
-              {
-                "path": "description.operations.0.effects.0",
-                "text": "evidence disclosed under agreed terms"
-              },
-              {
-                "path": "description.operations.0.effects.1",
-                "text": "indicative eligibility (not approval)"
-              },
-              {
-                "path": "description.operations.0.outcomes.0",
-                "text": "application-state receipt: received / checked / decided"
-              },
-              {
-                "path": "description.operations.0.limitations.0",
-                "text": "synthetic lender; indicative only; no credit decision or institutional approval"
-              },
-              {
-                "path": "description.bindings.0.id",
-                "text": "direct-local/0.1"
-              },
-              {
-                "path": "description.policyModule.policyProfile",
-                "text": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1"
-              },
-              {
-                "path": "description.policyModule.evaluator.name",
-                "text": "@jeswr/solid-odrl"
-              },
-              {
-                "path": "description.policyModule.evaluator.version",
-                "text": "b8fabc729c56245f4b63846261f1f06b6503f1c8"
-              },
-              {
-                "path": "description.policyModule.evaluator.interface",
-                "text": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
-              },
-              {
-                "path": "description.policyModule.status",
-                "text": "ready"
-              },
-              {
-                "path": "description.notice",
-                "text": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
-              }
-            ]
+            "digest": "sha-256:32fca2b9c7eb0f603ce9605489fe07194a10ccdcad2f7b25ce8513a5c978bce1"
           },
           "evidence": {
             "present": false,
@@ -1092,7 +874,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:ce009070c33…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:36bf5434fbd…; never trusted."
         },
         "layers": {
           "header": {
@@ -1122,7 +904,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:5967d782e4a827f81233d9cf60e029377b090bbd9471bb7c43cacf4b07fd3be9"
+            "digest": "sha-256:34294e7c9b8aab3e4b407c0b98c78ca0376866d0fd80510aa482ecc5d8d6f0e4"
           },
           "authority": {
             "present": false,
@@ -2014,7 +1796,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start mortgage-prequalification, with terms (round 1).",
+            "summary": "An offer to start mortgage-prequalification, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59\"",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -2031,7 +1813,25 @@
               "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59",
               "round": 1
             },
-            "digest": "sha-256:ab87cc1fe7492e6d1b354b7cbe19e850f8f9f164e5253f77798fd1da40662a09"
+            "digest": "sha-256:ab87cc1fe7492e6d1b354b7cbe19e850f8f9f164e5253f77798fd1da40662a09",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+              },
+              {
+                "path": "terms.model",
+                "text": "https://w3id.org/jeswr/awp#model/mortgage-application"
+              },
+              {
+                "path": "terms.applicant",
+                "text": "https://sam.example/#me"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -2398,7 +2198,7 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:4529617a8a0…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:23119bf3b6e…; never trusted."
         },
         "layers": {
           "header": {
@@ -2428,7 +2228,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:7d6f2fc84a1b57b2e77455c75406c9e42cc7ff7478c22cfac19a3e0758234b23"
+            "digest": "sha-256:48b88882604f1aef085ca265304a3ebdd4520a47185a82c54e2155d11973b316"
           },
           "authority": {
             "present": true,
@@ -2471,7 +2271,7 @@
                   "applicant": "https://sam.example/#me",
                   "synthetic": true
                 },
-                "applicationId": "urn:awp:ref:sam:0001#application",
+                "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
                 "evidenceRequest": [
                   {
                     "claimType": "income.gross.monthly-series",
@@ -2507,11 +2307,11 @@
                 },
                 "synthetic": true
               },
-              "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
+              "termsDigest": "sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827",
               "round": 2,
               "counters": "urn:awp:ref:sam:0003"
             },
-            "digest": "sha-256:b576ac948afe19d2cdc3f003e1ff4577e7e7778c05e71985e055d425cc04a70d"
+            "digest": "sha-256:523ca09439cbd463ebb6033c6cdf9108b1e09d543aeffcec42a2635fda621e4c"
           },
           "evidence": {
             "present": false,
@@ -2531,7 +2331,7 @@
                 "applicant": "https://sam.example/#me",
                 "synthetic": true
               },
-              "applicationId": "urn:awp:ref:sam:0001#application",
+              "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
               "evidenceRequest": [
                 {
                   "claimType": "income.gross.monthly-series",
@@ -2567,7 +2367,7 @@
               },
               "synthetic": true
             },
-            "digest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b"
+            "digest": "sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827"
           },
           "provenance": {
             "present": true,
@@ -2986,7 +2786,7 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:4529617a8a0…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:23119bf3b6e…; never trusted."
         },
         "layers": {
           "header": {
@@ -3016,7 +2816,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:7d6f2fc84a1b57b2e77455c75406c9e42cc7ff7478c22cfac19a3e0758234b23"
+            "digest": "sha-256:48b88882604f1aef085ca265304a3ebdd4520a47185a82c54e2155d11973b316"
           },
           "authority": {
             "present": true,
@@ -3042,7 +2842,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 2) with new terms.",
+            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"https://w3id.org/jeswr/awp#model/mortgage-application\"; \"https://sam.example/#me\"; \"urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"https://northbank.example/#org\"; \"https://underwriter.example/#org\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"https://w3id.org/dpv#Marketing\"; \"sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827\"; \"urn:awp:ref:sam:0003\"",
             "raw": {
               "operation": {
                 "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
@@ -3059,7 +2859,7 @@
                   "applicant": "https://sam.example/#me",
                   "synthetic": true
                 },
-                "applicationId": "urn:awp:ref:sam:0001#application",
+                "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
                 "evidenceRequest": [
                   {
                     "claimType": "income.gross.monthly-series",
@@ -3095,11 +2895,61 @@
                 },
                 "synthetic": true
               },
-              "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
+              "termsDigest": "sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827",
               "round": 2,
               "counters": "urn:awp:ref:sam:0003"
             },
-            "digest": "sha-256:b576ac948afe19d2cdc3f003e1ff4577e7e7778c05e71985e055d425cc04a70d"
+            "digest": "sha-256:523ca09439cbd463ebb6033c6cdf9108b1e09d543aeffcec42a2635fda621e4c",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+              },
+              {
+                "path": "terms.model",
+                "text": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series"
+              },
+              {
+                "path": "terms.application.model",
+                "text": "https://w3id.org/jeswr/awp#model/mortgage-application"
+              },
+              {
+                "path": "terms.application.applicant",
+                "text": "https://sam.example/#me"
+              },
+              {
+                "path": "terms.applicationId",
+                "text": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+              },
+              {
+                "path": "terms.recipients.0",
+                "text": "https://northbank.example/#org"
+              },
+              {
+                "path": "terms.onward.0.recipient",
+                "text": "https://underwriter.example/#org"
+              },
+              {
+                "path": "terms.onward.0.purpose",
+                "text": "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+              },
+              {
+                "path": "terms.prohibitedPurposes.0",
+                "text": "https://w3id.org/dpv#Marketing"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827"
+              },
+              {
+                "path": "counters",
+                "text": "urn:awp:ref:sam:0003"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -3119,7 +2969,7 @@
                 "applicant": "https://sam.example/#me",
                 "synthetic": true
               },
-              "applicationId": "urn:awp:ref:sam:0001#application",
+              "applicationId": "urn:awp:domain-item:5565957907466ad589b08a4e0031cbe1",
               "evidenceRequest": [
                 {
                   "claimType": "income.gross.monthly-series",
@@ -3155,7 +3005,7 @@
               },
               "synthetic": true
             },
-            "digest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b"
+            "digest": "sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827"
           },
           "provenance": {
             "present": true,
@@ -3406,7 +3256,7 @@
       ],
       "reason": "minimal-disclosure",
       "rule": {
-        "id": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
+        "id": "sha-256:6511bf7a287df5f663d4aece9b079f3616b9fc01edaac3b585e5d94d7cfbf827",
         "text": "The request asks for income.gross.monthly series and deposit.balance; by value is the only form in this configuration."
       },
       "caption": "Only what the request needs goes: Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months."
@@ -3828,12 +3678,18 @@
           },
           "content": {
             "present": true,
-            "summary": "Closes the conversation (refuse): approval-denied.",
+            "summary": "Closes the conversation (refuse): approval-denied. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:ref:northbank-intake:0002\"",
             "raw": {
               "ref": "urn:awp:ref:northbank-intake:0002",
               "reason": "approval-denied"
             },
-            "digest": "sha-256:791b06c99e392f0e481e091f3466a042174ad7f2e5d288a4c362b9ed7734470e"
+            "digest": "sha-256:791b06c99e392f0e481e091f3466a042174ad7f2e5d288a4c362b9ed7734470e",
+            "untrusted": [
+              {
+                "path": "ref",
+                "text": "urn:awp:ref:northbank-intake:0002"
+              }
+            ]
           },
           "evidence": {
             "present": false,

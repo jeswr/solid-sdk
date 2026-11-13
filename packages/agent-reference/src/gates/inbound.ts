@@ -34,6 +34,7 @@ import {
 } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { configurationById } from "../profile/configurations.js";
+import { identifiersIn } from "../profile/content.js";
 import type { OperationHandler } from "../runtime/operations.js";
 import { packetView } from "../trace/packet.js";
 import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
@@ -623,6 +624,7 @@ export class InboundGate {
     );
     if (termsOk.get(item.value) !== true || f.verdict !== "pass") return false;
     const fact: AdmittedFact = {
+      identifiers: identifiersIn(c),
       id: c.id ?? digestOf(c),
       digest: digestOf(c),
       label,

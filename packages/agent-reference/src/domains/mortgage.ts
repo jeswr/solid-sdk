@@ -33,6 +33,7 @@ import type {
 } from "../core/types.js";
 import { TYP } from "../mechanisms/statements.js";
 import type { OperationDescription } from "../profile/description.js";
+import { MORTGAGE_CONTENT } from "../profile/mortgage.js";
 import { AWP, PURPOSE } from "../profile/vocabulary.js";
 import type {
   AgreementPlan,
@@ -228,6 +229,7 @@ export interface ConsumerPolicy {
 }
 
 export class ConsumerMortgageHandler implements OperationHandler {
+  readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
   readonly description = prequalDescription([MODEL_MONTHLY], ["initiator"]);
   readonly termsSchema = prequalTerms as unknown as z.ZodType<JsonObject>;
@@ -275,7 +277,7 @@ export class ConsumerMortgageHandler implements OperationHandler {
       ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
       parameters: {
         termsDigest,
-        evidence: this.matching(t)
+        evidence: this.matching(t, ctx)
           .map((w) => w.statement.id)
           .sort(),
         onward: t.onward.map((o) => o.recipient).sort(),
@@ -285,11 +287,13 @@ export class ConsumerMortgageHandler implements OperationHandler {
     };
   }
 
-  private matching(t: EvidenceRequestTerms): WalletItem[] {
-    return this.wallet.filter((w) =>
-      t.evidenceRequest.some(
-        (r) => r.claimType === w.statement.claimType && r.currency === w.statement.currency,
-      ),
+  private matching(t: EvidenceRequestTerms, ctx: HandlerContext): WalletItem[] {
+    return this.wallet.filter(
+      (w) =>
+        ctx.admittedStatement(w.statement.id, digestOf(w.statement)) &&
+        t.evidenceRequest.some(
+          (r) => r.claimType === w.statement.claimType && r.currency === w.statement.currency,
+        ),
     );
   }
 
@@ -328,7 +332,7 @@ export class ConsumerMortgageHandler implements OperationHandler {
       };
     }
     const missing = t.evidenceRequest.filter(
-      (r) => !this.wallet.some((w) => w.statement.claimType === r.claimType),
+      (r) => !this.matching(t, ctx).some((w) => w.statement.claimType === r.claimType),
     );
     if (missing.length > 0)
       return {
@@ -341,7 +345,7 @@ export class ConsumerMortgageHandler implements OperationHandler {
 
   onAgreement(ctx: HandlerContext, agreement: Agreement): AgreementPlan {
     const t = evidenceRequestTerms.parse(agreement.terms);
-    const items = this.matching(t);
+    const items = this.matching(t, ctx);
     return {
       requiredOutcomes: ["peer"],
       messages: [
@@ -461,6 +465,7 @@ export function grantFromTerms(
 }
 
 export class LenderPrequalHandler implements OperationHandler {
+  readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription;
   readonly termsSchema = prequalTerms as unknown as z.ZodType<JsonObject>;
@@ -487,7 +492,7 @@ export class LenderPrequalHandler implements OperationHandler {
       model: model.id,
       modelVersion: model.version,
       application: app.data,
-      applicationId: `${ctx.conversation.id}#application`,
+      applicationId: ctx.identifierFor({ conversation: ctx.conversation.id, item: "application" }),
       evidenceRequest: [
         { claimType: CLAIM.incomeMonthly, periodMonths: 12, currency: "USD" },
         { claimType: CLAIM.depositBalance, periodMonths: 1, currency: "USD" },
@@ -566,7 +571,7 @@ export class LenderPrequalHandler implements OperationHandler {
         protectedObject: v.verification.protectedObject,
       };
       if (!s || v.verification.outcome !== "valid") {
-        checked.push({ ...entry, accepted: false, reason: "integrity check failed" });
+        checked.push({ ...entry, accepted: false, reason: "evidence-invalid" });
         continue;
       }
       entry.id = s.id;
@@ -590,7 +595,7 @@ export class LenderPrequalHandler implements OperationHandler {
         checked.push({
           ...entry,
           accepted: false,
-          reason: `source not accepted for ${s.claimType}`,
+          reason: "source-not-authoritative",
         });
         continue;
       }
@@ -598,7 +603,7 @@ export class LenderPrequalHandler implements OperationHandler {
         checked.push({
           ...entry,
           accepted: false,
-          reason: "evidence is about a different subject",
+          reason: "subject-mismatch",
         });
         continue;
       }
@@ -609,7 +614,7 @@ export class LenderPrequalHandler implements OperationHandler {
         checked.push({
           ...entry,
           accepted: false,
-          reason: "not requested (excess disclosure ignored)",
+          reason: "excessive-scope",
         });
         continue;
       }
@@ -622,6 +627,7 @@ export class LenderPrequalHandler implements OperationHandler {
       subject ?? "unknown",
       this.cfg.lender,
     );
+    ctx.setState(`grant:${ctx.conversation.id}`, grant.policy as unknown as JsonObject);
     const validUntil = new Date(
       Date.parse(ctx.now) + terms.retentionDays * 86_400_000,
     ).toISOString();
@@ -686,7 +692,7 @@ export class LenderPrequalHandler implements OperationHandler {
     ctx.setState(`application:${ctx.conversation.id}`, terms.application as unknown as JsonObject);
     return {
       type: "receipt",
-      activity: `${ctx.conversation.id}#intake-check`,
+      activity: ctx.identifierFor({ conversation: ctx.conversation.id, item: "intake-check" }),
       outcome: "completed",
       final: false,
       observed: {
@@ -705,6 +711,7 @@ export class LenderPrequalHandler implements OperationHandler {
 // ------------------------------------------------------------------ lender → underwriter
 
 export class LenderUnderwritingHandler implements OperationHandler {
+  readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription = {
     id: UNDERWRITING_OP.id,
@@ -759,7 +766,7 @@ export class LenderUnderwritingHandler implements OperationHandler {
     } as JsonObject);
     return {
       type: "receipt",
-      activity: `${ctx.conversation.id}#result-received`,
+      activity: ctx.identifierFor({ conversation: ctx.conversation.id, item: "result-received" }),
       outcome: "completed",
       final: true,
       observed: { stage: "underwriting-result-received", sourceAuthority: authority.outcome },
@@ -768,6 +775,7 @@ export class LenderUnderwritingHandler implements OperationHandler {
 }
 
 export class UnderwriterHandler implements OperationHandler {
+  readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription = {
     id: UNDERWRITING_OP.id,
@@ -844,11 +852,7 @@ export class UnderwriterHandler implements OperationHandler {
         depositCoversGap: depositOk,
       },
       rule: `${AWP}rule/synthetic-underwriting-thresholds/1`,
-      limitations: [
-        "synthetic thresholds",
-        "relies on the lender's attested derived income",
-        "not a lending decision",
-      ],
+      limitations: ["synthetic-thresholds", "lender-attested-income", "not-a-lending-decision"],
     };
     return {
       requiredOutcomes: ["peer"],
@@ -942,6 +946,7 @@ export function valuationDescription(roles: ("initiator" | "responder")[]): Oper
 }
 
 export class ConsumerValuationHandler implements OperationHandler {
+  readonly contentProfile = MORTGAGE_CONTENT;
   readonly description = valuationDescription(["responder"]);
   readonly termsSchema = valuationTerms as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;
@@ -970,7 +975,7 @@ export class ConsumerValuationHandler implements OperationHandler {
       effects: [
         {
           adapter: "payment.instruction",
-          key: `${agreement.id}#fee`,
+          key: ctx.identifierFor({ agreement: agreement.id, item: "fee" }),
           params: {
             amount: t.fee.amount,
             currency: t.fee.currency,
@@ -986,6 +991,7 @@ export class ConsumerValuationHandler implements OperationHandler {
 }
 
 export class LenderValuationHandler implements OperationHandler {
+  readonly contentProfile = MORTGAGE_CONTENT;
   readonly description = valuationDescription(["initiator"]);
   readonly termsSchema = valuationTerms as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;

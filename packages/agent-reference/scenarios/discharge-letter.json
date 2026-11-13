@@ -29,10 +29,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "fitness",
-    "terms"
-  ],
+  "stress": ["fitness", "terms"],
   "suites": {
     "meaning": "plain-language-upgrade"
   },

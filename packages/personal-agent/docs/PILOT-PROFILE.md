@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Agentic Web pilot profile 0.1 — personal agent
 
 Status: **experimental, synthetic test use only.** The pilot is implemented in `src/pilot/` and
@@ -637,7 +638,7 @@ operator operation starts or finishes one runtime step.
 
 | Role | Identity (synthetic, fixed) | Local provisioning at `init` | Durable role state | Operator operations |
 |---|---|---|---|---|
-| `mortgage-consumer` | Sam | `--wallet FILE`: issuer-signed evidence about Sam only (validated) | `wallet.json` | `start_prequalification` (pinned lender only) |
+| `mortgage-consumer` | Sam | `--wallet FILE --issuers FILE`: issuer-signed evidence about Sam, with reviewed public issuer anchors; admitted before disclosure | `wallet.json` | `start_prequalification` (pinned lender only) |
 | `mortgage-lender` | North Bank intake | `--issuers FILE`: issuer PUBLIC keys pinned locally + lender source-authority rules | `data-store.json` + `data-store-ledger.jsonl` (purpose-bound store and its own ledger); `mortgage-workflow.json` (once-only markers) | `internal_access`, `start_underwriting`, `send_decision_receipt` |
 | `mortgage-underwriter` | synthetic underwriting service | underwriter source-authority rules | runtime state only | none (answers peers only) |
 

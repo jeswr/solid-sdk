@@ -7,7 +7,7 @@
  */
 import type { OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
-import type { ContentVocabulary } from "../profile/content.js";
+import { type ContentVocabulary, identifiersIn } from "../profile/content.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import type { Namer } from "../trace/packet.js";
 import type { TraceSink } from "../trace/recorder.js";
@@ -97,6 +97,7 @@ export interface AdmittedFact {
   readonly method?: string;
   readonly asOf?: string;
   readonly terms?: ItemTerms;
+  readonly identifiers?: readonly string[];
 }
 
 /** Every item actually shown to the core, with labels retained across restarts. */
@@ -108,7 +109,24 @@ export interface ContextItem extends AdmittedFact {
 
 export class GateMemory {
   readonly facts = new Map<string, AdmittedFact>();
-  constructor(readonly contexts: Record<string, ContextItem[]> = {}) {}
+  constructor(
+    readonly contexts: Record<string, ContextItem[]> = {},
+    readonly identifiers: Record<string, string[]> = {},
+  ) {}
+  rememberIdentifiers(scope: string, value: unknown): void {
+    this.identifiers[scope] = [
+      ...new Set([...(this.identifiers[scope] ?? []), ...identifiersIn(value)]),
+    ];
+  }
+  knownIdentifiers(task: string, conversation: string, profile: unknown): Set<string> {
+    return new Set([
+      ...(this.identifiers["*"] ?? []),
+      ...(this.identifiers[task] ?? []),
+      ...(this.identifiers[conversation] ?? []),
+      ...identifiersIn(profile),
+      ...this.context(task).flatMap((item) => identifiersIn(item)),
+    ]);
+  }
   context(task: string): readonly ContextItem[] {
     return [...(this.contexts["*"] ?? []), ...(this.contexts[task] ?? [])];
   }
@@ -142,6 +160,7 @@ export interface GateContext {
   /** Shared across conversations only when the hosting application declares one task. */
   readonly taskId?: Iri;
   readonly vocabulary?: ContentVocabulary;
+  readonly identifiers?: readonly string[];
   /** The claims necessary for each declared purpose. Unknown purposes never pass. */
   readonly purposes?: Readonly<Record<Iri, readonly string[]>>;
   readonly freeTextApproval?: boolean;

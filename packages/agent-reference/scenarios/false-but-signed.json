@@ -29,11 +29,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "source",
-    "fitness",
-    "evidence"
-  ],
+  "stress": ["source", "fitness", "evidence"],
   "suites": {
     "reliance": "corroboration"
   },

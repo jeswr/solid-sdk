@@ -5,21 +5,15 @@
   "claims": [
     {
       "kind": "bank.account-owner",
-      "sources": [
-        "urn:fictional:supplier-bank"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:supplier-bank"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:master-data-change",
-      "claims": [
-        "bank.account-owner"
-      ]
+      "claims": ["bank.account-owner"]
     }
   ],
   "rules": [],

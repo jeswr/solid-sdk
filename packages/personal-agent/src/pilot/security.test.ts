@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,7 +46,7 @@ function terms(
 ) {
   return buildMeetingTerms({
     calendar: cal,
-    title: "Synthetic catch-up",
+    title: "catch-up",
     durationMinutes: 30,
     window,
     now: now.toISOString(),

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { digestOf } from "../src/core/canonical.js";
 import type { AnyMessage, JsonObject } from "../src/core/types.js";
 import { type GateContext, GateMemory, type ItemTerms } from "../src/gates/common.js";
@@ -8,7 +9,7 @@ import { evaluateItemTerms } from "../src/gates/quality.js";
 import { signApproval } from "../src/mechanisms/mandate.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { CONFIG_ED25519 } from "../src/profile/configurations.js";
-import { freeStrings } from "../src/profile/content.js";
+import { type ContentProfile, freeStrings } from "../src/profile/content.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { idSource, testKey } from "../src/reference/keys.js";
 import { AgentRuntime } from "../src/runtime/agent.js";
@@ -55,7 +56,11 @@ const receipt = (text = "The private balance is 31400.") =>
       final: false,
     },
   }) as AnyMessage;
-function fixture(allowApproval = true, recipientPurpose = PURPOSE) {
+function fixture(
+  allowApproval = true,
+  recipientPurpose = PURPOSE,
+  overrides: Partial<GateContext> = {},
+) {
   const memory = new GateMemory();
   memory.enter("urn:test:conversation", {
     id: "urn:test:balance",
@@ -67,6 +72,7 @@ function fixture(allowApproval = true, recipientPurpose = PURPOSE) {
     source: BANK.party,
     terms,
   });
+  memory.rememberIdentifiers("urn:test:conversation", ["urn:test:request", "urn:test:activity"]);
   const recorder = new TraceRecorder();
   const gate = new OutboundGate({
     identity: { actor: SAM.actor, party: SAM.party },
@@ -81,6 +87,7 @@ function fixture(allowApproval = true, recipientPurpose = PURPOSE) {
       sink: recorder.sink("sam"),
       configuration: BASELINE,
       purposes: { [PURPOSE]: ["balance"] },
+      ...overrides,
     },
     memory,
     isReplyTo: () => true,
@@ -153,13 +160,17 @@ describe("UNS context and text", () => {
       ],
     };
     expect(
-      freeStrings(value, {
-        "unfamiliar.*.id": { type: "identifier" },
-        "unfamiliar.*.code": { type: "code", values: ["ok"] },
-        "unfamiliar.*.wrong": { type: "term", values: ["yes"] },
-        "unfamiliar.*.numeric": { type: "number" },
-        "unfamiliar.*.day": { type: "date" },
-      }).map((f) => f.path),
+      freeStrings(
+        value,
+        {
+          "unfamiliar.*.id": { type: "identifier" },
+          "unfamiliar.*.code": { type: "code", values: ["ok"] },
+          "unfamiliar.*.wrong": { type: "term", values: ["yes"] },
+          "unfamiliar.*.numeric": { type: "number" },
+          "unfamiliar.*.day": { type: "date" },
+        },
+        { identifiers: new Set(["urn:test:id"]) },
+      ).map((f) => f.path),
     ).toEqual(["unfamiliar.0.diagnosis", "unfamiliar.0.wrong", "unfamiliar.0.numeric"]);
     expect(freeStrings({ id: "not an identifier" }, { id: { type: "identifier" } })).toHaveLength(
       1,
@@ -177,7 +188,7 @@ describe("UNS context and text", () => {
   });
 });
 
-async function runtimeFixture() {
+async function runtimeFixture(contentProfile?: ContentProfile) {
   const cast = new Cast(() => new Date(AT), {
     keys: async (id) => ({
       owner: await testKey(`${id}/owner`),
@@ -207,7 +218,10 @@ async function runtimeFixture() {
   const gates: GateContext = {
     configuration: BASELINE,
     taskId: "urn:test:task",
-    vocabulary: { "terms.purpose": { type: "identifier" } },
+    vocabulary: {
+      "terms.purpose": { type: "identifier" },
+      "observed.reference": { type: "identifier" },
+    },
     purposes: { [PURPOSE]: ["balance"] },
     reliance: {
       id: "urn:test:reliance",
@@ -223,6 +237,7 @@ async function runtimeFixture() {
     },
   };
   const handler: OperationHandler = {
+    ...(contentProfile ? { contentProfile } : {}),
     description: {
       ...OP,
       label: "test",
@@ -302,7 +317,7 @@ async function runtimeFixture() {
       purpose: PURPOSE,
     }),
   ).toEqual({ admitted: 1, refused: 0 });
-  return { rt, cast, start, store, create, claim };
+  return { rt, cast, start, store, create, claim, handler, issuer };
 }
 
 it("holds before the outbox, survives restart, approves exact text once, and preserves provenance", async () => {
@@ -590,4 +605,238 @@ it("an expired approval cannot resume a held text", async () => {
     outbound: [],
   });
   expect(rt.pendingApprovals()).toHaveLength(1);
+});
+
+// UNS-8a: syntax is insufficient, even in an explicitly identifier-typed position.
+describe("known identifiers", () => {
+  const vocabulary = { "observed.arbitrary.*.nested": { type: "identifier" as const } };
+  it.each([
+    true,
+    false,
+  ])("holds an invented IRI containing the restricted balance (approval=%s)", (approval) => {
+    const { gate, recorder } = fixture(approval, PURPOSE, { vocabulary });
+    expect(
+      gate.checkMessage(receipt("urn:x:the-balance-is-31400"), { operation: OP.id }),
+    ).toMatchObject({
+      outcome: approval ? "ask-principal" : "stop",
+      reason: "context-not-clear",
+    });
+    expect(recorder.events().filter((event) => event.outcome === "go")).toEqual([]);
+  });
+  it.each([
+    ["profile purpose", PURPOSE],
+    ["profile operation", OP.id],
+    ["profile source", "urn:test:source"],
+    ["profile party", BANK.party],
+    ["defined term", "urn:test:defined-term"],
+    ["context item", "urn:test:balance"],
+    ["context value", "urn:test:account"],
+    ["received message", "urn:test:received"],
+    ["sent message", "urn:test:sent"],
+    ["challenge", "urn:test:challenge"],
+    ["challenge nonce", "urn:test:nonce"],
+    ["proposal", "urn:test:proposal"],
+    ["agreement", "urn:test:agreement"],
+    ["activity", "urn:test:activity"],
+    ["runtime mint", "urn:test:minted"],
+  ])("keeps %s typed while private context is held", (_kind, id) => {
+    const { gate, memory } = fixture(true, PURPOSE, {
+      vocabulary: { ...vocabulary, defined: { type: "term", values: ["urn:test:defined-term"] } },
+      identifiers: [OP.id, BANK.party],
+      claimSources: { balance: ["urn:test:source"] },
+    });
+    memory.enter("urn:test:conversation", {
+      kind: "memory",
+      id: "urn:test:memory",
+      digest: "digest",
+      source: BANK.party,
+      claimType: "balance",
+      label: "account memory",
+      identifiers: ["urn:test:account"],
+      terms,
+    });
+    memory.rememberIdentifiers("urn:test:conversation", {
+      id: "urn:test:received",
+      reply: "urn:test:sent",
+      challenge: { id: "urn:test:challenge", nonce: "urn:test:nonce" },
+      proposal: "urn:test:proposal",
+      agreement: "urn:test:agreement",
+    });
+    memory.rememberIdentifiers("*", ["urn:test:minted"]);
+    expect(gate.checkMessage(receipt(id), { operation: OP.id })).toMatchObject({ outcome: "go" });
+  });
+  it("does not borrow identifiers from another conversation or type an undeclared position", () => {
+    const { gate, memory } = fixture(true, PURPOSE, { vocabulary });
+    memory.rememberIdentifiers("urn:test:other-conversation", ["urn:test:foreign"]);
+    expect(gate.checkMessage(receipt("urn:test:foreign"), { operation: OP.id }).outcome).toBe(
+      "ask-principal",
+    );
+    expect(
+      freeStrings(
+        { unknown: "urn:test:balance" },
+        {},
+        { identifiers: new Set(["urn:test:balance"]) },
+      ),
+    ).toEqual([{ path: "unknown", text: "urn:test:balance" }]);
+  });
+  it("remembers actual runtime mints and conversation IDs across restart, without admitting a new invention", async () => {
+    const { rt, start, create } = await runtimeFixture();
+    const minted = await rt.mintIdentifier();
+    const activity = await rt.mintIdentifier();
+    rt.close();
+    const restored = await create();
+    const conversation = required(start.conversation);
+    const agreement = required(restored.conversation(conversation)?.agreement);
+    const proposal = required(start.outbound[0]).id;
+    for (const reference of [
+      minted,
+      activity,
+      conversation,
+      agreement,
+      proposal,
+      "urn:test:balance",
+      PURPOSE,
+      OP.id,
+      BANK.party,
+      "urn:test:issuer",
+    ]) {
+      const sent = await restored.sendReceipt(conversation, {
+        activity,
+        outcome: "completed",
+        final: false,
+        observed: { reference },
+      });
+      expect(sent.outbound).toHaveLength(1);
+      expect((required(sent.outbound[0]).message.body as { observed: unknown }).observed).toEqual({
+        reference,
+      });
+    }
+    const held = await restored.sendReceipt(conversation, {
+      activity,
+      outcome: "completed",
+      final: false,
+      observed: { reference: "urn:x:the-balance-is-31400" },
+    });
+    expect(held).toMatchObject({
+      disposition: "pending-approval",
+      reason: "context-not-clear",
+      outbound: [],
+    });
+    expect(held.pendingApproval).toBeDefined();
+    restored.close();
+  });
+});
+
+it("snapshots installed vocabulary before a core can alter its declarations", async () => {
+  const profile = { vocabulary: { "terms.status": { type: "code" as const, values: ["ok"] } } };
+  const { rt, start } = await runtimeFixture(profile);
+  profile.vocabulary["terms.status"].values.push("the-balance-is-31400");
+  const stopped = await rt.startNegotiation({
+    peer: { actor: BANK.actor, party: BANK.party },
+    operation: OP,
+    terms: { purpose: PURPOSE, status: "the-balance-is-31400" },
+    models: [],
+    discover: false,
+    configuration: CONFIG_ED25519,
+  });
+  expect(stopped).toMatchObject({
+    disposition: "rejected",
+    reason: "structured-form-required",
+    outbound: [],
+  });
+  expect(rt.conversation(required(start.conversation))?.agreement).toBeDefined();
+  rt.close();
+});
+
+it("types a protected compound term only after its signature, schema and every claim's vocabulary pass", async () => {
+  const profile: ContentProfile = {
+    vocabulary: { "observed.token": { type: "term" } },
+    protectedTerms: {
+      "observed.token": {
+        typ: "awp-statement+jws",
+        role: "issuer",
+        schema: z.strictObject({
+          type: z.literal("Token"),
+          id: z.string(),
+          scope: z.literal("approved"),
+        }),
+        vocabulary: {
+          type: { type: "code", values: ["Token"] },
+          id: { type: "identifier" },
+          scope: { type: "code", values: ["approved"] },
+        },
+      },
+    },
+  };
+  const { rt, start, issuer } = await runtimeFixture(profile);
+  const id = await rt.mintIdentifier();
+  const activity = await rt.mintIdentifier();
+  const payload = { type: "Token", id, scope: "approved" };
+  const token = await signClaim(issuer, payload);
+  const send = (value: string) =>
+    rt.sendReceipt(required(start.conversation), {
+      activity,
+      outcome: "completed",
+      final: false,
+      observed: { token: value },
+    });
+  expect((await send(token)).outbound).toHaveLength(1);
+  for (const altered of [
+    issuer.kid,
+    await signClaim(issuer, { ...payload, id: "urn:x:the-balance-is-31400" }),
+    await signClaim(issuer, { ...payload, note: "The private balance is 31400." }),
+    `${token.slice(0, -10)}AAAAAAAAAA`,
+  ]) {
+    expect(await send(altered)).toMatchObject({
+      disposition: "pending-approval",
+      reason: "context-not-clear",
+      outbound: [],
+    });
+  }
+  rt.close();
+});
+
+it("recovers retained conversation identifiers from snapshots written before the registry existed", async () => {
+  const { rt, start, store, create } = await runtimeFixture();
+  const incoming = required(Object.keys(store.load().seen)[0]);
+  rt.close();
+  store.save({ ...store.load(), knownIdentifiers: {} });
+  const restored = await create();
+  const sent = await restored.sendReceipt(required(start.conversation), {
+    activity: await restored.mintIdentifier(),
+    outcome: "completed",
+    final: false,
+    observed: { reference: incoming },
+  });
+  expect(sent.outbound).toHaveLength(1);
+  restored.close();
+});
+
+it("does not learn an unsent core-selected conversation identifier during snapshot recovery", async () => {
+  const { rt, start, create } = await runtimeFixture();
+  const invented = "urn:x:the-balance-is-31400";
+  const stopped = await rt.startNegotiation({
+    conversation: invented,
+    peer: { actor: BANK.actor, party: BANK.party },
+    operation: OP,
+    terms: { purpose: PURPOSE, prose: "This cannot form an offer." },
+    models: [],
+    discover: false,
+    configuration: CONFIG_ED25519,
+  });
+  expect(stopped).toMatchObject({ reason: "structured-form-required", outbound: [] });
+  rt.close();
+  const restored = await create();
+  const held = await restored.sendReceipt(required(start.conversation), {
+    activity: await restored.mintIdentifier(),
+    outcome: "completed",
+    final: false,
+    observed: { reference: invented },
+  });
+  expect(held).toMatchObject({
+    disposition: "pending-approval",
+    reason: "context-not-clear",
+    outbound: [],
+  });
+  restored.close();
 });

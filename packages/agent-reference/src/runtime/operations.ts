@@ -34,6 +34,7 @@ import type {
 } from "../core/types.js";
 import type { StatementCheck } from "../mechanisms/statements.js";
 import type { KeyRole, TrustStore } from "../mechanisms/trust.js";
+import type { ContentProfile } from "../profile/content.js";
 import type { OperationDescription } from "../profile/description.js";
 
 /**
@@ -128,6 +129,11 @@ export interface HandlerContext {
   readonly signerKid?: string;
   readonly representation?: RepresentationAssessment;
   readonly trust: TrustStore;
+  /** Runtime-minted identifiers are registered before any outgoing classification. */
+  mintIdentifier(): Iri;
+  admittedStatement(id: Iri, digest: string): boolean;
+  /** A fixed-namespace, digest-derived identifier; the input cannot supply IRI words. */
+  identifierFor(value: Json): Iri;
   /** Handler-owned persistent state for this operation (JSON only). */
   getState<T extends Json>(key: string): T | undefined;
   /** Defaults to this conversation's ownership; null explicitly retains shared operation state. */
@@ -153,6 +159,8 @@ export interface HandlerContext {
 
 export interface OperationHandler {
   readonly description: OperationDescription;
+  /** Vocabulary and purpose boundaries of this operation's installed domain profile. */
+  readonly contentProfile?: ContentProfile;
   /** Validates proposal terms (negotiate) or invocation input (invoke). */
   readonly termsSchema?: z.ZodType<JsonObject>;
   readonly inputSchema?: z.ZodType<JsonObject>;

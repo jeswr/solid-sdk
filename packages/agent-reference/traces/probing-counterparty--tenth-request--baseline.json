@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "27f49668186cf9d030a6ba5d96b5f3c8911c6925",
+    "commit": "e0bafd2775189ecbec49b017bade7e1b489ac6a0",
     "core": "scripted"
   },
   "events": [
@@ -442,7 +442,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -460,7 +460,21 @@
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "round": 1
             },
-            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54"
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:service-query"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -962,13 +976,27 @@
           },
           "content": {
             "present": true,
-            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id.",
+            "summary": "Accepts the offer by its terms digest; both sides derive the same agreement id. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002\"; \"sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"",
             "raw": {
               "proposal": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002",
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "agreement": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
             },
-            "digest": "sha-256:47c4041a13bc0ea75166152890c4cc10bc2fd6c61322ed05923cad110e2e3a81"
+            "digest": "sha-256:47c4041a13bc0ea75166152890c4cc10bc2fd6c61322ed05923cad110e2e3a81",
+            "untrusted": [
+              {
+                "path": "proposal",
+                "text": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+              },
+              {
+                "path": "agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -1459,7 +1487,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -1475,7 +1503,21 @@
                 "sequence": 1
               }
             },
-            "digest": "sha-256:7d38f105a82d4bd1b5883785dfc51006abc9b4b83a97c93d87baa233d84e3b29"
+            "digest": "sha-256:7d38f105a82d4bd1b5883785dfc51006abc9b4b83a97c93d87baa233d84e3b29",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -2211,7 +2253,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -2227,7 +2269,21 @@
                 "sequence": 2
               }
             },
-            "digest": "sha-256:79084f1242808f78705bb8f12d1c9c8596eb35317f458ad988c3cee5cee9b228"
+            "digest": "sha-256:79084f1242808f78705bb8f12d1c9c8596eb35317f458ad988c3cee5cee9b228",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -2679,7 +2735,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -2695,7 +2751,21 @@
                 "sequence": 3
               }
             },
-            "digest": "sha-256:a5bd112b1217af28f941d5b968ee6cf95db9bf9f58eab826fe7604c364257343"
+            "digest": "sha-256:a5bd112b1217af28f941d5b968ee6cf95db9bf9f58eab826fe7604c364257343",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -3147,7 +3217,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -3163,7 +3233,21 @@
                 "sequence": 4
               }
             },
-            "digest": "sha-256:8df0c766cad65bde9850f3782e41d3d9316057d227c17f59b23b13634754f4e9"
+            "digest": "sha-256:8df0c766cad65bde9850f3782e41d3d9316057d227c17f59b23b13634754f4e9",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -3615,7 +3699,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -3631,7 +3715,21 @@
                 "sequence": 5
               }
             },
-            "digest": "sha-256:c7201e5d7d6851c2c1a028b50451b421b8e0687e060793515221429875197eb9"
+            "digest": "sha-256:c7201e5d7d6851c2c1a028b50451b421b8e0687e060793515221429875197eb9",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -4083,7 +4181,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -4099,7 +4197,21 @@
                 "sequence": 6
               }
             },
-            "digest": "sha-256:f8ddd3030969188685e2a0352b8e91f271b1a437ffef3d1c067faede12fc5211"
+            "digest": "sha-256:f8ddd3030969188685e2a0352b8e91f271b1a437ffef3d1c067faede12fc5211",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -4551,7 +4663,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -4567,7 +4679,21 @@
                 "sequence": 7
               }
             },
-            "digest": "sha-256:548a083d72025ba0f568ad985ecf8c2361d1ff4b81862e6f02c93f30c5b52ead"
+            "digest": "sha-256:548a083d72025ba0f568ad985ecf8c2361d1ff4b81862e6f02c93f30c5b52ead",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -5019,7 +5145,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -5035,7 +5161,21 @@
                 "sequence": 8
               }
             },
-            "digest": "sha-256:26cc5f84df3229c85331944c2e302cc3c2ec43566f018411ab27cd3f41dd459a"
+            "digest": "sha-256:26cc5f84df3229c85331944c2e302cc3c2ec43566f018411ab27cd3f41dd459a",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -5487,7 +5627,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -5503,7 +5643,21 @@
                 "sequence": 9
               }
             },
-            "digest": "sha-256:57cd1d8d155c73f90f6d56c01c3a17457bce1d0866c547237ec28e82ac3ae827"
+            "digest": "sha-256:57cd1d8d155c73f90f6d56c01c3a17457bce1d0866c547237ec28e82ac3ae827",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -5955,7 +6109,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation.",
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:awp:agreement:465263ce3d43c4a21462994d20e12963\"; \"urn:purpose:service-query\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -5971,7 +6125,21 @@
                 "sequence": 10
               }
             },
-            "digest": "sha-256:75ac53eef5360b1fb69e21c5edb9af13f25552e23c8240c2b8e21130b5ddc3fc"
+            "digest": "sha-256:75ac53eef5360b1fb69e21c5edb9af13f25552e23c8240c2b8e21130b5ddc3fc",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "basis.agreement",
+                "text": "urn:awp:agreement:465263ce3d43c4a21462994d20e12963"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:service-query"
+              }
+            ]
           },
           "evidence": {
             "present": false,

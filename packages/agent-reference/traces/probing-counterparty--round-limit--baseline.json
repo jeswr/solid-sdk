@@ -42,7 +42,7 @@
     }
   ],
   "generated": {
-    "commit": "27f49668186cf9d030a6ba5d96b5f3c8911c6925",
+    "commit": "e0bafd2775189ecbec49b017bade7e1b489ac6a0",
     "core": "scripted"
   },
   "events": [
@@ -413,7 +413,7 @@
           },
           "content": {
             "present": true,
-            "summary": "An offer to start urn:operation:service-query, with terms (round 1).",
+            "summary": "An offer to start urn:operation:service-query, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -431,7 +431,21 @@
               "termsDigest": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
               "round": 1
             },
-            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54"
+            "digest": "sha-256:8648d08ab6f916d5e25c59aaa63a79f7e4016e610231499b623f6adf152eed54",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:service-query"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -972,7 +986,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 2) with new terms.",
+            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:b91b54c0dd84c9e9952cab4515f34b10cf7fdab5576139f36853c5e7fdf648df\"; \"urn:awp:engine-probing-counterparty-round-limit:service-agent:0002\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -992,7 +1006,25 @@
               "round": 2,
               "counters": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002"
             },
-            "digest": "sha-256:1c3a4f737f4e56ba6462f31812f3d71d67192303b9e378f2d16bee158022c3ef"
+            "digest": "sha-256:1c3a4f737f4e56ba6462f31812f3d71d67192303b9e378f2d16bee158022c3ef",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:service-query"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:b91b54c0dd84c9e9952cab4515f34b10cf7fdab5576139f36853c5e7fdf648df"
+              },
+              {
+                "path": "counters",
+                "text": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002"
+              }
+            ]
           },
           "evidence": {
             "present": false,
@@ -1535,7 +1567,7 @@
           },
           "content": {
             "present": true,
-            "summary": "A counter-offer (round 3) with new terms.",
+            "summary": "A counter-offer (round 3) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:operation:service-query\"; \"urn:purpose:service-query\"; \"sha-256:2d8bd2ed782505a97e9d0bb93e13188500991ae7016eaf59935262fdfb828cb1\"; \"urn:awp:engine-probing-counterparty-round-limit:person-agent:0001\"",
             "raw": {
               "operation": {
                 "id": "urn:operation:service-query",
@@ -1555,7 +1587,25 @@
               "round": 3,
               "counters": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001"
             },
-            "digest": "sha-256:441857d0d12224f4a4c885f9c629d64f1213185f803d9eb761dcb2e1c0bd4def"
+            "digest": "sha-256:441857d0d12224f4a4c885f9c629d64f1213185f803d9eb761dcb2e1c0bd4def",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:operation:service-query"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:service-query"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:2d8bd2ed782505a97e9d0bb93e13188500991ae7016eaf59935262fdfb828cb1"
+              },
+              {
+                "path": "counters",
+                "text": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001"
+              }
+            ]
           },
           "evidence": {
             "present": false,

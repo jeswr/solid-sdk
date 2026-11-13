@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { DirectBus } from "./bindings/direct.js";
 import { buildEmail, carrierFor, parseInboundEmail, renderHuman } from "./bindings/email.js";
@@ -11,7 +12,7 @@ async function setup() {
   const pair = await personalPair({ now: clock.now });
   const terms = buildMeetingTerms({
     calendar: pair.alice.calendar,
-    title: "Synthetic catch-up",
+    title: "catch-up",
     durationMinutes: 30,
     window: { start: "2026-10-20T08:00:00Z", end: "2026-10-23T17:00:00Z" },
     now: clock.now().toISOString(),

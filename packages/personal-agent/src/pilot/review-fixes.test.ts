@@ -117,7 +117,7 @@ async function toProposal(
   const b = await openBob(bobStore, wrap);
   const terms = buildMeetingTerms({
     calendar: a.calendar,
-    title: "x",
+    title: "meeting",
     durationMinutes: 30,
     window: OVERLAP,
     now: clock.now().toISOString(),
@@ -223,7 +223,7 @@ describe("finding 3 — mandate revocation persists", () => {
     const terms = (a: PersonalAgent) =>
       buildMeetingTerms({
         calendar: a.calendar,
-        title: "x",
+        title: "meeting",
         durationMinutes: 30,
         window: OVERLAP,
         now: clock.now().toISOString(),
@@ -272,7 +272,7 @@ describe("finding 3 — mandate revocation persists", () => {
     const a = await startAgent(alice, londonCalendar(), { now: clock.now, accepted: ED });
     const terms = buildMeetingTerms({
       calendar: a.calendar,
-      title: "x",
+      title: "meeting",
       durationMinutes: 30,
       window: OVERLAP,
       now: clock.now().toISOString(),

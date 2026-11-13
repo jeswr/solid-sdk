@@ -273,8 +273,8 @@ export async function runReference(
       name,
       taskLabel,
       claimLabel: (st) => claimLabel(st, name),
-      reliance: MORTGAGE_RELIANCE,
       ...MORTGAGE_CONTENT,
+      reliance: MORTGAGE_RELIANCE,
       tellPrincipal: tellSam,
       resolver: new TrustResolver({ principal, trust, root, name }),
       ...(limits ? { principalLimits: limits } : {}),
@@ -401,6 +401,7 @@ export async function runReference(
       notClaimed: ["loan-approval", "truth-of-evidence", "complete-financial-picture"],
     };
     const decision = decisionInPrinciple({
+      id: await nb.runtime.mintIdentifier(),
       amount: eligible ? 380000 : 0,
       at: now().toISOString(),
       conversation: conv,
@@ -452,7 +453,7 @@ export async function runReference(
       stepOf,
     );
     let final = await nb.runtime.sendReceipt(conv, {
-      activity: `${conv}#decision`,
+      activity: await nb.runtime.mintIdentifier(),
       outcome: "completed",
       final: true,
       observed,

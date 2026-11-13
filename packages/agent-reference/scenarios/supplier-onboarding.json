@@ -41,11 +41,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "source",
-    "authority",
-    "fitness"
-  ],
+  "stress": ["source", "authority", "fitness"],
   "suites": {
     "authority": "mandate-credential",
     "identity": "did"

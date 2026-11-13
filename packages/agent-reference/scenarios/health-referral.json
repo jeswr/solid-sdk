@@ -41,11 +41,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "disclosure",
-    "recipient",
-    "terms"
-  ],
+  "stress": ["disclosure", "recipient", "terms"],
   "suites": {
     "data-access": "by-reference-solid"
   },

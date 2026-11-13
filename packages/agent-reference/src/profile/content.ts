@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 /** A vocabulary types values, not field names guessed to contain prose (UNS-8..13). */
 
+import type { z } from "zod";
 import { isIri } from "../core/canonical.js";
-import { CORE_REASON_CODES } from "../core/types.js";
+import { REASON_CODES } from "../core/types.js";
 
 export interface ContentType {
   readonly type: "identifier" | "code" | "number" | "date" | "term";
@@ -11,6 +12,46 @@ export interface ContentType {
   readonly claimType?: string;
 }
 export type ContentVocabulary = Readonly<Record<string, ContentType>>;
+
+/** Trusted domain configuration, installed with a handler rather than supplied by a proposal. */
+export interface ContentProfile {
+  readonly vocabulary: ContentVocabulary;
+  readonly purposes?: Readonly<Record<string, readonly string[]>>;
+  readonly identifiers?: readonly string[];
+  readonly reliance?: import("../gates/common.js").RelianceProfile;
+  /** A compound defined term: verified JWS, strict schema, and vocabulary for its claims. */
+  readonly protectedTerms?: Readonly<
+    Record<
+      string,
+      {
+        readonly typ: string;
+        readonly role: import("../mechanisms/trust.js").KeyRole;
+        readonly schema: z.ZodType;
+        readonly vocabulary: ContentVocabulary;
+      }
+    >
+  >;
+}
+
+export interface KnownContent {
+  readonly identifiers: ReadonlySet<string>;
+  readonly terms?: ReadonlySet<string>;
+}
+
+/** Collect values already received/installed; never call on a proposed outgoing body. */
+export function identifiersIn(value: unknown): string[] {
+  const found = new Set<string>();
+  const visit = (item: unknown) => {
+    if (typeof item === "string" && isIri(item)) found.add(item);
+    else if (item && typeof item === "object")
+      for (const [key, child] of Object.entries(item)) {
+        if (isIri(key)) found.add(key);
+        visit(child);
+      }
+  };
+  visit(value);
+  return [...found];
+}
 
 function declarationAt(vocabulary: ContentVocabulary, path: string): ContentType | undefined {
   if (Object.hasOwn(vocabulary, path)) return vocabulary[path];
@@ -22,16 +63,27 @@ function declarationAt(vocabulary: ContentVocabulary, path: string): ContentType
     })
     .sort(([a], [b]) => a.split("*").length - b.split("*").length)[0]?.[1];
 }
-function typed(value: unknown, declaration: ContentType | undefined): boolean {
+function typed(
+  value: unknown,
+  declaration: ContentType | undefined,
+  known?: KnownContent,
+): boolean {
   if (!declaration) return false;
   if (typeof value === "number") return declaration.type === "number" && Number.isFinite(value);
   if (
     (declaration.type === "code" || declaration.type === "term") &&
     (typeof value === "string" || typeof value === "boolean")
   )
-    return declaration.values?.includes(value) === true;
+    return (
+      declaration.values?.includes(value) === true ||
+      (declaration.type === "term" &&
+        declaration.values === undefined &&
+        typeof value === "string" &&
+        known?.terms?.has(value) === true)
+    );
   if (typeof value !== "string") return false;
-  if (declaration.type === "identifier") return isIri(value);
+  if (declaration.type === "identifier")
+    return isIri(value) && known?.identifiers.has(value) === true;
   if (declaration.type === "date") {
     const day = value.slice(0, 10);
     const dayTime = Date.parse(`${day}T00:00:00Z`);
@@ -51,11 +103,12 @@ const segment = (key: string) =>
 export function freeStrings(
   value: unknown,
   vocabulary: ContentVocabulary = {},
+  known?: KnownContent,
 ): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [];
   const visit = (v: unknown, path: string) => {
     if (typeof v === "string") {
-      if (!typed(v, declarationAt(vocabulary, path))) out.push({ path, text: v });
+      if (!typed(v, declarationAt(vocabulary, path), known)) out.push({ path, text: v });
     } else if (v && typeof v === "object") {
       for (const [k, child] of Object.entries(v))
         visit(child, path ? `${path}.${segment(k)}` : segment(k));
@@ -68,7 +121,7 @@ export function freeStrings(
 export const CORE_CONTENT_VOCABULARY: ContentVocabulary = {
   "operation.id": { type: "identifier" },
   "operation.version": { type: "code", values: ["0.1", "0.2", "1"] },
-  reason: { type: "code", values: CORE_REASON_CODES },
+  reason: { type: "code", values: REASON_CODES },
   termsDigest: { type: "identifier" },
   purpose: { type: "identifier" },
   ref: { type: "identifier" },
@@ -97,6 +150,7 @@ export function dataClaims(
   value: unknown,
   vocabulary: ContentVocabulary,
   prefix = "",
+  known?: KnownContent,
 ): { claims: string[]; unknown: boolean } {
   const claims = new Set<string>();
   let unknown = false;
@@ -108,7 +162,7 @@ export function dataClaims(
     }
     if (v === null) return;
     const declaration = declarationAt(vocabulary, path);
-    if (!typed(v, declaration)) {
+    if (!typed(v, declaration, known)) {
       unknown = true;
       return;
     }
@@ -122,8 +176,9 @@ export function dataClaims(
 export function freeMessageStrings(
   message: import("../core/types.js").AnyMessage,
   vocabulary: ContentVocabulary = {},
+  known?: KnownContent,
 ): { path: string; text: string }[] {
-  const found = freeStrings(message.body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary });
+  const found = freeStrings(message.body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known);
   for (const [index, evidence] of (message.evidence ?? []).entries()) {
     if (evidence.role !== "credential" || evidence.format !== "jws-compact") continue;
     try {
@@ -137,7 +192,7 @@ export function freeMessageStrings(
           .map(([path, type]) => [path.slice(8), type]),
       );
       found.push(
-        ...freeStrings(claim.value, readingVocabulary).map((item) => ({
+        ...freeStrings(claim.value, readingVocabulary, known).map((item) => ({
           path: `evidence.${index}.value${item.path ? `.${item.path}` : ""}`,
           text: item.text,
         })),

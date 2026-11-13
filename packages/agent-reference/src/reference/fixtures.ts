@@ -7,11 +7,8 @@
  * application, and the plain names shown to Sam. Everyone and every figure is fictional.
  */
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { fileURLToPath } from "url";
 import type { Iri, JsonObject } from "../core/types.js";
 import { CLAIM, type EvidenceStatement, PREQUAL_OP, type WalletItem } from "../domains/mortgage.js";
-import { loadProfile } from "../engine/load.js";
 import { NORTH, SAM } from "../fixtures/mortgage.js";
 import type { ItemTerms, RelianceProfile } from "../gates/common.js";
 import type { SigningKey } from "../mechanisms/jws.js";
@@ -135,11 +132,12 @@ export function decisionInPrinciple(input: {
   amount: number;
   at: string;
   conversation: Iri;
+  id?: Iri;
 }): JsonObject {
   const validUntil = new Date(Date.parse(input.at) + 92 * 86_400_000).toISOString();
   return {
     type: "DecisionInPrinciple",
-    id: `${input.conversation}#decision-in-principle`,
+    id: input.id ?? `${input.conversation}#decision-in-principle`,
     issuer: NORTH.party,
     subject: SAM.party,
     claimType: DECISION_CLAIM,
@@ -306,11 +304,4 @@ export function tellSam(s: Readonly<Record<string, unknown>>): string | undefine
   return `North Bank has given you a decision in principle: they would lend up to $${d.amount.toLocaleString("en-US")}. It is valid until ${dateWords(String(s.validUntil))}, and it is not a binding offer.`;
 }
 
-/** Vocabulary and purpose boundaries come from the same profile the data engine loads. */
-export const MORTGAGE_PROFILE = loadProfile(
-  fileURLToPath(new URL("../../profiles/mortgage.json", import.meta.url)),
-);
-export const MORTGAGE_CONTENT = {
-  vocabulary: MORTGAGE_PROFILE.vocabulary,
-  purposes: Object.fromEntries(MORTGAGE_PROFILE.purposes.map((p) => [p.id, p.claims])),
-};
+export { MORTGAGE_CONTENT, MORTGAGE_PROFILE } from "../profile/mortgage.js";

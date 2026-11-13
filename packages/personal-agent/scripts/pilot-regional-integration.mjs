@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // Durable REGIONAL workflows across independent OS processes (SYNTHETIC ONLY). Requires
 // `npm run build` and a local SPARQ policy binary (explicit path; never the ambient `sparq`).
 //
@@ -903,6 +904,8 @@ async function partI() {
       "industrial-contracting",
       "--role-input",
       `membership=${syn.json.membership}`,
+      "--role-input",
+      `issuers=${alpineIssuer}`,
       "--owner-name",
       "nordwerk",
     ],

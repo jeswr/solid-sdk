@@ -276,6 +276,7 @@ async function runPath(
       taskId: task,
       name,
       vocabulary: profile.vocabulary,
+      identifiers: profile.identifiers,
       claimSources: Object.fromEntries(profile.claims.map((c) => [c.kind, c.sources])),
       purposes: Object.fromEntries(profile.purposes.map((p) => [p.id, p.claims])),
       reliance: {

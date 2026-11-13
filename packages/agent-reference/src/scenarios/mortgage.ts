@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * UC-01 executable workflow: Sam's personal agent, North Bank (intake + internal agents +
  * enforcement point), Valley Bank (incompatible evidence model) and an underwriting
@@ -57,7 +58,7 @@ import { schedulingMandate } from "../mandates.js";
 import { evaluateIntent } from "../mechanisms/mandate.js";
 import { PURPOSE } from "../profile/vocabulary.js";
 import { verifyLedger } from "../store/ledger.js";
-import { Cast } from "./common.js";
+import { Cast, craftSigned } from "./common.js";
 import { scenarioPolicyEngine } from "./policy.js";
 
 export {
@@ -85,6 +86,7 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     [DEPOSIT_BANK, issuers.deposit],
     [VALUER, issuers.valuer],
   ] as const) {
+    cast.pinIssuer("sam", iri, key, "Sam reviewed this issuer key");
     cast.pinIssuer(
       "northbank-intake",
       iri,
@@ -93,7 +95,10 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     );
   }
   const until = new Date(now().getTime() + 365 * 86_400_000).toISOString();
-  for (const rule of lenderSourceRules(until)) cast.rule("northbank-intake", rule);
+  for (const rule of lenderSourceRules(until)) {
+    cast.rule("northbank-intake", rule);
+    cast.rule("sam", rule);
+  }
   for (const rule of underwriterSourceRules(until)) cast.rule("underwriter", rule);
 
   // Sam's wallet: payroll series, deposit balance, plus adversarial fixtures (an income
@@ -142,6 +147,11 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
   const uw = await cast.runtime("underwriter", [new UnderwriterHandler()]);
   const bus = new DirectBus().register(sam.runtime, nb.runtime, vb.runtime, uw.runtime);
   const obs: Record<string, unknown> = {};
+  await sam.runtime.admitStatements(wallet, {
+    subject: SAM.party,
+    task: "mortgage",
+    purpose: PURPOSE.mortgageApplication,
+  });
   const application = applicationTermsFor(SAM.party, 450000, 380000);
 
   // 1. Comparison: Valley Bank accepts only an annual-income model; no silent mapping.
@@ -190,7 +200,25 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
   const approved = await sam.runtime.submitApproval(
     await cast.approval("sam", pendingDigest, conv),
   );
-  bus.send(sam.runtime, approved);
+  // Deliberate compromised-sender fixture: add rejected support outside the honest runtime.
+  const attacked = [];
+  for (const out of approved.outbound) {
+    if (out.kind !== "deliver") {
+      attacked.push(out);
+      continue;
+    }
+    const forged = {
+      ...out.message,
+      evidence: [
+        ...(out.message.evidence ?? []),
+        ...wallet
+          .slice(2)
+          .map((w) => ({ role: "credential" as const, format: "jws-compact", value: w.jws })),
+      ],
+    };
+    attacked.push({ ...out, wire: await craftSigned(cast.get("sam"), forged), message: forged });
+  }
+  bus.send(sam.runtime, attacked);
   await bus.run();
   const intakeReceipt = sam.runtime.domainState(
     `${PREQUAL_OP.id}@${PREQUAL_OP.version}:application-state:${conv}`,
@@ -257,7 +285,9 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
   // 5. Organisation-to-organisation underwriting under an attenuated, distinct grant.
   const agreementId = sam.runtime.conversation(conv)?.agreement as Iri;
   const uwTerms = underwritingTermsFor({
-    applicationRef: `${conv}#application`,
+    applicationRef: String(
+      nb.runtime.agreements().find((a) => a.conversation === conv)?.terms.applicationId,
+    ),
     annualGrossIncome: annual,
     derivedFrom: [derivedId],
     depositBalance: depositValue,
@@ -267,6 +297,8 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
     onwardRule: `${agreementId}#onward-0`,
     lender: NORTH.party,
   });
+  nb.runtime.domainState(`${PREQUAL_OP.id}@${PREQUAL_OP.version}:stored:${conv}`);
+  nb.runtime.domainState(`${PREQUAL_OP.id}@${PREQUAL_OP.version}:grant:${conv}`);
   const toUw = await nb.runtime.startNegotiation({
     peer: { actor: UW.actor, party: UW.party },
     operation: UNDERWRITING_OP,
@@ -288,7 +320,7 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
 
   // 6. Final application-state receipt to Sam (received / checked / decided, not approval).
   const final = await nb.runtime.sendReceipt(conv, {
-    activity: `${conv}#decision`,
+    activity: await nb.runtime.mintIdentifier(),
     outcome: "completed",
     final: true,
     observed: {
@@ -298,10 +330,10 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
       decided: {
         status: indicative,
         by: NORTH.party,
-        basis: "synthetic prequalification rule; indicative only",
+        basis: "synthetic-decision-in-principle",
       },
       underwriting: { result: uwResult?.result ?? "none", by: UW.party },
-      notClaimed: ["loan approval", "truth of evidence", "complete financial picture"],
+      notClaimed: ["loan-approval", "truth-of-evidence", "complete-financial-picture"],
     },
   });
   bus.send(nb.runtime, final);
@@ -351,7 +383,11 @@ export async function runMortgage(clock: { now: () => Date; advance: (ms: number
   const toSamValuation = await nb.runtime.startNegotiation({
     peer: { actor: SAM.actor, party: SAM.party },
     operation: VALUATION_OP,
-    terms: valuationTermsFor(`${conv}#application`, VALUER, 450),
+    terms: valuationTermsFor(
+      String(nb.runtime.agreements().find((a) => a.conversation === conv)?.terms.applicationId),
+      VALUER,
+      450,
+    ),
     models: [VALUATION_MODEL],
   });
   const vconv = toSamValuation.conversation as string;

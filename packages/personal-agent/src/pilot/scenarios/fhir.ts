@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * UC-04 executable workflow: CareBrief (Maya's agent) against a local synthetic Cedar
  * Valley authorisation server + FHIR R4 resource server, plus a misconfigured clinic and a
@@ -37,10 +38,10 @@ import { generateSigningKey } from "../mechanisms/jws.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { CONFIG_ED25519 } from "../profile/configurations.js";
-import { PURPOSE } from "../profile/vocabulary.js";
+import { PILOT_PROFILE, PURPOSE } from "../profile/vocabulary.js";
 import type { OperationHandler } from "../runtime/operations.js";
 import { verifyLedger } from "../store/ledger.js";
-import { Cast, mandateOf, permit } from "./common.js";
+import { Cast, craftSigned, mandateOf, permit } from "./common.js";
 
 export { BIRCH, CAREBRIEF, CV_AUTH, CV_FHIR, MAYA_PARTY, ROGUE };
 
@@ -212,6 +213,36 @@ export async function runFhir(clock: { now: () => Date; advance: (ms: number) =>
   };
   const grant = cbAuth.grantInfo;
 
+  // An intentionally compromised sender is built outside its honest outbound gate. This
+  // keeps the independent responder tests meaningful after CORE-OUT-1 enforcement.
+  const hostileInvoke = async (
+    conversation: string,
+    operation: typeof FHIR_SEARCH_OP | typeof FHIR_WRITE_OP,
+    input: JsonObject,
+    basis: JsonObject,
+    evidence: ReturnType<CareBriefHandler["grantEvidence"]>,
+  ) => {
+    const agent = cast.get("rogue-app");
+    const wire = await craftSigned(agent, {
+      profile: PILOT_PROFILE,
+      configuration: CONFIG_ED25519,
+      id: newUrn(),
+      conversation,
+      kind: "invoke",
+      from: { actor: ROGUE.actor, onBehalfOf: ROGUE.party },
+      to: { actor: CV_FHIR.actor, party: CV_FHIR.party },
+      createdAt: now().toISOString(),
+      expiresAt: new Date(now().getTime() + 600_000).toISOString(),
+      body: { operation, input, basis, purpose: PURPOSE.personalHealthSummary },
+      evidence: [
+        ...evidence,
+        { role: "representation", format: "jws-compact", value: agent.representationJws },
+      ],
+    });
+    bus.send(fhir.runtime, await fhir.runtime.receive(wire));
+    await bus.run();
+  };
+
   // 3. Reads, each an invocation carrying the client-bound grant.
   const read = async (
     rt: typeof cb.runtime,
@@ -228,9 +259,19 @@ export async function runFhir(clock: { now: () => Date; advance: (ms: number) =>
       configuration: CONFIG_ED25519,
       evidence,
     });
-    bus.send(rt, step);
-    await bus.run();
-    const c = rt.conversation(step.conversation as string);
+    if (rt === rogue.runtime)
+      await hostileInvoke(
+        step.conversation as string,
+        FHIR_SEARCH_OP,
+        { resourceType, patientId: PATIENT_ID },
+        { kind: "grant", grant: grant?.id ?? "urn:awp:none" },
+        evidence,
+      );
+    else {
+      bus.send(rt, step);
+      await bus.run();
+    }
+    const c = (rt === rogue.runtime ? fhir.runtime : rt).conversation(step.conversation as string);
     return { phase: c?.phase, reason: c?.closedReason };
   };
   obs.reads = {
@@ -268,15 +309,20 @@ export async function runFhir(clock: { now: () => Date; advance: (ms: number) =>
     discover: false,
     configuration: CONFIG_ED25519,
   });
-  bus.send(rogue.runtime, rogueWrite);
-  await bus.run();
+  await hostileInvoke(
+    rogueWrite.conversation as string,
+    FHIR_WRITE_OP,
+    { resourceType: "MedicationRequest", patientId: PATIENT_ID },
+    { kind: "grant", grant: "urn:awp:none" },
+    [],
+  );
   const stolen = await read(rogue.runtime, "MedicationRequest", cbAuth.grantEvidence());
   obs.writes = {
     careBriefWriteSent: writeStep.outbound.length,
     careBriefLocalDecision: writeStep.decisions[0]?.outcome,
     rogueWrite: {
-      phase: rogue.runtime.conversation(rogueWrite.conversation as string)?.phase,
-      reason: rogue.runtime.conversation(rogueWrite.conversation as string)?.closedReason,
+      phase: fhir.runtime.conversation(rogueWrite.conversation as string)?.phase,
+      reason: fhir.runtime.conversation(rogueWrite.conversation as string)?.closedReason,
     },
     stolenGrant: stolen,
   };

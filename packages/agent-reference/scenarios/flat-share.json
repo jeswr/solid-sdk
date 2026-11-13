@@ -29,11 +29,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "recipient",
-    "source",
-    "limits-approval"
-  ],
+  "stress": ["recipient", "source", "limits-approval"],
   "suites": {
     "trust": "pinned-list"
   },

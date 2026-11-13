@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * SYNTHETIC mortgage (UC-01) fixture: the identities, owner mandates, source-authority anchors,
  * internal roles, evidence issuers and wallet statements used by BOTH the in-process scenario
@@ -266,6 +267,38 @@ export async function samWallet(issuers: SyntheticIssuers): Promise<WalletItem[]
     issuer: VALUER,
     monthly: ms.map((m) => ({ month: m, gross: 20000 })),
   };
+  for (const statement of [payroll, deposit, valuerIncome]) {
+    statement.method = "recorded-by-authority";
+    statement.terms = {
+      policy: {
+        id: `${statement.id}#terms`,
+        type: "Set",
+        conflict: "prohibit",
+        permissions: ["use", "distribute"].map((action) => ({
+          type: "permission",
+          action,
+          target: statement.id,
+          constraints: [
+            {
+              leftOperand: "purpose",
+              operator: "isAnyOf",
+              rightOperand: [PURPOSE.mortgageApplication, PURPOSE.creditAssessment],
+            },
+            ...(action === "distribute"
+              ? [
+                  {
+                    leftOperand: "recipient",
+                    operator: "isAnyOf",
+                    rightOperand: [NORTH.party, UW.party],
+                  },
+                ]
+              : []),
+          ],
+        })),
+      },
+      deleteWithinDays: 90,
+    };
+  }
   const depositJws = await signClaim(issuers.deposit, deposit);
   const [h, , s] = depositJws.split(".");
   const tamperedPayload = Buffer.from(

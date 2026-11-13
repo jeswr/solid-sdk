@@ -5,27 +5,19 @@
   "claims": [
     {
       "kind": "person.identity",
-      "sources": [
-        "urn:fictional:identity-office"
-      ],
-      "methods": [
-        "attested"
-      ],
+      "sources": ["urn:fictional:identity-office"],
+      "methods": ["attested"],
       "maxAgeDays": 365
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:flat-share",
-      "claims": [
-        "person.identity"
-      ]
+      "claims": ["person.identity"]
     }
   ],
   "rules": [],
-  "decisionsForPerson": [
-    "trust-stranger"
-  ],
+  "decisionsForPerson": ["trust-stranger"],
   "modelReadings": [],
   "vocabulary": {},
   "operations": []

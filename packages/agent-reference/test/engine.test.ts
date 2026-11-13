@@ -255,7 +255,11 @@ it("returns an already emitted acceptance and resumes the rest of a held agreeme
     agent: "service-agent",
     type: "receive",
   });
-  const result = await runScenario(profile, modified, { compare: false });
+  const result = await runScenario(
+    { ...profile, identifiers: [...profile.identifiers, "urn:test:follow-up"] },
+    modified,
+    { compare: false },
+  );
   const events = required(required(result[0]).trace).events;
   const sent = events.filter(
     (event) => event.agent === "person-agent" && event.kind === "message-out",

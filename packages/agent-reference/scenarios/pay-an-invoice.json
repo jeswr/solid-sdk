@@ -41,11 +41,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "source",
-    "recipient",
-    "limits-approval"
-  ],
+  "stress": ["source", "recipient", "limits-approval"],
   "suites": {
     "commitments": "payment"
   },

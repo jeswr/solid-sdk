@@ -5,27 +5,19 @@
   "claims": [
     {
       "kind": "referral.history",
-      "sources": [
-        "urn:fictional:family-practice"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:family-practice"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 90
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:health-referral",
-      "claims": [
-        "referral.history"
-      ]
+      "claims": ["referral.history"]
     }
   ],
   "rules": [],
-  "decisionsForPerson": [
-    "clinical-relevance"
-  ],
+  "decisionsForPerson": ["clinical-relevance"],
   "modelReadings": [],
   "vocabulary": {},
   "operations": []

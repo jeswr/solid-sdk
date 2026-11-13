@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // Real MCP workflow (SYNTHETIC ONLY). Requires `npm run build` and a local SPARQ policy binary.
 //
 // Independently initialised agents run as SEPARATE OS processes, each an `awp-pilot mcp`
@@ -282,7 +283,7 @@ try {
     windowStart: "2026-10-20T13:00:00Z",
     windowEnd: "2026-10-20T17:00:00Z",
     durationMinutes: 30,
-    title: "Synthetic MCP catch-up",
+    title: "catch-up",
   });
   const trace = [];
   await shuttle(["alice", "bob"], byActor, trace, (item) => item.kind === "description");

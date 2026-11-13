@@ -315,6 +315,9 @@ it.each([
   const handler: OperationHandler = {
     description: { ...description, ...operation, pattern: "negotiate" },
     requiresRepresentation: false,
+    contentProfile: {
+      vocabulary: { "output.result": { type: "code", values: ["agreed-result"] } },
+    },
     agreementDelivery: deliveryRole,
     intentForProposal: (ctx) => ({ ...intent, conversation: ctx.conversation.id }),
     onProposal: (ctx) => ({
@@ -332,7 +335,7 @@ it.each([
                   ref: agreement.id,
                   operation,
                   basis: { kind: "agreement", agreement: agreement.id },
-                  output: { result: "agreed result" },
+                  output: { result: "agreed-result" },
                 },
               },
             ]
@@ -387,7 +390,7 @@ it.each([
   expect(onDeliver).toHaveBeenCalledTimes(1);
   expect(onDeliver.mock.calls[0]?.[1]).toMatchObject({
     operation,
-    output: { result: "agreed result" },
+    output: { result: "agreed-result" },
   });
 });
 

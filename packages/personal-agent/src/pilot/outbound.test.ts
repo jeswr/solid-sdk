@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Findings 1 and 7: the provider adapter revalidates the exact bytes it would send, and
  * inbound strict parity covers every human-visible part. The transport is a local
@@ -62,7 +63,7 @@ async function setup() {
   const pair = await personalPair({ now: clock.now });
   const terms = buildMeetingTerms({
     calendar: pair.alice.calendar,
-    title: "x",
+    title: "meeting",
     durationMinutes: 30,
     window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
     now: clock.now().toISOString(),

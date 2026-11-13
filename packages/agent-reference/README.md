@@ -53,6 +53,11 @@ Experimental. Synthetic parties and data only; both sides of every exchange run 
 The data engine loads `profiles/<id>.json` (`agent-profile/0.1`) and
 `scenarios/<id>.json` (`agent-scenario/0.1`). Their JSON Schemas are in `schemas/`;
 the runtime validators and published schemas come from the same Zod definitions.
+Data imports include the `.json` suffix, for example
+`@jeswr/agent-reference/scenarios/probing-counterparty.json` and
+`@jeswr/agent-reference/profiles/mortgage.json`. The data export patterns are
+`./scenarios/*.json`, `./profiles/*.json`, `./schemas/*.json` and `./outlines/*.json`;
+code such as `@jeswr/agent-reference/scenarios/common` resolves to the built module.
 `runScenario()` runs the main path and each branch in a fresh synthetic world,
 using real runtimes, signatures and gates. It checks branch outcomes and outlines.
 `pnpm run scenarios` writes runnable traces and `scenario-runs.json`, which also
@@ -79,3 +84,13 @@ items conservatively affect every task. Text that fails the context rule is held
 before the outbox and requires a single-use approval of its exact message digest,
 when the signed mandate permits asking. `recordReading()` requires a declared core
 and records its signed implementation statement, original digest and model authorship.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Installed handlers may supply a `contentProfile` with explicit vocabulary, purposes,
+known identifiers and reliance rules. The runtime snapshots it before calling the core.
+An identifier declaration accepts only identifiers already in the installed profile,
+verified conversation history, task context or runtime mint registry. An arbitrary IRI
+remains free text. `mintIdentifier()` and a handler's `identifierFor()` register their
+results; principal instructions may include structured task data in `instruct(text, data)`.
+A protected compound term needs an installed signature verifier, strict schema and
+vocabulary for its claims; a signature alone does not type prose or grant authority.

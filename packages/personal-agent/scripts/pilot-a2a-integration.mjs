@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // A2A + durable enterprise workflow (SYNTHETIC ONLY). Requires `npm run build` and a local SPARQ
 // policy binary (explicit path; never the ambient `sparq` command).
 //
@@ -545,6 +546,8 @@ try {
     "mortgage-consumer",
     "--wallet",
     issuance.json.wallet,
+    "--issuers",
+    issuance.json.issuers,
   ]);
   mids.northbank = await provision("northbank", [
     "--role",

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The personal role: synthetic calendar scheduling (negotiated) and the UC-02 remembered
  * conventional scheduling service. Handlers and adapters are the existing domain code.
@@ -44,7 +45,7 @@ function proposeMeeting(ctx: OperationContext): OperatorOperation {
       const peer = ctx.pinnedPeer(args.peerActor);
       const terms = buildMeetingTerms({
         calendar: ctx.calendar,
-        title: args.title ?? "Synthetic test meeting",
+        title: args.title ?? "meeting",
         durationMinutes: args.durationMinutes ?? 30,
         window: { start: args.windowStart, end: args.windowEnd },
         now: ctx.now().toISOString(),

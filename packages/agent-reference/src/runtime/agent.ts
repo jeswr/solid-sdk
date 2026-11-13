@@ -56,7 +56,15 @@ import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
-import { CORE_CONTENT_VOCABULARY, freeMessageStrings, freeStrings } from "../profile/content.js";
+import {
+  CORE_CONTENT_VOCABULARY,
+  type ContentProfile,
+  type ContentVocabulary,
+  dataClaims,
+  freeMessageStrings,
+  freeStrings,
+  identifiersIn,
+} from "../profile/content.js";
 import {
   buildDescription,
   type ConformanceClaim,
@@ -300,6 +308,8 @@ export class AgentRuntime {
   /** Set while a task the core took from a received message is being proposed. */
   private proposalOrigin: ProposalOrigin | undefined;
   private readonly gateMemory: GateMemory;
+  private readonly contentProfiles = new Map<string, ContentProfile>();
+  private readonly protocolVocabulary: ContentVocabulary;
 
   private constructor(private readonly options: AgentRuntimeOptions) {
     this.retention = { ...DEFAULT_RETENTION, ...(options.retention ?? {}) };
@@ -309,14 +319,70 @@ export class AgentRuntime {
     this.store = options.store;
     this.ledger = options.ledger;
     this.clock = options.now ?? (() => new Date());
-    this.newId = options.newId ?? newUrn;
-    for (const h of options.handlers) this.handlers.set(operationKey(h.description), h);
+    const idSource = options.newId ?? newUrn;
+    this.newId = () => this.registerIdentifier(idSource());
+    for (const h of options.handlers) {
+      const key = operationKey(h.description);
+      this.handlers.set(key, h);
+      const profile = h.contentProfile;
+      if (profile)
+        this.contentProfiles.set(key, {
+          vocabulary: structuredClone(profile.vocabulary),
+          ...(profile.identifiers ? { identifiers: [...profile.identifiers] } : {}),
+          ...(profile.purposes ? { purposes: structuredClone(profile.purposes) } : {}),
+          ...(profile.reliance ? { reliance: structuredClone(profile.reliance) } : {}),
+          ...(profile.protectedTerms
+            ? {
+                protectedTerms: Object.fromEntries(
+                  Object.entries(profile.protectedTerms).map(([path, term]) => [
+                    path,
+                    {
+                      ...term,
+                      vocabulary: structuredClone(term.vocabulary),
+                      schema: term.schema.clone(),
+                    },
+                  ]),
+                ),
+              }
+            : {}),
+        });
+    }
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
-    const gate: GateContext = { ...(options.gates ?? {}), carriage: () => this.carriage };
-    const memory = new GateMemory(this.state.contextItems);
+    const gate: GateContext = {
+      reliance: {
+        id: "urn:awp:installed-domain-reliance",
+        rules: [...this.contentProfiles.values()].flatMap((p) => p.reliance?.rules ?? []),
+      },
+      ...(options.gates ?? {}),
+      carriage: () => this.carriage,
+    };
+    const memory = new GateMemory(this.state.contextItems, this.state.knownIdentifiers);
     this.gateMemory = memory;
+    memory.rememberIdentifiers("*", {
+      identity: this.identity,
+      trust: this.trust.data,
+      descriptions: options.handlers.map((h) => h.description),
+      core: options.core,
+      accepted: options.accepted,
+    });
+    // Snapshots predating this registry still retain verified message IDs and outgoing bytes.
+    for (const [id, seen] of Object.entries(this.state.seen))
+      if (seen.conversation) memory.rememberIdentifiers(seen.conversation, [id, seen.conversation]);
+    for (const conv of Object.values(this.state.conversations))
+      if (conv.history.length > 0)
+        memory.rememberIdentifiers(conv.id, {
+          id: conv.id,
+          peer: conv.peer,
+          history: conv.history,
+          challenge: conv.challenge,
+          agreement: conv.agreement ? this.state.agreements[conv.agreement] : undefined,
+        });
+    for (const entry of Object.values(this.state.outbox)) {
+      const message = peekWire(entry.wire);
+      if (message) memory.rememberIdentifiers(entry.conversation, message);
+    }
     for (const items of Object.values(memory.contexts))
       for (const item of items) {
         if (
@@ -384,6 +450,20 @@ export class AgentRuntime {
         };
       },
     });
+    const metadata: Record<string, import("../profile/content.js").ContentType> = {};
+    const declare = (value: unknown, path: string) => {
+      if (typeof value === "string") metadata[path] = { type: "term", values: [value] };
+      else if (typeof value === "number") metadata[path] = { type: "number" };
+      else if (typeof value === "boolean") metadata[path] = { type: "code", values: [value] };
+      else if (value && typeof value === "object")
+        for (const [key, child] of Object.entries(value))
+          declare(
+            child,
+            `${path}.${key.replaceAll("~", "~0").replaceAll(".", "~1").replaceAll("*", "~2")}`,
+          );
+    };
+    declare(this.description(), "description");
+    this.protocolVocabulary = metadata;
   }
 
   static async create(options: AgentRuntimeOptions): Promise<AgentRuntime> {
@@ -460,6 +540,7 @@ export class AgentRuntime {
     this.record(result.ok ? result.loaded.verification : result.verification);
     if (result.ok) {
       this.mandate = result.loaded;
+      this.gateMemory.rememberIdentifiers("*", result.loaded.mandate);
       this.mandateFailure = undefined;
       this.record({
         type: "grant",
@@ -594,7 +675,54 @@ export class AgentRuntime {
   }
 
   domainState(key: string): Json | undefined {
-    return this.getDomain(key);
+    const value = this.getDomain(key);
+    if (value !== undefined) {
+      this.gateMemory.enter(this.options.gates?.taskId ?? "*", {
+        id: derivedUrn("memory", { key, digest: digestOf(value) }),
+        digest: digestOf(value),
+        identifiers: identifiersIn(value),
+        kind: "memory",
+        label: `Memory entry ${key}`,
+        claimType: `memory:${key}`,
+        source: this.identity.actor,
+        subject: this.identity.party ?? "unknown",
+      });
+      this.persist();
+    }
+    return structuredClone(value);
+  }
+
+  /** Receive a signed compound term through a verifier installed by this operation's profile.
+   * This records context, not accepted factual support or authority to act.
+   */
+  readProtectedTerm(operation: OperationRef, path: string, jws: string): Promise<Json> {
+    return this.exclusive(async () => {
+      const declaration = this.contentProfiles.get(operationKey(operation))?.protectedTerms?.[path];
+      if (!declaration)
+        throw new RejectError("unsupported-term", "no installed verifier for this compound term");
+      const check = await verifyStatement(jws, {
+        ...declaration,
+        trust: this.trust,
+        limits: this.limits,
+        verifier: this.identity.actor,
+        at: this.now(),
+      });
+      this.record(check.verification);
+      if (!check.payload) throw new RejectError("evidence-invalid", "compound term did not verify");
+      this.gateMemory.enter(this.options.gates?.taskId ?? "*", {
+        id: digestOf(check.payload),
+        digest: digestOf(check.payload),
+        identifiers: identifiersIn(check.payload),
+        kind: "statement",
+        accepted: false,
+        label: "Received protected term",
+        claimType: "protected-term",
+        source: check.signer?.subject ?? "unknown",
+        subject: this.identity.party ?? "unknown",
+      });
+      this.persist();
+      return structuredClone(check.payload) as Json;
+    });
   }
 
   /**
@@ -726,12 +854,13 @@ export class AgentRuntime {
     this.outbound.mandateLoaded();
   }
 
-  instruct(text: string): void {
+  instruct(text: string, data?: Json): void {
     this.gateMemory.enter(this.options.gates?.taskId ?? "*", {
-      id: derivedUrn("instruction", { text }),
-      digest: digestOf(text),
+      id: derivedUrn("instruction", data === undefined ? { text } : { text, data }),
+      digest: digestOf(data === undefined ? text : { text, data }),
       kind: "message",
       label: "Principal instruction",
+      ...(data === undefined ? {} : { identifiers: identifiersIn(data) }),
       source: this.identity.party ?? this.identity.actor,
       subject: this.identity.party ?? "unknown",
       claimType: "principal-instruction",
@@ -787,7 +916,9 @@ export class AgentRuntime {
         core: this.options.core,
         description: this.description(),
       };
-      const implementationId = derivedUrn("implementation", implementation);
+      const implementationId = this.registerIdentifier(
+        derivedUrn("implementation", implementation),
+      );
       const implementationStatement = { id: implementationId, ...implementation };
       const implementationJws = await signCompact(key, TYP.implementation, implementationStatement);
       this.record({
@@ -822,6 +953,7 @@ export class AgentRuntime {
         claimType: input.claimType,
         method: "model-output",
         kind: "reading",
+        identifiers: identifiersIn(statement),
         accepted: false,
         digest: digestOf(statement),
       });
@@ -1033,7 +1165,7 @@ export class AgentRuntime {
       const body = {
         operation: plan.operation,
         terms: plan.terms,
-        termsDigest: digestOf(plan.terms),
+        termsDigest: this.registerIdentifier(digestOf(plan.terms)),
         round: 1,
       };
       return {
@@ -1081,12 +1213,13 @@ export class AgentRuntime {
         return { messages: [] };
       }
     }
+    const purpose = plan.purpose ?? intent?.purpose;
     const body = {
       operation: plan.operation,
       input: plan.input ?? {},
       ...(challenge ? { challenge: { id: challenge.id, nonce: challenge.nonce } } : {}),
       basis: plan.basis ?? { kind: "public" },
-      ...(plan.purpose ? { purpose: plan.purpose } : {}),
+      ...(purpose ? { purpose } : {}),
     };
     const anonymous =
       configurationById(conv.configuration ?? "")?.requesterAuthentication === "not-applicable";
@@ -1252,6 +1385,7 @@ export class AgentRuntime {
       this.reject("capacity", "replay set is full; refusing new input");
     }
     admission.passIntegrity(checked);
+    this.gateMemory.rememberIdentifiers(msg.conversation, msg);
     this.state.seen[msg.id] = {
       digest: msgDigest,
       expiresAt: msg.expiresAt,
@@ -1534,7 +1668,7 @@ export class AgentRuntime {
       const out = await this.emit(
         conv.id,
         "unsupported",
-        { ref: msg.id, reason: selection.reason, detail: selection.detail },
+        { ref: msg.id, reason: selection.reason },
         { inReplyTo: msg.id },
       );
       return {
@@ -1567,7 +1701,7 @@ export class AgentRuntime {
       const out = await this.emit(
         conv.id,
         "unsupported",
-        { ref: msg.id, reason: vet.reason, detail: vet.detail },
+        { ref: msg.id, reason: vet.reason },
         { inReplyTo: msg.id },
       );
       return {
@@ -1873,6 +2007,7 @@ export class AgentRuntime {
             kind: "statement",
             accepted: false,
             label: "Unaccepted statement shown as untrusted data",
+            identifiers: identifiersIn(claim),
             claimType: typeof claim.claimType === "string" ? claim.claimType : "unknown",
             source: typeof claim.issuer === "string" ? claim.issuer : "unknown",
             subject: typeof claim.subject === "string" ? claim.subject : "unknown",
@@ -2019,7 +2154,7 @@ export class AgentRuntime {
         const body = {
           operation: conv.operation as OperationRef,
           terms: reply.terms,
-          termsDigest: digestOf(reply.terms),
+          termsDigest: this.registerIdentifier(digestOf(reply.terms)),
           round: open.round + 1,
           counters: open.id,
         };
@@ -3328,10 +3463,59 @@ export class AgentRuntime {
     );
     const anonymousRequester =
       cfg.requesterAuthentication === "not-applicable" && conv.role === "initiator";
-    const free = freeStrings(body, {
-      ...CORE_CONTENT_VOCABULARY,
+    const operation =
+      (body as { operation?: OperationRef }).operation ??
+      conv.operation ??
+      (this.getDomain(`_start:${conv.id}`) as unknown as StartPlan | undefined)?.operation;
+    const content: ContentProfile | undefined =
+      (operation ? this.contentProfiles.get(operationKey(operation)) : undefined) ??
+      (kind === "description"
+        ? {
+            vocabulary: Object.assign(
+              {},
+              ...[...this.contentProfiles.values()].map((p) => p.vocabulary),
+            ),
+            identifiers: [...this.contentProfiles.values()].flatMap((p) => p.identifiers ?? []),
+          }
+        : undefined);
+    const vocabulary: Record<string, import("../profile/content.js").ContentType> = {
+      ...content?.vocabulary,
       ...this.options.gates?.vocabulary,
-    });
+    };
+    const known = {
+      identifiers: this.gateMemory.knownIdentifiers(
+        this.options.gates?.taskId ?? conv.id,
+        conv.id,
+        { gate: this.options.gates, content },
+      ),
+      terms: new Set(this.trust.data.keys.map((key) => key.kid)),
+    };
+    if (kind === "description") Object.assign(vocabulary, this.protocolVocabulary);
+    for (const [path, term] of Object.entries(content?.protectedTerms ?? {})) {
+      // A protected position cannot fall back to another known term when verification fails.
+      vocabulary[path] = { type: "term", values: [] };
+      const value = path
+        .split(".")
+        .reduce<unknown>(
+          (item, key) =>
+            item && typeof item === "object" ? (item as Record<string, unknown>)[key] : undefined,
+          body,
+        );
+      if (typeof value !== "string") continue;
+      const check = await verifyStatement(value, {
+        ...term,
+        trust: this.trust,
+        limits: this.limits,
+        verifier: this.identity.actor,
+        at: this.now(),
+      });
+      this.record(check.verification);
+      if (check.payload && !dataClaims(check.payload, term.vocabulary, "", known).unknown) {
+        vocabulary[path] = { type: "term", values: [value] };
+        known.terms.add(value);
+      }
+    }
+    const free = freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known);
     let message =
       opts.resume ??
       ({
@@ -3363,7 +3547,7 @@ export class AgentRuntime {
     if (
       !opts.resume &&
       this.identity.party &&
-      freeMessageStrings(message, this.options.gates?.vocabulary).length > 0
+      freeMessageStrings(message, vocabulary, known).length > 0
     ) {
       message = {
         ...message,
@@ -3391,6 +3575,8 @@ export class AgentRuntime {
       }
     }
     const release = this.outbound.checkMessage(message, {
+      content: { ...content, vocabulary },
+      knownTerms: known.terms,
       ...(opts.intent ? { intent: opts.intent } : {}),
       ...(this.operationOf(conv) ? { operation: this.operationOf(conv) } : {}),
       ...(opts.approved ? { approved: true } : {}),
@@ -3422,6 +3608,7 @@ export class AgentRuntime {
         }),
       );
     }
+    if (opts.intent?.purpose) this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
     if (!opts.force || !isTerminal(conv.phase)) {
       const next = transition(
         conv,
@@ -3483,9 +3670,12 @@ export class AgentRuntime {
     });
     // Evidence and the write-ahead record must succeed before the outbox can expose it.
     this.outbound.seal(message, wire, {
+      vocabulary,
+      known,
       ...(opts.intent ? { intent: opts.intent } : {}),
       ...(this.operationOf(conv) ? { operation: this.operationOf(conv) as Iri } : {}),
     });
+    this.gateMemory.rememberIdentifiers(message.conversation, message);
     this.state.outbox[message.id] = entry;
     // Associate the response with the inbound message being processed NOW, so any
     // mid-dispatch snapshot already links them (a replay then returns this response).
@@ -3621,6 +3811,9 @@ export class AgentRuntime {
       ...(message && this.kidOf(message) ? { signerKid: this.kidOf(message) as string } : {}),
       ...(representation ? { representation } : {}),
       trust: this.trust,
+      mintIdentifier: () => this.newId(),
+      admittedStatement: (id, digest) => this.gateMemory.facts.get(id)?.digest === digest,
+      identifierFor: (value) => this.registerIdentifier(derivedUrn("domain-item", value)),
       assessRepresentation: (jws, expect) => this.inbound.assessRepresentation(jws, expect),
       getState: <T extends Json>(key: string) => {
         const value = this.getDomain(`${opKey}:${key}`);
@@ -3628,6 +3821,7 @@ export class AgentRuntime {
           this.gateMemory.enter(this.options.gates?.taskId ?? conv.id, {
             id: derivedUrn("memory", { operation: opKey, key, digest: digestOf(value) }),
             kind: "memory",
+            identifiers: identifiersIn(value),
             digest: digestOf(value),
             label: `Memory entry ${key}`,
             claimType: `memory:${key}`,
@@ -3650,6 +3844,8 @@ export class AgentRuntime {
           at: this.now(),
         });
         this.record(check.verification);
+        this.gateMemory.rememberIdentifiers(conv.id, check.verification);
+        if (check.payload) this.gateMemory.rememberIdentifiers(conv.id, check.payload);
         return check;
       },
       assessSource: (input) => {
@@ -3665,6 +3861,20 @@ export class AgentRuntime {
     };
   }
 
+  /** Mint outside a handler without giving the caller a way to choose identifier words. */
+  mintIdentifier(): Promise<Iri> {
+    return this.exclusive(async () => {
+      const id = this.newId();
+      this.persist();
+      return id;
+    });
+  }
+
+  private registerIdentifier(id: Iri): Iri {
+    this.gateMemory.rememberIdentifiers("*", [id]);
+    return id;
+  }
+
   private selfRef() {
     return {
       actor: this.identity.actor,
@@ -3674,7 +3884,9 @@ export class AgentRuntime {
   }
 
   private agreementId(proposal: Iri, termsDigest: string, selection?: JsonObject): Iri {
-    return derivedUrn("agreement", { proposal, termsDigest, selection: selection ?? null });
+    return this.registerIdentifier(
+      derivedUrn("agreement", { proposal, termsDigest, selection: selection ?? null }),
+    );
   }
 
   private mustConversation(id: Iri): ConversationState {

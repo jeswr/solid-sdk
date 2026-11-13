@@ -41,11 +41,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "mandate",
-    "limits-approval",
-    "source"
-  ],
+  "stress": ["mandate", "limits-approval", "source"],
   "suites": {},
   "assurance": null,
   "blocked": [

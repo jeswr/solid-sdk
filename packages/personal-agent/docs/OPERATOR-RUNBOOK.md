@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Operator runbook — pilot personal agents (synthetic use only)
 
 This runbook covers running independent pilot agents locally, driving them from a shell or a
@@ -257,7 +258,7 @@ their PUBLIC keys are written; the lender pins them locally at provisioning.
 
 ```sh
 awp synthetic-issuers --out issuance            # issuance/issuers.public.json, issuance/wallet-sam.json
-awp init --name sam       --role mortgage-consumer   --wallet  issuance/wallet-sam.json      --sparq-bin="$AWP_SPARQ_POLICY_BIN" --owner-dir "$OWNERS" > sam.json
+awp init --name sam       --role mortgage-consumer   --wallet  issuance/wallet-sam.json --issuers issuance/issuers.public.json      --sparq-bin="$AWP_SPARQ_POLICY_BIN" --owner-dir "$OWNERS" > sam.json
 awp init --name northbank --role mortgage-lender     --issuers issuance/issuers.public.json  --sparq-bin="$AWP_SPARQ_POLICY_BIN" --owner-dir "$OWNERS" > northbank.json
 awp init --name uw        --role mortgage-underwriter                                        --sparq-bin="$AWP_SPARQ_POLICY_BIN" --owner-dir "$OWNERS" > uw.json
 for n in sam northbank uw; do awp card --name "$n" > "$n.card.json"; done

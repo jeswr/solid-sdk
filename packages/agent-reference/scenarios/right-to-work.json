@@ -29,10 +29,7 @@
     }
   ],
   "expect": [],
-  "stress": [
-    "disclosure",
-    "source"
-  ],
+  "stress": ["disclosure", "source"],
   "suites": {
     "authenticity": "selective-disclosure"
   },

@@ -53,12 +53,7 @@
     }
   ],
   "trust": {
-    "introductions": [
-      [
-        "sam-agent",
-        "north-agent"
-      ]
-    ],
+    "introductions": [["sam-agent", "north-agent"]],
     "ownLists": {},
     "sources": {
       "sam-agent": [
@@ -66,12 +61,8 @@
           "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
           "version": "1",
           "source": "https://harbourbank.example/#org",
-          "claimTypes": [
-            "deposit.*"
-          ],
-          "subjects": [
-            "https://sam.example/#me"
-          ],
+          "claimTypes": ["deposit.*"],
+          "subjects": ["https://sam.example/#me"],
           "validUntil": "2027-01-01T00:00:00Z",
           "framework": "Sam's own list: Sam's own bank"
         },
@@ -79,12 +70,8 @@
           "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
           "version": "1",
           "source": "https://paywell.example/#org",
-          "claimTypes": [
-            "income.*"
-          ],
-          "subjects": [
-            "https://sam.example/#me"
-          ],
+          "claimTypes": ["income.*"],
+          "subjects": ["https://sam.example/#me"],
           "validUntil": "2027-01-01T00:00:00Z",
           "framework": "Sam's own list: Sam's employer's payroll"
         }
@@ -94,9 +81,7 @@
           "id": "https://w3id.org/jeswr/awp#rule/nb/paywell-income",
           "version": "1",
           "source": "https://paywell.example/#org",
-          "claimTypes": [
-            "income.*"
-          ],
+          "claimTypes": ["income.*"],
           "subjects": "any",
           "validUntil": "2027-01-01T00:00:00Z",
           "framework": "North Bank source policy"
@@ -105,9 +90,7 @@
           "id": "https://w3id.org/jeswr/awp#rule/nb/harbourbank-deposits",
           "version": "1",
           "source": "https://harbourbank.example/#org",
-          "claimTypes": [
-            "deposit.*"
-          ],
+          "claimTypes": ["deposit.*"],
           "subjects": "any",
           "validUntil": "2027-01-01T00:00:00Z",
           "framework": "North Bank source policy"
@@ -248,9 +231,7 @@
                 {
                   "leftOperand": "purpose",
                   "operator": "isAnyOf",
-                  "rightOperand": [
-                    "https://w3id.org/dpv#Marketing"
-                  ]
+                  "rightOperand": ["https://w3id.org/dpv#Marketing"]
                 }
               ]
             }
@@ -345,9 +326,7 @@
                 {
                   "leftOperand": "purpose",
                   "operator": "isAnyOf",
-                  "rightOperand": [
-                    "https://w3id.org/dpv#Marketing"
-                  ]
+                  "rightOperand": ["https://w3id.org/dpv#Marketing"]
                 }
               ]
             }
@@ -373,17 +352,12 @@
             {
               "leftOperand": "purpose",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://w3id.org/jeswr/awp#purpose/mortgage-application"
-              ]
+              "rightOperand": ["https://w3id.org/jeswr/awp#purpose/mortgage-application"]
             },
             {
               "leftOperand": "recipient",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://northbank.example/#org",
-                "https://valleybank.example/#org"
-              ]
+              "rightOperand": ["https://northbank.example/#org", "https://valleybank.example/#org"]
             }
           ]
         }
@@ -398,17 +372,12 @@
             {
               "leftOperand": "purpose",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://w3id.org/jeswr/awp#purpose/credit-assessment"
-              ]
+              "rightOperand": ["https://w3id.org/jeswr/awp#purpose/credit-assessment"]
             },
             {
               "leftOperand": "recipient",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://northbank.example/#org",
-                "https://valleybank.example/#org"
-              ]
+              "rightOperand": ["https://northbank.example/#org", "https://valleybank.example/#org"]
             }
           ]
         },
@@ -421,16 +390,12 @@
             {
               "leftOperand": "purpose",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://w3id.org/jeswr/awp#purpose/mortgage-application"
-              ]
+              "rightOperand": ["https://w3id.org/jeswr/awp#purpose/mortgage-application"]
             },
             {
               "leftOperand": "recipient",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://northbank.example/#org"
-              ]
+              "rightOperand": ["https://northbank.example/#org"]
             }
           ]
         }
@@ -450,9 +415,7 @@
             {
               "leftOperand": "purpose",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://w3id.org/jeswr/awp#purpose/credit-assessment"
-              ]
+              "rightOperand": ["https://w3id.org/jeswr/awp#purpose/credit-assessment"]
             }
           ]
         },
@@ -465,16 +428,12 @@
             {
               "leftOperand": "purpose",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://w3id.org/jeswr/awp#purpose/credit-assessment"
-              ]
+              "rightOperand": ["https://w3id.org/jeswr/awp#purpose/credit-assessment"]
             },
             {
               "leftOperand": "recipient",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://underwriter.example/#org"
-              ]
+              "rightOperand": ["https://underwriter.example/#org"]
             }
           ]
         },
@@ -487,9 +446,7 @@
             {
               "leftOperand": "purpose",
               "operator": "isAnyOf",
-              "rightOperand": [
-                "https://w3id.org/jeswr/awp#purpose/mortgage-application"
-              ]
+              "rightOperand": ["https://w3id.org/jeswr/awp#purpose/mortgage-application"]
             }
           ]
         }

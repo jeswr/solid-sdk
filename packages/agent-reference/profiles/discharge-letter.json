@@ -5,28 +5,20 @@
   "claims": [
     {
       "kind": "clinical.diagnosis",
-      "sources": [
-        "urn:fictional:hospital"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:hospital"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:discharge-letter",
-      "claims": [
-        "clinical.diagnosis"
-      ]
+      "claims": ["clinical.diagnosis"]
     }
   ],
   "rules": [],
   "decisionsForPerson": [],
-  "modelReadings": [
-    "administrative-summary"
-  ],
+  "modelReadings": ["administrative-summary"],
   "vocabulary": {},
   "operations": []
 }

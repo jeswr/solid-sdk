@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Phase-2 review items 1 and 2: provider transmission is an effect boundary.
  *  1. Authorisation and expiry are re-decided when the message is actually transmitted
@@ -138,7 +139,7 @@ async function alicePropose(alice: PersonalAgent, bob: PersonalAgent, now: Date)
     operation: SCHEDULE_OP,
     terms: buildMeetingTerms({
       calendar: alice.calendar,
-      title: "Synthetic catch-up",
+      title: "catch-up",
       durationMinutes: 30,
       window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
       now: now.toISOString(),

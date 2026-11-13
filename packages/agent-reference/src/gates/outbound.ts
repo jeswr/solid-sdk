@@ -24,9 +24,12 @@ import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.
 import { configurationById } from "../profile/configurations.js";
 import {
   CORE_CONTENT_VOCABULARY,
+  type ContentProfile,
+  type ContentVocabulary,
   dataClaims,
   freeMessageStrings,
   freeStrings,
+  type KnownContent,
 } from "../profile/content.js";
 import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
@@ -749,13 +752,29 @@ export class OutboundGate {
   /** UNS-9 / CORE-OUT-12: a real release boundary, independent of trace collection. */
   checkMessage(
     message: AnyMessage,
-    opts: { intent?: ActionIntent; operation?: Iri; approved?: boolean } = {},
+    opts: {
+      intent?: ActionIntent;
+      operation?: Iri;
+      approved?: boolean;
+      content?: ContentProfile;
+      knownTerms?: ReadonlySet<string>;
+    } = {},
   ): {
     outcome: OutboundOutcome;
     reason?: string;
     digest: string;
     intent: ActionIntent;
   } {
+    const vocabulary = { ...this.deps.gate.vocabulary, ...opts.content?.vocabulary };
+    const purposes = { ...opts.content?.purposes, ...this.deps.gate.purposes };
+    const known = {
+      identifiers: this.deps.memory.knownIdentifiers(
+        this.deps.gate.taskId ?? message.conversation,
+        message.conversation,
+        { ...this.deps.gate, content: opts.content },
+      ),
+      terms: opts.knownTerms,
+    };
     const digest = digestOf(message);
     const body = message.body as unknown as JsonObject;
     const purpose =
@@ -775,7 +794,7 @@ export class OutboundGate {
       conversation: message.conversation,
       parameters: {
         messageDigest: digest,
-        textDigest: digestOf(freeMessageStrings(message, this.deps.gate.vocabulary)),
+        textDigest: digestOf(freeMessageStrings(message, vocabulary, known)),
       },
     };
     const verdicts: CheckVerdict[] = [];
@@ -787,7 +806,7 @@ export class OutboundGate {
     });
     if (
       !opts.intent &&
-      this.deps.identity.party &&
+      message.from.onBehalfOf &&
       ["invoke", "propose", "accept"].includes(message.kind)
     ) {
       this.verdict(
@@ -829,7 +848,7 @@ export class OutboundGate {
           return finish("stop", "evidence-invalid");
         }
         if (fact) {
-          const needed = purpose ? this.deps.gate.purposes?.[purpose] : undefined;
+          const needed = purpose ? purposes?.[purpose] : undefined;
           const reason = !needed
             ? "missing-context"
             : !needed.includes(fact.claimType)
@@ -901,9 +920,9 @@ export class OutboundGate {
               ? "observed"
               : undefined;
     if (payloadKey && body[payloadKey]) {
-      const payload = dataClaims(body[payloadKey], this.deps.gate.vocabulary ?? {}, payloadKey);
+      const payload = dataClaims(body[payloadKey], vocabulary ?? {}, payloadKey, known);
       bodyHasPersonalData = payload.claims.length > 0;
-      const needs = purpose ? this.deps.gate.purposes?.[purpose] : undefined;
+      const needs = purpose ? purposes?.[purpose] : undefined;
       const reason =
         payload.claims.length > 0 && !needs
           ? "missing-context"
@@ -925,7 +944,7 @@ export class OutboundGate {
       // Unknown strings go through UNS-9 below. Unknown non-string data cannot be assumed public.
       if (
         payload.unknown &&
-        freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...this.deps.gate.vocabulary }).length === 0
+        freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known).length === 0
       ) {
         this.verdict(
           verdicts,
@@ -984,7 +1003,7 @@ export class OutboundGate {
           { reason: "no-personal-data" },
         );
     }
-    const free = freeMessageStrings(message, this.deps.gate.vocabulary);
+    const free = freeMessageStrings(message, vocabulary, known);
     if ((message.kind === "accept" || message.kind === "propose") && free.length > 0) {
       this.verdict(
         verdicts,
@@ -998,7 +1017,7 @@ export class OutboundGate {
       return finish("stop", "structured-form-required");
     }
     const context = this.deps.memory.context(this.deps.gate.taskId ?? message.conversation);
-    const needed = purpose ? this.deps.gate.purposes?.[purpose] : undefined;
+    const needed = purpose ? purposes?.[purpose] : undefined;
     let contextClear = true;
     if (free.length > 0) {
       // Every item is assessed separately, including items about someone other than our principal.
@@ -1144,17 +1163,20 @@ export class OutboundGate {
         verdicts,
         digest,
         "disclosure",
-        "not-applicable",
+        message.kind === "description" ? "pass" : "not-applicable",
         "The gate finds no personal data in this protocol message.",
-        { reason: NOT_APPLICABLE.noPersonalData },
+        {
+          reason:
+            message.kind === "description" ? "minimal-disclosure" : NOT_APPLICABLE.noPersonalData,
+        },
       );
       this.verdict(
         verdicts,
         digest,
         "data-terms",
-        "not-applicable",
+        message.kind === "description" ? "pass" : "not-applicable",
         "The gate finds no data terms to apply.",
-        { reason: NOT_APPLICABLE.noPersonalData },
+        { reason: message.kind === "description" ? "terms-allow" : NOT_APPLICABLE.noPersonalData },
       );
     }
     if (!opts.intent)
@@ -1173,7 +1195,12 @@ export class OutboundGate {
   seal(
     message: AnyMessage,
     wire: WireMessage,
-    opts: { intent?: ActionIntent; operation?: Iri },
+    opts: {
+      intent?: ActionIntent;
+      operation?: Iri;
+      vocabulary?: ContentVocabulary;
+      known?: KnownContent;
+    },
   ): void {
     const verdicts: CheckVerdict[] = [];
     if (opts.intent) this.pendingGo.delete(actionDigest(opts.intent));
@@ -1209,7 +1236,8 @@ export class OutboundGate {
         carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
         carriageSummary: "Handed to the carriage.",
         name: this.name,
-        vocabulary: this.deps.gate.vocabulary,
+        vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
+        known: opts.known,
       }),
       ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
       caption: `${this.name(message.from.actor)} sends ${article(message.kind)} ${message.kind} message to ${this.name(message.to?.actor)}.`,

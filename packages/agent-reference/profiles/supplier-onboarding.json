@@ -5,43 +5,27 @@
   "claims": [
     {
       "kind": "company.exists",
-      "sources": [
-        "urn:fictional:company-register"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:company-register"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
       "kind": "bank.account-owner",
-      "sources": [
-        "urn:fictional:supplier-bank"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:supplier-bank"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     },
     {
       "kind": "certificate",
-      "sources": [
-        "urn:fictional:certifier"
-      ],
-      "methods": [
-        "attested"
-      ],
+      "sources": ["urn:fictional:certifier"],
+      "methods": ["attested"],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:supplier-onboarding",
-      "claims": [
-        "company.exists",
-        "bank.account-owner",
-        "certificate"
-      ]
+      "claims": ["company.exists", "bank.account-owner", "certificate"]
     }
   ],
   "rules": [],

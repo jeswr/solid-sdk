@@ -160,6 +160,7 @@ export interface RuntimeState {
   /** Provider transmissions of outbound messages, keyed by message id (see transmission.ts). */
   transmissions: Record<Iri, TransmissionRecord>;
   contextItems: Record<Iri, ContextItem[]>;
+  knownIdentifiers: Record<Iri, string[]>;
   /** Single-use approvals remain remembered after their permitted release. */
   usedApprovals: Record<Iri, true>;
 }
@@ -193,6 +194,7 @@ export function emptyState(): RuntimeState {
     tasks: {},
     transmissions: {},
     contextItems: {},
+    knownIdentifiers: {},
     usedApprovals: {},
   };
 }

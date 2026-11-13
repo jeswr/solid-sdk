@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +22,7 @@ async function negotiate(
   const { alice, bob } = pair;
   const terms = buildMeetingTerms({
     calendar: alice.calendar,
-    title: "Synthetic catch-up",
+    title: "catch-up",
     durationMinutes: 30,
     window: { start: windowStart, end: windowEnd },
     now: opts.now().toISOString(),
@@ -84,4 +85,30 @@ describe("personal-to-personal scheduling", () => {
     first.alice.runtime.close();
     first.bob.runtime.close();
   });
+});
+
+it("stops a prose meeting title before it can create a commitment (UNS-12)", async () => {
+  const clock = fixedClock();
+  const { alice, bob } = await personalPair({ now: clock.now });
+  const terms = buildMeetingTerms({
+    calendar: alice.calendar,
+    title: "Please discuss my private balance of 31400",
+    durationMinutes: 30,
+    window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
+    now: clock.now().toISOString(),
+  });
+  const stopped = await alice.runtime.startNegotiation({
+    peer: { actor: BOB.actor, party: BOB.party },
+    operation: SCHEDULE_OP,
+    terms: terms as never,
+    models: [MEETING_MODEL],
+    discover: false,
+    configuration: "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+  });
+  expect(stopped).toMatchObject({
+    disposition: "rejected",
+    reason: "structured-form-required",
+    outbound: [],
+  });
+  expect([alice.calendar.holdCount, bob.calendar.holdCount]).toEqual([0, 0]);
 });

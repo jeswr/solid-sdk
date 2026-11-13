@@ -5,21 +5,15 @@
   "claims": [
     {
       "kind": "income",
-      "sources": [
-        "urn:fictional:employer"
-      ],
-      "methods": [
-        "recorded-by-authority"
-      ],
+      "sources": ["urn:fictional:employer"],
+      "methods": ["recorded-by-authority"],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:false-but-signed",
-      "claims": [
-        "income"
-      ]
+      "claims": ["income"]
     }
   ],
   "rules": [],
