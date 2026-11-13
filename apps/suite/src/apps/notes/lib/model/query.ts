@@ -14,6 +14,10 @@ export interface NotesFilter {
   query?: string | undefined;
 }
 
+export function hasNoteReminder(note: Pick<Note, "reminder">): boolean {
+  return Number.isFinite(Date.parse(note.reminder ?? ""));
+}
+
 export function selectNotes<T extends Note>(
   notes: readonly T[],
   prefs: NotesPreferences,
@@ -21,9 +25,7 @@ export function selectNotes<T extends Note>(
 ): { pinned: T[]; others: T[]; sections?: { title: string; notes: T[] }[] } {
   if (filter.location === "reminders") {
     const now = filter.now ?? Date.now();
-    const reminders = notes.filter(
-      (note) => note.location !== "trashed" && Number.isFinite(Date.parse(note.reminder ?? "")),
-    );
+    const reminders = notes.filter((note) => note.location !== "trashed" && hasNoteReminder(note));
     return {
       pinned: [],
       others: [],
