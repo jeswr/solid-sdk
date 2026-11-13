@@ -506,12 +506,13 @@ async function claudeSession(client: Client, account: Awaited<ReturnType<typeof 
     privateChildren.some((entry) => entry.url.startsWith(`${account.podRoot}private/pkg`)),
   ).toBe(false);
   expect(root.some((entry) => entry.url.startsWith(`${account.podRoot}private/pkg`))).toBe(false);
-  // sst-5ax.38 will reserve agent/context too. Pin today's exposure explicitly.
+  // sst-5ax.38: the shared context is walled off from generic tools; context_read serves it.
   expect(
-    (await json(client, "pod_list", { container: `${account.podRoot}agent/context/` })).some(
-      (entry: { url: string }) => entry.url === context,
-    ),
-  ).toBe(true);
+    await text(client, "pod_list", { container: `${account.podRoot}agent/context/` }, true),
+  ).toBe("Personal data requires a purpose-limited tool");
+  expect(await text(client, "pod_read", { url: context }, true)).toBe(
+    "Personal data requires a purpose-limited tool",
+  );
   expect(
     await text(client, "pod_read", { url: `${account.podRoot}private/pkg/mcp-policy.ttl` }, true),
   ).toBe("Personal data requires a purpose-limited tool");
@@ -553,8 +554,6 @@ for (const mode of ["Client ID Metadata Document", "RFC 7591 DCR"] as const) {
     });
   });
 }
-
-it.todo("sst-5ax.38: agent/context wall hides agent internals from generic pod tools and listings");
 
 describe("ChatGPT developer-mode connector / app", () => {
   it("registers the exact callback, enforces public-client metadata and returns search/fetch shapes", async () => {
