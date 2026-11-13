@@ -74,7 +74,7 @@
     },
     {
       "path": "branch-2",
-      "reason": "needs attestation"
+      "reason": "needs joint computation"
     }
   ]
 }

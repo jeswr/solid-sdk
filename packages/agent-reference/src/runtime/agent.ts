@@ -2,6 +2,7 @@
 
 import { AsyncLocalStorage } from "async_hooks";
 import type { JWK } from "jose";
+import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
 import { derivedUrn, digestBytes, digestContent, digestOf, newUrn } from "../core/canonical.js";
 import {
   type ConversationEvent,
@@ -304,6 +305,10 @@ class MessageReleaseError extends Error {
 }
 
 export class AgentRuntime {
+  private readonly verifiedEmailPins = new Map<
+    string,
+    { purposes: readonly string[]; validUntil: string }
+  >();
   readonly identity: AgentIdentity;
   readonly limits: PilotLimits;
   private readonly trust: TrustStore;
@@ -581,6 +586,15 @@ export class AgentRuntime {
                 ? this.trust.data.keys.find((key) => key.role === "actor" && key.subject === actor)
                     ?.kid
                 : undefined;
+              const email = this.verifiedEmailPins.get(party);
+              if (
+                !actor &&
+                email &&
+                purpose &&
+                email.purposes.includes(purpose) &&
+                Date.parse(email.validUntil) > Date.parse(this.now())
+              )
+                return true;
               return (!actor || !!kid) && this.hasTrustPin(party, purpose, kid);
             },
           }
@@ -598,6 +612,7 @@ export class AgentRuntime {
         if (
           intent.action !== "pay" &&
           !gate.personDecisions?.some((p) => p.action === intent.action) &&
+          !(gate.email && intent.operation === "urn:op:email") &&
           !this.state.relianceBindings[actionDigest(intent)] &&
           !this.state.organisationApprovals[actionDigest(intent)]?.length
         )
@@ -1131,6 +1146,153 @@ export class AgentRuntime {
     this.persist();
   }
 
+  private emailFooter(): string {
+    const email = this.options.gates?.email;
+    if (!email || !this.identity.party) throw new Error("email profile is not installed");
+    return `Written by an agent (model-generated) for ${this.options.gates?.name?.(this.identity.party) ?? this.identity.party} (${this.identity.party}).\nReply in structured form: ${email.structuredReply}`;
+  }
+  private async checkEmailPin(endpoint: string, purpose: string): Promise<boolean> {
+    this.verifiedEmailPins.clear();
+    for (const jws of this.options.gates?.email?.pins ?? []) {
+      const checked = await verifyStatement(jws, {
+        trust: this.trust,
+        typ: "awp-email-endpoint-pin+jws",
+        schema: emailPinSchema,
+        role: "party",
+        limits: this.limits,
+        at: this.now(),
+        verifier: this.identity.actor,
+      });
+      this.record(checked.verification);
+      const p = checked.payload;
+      if (
+        p &&
+        checked.signer?.subject === this.identity.party &&
+        p.issuer === this.identity.party &&
+        Date.parse(p.validUntil) > Date.parse(this.now())
+      )
+        this.verifiedEmailPins.set(p.endpoint, { purposes: p.purposes, validUntil: p.validUntil });
+    }
+    const pin = this.verifiedEmailPins.get(endpoint);
+    return !!pin && pin.purposes.includes(purpose);
+  }
+  /** Plain prose is sent only as an approved effect to a principal-pinned mailbox. */
+  sendEmail(input: { taskId: Iri; adapter: string; to: string; text: string; purpose: Iri }) {
+    const params = {
+      id: input.taskId,
+      from: this.options.gates?.email?.from ?? "",
+      to: input.to,
+      text: `${input.text}\n\n${this.emailFooter()}`,
+      purpose: input.purpose,
+    };
+    return this.runTask({
+      taskId: input.taskId,
+      kind: "email",
+      plan: {
+        adapter: input.adapter,
+        key: input.taskId,
+        params,
+        activityType: "urn:activity:email-send",
+        intent: {
+          action: "distribute",
+          target: "urn:op:email",
+          operation: "urn:op:email",
+          recipient: input.to,
+          purpose: input.purpose,
+          conversation: input.taskId,
+          parameters: params,
+        },
+      },
+    });
+  }
+  /** Address-only prose never enters facts or instruction channels, whatever it says. */
+  receiveEmail(input: { from: string; text: string; purpose: Iri }) {
+    return this.exclusive(async () => {
+      const sink = this.options.gates?.sink;
+      const fail = (reason: ReasonCode) => {
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "check",
+          check: "source",
+          verdict: "fail",
+          reason,
+          caption: "The prose is from an unpinned email endpoint.",
+        });
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "decision",
+          outcome: "refuse",
+          reason,
+          caption: "The email is refused before core context.",
+        });
+        return { ok: false as const, reason };
+      };
+      if (!this.options.gates?.email || !(await this.checkEmailPin(input.from, input.purpose)))
+        return fail("source-unknown");
+      if (typeof input.text !== "string" || !input.text || Buffer.byteLength(input.text) > 32768)
+        return fail("bounds-exceeded");
+      const digest = digestContent(input.text),
+        id = this.newId(),
+        task = this.options.gates.taskId ?? "*";
+      sink?.emit({
+        part: "inbound-gate",
+        kind: "check",
+        check: "integrity",
+        verdict: "pass",
+        reason: "intact",
+        caption:
+          "Unsigned email bytes are digested; no signature or person identity is established.",
+      });
+      sink?.emit({
+        part: "inbound-gate",
+        kind: "check",
+        check: "source",
+        verdict: "pass",
+        reason: "source-accepted",
+        caption: "Only the pinned email address is recognized; no factual claims are admitted.",
+      });
+      const part = { id, mediaType: "text/plain", bytes: input.text, digest };
+      this.gateMemory.enter(task, {
+        id,
+        digest,
+        kind: "content",
+        accepted: false,
+        label: "Unsigned email prose; address-only identity; never instructions or commitments",
+        source: input.from,
+        claimType: "unstructured-content",
+        method: "unsigned-prose",
+        subject: input.from,
+        admittedPurpose: input.purpose,
+        statement: part,
+      });
+      this.record({
+        type: "email-content",
+        id,
+        digest,
+        source: input.from,
+        method: "unsigned-prose",
+        acceptedClaims: [],
+        commitment: false,
+        at: this.now(),
+      });
+      sink?.emit({
+        part: "memory",
+        kind: "store",
+        caption:
+          "Unsigned address-only prose enters the unstructured-content channel; never facts or instructions.",
+      });
+      sink?.emit({
+        part: "inbound-gate",
+        kind: "decision",
+        outcome: "admit",
+        reason: "fit-for-use",
+        caption: "Admit labelled unstructured content only.",
+      });
+      this.persist();
+      return { ok: true as const, id, digest };
+    });
+  }
+
   /**
    * Statements the agent fetched or holds pass its inbound gate like any message (integrity
    * and source per statement); admitted ones are shown entering memory with their labels.
@@ -1220,7 +1382,7 @@ export class AgentRuntime {
     rule: string;
     subject: Iri;
     purpose: Iri;
-    assurance?: "recomputed" | "by-source";
+    assurance?: "recomputed" | "by-source" | "attested";
   }) {
     return this.exclusive(() => this.deriveInner(input));
   }
@@ -1228,11 +1390,11 @@ export class AgentRuntime {
     rule: string;
     subject: Iri;
     purpose: Iri;
-    assurance?: "recomputed" | "by-source";
+    assurance?: "recomputed" | "by-source" | "attested";
   }) {
     const task = this.options.gates?.taskId;
     if (!task) return { ok: false as const, reason: "missing-context" };
-    const source = input.assurance === "by-source";
+    const source = input.assurance === "by-source" || input.assurance === "attested";
     const author = source ? this.identity.party : this.identity.actor;
     const key = source ? this.options.sourceKey : this.keysByAlg.get("EdDSA");
     const sourcePin = key
@@ -1666,6 +1828,18 @@ export class AgentRuntime {
     });
   }
 
+  /** Factual statements available to a core, copied from gate-held task memory only. */
+  admittedStatements(): readonly JsonObject[] {
+    return this.gateMemory
+      .context(this.options.gates?.taskId ?? "*")
+      .filter(
+        (item) =>
+          item.accepted === true &&
+          this.gateMemory.facts.get(item.id)?.digest === item.digest &&
+          !!item.statement,
+      )
+      .map((item) => structuredClone(item.statement!));
+  }
   recordDisclosures() {
     return [...this.gateMemory.facts.values()].map((f) => f.id);
   }
@@ -3985,6 +4159,38 @@ export class AgentRuntime {
   }
 
   private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
+    const boundary = this.effectAdapters.get(plan.adapter);
+    if (boundary?.bindsParameters || boundary?.plainTextEmail) {
+      if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
+        for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
+          this.record(verdict);
+        return [];
+      }
+    }
+    if (boundary?.plainTextEmail) {
+      const email = emailEnvelopeSchema.safeParse(plan.params);
+      if (
+        !email.success ||
+        plan.intent.operation !== "urn:op:email" ||
+        plan.intent.action !== "distribute" ||
+        email.data.to !== plan.intent.recipient ||
+        email.data.purpose !== plan.intent.purpose ||
+        email.data.from !== this.options.gates?.email?.from ||
+        !email.data.text.endsWith(this.emailFooter()) ||
+        !(await this.checkEmailPin(email.data.to, email.data.purpose))
+      ) {
+        for (const verdict of this.outbound.rejectEffect(plan.intent, "source-unknown"))
+          this.record(verdict);
+        return [];
+      }
+      const approval = this.state.approvals[actionDigest(plan.intent)];
+      const approved =
+        approval?.decision === "approve" &&
+        Date.parse(approval.validUntil) > Date.parse(this.now()) &&
+        !this.state.usedApprovals[approval.id];
+      for (const verdict of this.outbound.checkEmailContext(plan.intent, email.data.text, approved))
+        this.record(verdict);
+    }
     if (this.effectAdapters.get(plan.adapter)?.releasesRecord) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
         for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
@@ -4715,6 +4921,7 @@ export class AgentRuntime {
     decisions: readonly AuthorisationDecision[];
     pendingApproval?: string;
   }> {
+    input = structuredClone(input);
     return this.exclusive(async () => {
       const at = this.now();
       let task = this.state.tasks[input.taskId];

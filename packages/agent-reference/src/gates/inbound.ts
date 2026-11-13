@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { mapCodeClaim } from "../mechanisms/code-mapping.js";
 import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/selective.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
@@ -662,10 +663,13 @@ export class InboundGate {
 
   /** Plain name for a claim. */
   labelOf(c: Claim): string {
-    return (
+    const label =
       this.deps.gate.claimLabel?.(c as unknown as Record<string, unknown>) ??
-      `${this.name(c.issuer)}'s ${c.claimType} statement`
-    );
+      `${this.name(c.issuer)}'s ${c.claimType} statement`;
+    const mapping = (c as JsonObject).derivation as JsonObject | undefined;
+    return mapping?.type === "code-mapping" && mapping.approximate === true
+      ? `${label} (approximate mapping; reduced standing)`
+      : label;
   }
 
   /** Source: who stands behind one relayed claim, and is that source accepted for it? */
@@ -889,10 +893,11 @@ export class InboundGate {
       cache.set(item.value, r);
     }
     const c = r.claim;
-    const label = c ? this.labelOf(c) : "A relayed statement";
+    let label = c ? this.labelOf(c) : "A relayed statement";
     if (phase === "source" && c?.derivation) {
       const derived = verifyDerivation(c as JsonObject, {
         rules: this.deps.gate.rules ?? [],
+        attestedDerivers: this.deps.gate.attestedDerivers,
         sources: this.deps.gate.sourceAliases,
         memory: this.deps.memory,
         task: this.deps.gate.taskId ?? need.task,
@@ -1111,6 +1116,58 @@ export class InboundGate {
       }
     }
 
+    let mapped = false;
+    if (
+      this.deps.gate.codeMappings &&
+      typeof c.codeList === "string" &&
+      typeof c.code === "string" &&
+      !this.deps.gate.codeMappings.policy.acceptedLists.includes(c.codeList)
+    ) {
+      const result = await mapCodeClaim(c as JsonObject, {
+        ...this.deps.gate.codeMappings,
+        attestedDerivers: this.deps.gate.attestedDerivers,
+        purpose: need.purpose ?? "",
+        trust: this.deps.trust,
+        at,
+        verifier: this.deps.identity.actor,
+        record: this.deps.record,
+      });
+      if (!result.ok) {
+        this.verdictEvent(
+          "fitness",
+          result.outcome === "ask-more" ? "ask-more" : "fail",
+          `Code ${result.code} cannot be used through this mapping: ${result.reason}.`,
+          {
+            reason: result.reason,
+            rule: { id: String(c.codeList), text: `Unsupported or unusable code: ${result.code}` },
+          },
+        );
+        this.failedClaim(c, result.reason, need.taskId ?? need.task);
+        this.claimFailure = { outcome: result.outcome, reason: result.reason };
+        return false;
+      }
+      const fitness = fitnessOf(
+        result.statement as unknown as import("./quality.js").QualityClaim,
+        this.deps.gate.reliance,
+        at,
+      );
+      if (fitness.verdict !== "pass") {
+        this.failedClaim(c, fitness.reason ?? "method-not-accepted", need.taskId ?? need.task);
+        this.verdictEvent("fitness", "fail", "The profile does not accept this mapped method.", {
+          reason: fitness.reason,
+        });
+        return false;
+      }
+      Object.assign(c, result.statement);
+      mapped = true;
+      label = this.labelOf(c);
+      this.verdictEvent(
+        "fitness",
+        "pass",
+        `The signed mapping derives ${String(c.code)}; original source and quality are retained.`,
+        { reason: "fit-for-use" },
+      );
+    }
     const fact: AdmittedFact = {
       admittedPurpose: need.purpose,
       statement: c as JsonObject,
@@ -1126,6 +1183,13 @@ export class InboundGate {
       ...(terms ? { terms } : {}),
     };
     this.deps.memory.facts.set(fact.id, fact);
+    if (mapped)
+      this.deps.memory.enter(this.deps.gate.taskId ?? need.taskId ?? need.task, {
+        ...fact,
+        kind: "statement",
+        accepted: true,
+        digest: digestOf(c),
+      });
     delete this.deps.memory.relianceHolds[
       `${this.deps.gate.taskId ?? need.taskId ?? need.task}|${fact.id}`
     ];
@@ -1144,18 +1208,20 @@ export class InboundGate {
         claimType: c.claimType,
         subject: c.subject ?? "unknown",
         value:
-          (c as JsonObject).balance ??
-          (c as JsonObject).monthly ??
-          (c as JsonObject).decision ??
-          (c as JsonObject).product ??
-          (c as JsonObject).level ??
-          null,
+          ((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping"
+            ? { codeList: c.codeList, code: c.code, derivation: c.derivation }
+            : ((c as JsonObject).balance ??
+              (c as JsonObject).monthly ??
+              (c as JsonObject).decision ??
+              (c as JsonObject).product ??
+              (c as JsonObject).level ??
+              null),
         source: c.issuer,
         ...(c.method ? { method: c.method } : {}),
         ...(c.asOf ? { asOf: c.asOf } : {}),
         ...(c.period ? { period: c.period } : {}),
         ...(terms ? { terms: { id: terms.policy.id, summary: termsSummary(terms) } } : {}),
-        provenance: `signed by ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
+        provenance: `${((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping" ? "Locally mapped; original signed by" : "signed by"} ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
       },
       ...(chat
         ? {
@@ -1390,7 +1456,18 @@ export class Admission {
       const ok = await this.gate.claimChecks(
         item,
         msg.from.onBehalfOf,
-        { task: "", taskId: msg.conversation },
+        {
+          task: "",
+          taskId: msg.conversation,
+          purpose:
+            typeof this.deps.agreementTerms(msg.conversation)?.purpose === "string"
+              ? String(this.deps.agreementTerms(msg.conversation)?.purpose)
+              : msg.kind === "invoke"
+                ? msg.body.purpose
+                : msg.kind === "deliver"
+                  ? this.deps.requestPurpose?.(msg.body.ref)
+                  : undefined,
+        },
         "source",
         this.claimCache,
       );

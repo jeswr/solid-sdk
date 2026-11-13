@@ -8,7 +8,10 @@
     "employer": "The second applicant’s employer",
     "owner-agent": "The first applicant’s agent",
     "receiver-agent": "The lender’s agent",
-    "second-applicant": "The second applicant"
+    "second-applicant": "The second applicant",
+    "coordinator": "The joint agreement coordinator",
+    "coordinator-agent": "The joint agreement coordinator’s agent",
+    "second-applicant-agent": "The second applicant’s agent"
   },
   "claims": [
     {
@@ -74,6 +77,24 @@
         "urn:purpose:joint-mortgage"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:joint-mortgage"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ]
 }

@@ -26,6 +26,22 @@
     {
       "id": "identity-issuer",
       "name": "The identity issuer"
+    },
+    {
+      "id": "coordinator",
+      "name": "The reservation service"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The reservation service’s agent"
+    },
+    {
+      "id": "airline",
+      "name": "The airline that tickets"
+    },
+    {
+      "id": "airline-agent",
+      "name": "The airline that tickets’s agent"
     }
   ],
   "scenario": {
@@ -35,7 +51,17 @@
       "1": "The traveller’s agent checks the signed statements.",
       "2": "The hotel’s agent sends the signed request.",
       "3": "The traveller’s agent checks the message and prepares a response.",
-      "4": "The traveller’s agent sends the signed request."
+      "4": "The traveller’s agent sends the signed request.",
+      "5": "The parties complete and collect their signed agreement.",
+      "6": "The parties complete and collect their signed agreement.",
+      "7": "The parties complete and collect their signed agreement.",
+      "8": "The parties complete and collect their signed agreement.",
+      "9": "The parties complete and collect their signed agreement.",
+      "10": "The parties complete and collect their signed agreement.",
+      "11": "The parties complete and collect their signed agreement.",
+      "12": "The airline receives the passport only for ticketing.",
+      "13": "The airline receives the passport only for ticketing.",
+      "14": "The airline receives the passport only for ticketing."
     }
   },
   "configuration": {
@@ -66,13 +92,29 @@
       "name": "The traveller’s agent",
       "actsFor": "receiver",
       "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The reservation service’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
+    },
+    {
+      "id": "airline-agent",
+      "name": "The airline that tickets’s agent",
+      "actsFor": "airline",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -80,6 +122,10 @@
     {
       "what": "Travel safety preflights",
       "replacedBy": "Original source-signed hostile hotel listing and a separately signed held passport; neither a different hotel nor travel-document disclosure is released"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ],
   "events": [
@@ -185,9 +231,9 @@
       "reason": "terms-acceptable",
       "rule": {
         "id": "urn:terms:trip-booking:passport",
-        "text": "Its terms allow this: use for urn:purpose:passport management; share for urn:purpose:passport management."
+        "text": "Its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
       },
-      "caption": "The identity issuer's identity.passport statement: its terms allow this: use for urn:purpose:passport management; share for urn:purpose:passport management."
+      "caption": "The identity issuer's identity.passport statement: its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
     },
     {
       "seq": 5,
@@ -238,7 +284,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "terms": {
           "id": "urn:terms:trip-booking:passport",
-          "summary": "use for urn:purpose:passport management; share for urn:purpose:passport management"
+          "summary": "use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing"
         },
         "provenance": "signed by The identity issuer"
       },
@@ -431,7 +477,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:813591727c6…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:200aa664371…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +505,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:5423e6114984b11e67532f56366eba3ff385bf508234182e000e90892ec712bd"
+            "digest": "sha-256:8843c5d5522ba7cae3a5da90b389d263cc43abdeeec5550f7fcfe51510a07e33"
           },
           "authority": {
             "present": true,
@@ -475,14 +521,16 @@
                   "urn:op:trip-booking",
                   "urn:op:trip-booking:request",
                   "urn:op:trip-booking:decision",
-                  "urn:op:trip-booking:passport"
+                  "urn:op:trip-booking:passport",
+                  "urn:op:agreement",
+                  "urn:op:trip-booking:ticket"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:c96b5c1b4243fea73500b085d70214c3a198d70755015e33ed81ce1e334ca39c"
+            "digest": "sha-256:2332d11521fe01a8a605b76bb9365f5628829a5077ca2fe9d385f07762254cad"
           },
           "content": {
             "present": true,
@@ -552,7 +600,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:813591727c6…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:200aa664371…; never trusted."
         },
         "layers": {
           "header": {
@@ -580,7 +628,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:5423e6114984b11e67532f56366eba3ff385bf508234182e000e90892ec712bd"
+            "digest": "sha-256:8843c5d5522ba7cae3a5da90b389d263cc43abdeeec5550f7fcfe51510a07e33"
           },
           "authority": {
             "present": true,
@@ -596,14 +644,16 @@
                   "urn:op:trip-booking",
                   "urn:op:trip-booking:request",
                   "urn:op:trip-booking:decision",
-                  "urn:op:trip-booking:passport"
+                  "urn:op:trip-booking:passport",
+                  "urn:op:agreement",
+                  "urn:op:trip-booking:ticket"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:c96b5c1b4243fea73500b085d70214c3a198d70755015e33ed81ce1e334ca39c"
+            "digest": "sha-256:2332d11521fe01a8a605b76bb9365f5628829a5077ca2fe9d385f07762254cad"
           },
           "content": {
             "present": true,

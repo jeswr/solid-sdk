@@ -1,0 +1,3404 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "trip-booking",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The hotel"
+    },
+    {
+      "id": "receiver",
+      "name": "The traveller"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The hotel’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The traveller’s agent"
+    },
+    {
+      "id": "identity-issuer",
+      "name": "The identity issuer"
+    },
+    {
+      "id": "coordinator",
+      "name": "The reservation service"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The reservation service’s agent"
+    },
+    {
+      "id": "airline",
+      "name": "The airline that tickets"
+    },
+    {
+      "id": "airline-agent",
+      "name": "The airline that tickets’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "trip-booking",
+    "title": "Booking a trip",
+    "steps": {
+      "1": "The parties complete and collect their signed agreement.",
+      "2": "The parties complete and collect their signed agreement.",
+      "3": "The parties complete and collect their signed agreement.",
+      "4": "The parties complete and collect their signed agreement.",
+      "5": "The parties complete and collect their signed agreement.",
+      "6": "The parties complete and collect their signed agreement.",
+      "7": "The parties complete and collect their signed agreement.",
+      "8": "The parties complete and collect their signed agreement.",
+      "9": "The parties complete and collect their signed agreement.",
+      "10": "The parties complete and collect their signed agreement.",
+      "11": "The parties complete and collect their signed agreement.",
+      "12": "The airline receives the passport only for ticketing.",
+      "13": "The airline receives the passport only for ticketing.",
+      "14": "The airline receives the passport only for ticketing."
+    }
+  },
+  "configuration": {
+    "id": "trip-booking-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "agreement-credential",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The hotel’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The traveller’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The reservation service’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
+    },
+    {
+      "id": "airline-agent",
+      "name": "The airline that tickets’s agent",
+      "actsFor": "airline",
+      "role": "agent"
+    },
+    {
+      "id": "coordinator",
+      "name": "The reservation service",
+      "actsFor": "coordinator",
+      "role": "source"
+    }
+  ],
+  "generated": {
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Travel safety preflights",
+      "replacedBy": "Original source-signed hostile hotel listing and a separately signed held passport; neither a different hotel nor travel-document disclosure is released"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The reservation service's mandate covers this action."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The reservation service's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The reservation service's limits."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:0225714c38fa04839e11d9256ffc1778db70f7f6d1de287a57b1c63f57043702",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The hotel's mandate covers this action."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The hotel's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The hotel's limits."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:0c9ac1766d301c2cc73c001211fcd2d0c5cab2df5f7f200995b2e0d6aec0dafd",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 25,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 26,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 27,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 28,
+      "step": 2,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The airline that tickets's mandate covers this action."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The airline that tickets's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 33,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 34,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The airline that tickets's limits."
+    },
+    {
+      "seq": 35,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:4021979fa4a3303fa44cfb4835f89c4bf940d7b983eacf320889a4d9c2d8c190",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 36,
+      "step": 3,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 37,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 38,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 39,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 40,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 41,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 42,
+      "step": 3,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 43,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 44,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The traveller's mandate covers this action."
+    },
+    {
+      "seq": 45,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The traveller's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 46,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 47,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 48,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The traveller's limits."
+    },
+    {
+      "seq": 49,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:1c163bd857358d8600aafe47b07705a761bbaa522371c167656728d844c045ab",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 50,
+      "step": 4,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 51,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 52,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 53,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 54,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 55,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 56,
+      "step": 4,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 58,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The reservation service's mandate covers this action."
+    },
+    {
+      "seq": 59,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The reservation service's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 60,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 61,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 62,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The reservation service's limits."
+    },
+    {
+      "seq": 63,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:2c813c798e6076d939f435c53ebd294c2d667bbc3d48e041ea3809de22f6697a",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 64,
+      "step": 5,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 65,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 66,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 67,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 68,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 69,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 70,
+      "step": 5,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 71,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 72,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The reservation service's mandate covers this action."
+    },
+    {
+      "seq": 73,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The reservation service's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 74,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 75,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 76,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The reservation service's limits."
+    },
+    {
+      "seq": 77,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:bdf038570b0c45f9614eb5da34412918827ff62dd0509013a74e2151f36dc50c",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 78,
+      "step": 6,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 79,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 80,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 81,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 82,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 83,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 84,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 85,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 86,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 87,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 88,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 89,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 90,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 91,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 92,
+      "step": 6,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 93,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 94,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The hotel's mandate covers this action."
+    },
+    {
+      "seq": 95,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The hotel's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 96,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 97,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 98,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The hotel's limits."
+    },
+    {
+      "seq": 99,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:97ee1061f45ee39774e013c7ab75bd78cfeb686e08c9291470ba133cea77b81a",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 100,
+      "step": 8,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 101,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 102,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 103,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 104,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 105,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 106,
+      "step": 8,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 107,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 108,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The airline that tickets's mandate covers this action."
+    },
+    {
+      "seq": 109,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The airline that tickets's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 110,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 111,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 112,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The airline that tickets's limits."
+    },
+    {
+      "seq": 113,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:915b9b5e325300bd2e69fe6a68fddecdb9823c1e7b49d289f655e2433ce1b897",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 114,
+      "step": 9,
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 115,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 116,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 117,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 118,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 119,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 120,
+      "step": 9,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 121,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 122,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The traveller's mandate covers this action."
+    },
+    {
+      "seq": 123,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The traveller's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 124,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 125,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 126,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The traveller's limits."
+    },
+    {
+      "seq": 127,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:2bddbe680ec76b99a8c1eaecbed73c45ec72c98d0f7f161da94c8907599d2549",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 128,
+      "step": 10,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 129,
+      "step": 10,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 130,
+      "step": 10,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 131,
+      "step": 10,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 132,
+      "step": 10,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 133,
+      "step": 10,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 134,
+      "step": 10,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 135,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 136,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The reservation service's mandate covers this action."
+    },
+    {
+      "seq": 137,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The reservation service a party I can send Accepting the same agreement terms to?",
+        "path": [
+          {
+            "at": "The reservation service's own list",
+            "kind": "own-list",
+            "says": "The reservation service is accepted for Accepting the same agreement terms."
+          }
+        ],
+        "answer": "Accepted, for Accepting the same agreement terms only."
+      },
+      "reason": "recipient-established",
+      "caption": "The reservation service: Accepted, for Accepting the same agreement terms only."
+    },
+    {
+      "seq": 138,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 139,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 140,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The reservation service's limits."
+    },
+    {
+      "seq": 141,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:afd7272e97981831fd39497171b26d3cc3c90646a06e830a1b043fb560901e43",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 142,
+      "step": 11,
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service."
+    },
+    {
+      "seq": 143,
+      "step": 11,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact",
+      "caption": "The service checks integrity."
+    },
+    {
+      "seq": 144,
+      "step": 11,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted",
+      "caption": "The service checks source."
+    },
+    {
+      "seq": 145,
+      "step": 11,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid",
+      "caption": "The service checks authority."
+    },
+    {
+      "seq": 146,
+      "step": 11,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable",
+      "caption": "The service checks terms."
+    },
+    {
+      "seq": 147,
+      "step": 11,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use",
+      "caption": "The service checks fitness."
+    },
+    {
+      "seq": 148,
+      "step": 11,
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "outcome": "admit",
+      "reason": "authority-valid",
+      "caption": "The service admits the signed request."
+    },
+    {
+      "seq": 149,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The identity issuer's identity.passport statement is intact and signed with The identity issuer's pinned key."
+    },
+    {
+      "seq": 150,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:passport",
+        "text": "The identity issuer is accepted for identity.passport claims."
+      },
+      "resolution": {
+        "question": "Is The identity issuer an authority for identity.passport claims about The traveller?",
+        "path": [
+          {
+            "at": "The traveller's own list",
+            "kind": "own-list",
+            "says": "The identity issuer is accepted for identity.passport."
+          }
+        ],
+        "answer": "Accepted, for identity.passport claims only."
+      },
+      "caption": "The identity issuer's identity.passport statement: The identity issuer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 151,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The identity issuer's identity.passport statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 152,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "agreement-credential",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:trip-booking:passport",
+        "text": "Its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+      },
+      "caption": "The identity issuer's identity.passport statement: its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+    },
+    {
+      "seq": 153,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:trip-booking:identity.passport",
+        "text": "Accept identity.passport from urn:fictional:trip-booking:identity-issuer by recorded-by-authority, at most 365 days old."
+      },
+      "caption": "The identity issuer's identity.passport statement is fit for urn:scenario:trip-booking:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 154,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The identity issuer's identity.passport statement is admitted."
+    },
+    {
+      "seq": 155,
+      "step": 12,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:trip-booking:passport",
+        "label": "The identity issuer's identity.passport statement",
+        "claimType": "identity.passport",
+        "subject": "urn:fictional:trip-booking:receiver",
+        "value": null,
+        "source": "urn:fictional:trip-booking:identity-issuer",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:trip-booking:passport",
+          "summary": "use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing"
+        },
+        "provenance": "signed by The identity issuer"
+      },
+      "caption": "The identity issuer's identity.passport statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 156,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:trip booking:ticket with The airline that tickets."
+    },
+    {
+      "seq": 157,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The traveller's mandate covers this action."
+    },
+    {
+      "seq": 158,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The airline that tickets a party I can send Ticketing the confirmed flight to?",
+        "path": [
+          {
+            "at": "The traveller's own list",
+            "kind": "own-list",
+            "says": "The airline that tickets is accepted for Ticketing the confirmed flight."
+          }
+        ],
+        "answer": "Accepted, for Ticketing the confirmed flight only."
+      },
+      "reason": "recipient-established",
+      "caption": "The airline that tickets: Accepted, for Ticketing the confirmed flight only."
+    },
+    {
+      "seq": 159,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 160,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 161,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The traveller's limits."
+    },
+    {
+      "seq": 162,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 163,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:trip-booking:passport",
+        "text": "The issuer's terms: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The identity issuer's identity.passport statement: its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+    },
+    {
+      "seq": 164,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 165,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The traveller’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 166,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The airline that tickets’s agent."
+    },
+    {
+      "seq": 167,
+      "step": 13,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-trip-booking-main:receiver-agent:0004",
+        "from": "The traveller’s agent",
+        "to": "The airline that tickets’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:3dc3cba4d92…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The traveller’s agent to The airline that tickets’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-trip-booking-main:receiver-agent:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+              "id": "urn:awp:engine-trip-booking-main:receiver-agent:0004",
+              "conversation": "urn:awp:engine-trip-booking-main:receiver-agent:0003",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:trip-booking:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:trip-booking:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:trip-booking:airline-agent:actor",
+                "party": "urn:fictional:trip-booking:airline"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f021181372ee7a6e34be66a229b6cd4e6425a41628cbe81e839b5a94b729e8b0"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The traveller says The traveller’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:8720d25c9aa3414e7b217587dec19bfa:1794560400000",
+                "party": "urn:fictional:trip-booking:receiver",
+                "actor": "urn:fictional:trip-booking:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:trip-booking",
+                  "urn:op:trip-booking:request",
+                  "urn:op:trip-booking:decision",
+                  "urn:op:trip-booking:passport",
+                  "urn:op:agreement",
+                  "urn:op:trip-booking:ticket"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:53c0ee8a8e856fbaa437a12168bc066a21df97c05b8987c90c326b2b01671d0b"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:trip-booking:ticket",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:trip-booking:passport"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:ticketing"
+            },
+            "digest": "sha-256:2582bb54f498b2823360fd03fcaa75b2c4e4b9311261b5cfb30717609873ee23"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: identity.passport from The identity issuer.",
+            "raw": [
+              {
+                "document": "urn:fictional:passport",
+                "number": 123456789,
+                "id": "urn:scenario:trip-booking:passport",
+                "issuer": "urn:fictional:trip-booking:identity-issuer",
+                "subject": "urn:fictional:trip-booking:receiver",
+                "claimType": "identity.passport",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:trip-booking:passport",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:passport-management"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:passport-management"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:ticketing"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:ticketing"
+                          },
+                          {
+                            "leftOperand": "recipient",
+                            "operator": "eq",
+                            "rightOperand": "urn:fictional:trip-booking:airline"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:3a68f7b851ce489a110195aa573c4e57213545ac2145247a6b1c9477c0d000fc"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The traveller’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-trip-booking-main:receiver-agent:0003",
+              "statements": [
+                {
+                  "id": "urn:scenario:trip-booking:passport",
+                  "issuer": "urn:fictional:trip-booking:identity-issuer",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The traveller’s agent sends an invoke message to The airline that tickets’s agent."
+    },
+    {
+      "seq": 168,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-trip-booking-main:receiver-agent:0004",
+        "from": "The traveller’s agent",
+        "to": "The airline that tickets’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:3dc3cba4d92…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The traveller’s agent to The airline that tickets’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-trip-booking-main:receiver-agent:0004.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+              "id": "urn:awp:engine-trip-booking-main:receiver-agent:0004",
+              "conversation": "urn:awp:engine-trip-booking-main:receiver-agent:0003",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:trip-booking:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:trip-booking:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:trip-booking:airline-agent:actor",
+                "party": "urn:fictional:trip-booking:airline"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f021181372ee7a6e34be66a229b6cd4e6425a41628cbe81e839b5a94b729e8b0"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The traveller says The traveller’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:8720d25c9aa3414e7b217587dec19bfa:1794560400000",
+                "party": "urn:fictional:trip-booking:receiver",
+                "actor": "urn:fictional:trip-booking:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:trip-booking",
+                  "urn:op:trip-booking:request",
+                  "urn:op:trip-booking:decision",
+                  "urn:op:trip-booking:passport",
+                  "urn:op:agreement",
+                  "urn:op:trip-booking:ticket"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:53c0ee8a8e856fbaa437a12168bc066a21df97c05b8987c90c326b2b01671d0b"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:trip-booking:ticket\"; \"urn:scenario:trip-booking:passport\"; \"urn:purpose:ticketing\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:trip-booking:ticket",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:trip-booking:passport"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:ticketing"
+            },
+            "digest": "sha-256:2582bb54f498b2823360fd03fcaa75b2c4e4b9311261b5cfb30717609873ee23",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:trip-booking:ticket"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:trip-booking:passport"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:ticketing"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: identity.passport from The identity issuer.",
+            "raw": [
+              {
+                "document": "urn:fictional:passport",
+                "number": 123456789,
+                "id": "urn:scenario:trip-booking:passport",
+                "issuer": "urn:fictional:trip-booking:identity-issuer",
+                "subject": "urn:fictional:trip-booking:receiver",
+                "claimType": "identity.passport",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:trip-booking:passport",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:passport-management"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:passport-management"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:ticketing"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:trip-booking:passport",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:ticketing"
+                          },
+                          {
+                            "leftOperand": "recipient",
+                            "operator": "eq",
+                            "rightOperand": "urn:fictional:trip-booking:airline"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:3a68f7b851ce489a110195aa573c4e57213545ac2145247a6b1c9477c0d000fc"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The traveller’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-trip-booking-main:receiver-agent:0003",
+              "statements": [
+                {
+                  "id": "urn:scenario:trip-booking:passport",
+                  "issuer": "urn:fictional:trip-booking:identity-issuer",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The traveller’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 169,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The traveller’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 170,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:ticketing:passport",
+        "text": "The identity issuer is accepted for identity.passport claims."
+      },
+      "resolution": {
+        "question": "Is The identity issuer an authority for identity.passport claims about The traveller?",
+        "path": [
+          {
+            "at": "The airline that tickets's own list",
+            "kind": "own-list",
+            "says": "The identity issuer is accepted for identity.passport."
+          }
+        ],
+        "answer": "Accepted, for identity.passport claims only."
+      },
+      "caption": "The identity issuer's identity.passport statement: The identity issuer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 171,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:8720d25c9aa3414e7b217587dec19bfa:1794560400000",
+        "text": "A representation statement signed with The traveller's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The traveller signed a statement that The traveller’s agent acts for them in this operation."
+    },
+    {
+      "seq": 172,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "agreement-credential",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:trip-booking:passport",
+        "text": "Its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+      },
+      "caption": "The identity issuer's identity.passport statement: its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+    },
+    {
+      "seq": 173,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:trip-booking:identity.passport",
+        "text": "Accept identity.passport from urn:fictional:trip-booking:identity-issuer by recorded-by-authority, at most 365 days old."
+      },
+      "caption": "The identity issuer's identity.passport statement is fit for Ticketing the confirmed flight: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 174,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 175,
+      "step": 14,
+      "agent": "airline-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:trip-booking:passport",
+        "label": "The identity issuer's identity.passport statement",
+        "claimType": "identity.passport",
+        "subject": "urn:fictional:trip-booking:receiver",
+        "value": null,
+        "source": "urn:fictional:trip-booking:identity-issuer",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:trip-booking:passport",
+          "summary": "use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing"
+        },
+        "provenance": "signed by The identity issuer"
+      },
+      "caption": "The identity issuer's identity.passport statement is stored with its source, how it was produced, its date and its terms."
+    }
+  ]
+}

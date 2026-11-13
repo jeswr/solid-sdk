@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6
 /** The on-disk contract. Runtime validation and published JSON Schemas share this source. */
 import { z } from "zod";
+import { emailAddress } from "../bindings/email.js";
 import { CORE_REASON_CODES } from "../core/types.js";
 import { ruleSchema } from "../derive/rules.js";
+import { agreementDefinitionSchema } from "../mechanisms/agreements.js";
 import { chainPolicySchema } from "../mechanisms/authority-chain.js";
+import { mappingPolicySchema, mappingTableSchema } from "../mechanisms/code-mapping.js";
+import { datasetRowSchema, protocolSchema, queryGrantSchema } from "../mechanisms/dataset-query.js";
 import { dutyRuleSchema } from "../runtime/duties.js";
 import { INBOUND_CHECKS, OUTBOUND_CHECKS } from "../trace/types.js";
 
@@ -42,6 +46,23 @@ export const outlineSchema = z.array(outlineEntry);
 const baseDomainProfileSchema = z.strictObject({
   "x-authored-by": z.string(),
   schema: z.literal("agent-profile/0.1"),
+  codeMappings: mappingPolicySchema.optional(),
+  attestedDerivers: z
+    .array(z.strictObject({ deriver: iri, rule: iri, purposes: z.array(iri) }))
+    .default([]),
+  email: z
+    .strictObject({
+      from: emailAddress,
+      structuredReply: iri,
+      pins: z.array(
+        z.strictObject({
+          endpoint: emailAddress,
+          purposes: z.array(iri),
+          validUntil: z.iso.datetime(),
+        }),
+      ),
+    })
+    .optional(),
   id: slug,
   parties: z.record(slug, z.string()).default({}),
   sources: z.record(z.string(), iri).default({}),
@@ -202,7 +223,7 @@ const party = z.strictObject({
   representationOperations: z.array(iri).optional(),
   name: z.string(),
   role: z.enum(["principal", "agent", "source", "register"]),
-  runs: z.enum(["agent", "issuer-only"]),
+  runs: z.enum(["agent", "issuer-only", "mailbox"]),
   actsFor: slug.optional(),
 });
 const ownEntry = z.strictObject({
@@ -245,6 +266,59 @@ const root = z.strictObject({
 });
 const base = { id: slug, agent: slug, atStep: z.number().int().positive().optional() };
 const step = z.discriminatedUnion("type", [
+  z.strictObject({ ...base, type: z.literal("facts") }),
+  z.strictObject({
+    ...base,
+    type: z.literal("email-send"),
+    mailbox: slug,
+    text: z.string(),
+    purpose: iri,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("email-receive"),
+    mailbox: slug,
+    index: z.number().int().nonnegative().default(0),
+    purpose: iri,
+    from: emailAddress.optional(),
+  }),
+  z.strictObject({ ...base, type: z.literal("email-inbox"), mailbox: slug }),
+  z.strictObject({
+    ...base,
+    type: z.literal("dataset-query"),
+    holder: slug,
+    grant: slug,
+    purpose: iri,
+    protocol: protocolSchema,
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("admit-derived"),
+    jws: json,
+    purpose: iri,
+    operation: iri.optional(),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("agreement-request"),
+    service: slug,
+    operation: z.enum(["hold", "accept", "complete", "collect", "withdraw", "end", "replace"]),
+    evidence: strings.default([]),
+    termsDigest: z.string().optional(),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("agreement-present"),
+    service: slug,
+    credential: json,
+    presenter: iri,
+    request: z.strictObject({
+      asset: iri,
+      purpose: iri,
+      at: z.iso.datetime(),
+      period: z.strictObject({ start: z.iso.datetime(), end: z.iso.datetime() }).optional(),
+    }),
+  }),
   z.strictObject({
     ...base,
     type: z.literal("record-segment"),
@@ -299,6 +373,7 @@ const step = z.discriminatedUnion("type", [
     configuration: z.enum(["baseline", "public-read"]).optional(),
     basis: object.optional(),
     evidence: strings.default([]),
+    derivedEvidence: z.array(json).default([]),
     content: z
       .array(
         z.strictObject({
@@ -358,7 +433,7 @@ const step = z.discriminatedUnion("type", [
     rule: iri,
     subject: iri,
     purpose: iri,
-    assurance: z.enum(["recomputed", "by-source"]).default("recomputed"),
+    assurance: z.enum(["recomputed", "by-source", "attested"]).default("recomputed"),
   }),
   z.strictObject({
     ...base,
@@ -515,6 +590,31 @@ export const scenarioSchema = z.strictObject({
         status: z.strictObject({ ref: iri, id: z.string() }),
       }),
     )
+    .default([]),
+  mappingTables: z
+    .array(
+      z.strictObject({ issuer: slug, value: mappingTableSchema, tamper: z.boolean().optional() }),
+    )
+    .default([]),
+  mailboxes: z
+    .array(z.strictObject({ party: slug, address: emailAddress, replies: strings }))
+    .default([]),
+  datasets: z
+    .array(z.strictObject({ holder: slug, id: iri, rows: z.array(datasetRowSchema) }))
+    .default([]),
+  queryGrants: z
+    .array(
+      z.strictObject({
+        id: slug,
+        holder: slug,
+        value: queryGrantSchema
+          .omit({ type: true, issuer: true, reader: true })
+          .extend({ reader: slug }),
+      }),
+    )
+    .default([]),
+  agreements: z
+    .array(z.strictObject({ service: slug, definition: agreementDefinitionSchema }))
     .default([]),
   singleUseRegisters: z
     .array(

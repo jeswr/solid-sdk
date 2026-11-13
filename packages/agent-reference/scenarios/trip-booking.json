@@ -44,6 +44,38 @@
       "name": "The identity issuer",
       "role": "source",
       "runs": "issuer-only"
+    },
+    {
+      "id": "coordinator",
+      "identity": "urn:fictional:trip-booking:coordinator",
+      "name": "The reservation service",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "coordinator-agent",
+      "identity": "urn:fictional:trip-booking:coordinator-agent",
+      "actor": "urn:fictional:trip-booking:coordinator-agent:actor",
+      "name": "The reservation service’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "coordinator"
+    },
+    {
+      "id": "airline",
+      "identity": "urn:fictional:trip-booking:airline",
+      "name": "The airline that tickets",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "airline-agent",
+      "identity": "urn:fictional:trip-booking:airline-agent",
+      "actor": "urn:fictional:trip-booking:airline-agent:actor",
+      "name": "The airline that tickets’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "airline"
     }
   ],
   "trust": {
@@ -51,6 +83,22 @@
       [
         "owner-agent",
         "receiver-agent"
+      ],
+      [
+        "owner-agent",
+        "coordinator-agent"
+      ],
+      [
+        "receiver-agent",
+        "coordinator-agent"
+      ],
+      [
+        "airline-agent",
+        "coordinator-agent"
+      ],
+      [
+        "receiver-agent",
+        "airline-agent"
       ]
     ],
     "ownLists": {
@@ -61,6 +109,12 @@
             "urn:op:trip-booking",
             "urn:op:trip-booking:request",
             "urn:op:trip-booking:passport"
+          ]
+        },
+        {
+          "party": "urn:fictional:trip-booking:coordinator",
+          "tasks": [
+            "urn:op:agreement"
           ]
         }
       ],
@@ -77,6 +131,40 @@
           "party": "urn:fictional:trip-booking:receiver",
           "tasks": [
             "urn:op:trip-booking:decision"
+          ]
+        },
+        {
+          "party": "urn:fictional:trip-booking:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        },
+        {
+          "party": "urn:fictional:trip-booking:airline",
+          "tasks": [
+            "urn:op:trip-booking:ticket"
+          ]
+        }
+      ],
+      "coordinator-agent": [
+        {
+          "party": "urn:fictional:trip-booking:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        }
+      ],
+      "airline-agent": [
+        {
+          "party": "urn:fictional:trip-booking:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        },
+        {
+          "party": "urn:fictional:trip-booking:receiver",
+          "tasks": [
+            "urn:op:trip-booking:ticket"
           ]
         }
       ]
@@ -120,6 +208,30 @@
         },
         {
           "id": "urn:source:passport",
+          "version": "1",
+          "source": "urn:fictional:trip-booking:identity-issuer",
+          "claimTypes": [
+            "identity.passport"
+          ],
+          "subjects": [
+            "urn:fictional:trip-booking:receiver"
+          ]
+        },
+        {
+          "id": "urn:source:ticketing:passport",
+          "version": "1",
+          "source": "urn:fictional:trip-booking:identity-issuer",
+          "claimTypes": [
+            "identity.passport"
+          ],
+          "subjects": [
+            "urn:fictional:trip-booking:receiver"
+          ]
+        }
+      ],
+      "airline-agent": [
+        {
+          "id": "urn:source:ticketing:passport",
           "version": "1",
           "source": "urn:fictional:trip-booking:identity-issuer",
           "claimTypes": [
@@ -181,7 +293,8 @@
       "subject": "urn:fictional:trip-booking:receiver",
       "kind": "identity.passport",
       "value": {
-        "document": "urn:fictional:passport"
+        "document": "urn:fictional:passport",
+        "number": 123456789
       },
       "method": "recorded-by-authority",
       "asOf": "2026-11-13T09:00:00.000Z",
@@ -212,6 +325,35 @@
                   "rightOperand": "urn:purpose:passport-management"
                 }
               ]
+            },
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:trip-booking:passport",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:ticketing"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:trip-booking:passport",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:ticketing"
+                },
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:trip-booking:airline"
+                }
+              ]
             }
           ]
         }
@@ -231,6 +373,11 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:trip-booking:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
         }
       ],
       "withApproval": [
@@ -258,12 +405,171 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:trip-booking:passport"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:trip-booking:ticket"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "coordinator-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "airline-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
         }
       ],
       "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "reserve-plan",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "hold"
+    },
+    {
+      "id": "accept-owner",
+      "agent": "owner-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-airline",
+      "agent": "airline-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-receiver",
+      "agent": "receiver-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-coordinator",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "complete-plan",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "complete",
+      "evidence": []
+    },
+    {
+      "id": "completed",
+      "agent": "coordinator-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.complete-plan.service.status"
+      },
+      "expected": "complete"
+    },
+    {
+      "id": "issue-to-owner",
+      "agent": "owner-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-airline",
+      "agent": "airline-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-receiver",
+      "agent": "receiver-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-coordinator",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "passport-at-ticketing",
+      "agent": "receiver-agent",
+      "type": "admit",
+      "statements": [
+        "passport"
+      ],
+      "purpose": "urn:purpose:ticketing"
+    },
+    {
+      "id": "ticket-flight",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "airline-agent",
+      "kind": "invoke",
+      "operation": "urn:op:trip-booking:ticket",
+      "contents": {
+        "items": [
+          "urn:scenario:trip-booking:passport"
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:trip-booking:ticket",
+        "operation": "urn:op:trip-booking:ticket",
+        "recipient": "urn:fictional:trip-booking:airline",
+        "purpose": "urn:purpose:ticketing",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": "urn:scenario:trip-booking:passport",
+            "claimType": "identity.passport"
+          }
+        ]
+      },
+      "evidence": [
+        "passport"
+      ],
+      "purpose": "urn:purpose:ticketing"
+    },
+    {
+      "id": "ticketing-receives",
+      "agent": "airline-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -410,7 +716,12 @@
           "6": "The traveller’s agent checks the message and prepares a response.",
           "7": "The traveller’s agent completes the read content step.",
           "8": "The traveller’s agent proposes the local action."
-        }
+        },
+        "suites": {
+          "meaning": "plain-language-upgrade",
+          "commitments": "signed-offer-acceptance"
+        },
+        "agreements": []
       },
       "expect": {
         "outcome": "stop",
@@ -961,7 +1272,12 @@
           "2": "The hotel’s agent sends the signed request.",
           "3": "The traveller’s agent checks the message and prepares a response.",
           "4": "The traveller’s agent sends the signed request."
-        }
+        },
+        "suites": {
+          "meaning": "plain-language-upgrade",
+          "commitments": "signed-offer-acceptance"
+        },
+        "agreements": []
       },
       "expect": {
         "outcome": "stop",
@@ -1191,21 +1507,1261 @@
       ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "airline-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
   "stress": [
     "disclosure",
     "integrity"
   ],
   "suites": {
-    "meaning": "plain-language-upgrade"
+    "commitments": "agreement-credential"
   },
   "assurance": null,
-  "blocked": [
-    {
-      "path": "main",
-      "reason": "Needs a coordinated flight/hotel reservation plan, total-trip budget accounting and ticketing-only passport release; the synthetic effect adapter cannot confirm travel reservations."
-    }
-  ],
+  "blocked": [],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -1214,12 +2770,81 @@
     {
       "what": "Travel safety preflights",
       "replacedBy": "Original source-signed hostile hotel listing and a separately signed held passport; neither a different hotel nor travel-document disclosure is released"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ],
+  "traceSteps": {
+    "1": "The parties complete and collect their signed agreement.",
+    "2": "The parties complete and collect their signed agreement.",
+    "3": "The parties complete and collect their signed agreement.",
+    "4": "The parties complete and collect their signed agreement.",
+    "5": "The parties complete and collect their signed agreement.",
+    "6": "The parties complete and collect their signed agreement.",
+    "7": "The parties complete and collect their signed agreement.",
+    "8": "The parties complete and collect their signed agreement.",
+    "9": "The parties complete and collect their signed agreement.",
+    "10": "The parties complete and collect their signed agreement.",
+    "11": "The parties complete and collect their signed agreement.",
+    "12": "The airline receives the passport only for ticketing.",
+    "13": "The airline receives the passport only for ticketing.",
+    "14": "The airline receives the passport only for ticketing."
+  },
+  "agreements": [
+    {
+      "service": "coordinator",
+      "definition": {
+        "id": "urn:fictional:trip-booking:agreement",
+        "coordinator": "urn:fictional:trip-booking:coordinator",
+        "parties": [
+          "urn:fictional:trip-booking:owner",
+          "urn:fictional:trip-booking:airline",
+          "urn:fictional:trip-booking:receiver",
+          "urn:fictional:trip-booking:coordinator"
+        ],
+        "required": [
+          "urn:fictional:trip-booking:owner",
+          "urn:fictional:trip-booking:airline",
+          "urn:fictional:trip-booking:receiver",
+          "urn:fictional:trip-booking:coordinator"
+        ],
+        "terms": {
+          "asset": "urn:fictional:trip-booking:asset",
+          "purpose": "urn:purpose:trip-booking",
+          "validFrom": "2026-11-13T00:00:00.000Z",
+          "validUntil": "2027-11-13T00:00:00.000Z",
+          "clauses": {
+            "maxTotal": 600,
+            "currency": "GBP"
+          }
+        },
+        "conditions": [],
+        "reservations": [
+          {
+            "id": "urn:fictional:trip-booking:hold:owner",
+            "provider": "urn:fictional:trip-booking:owner",
+            "amount": 200,
+            "currency": "GBP"
+          },
+          {
+            "id": "urn:fictional:trip-booking:hold:airline",
+            "provider": "urn:fictional:trip-booking:airline",
+            "amount": 300,
+            "currency": "GBP"
+          }
+        ],
+        "budget": {
+          "amount": 600,
+          "currency": "GBP"
+        }
+      }
     }
   ],
   "result": {
-    "outcome": "ask-principal",
-    "check": "limits-approval",
-    "reason": "approval-required"
-  },
-  "traceSteps": {}
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+  }
 }

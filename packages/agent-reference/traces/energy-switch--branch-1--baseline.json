@@ -26,6 +26,22 @@
     {
       "id": "receiver-agent",
       "name": "The energy supplier’s agent"
+    },
+    {
+      "id": "coordinator",
+      "name": "The switching service"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The switching service’s agent"
+    },
+    {
+      "id": "external-receiver",
+      "name": "The old supplier"
+    },
+    {
+      "id": "external-receiver-agent",
+      "name": "The old supplier’s agent"
     }
   ],
   "scenario": {
@@ -35,7 +51,14 @@
       "1": "The household’s agent checks the signed statements.",
       "2": "The energy supplier’s agent sends the signed request.",
       "3": "The household’s agent checks the message and prepares a response.",
-      "4": "The household’s agent sends the signed request."
+      "4": "The household’s agent sends the signed request.",
+      "5": "The parties complete and collect their signed agreement.",
+      "6": "The parties complete and collect their signed agreement.",
+      "7": "The parties complete and collect their signed agreement.",
+      "8": "The parties complete and collect their signed agreement.",
+      "9": "The parties complete and collect their signed agreement.",
+      "10": "The parties complete and collect their signed agreement.",
+      "11": "The parties complete and collect their signed agreement."
     }
   },
   "configuration": {
@@ -66,13 +89,29 @@
       "name": "The energy supplier’s agent",
       "actsFor": "receiver",
       "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The switching service’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
+    },
+    {
+      "id": "external-receiver-agent",
+      "name": "The old supplier’s agent",
+      "actsFor": "external-receiver",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -80,6 +119,10 @@
     {
       "what": "Energy quote scope preflight",
       "replacedBy": "The supplier signs a real request, while the household holds meter-service-signed readings for billing only; no supplier switch or contract credential is produced"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ],
   "events": [
@@ -431,7 +474,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:c4a8f4984c0…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:d49a8e450a2…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +502,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:d7e7e9cb12aab9fec89e0842d7bce8eae7e06462e3953c7e44783d64f6327bf0"
+            "digest": "sha-256:a568a6c3f57849bf93c389785d2b6c7c8725a97e4504377dd5a204cde544ad82"
           },
           "authority": {
             "present": true,
@@ -473,14 +516,15 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:energy-switch",
-                  "urn:op:energy-switch:request"
+                  "urn:op:energy-switch:request",
+                  "urn:op:agreement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:940e4df0fa780f9807f04eb402b17778320b1c889a8275c13f8b337a45b1b926"
+            "digest": "sha-256:64ba298cf4ab67fa8f73151bb402b6a1ed788852b3eec357ee99653de0cf08e0"
           },
           "content": {
             "present": true,
@@ -550,7 +594,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c4a8f4984c0…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:d49a8e450a2…; never trusted."
         },
         "layers": {
           "header": {
@@ -578,7 +622,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:d7e7e9cb12aab9fec89e0842d7bce8eae7e06462e3953c7e44783d64f6327bf0"
+            "digest": "sha-256:a568a6c3f57849bf93c389785d2b6c7c8725a97e4504377dd5a204cde544ad82"
           },
           "authority": {
             "present": true,
@@ -592,14 +636,15 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:energy-switch",
-                  "urn:op:energy-switch:request"
+                  "urn:op:energy-switch:request",
+                  "urn:op:agreement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:940e4df0fa780f9807f04eb402b17778320b1c889a8275c13f8b337a45b1b926"
+            "digest": "sha-256:64ba298cf4ab67fa8f73151bb402b6a1ed788852b3eec357ee99653de0cf08e0"
           },
           "content": {
             "present": true,

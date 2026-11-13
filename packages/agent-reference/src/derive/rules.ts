@@ -106,6 +106,7 @@ export type DerivedResult =
         | "rule-not-accepted"
         | "derivation-not-verified"
         | "deriver-not-accepted"
+        | "source-not-authoritative"
         | "purpose-not-permitted";
     };
 function monthIndex(value: string): number {
@@ -123,8 +124,9 @@ export function evaluateRule(options: {
   deriver: string;
   at: string;
   purpose: string;
-  assurance?: "recomputed" | "by-source";
+  assurance?: "recomputed" | "by-source" | "attested";
   recordAt?: string;
+  attestedDerivers?: readonly { deriver: string; rule: string; purposes: readonly string[] }[];
   sources?: Readonly<Record<string, string>>;
   reliance?: import("../gates/common.js").RelianceProfile;
 }): DerivedResult {
@@ -377,7 +379,7 @@ export function verifyDerivation(
     (r) => r.id === d.rule && digestOf(r) === d.ruleDigest && r.output === statement.claimType,
   );
   if (!rule) return { ok: false, reason: "rule-not-accepted" };
-  if (d.assurance !== "recomputed" && d.assurance !== "by-source")
+  if (d.assurance !== "recomputed" && d.assurance !== "by-source" && d.assurance !== "attested")
     return { ok: false, reason: "derivation-not-verified" };
   if (
     statement.method !== "derived" ||
@@ -437,6 +439,18 @@ export function verifyDerivation(
   const declared = new Set(leaves(rule));
   if (d.inputs.some((input) => !declared.has(String((input as JsonObject).claimType))))
     return { ok: false, reason: "derivation-not-verified" };
+  if (d.assurance === "attested") {
+    if (
+      !options.attestedDerivers?.some(
+        (a) =>
+          a.deriver === d.deriver && a.rule === rule.id && a.purposes.includes(options.purpose),
+      )
+    )
+      return { ok: false, reason: "source-not-authoritative" };
+    return digestOf(statement.value) === d.outputDigest
+      ? { ok: true, statement, inputs: [] }
+      : { ok: false, reason: "derivation-not-verified" };
+  }
   if (d.assurance === "by-source") {
     if (
       statement.issuer !== d.deriver ||

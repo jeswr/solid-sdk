@@ -37,12 +37,36 @@
       "runs": "agent",
       "actor": "urn:fictional:find-a-time:receiver-agent:actor",
       "actsFor": "receiver"
+    },
+    {
+      "id": "calendar-service",
+      "identity": "urn:fictional:find-a-time:calendar-service",
+      "name": "The fictional shared calendar service",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "calendar-agent",
+      "identity": "urn:fictional:find-a-time:calendar-agent",
+      "actor": "urn:fictional:find-a-time:calendar-agent:actor",
+      "name": "The calendar service’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "calendar-service"
     }
   ],
   "trust": {
     "introductions": [
       [
         "owner-agent",
+        "receiver-agent"
+      ],
+      [
+        "calendar-agent",
+        "owner-agent"
+      ],
+      [
+        "calendar-agent",
         "receiver-agent"
       ]
     ],
@@ -54,6 +78,12 @@
             "urn:op:find-a-time",
             "urn:op:find-a-time:request"
           ]
+        },
+        {
+          "party": "urn:fictional:find-a-time:calendar-service",
+          "tasks": [
+            "urn:op:find-a-time:slots"
+          ]
         }
       ],
       "receiver-agent": [
@@ -62,6 +92,26 @@
           "tasks": [
             "urn:op:find-a-time",
             "urn:op:find-a-time:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:find-a-time:calendar-service",
+          "tasks": [
+            "urn:op:find-a-time:slots"
+          ]
+        }
+      ],
+      "calendar-agent": [
+        {
+          "party": "urn:fictional:find-a-time:owner",
+          "tasks": [
+            "urn:op:find-a-time:slots"
+          ]
+        },
+        {
+          "party": "urn:fictional:find-a-time:receiver",
+          "tasks": [
+            "urn:op:find-a-time:slots"
           ]
         }
       ]
@@ -78,6 +128,19 @@
           "subjects": [
             "urn:fictional:find-a-time:owner"
           ]
+        },
+        {
+          "id": "urn:fictional:find-a-time:calendar-source",
+          "version": "1",
+          "source": "urn:fictional:find-a-time:calendar-service",
+          "claimTypes": [
+            "calendar.first-free",
+            "calendar.second-free",
+            "calendar.slot-free"
+          ],
+          "subjects": [
+            "urn:fictional:find-a-time:slot:2026-11-17T10-00"
+          ]
         }
       ],
       "receiver-agent": [
@@ -90,6 +153,34 @@
           ],
           "subjects": [
             "urn:fictional:find-a-time:owner"
+          ]
+        },
+        {
+          "id": "urn:fictional:find-a-time:calendar-source",
+          "version": "1",
+          "source": "urn:fictional:find-a-time:calendar-service",
+          "claimTypes": [
+            "calendar.first-free",
+            "calendar.second-free",
+            "calendar.slot-free"
+          ],
+          "subjects": [
+            "urn:fictional:find-a-time:slot:2026-11-17T10-00"
+          ]
+        }
+      ],
+      "calendar-agent": [
+        {
+          "id": "urn:fictional:find-a-time:calendar-source",
+          "version": "1",
+          "source": "urn:fictional:find-a-time:calendar-service",
+          "claimTypes": [
+            "calendar.first-free",
+            "calendar.second-free",
+            "calendar.slot-free"
+          ],
+          "subjects": [
+            "urn:fictional:find-a-time:slot:2026-11-17T10-00"
           ]
         }
       ]
@@ -126,6 +217,90 @@
           ]
         }
       }
+    },
+    {
+      "id": "first-free",
+      "issuer": "calendar-service",
+      "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+      "kind": "calendar.first-free",
+      "value": {
+        "value": true
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:fictional:find-a-time:calendar.first-free-terms",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:find-a-time:first-free",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:find-a-time"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:find-a-time:first-free",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:find-a-time"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "second-free",
+      "issuer": "calendar-service",
+      "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+      "kind": "calendar.second-free",
+      "value": {
+        "value": true
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:fictional:find-a-time:calendar.second-free-terms",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:find-a-time:second-free",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:find-a-time"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:find-a-time:second-free",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:find-a-time"
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ],
   "mandates": [
@@ -150,9 +325,161 @@
         }
       ],
       "withApproval": []
+    },
+    {
+      "agent": "calendar-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:find-a-time:slots"
+        }
+      ],
+      "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "read-calendars",
+      "agent": "calendar-agent",
+      "type": "admit",
+      "statements": [
+        "first-free",
+        "second-free"
+      ],
+      "purpose": "urn:purpose:find-a-time"
+    },
+    {
+      "id": "derive-slot",
+      "agent": "calendar-agent",
+      "type": "derive",
+      "rule": "urn:fictional:find-a-time:both-free-rule",
+      "subject": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+      "purpose": "urn:purpose:find-a-time",
+      "assurance": "attested"
+    },
+    {
+      "id": "admit-slot",
+      "agent": "calendar-agent",
+      "type": "admit-derived",
+      "jws": {
+        "$ref": "steps.derive-slot.jws"
+      },
+      "purpose": "urn:purpose:find-a-time"
+    },
+    {
+      "id": "send-to-owner",
+      "agent": "calendar-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:find-a-time:slots",
+      "contents": {
+        "slot": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "free": {
+          "$ref": "steps.derive-slot.statement.value"
+        }
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time:slots",
+        "operation": "urn:op:find-a-time:slots",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": {
+              "$ref": "steps.derive-slot.statement.id"
+            },
+            "claimType": "calendar.slot-free"
+          }
+        ]
+      },
+      "derivedEvidence": [
+        {
+          "$ref": "steps.derive-slot.jws"
+        }
+      ],
+      "purpose": "urn:purpose:find-a-time"
+    },
+    {
+      "id": "receive-at-owner",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "calendar-agent"
+    },
+    {
+      "id": "send-to-receiver",
+      "agent": "calendar-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:find-a-time:slots",
+      "contents": {
+        "slot": "urn:fictional:find-a-time:slot:2026-11-17T10-00",
+        "free": {
+          "$ref": "steps.derive-slot.statement.value"
+        }
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time:slots",
+        "operation": "urn:op:find-a-time:slots",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": {
+              "$ref": "steps.derive-slot.statement.id"
+            },
+            "claimType": "calendar.slot-free"
+          }
+        ]
+      },
+      "derivedEvidence": [
+        {
+          "$ref": "steps.derive-slot.jws"
+        }
+      ],
+      "purpose": "urn:purpose:find-a-time"
+    },
+    {
+      "id": "receive-at-receiver",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "calendar-agent"
+    },
+    {
+      "id": "owner-facts",
+      "agent": "owner-agent",
+      "type": "facts"
+    },
+    {
+      "id": "receiver-facts",
+      "agent": "receiver-agent",
+      "type": "facts"
+    },
+    {
+      "id": "same-slot-owner",
+      "agent": "owner-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.owner-facts.0.value"
+      },
+      "expected": true
+    },
+    {
+      "id": "same-slot-receiver",
+      "agent": "receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.receiver-facts.0.value"
+      },
+      "expected": true
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -463,19 +790,485 @@
       ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "calendar-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
   "stress": [
     "disclosure",
     "data-terms"
   ],
   "suites": {},
   "assurance": "attested",
-  "blocked": [
-    {
-      "path": "main",
-      "reason": "needs attestation"
-    }
-  ],
+  "blocked": [],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -484,7 +1277,28 @@
     {
       "what": "Attestation-free calendar privacy preflight",
       "replacedBy": "The real signed request cannot widen meeting coordination to a held private appointment; no attested free/busy predicate is made"
+    },
+    {
+      "what": "Attested calendar derivation",
+      "replacedBy": "A separately keyed fictional calendar service holds both synthetic availability records, evaluates the installed all-of rule for a named candidate slot, signs its derivation and releases only that free-slot result through both receiving agents’ gates. No hardware attestation or joint computation is claimed."
     }
   ],
-  "traceSteps": {}
+  "traceSteps": {
+    "1": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "2": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "3": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "4": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "5": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "6": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "7": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "8": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "9": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "10": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+    "11": "The calendar service signs the free-slot derivation, and each receiving agent verifies it."
+  },
+  "result": {
+    "outcome": "admit",
+    "check": "fitness",
+    "reason": "fit-for-use"
+  }
 }

@@ -10,7 +10,9 @@
     "land-register": "The fictional land registry",
     "other-person": "The other fictional owner",
     "owner-agent": "The buyer’s agent",
-    "receiver-agent": "The seller’s agent"
+    "receiver-agent": "The seller’s agent",
+    "coordinator": "The conveyancer and conditional escrow register",
+    "coordinator-agent": "The conveyancer and conditional escrow register’s agent"
   },
   "claims": [
     {
@@ -32,6 +34,26 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "searches.complete",
+      "sources": [
+        "urn:fictional:home-purchase:land-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
+    },
+    {
+      "kind": "funds.held",
+      "sources": [
+        "urn:fictional:home-purchase:coordinator"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
     }
   ],
   "purposes": [
@@ -88,6 +110,18 @@
         "urn:purpose:home-purchase"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:home-purchase"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "actionClaims": [
@@ -102,6 +136,12 @@
       "claims": [
         "land.ownership"
       ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ]
 }

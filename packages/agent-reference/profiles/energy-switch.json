@@ -7,7 +7,11 @@
     "receiver": "The energy supplier",
     "meter-service": "The meter data service",
     "owner-agent": "The household’s agent",
-    "receiver-agent": "The energy supplier’s agent"
+    "receiver-agent": "The energy supplier’s agent",
+    "coordinator": "The switching service",
+    "coordinator-agent": "The switching service’s agent",
+    "external-receiver": "The old supplier",
+    "external-receiver-agent": "The old supplier’s agent"
   },
   "claims": [
     {
@@ -29,6 +33,16 @@
         "recorded-by-authority"
       ],
       "maxAgeDays": 30
+    },
+    {
+      "kind": "switch.date",
+      "sources": [
+        "urn:fictional:energy-switch:coordinator"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 1
     }
   ],
   "purposes": [
@@ -90,6 +104,24 @@
         "urn:purpose:energy-switch"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:energy-switch"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ]
 }

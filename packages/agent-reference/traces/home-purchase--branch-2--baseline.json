@@ -38,6 +38,14 @@
     {
       "id": "receiver-agent",
       "name": "The seller’s agent"
+    },
+    {
+      "id": "coordinator",
+      "name": "The conveyancer and conditional escrow register"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The conveyancer and conditional escrow register’s agent"
     }
   ],
   "scenario": {
@@ -45,7 +53,14 @@
     "title": "Buying a home: The seller is not the registered owner",
     "steps": {
       "1": "The buyer’s agent checks the signed statements.",
-      "2": "The buyer’s agent proposes the local action."
+      "2": "The buyer’s agent proposes the local action.",
+      "3": "The parties complete and collect their signed agreement.",
+      "4": "The parties complete and collect their signed agreement.",
+      "5": "The parties complete and collect their signed agreement.",
+      "6": "The parties complete and collect their signed agreement.",
+      "7": "The parties complete and collect their signed agreement.",
+      "8": "The parties complete and collect their signed agreement.",
+      "9": "The parties complete and collect their signed agreement."
     }
   },
   "configuration": {
@@ -76,13 +91,23 @@
       "name": "The seller’s agent",
       "actsFor": "receiver",
       "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The conveyancer and conditional escrow register’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -90,6 +115,10 @@
     {
       "what": "Conveyancing source preflights",
       "replacedBy": "An email author signs an unauthoritative deposit account; the registry signs ownership by someone other than the seller. No funds, escrow or completion are simulated"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ],
   "events": [

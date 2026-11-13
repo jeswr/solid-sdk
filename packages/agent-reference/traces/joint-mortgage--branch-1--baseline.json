@@ -30,6 +30,18 @@
     {
       "id": "second-applicant",
       "name": "The second applicant"
+    },
+    {
+      "id": "coordinator",
+      "name": "The joint agreement coordinator"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The joint agreement coordinator’s agent"
+    },
+    {
+      "id": "second-applicant-agent",
+      "name": "The second applicant’s agent"
     }
   ],
   "scenario": {
@@ -40,7 +52,13 @@
       "2": "The lender’s agent sends the signed request.",
       "3": "The first applicant’s agent checks the message and prepares a response.",
       "4": "The first applicant’s agent completes the revoke mandate step.",
-      "5": "The first applicant’s agent sends the signed request."
+      "5": "The first applicant’s agent sends the signed request.",
+      "6": "The parties complete and collect their signed agreement.",
+      "7": "The parties complete and collect their signed agreement.",
+      "8": "The parties complete and collect their signed agreement.",
+      "9": "The parties complete and collect their signed agreement.",
+      "10": "The parties complete and collect their signed agreement.",
+      "11": "The parties complete and collect their signed agreement."
     }
   },
   "configuration": {
@@ -71,13 +89,29 @@
       "name": "The lender’s agent",
       "actsFor": "receiver",
       "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The joint agreement coordinator’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
+    },
+    {
+      "id": "second-applicant-agent",
+      "name": "The second applicant’s agent",
+      "actsFor": "second-applicant",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -85,6 +119,10 @@
     {
       "what": "Joint-commitment preflight",
       "replacedBy": "The branches check only one owner’s withdrawal and issuer restrictions on another applicant’s signed payslip; no joint acceptance is produced"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ],
   "events": [
@@ -436,7 +474,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:c41209a39fe…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:4b27cf112a4…; never trusted."
         },
         "layers": {
           "header": {
@@ -464,7 +502,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:61ab64578c95cdd0a63d50ff033e6026a76f9f3358a1c506c3f1f4a367e6aed5"
+            "digest": "sha-256:a550b9e621ea389fff7eaffa03b008b164a087071a793b888155cdb7b2c793b3"
           },
           "authority": {
             "present": true,
@@ -478,14 +516,15 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:joint-mortgage",
-                  "urn:op:joint-mortgage:request"
+                  "urn:op:joint-mortgage:request",
+                  "urn:op:agreement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:70b3fc67297eada84e2892278b6735446309e955d8337ee9185fbccd5f077b07"
+            "digest": "sha-256:b5e6d21aede7311788f38d6254837b36c82c2cc7a4653712b9ea5fff01bfe785"
           },
           "content": {
             "present": true,
@@ -555,7 +594,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:c41209a39fe…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:4b27cf112a4…; never trusted."
         },
         "layers": {
           "header": {
@@ -583,7 +622,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:61ab64578c95cdd0a63d50ff033e6026a76f9f3358a1c506c3f1f4a367e6aed5"
+            "digest": "sha-256:a550b9e621ea389fff7eaffa03b008b164a087071a793b888155cdb7b2c793b3"
           },
           "authority": {
             "present": true,
@@ -597,14 +636,15 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:joint-mortgage",
-                  "urn:op:joint-mortgage:request"
+                  "urn:op:joint-mortgage:request",
+                  "urn:op:agreement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:70b3fc67297eada84e2892278b6735446309e955d8337ee9185fbccd5f077b07"
+            "digest": "sha-256:b5e6d21aede7311788f38d6254837b36c82c2cc7a4653712b9ea5fff01bfe785"
           },
           "content": {
             "present": true,

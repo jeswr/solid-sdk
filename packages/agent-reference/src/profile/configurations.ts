@@ -25,7 +25,8 @@ export interface ConfigurationDefinition {
         readonly curve: "Ed25519" | "P-256";
         readonly specs: readonly string[];
       }
-    | { readonly status: "unresolved"; readonly candidate: string };
+    | { readonly status: "unresolved"; readonly candidate: string }
+    | { readonly status: "not-applicable"; readonly limitations: string };
   /** Whether the REQUESTER must sign. Responses are always signed in these configurations. */
   readonly requesterAuthentication: ConcernStatus;
   readonly authentication: string;
@@ -81,6 +82,10 @@ export const CONFIG_PUBLIC = `${AWP}config/public-readonly-ed25519/0.1`;
 export const CONFIG_SD_CANDIDATE = `${AWP}config/selective-disclosure-candidate/0.1`;
 
 export const CONFIG_PLAIN_LANGUAGE = `${AWP}config/plain-language-upgrade-local/0.1`;
+export const CONFIG_MAPPING = `${AWP}config/local-signed-code-mappings/0.1`;
+export const CONFIG_EMAIL = `${AWP}config/plaintext-email-human-approval/0.1`;
+export const CONFIG_AGREEMENT = `${AWP}config/local-multiparty-agreement/0.1`;
+export const CONFIG_QUERY = `${AWP}config/local-approved-query/0.1`;
 export const CONFIG_FORUM = `${AWP}config/local-record-forum/0.1`;
 export const CONFIG_REFERENCE_LOCAL = `${AWP}config/by-reference-local-holder/0.1`;
 export const CONFIG_ORGANIZATIONS = `${AWP}config/organizations-local-resolver/0.1`;
@@ -107,6 +112,37 @@ const localDefinition = (id: string, label: string): ConfigurationDefinition => 
 });
 
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_MAPPING]: localDefinition(
+    CONFIG_MAPPING,
+    "Signed versioned code-list mapping lookup with original-source standing",
+  ),
+  [CONFIG_EMAIL]: {
+    ...localDefinition(
+      CONFIG_EMAIL,
+      "Unsigned plain-text email to principal-pinned endpoints; approval before every send",
+    ),
+    integrity: {
+      status: "not-applicable",
+      limitations:
+        "Email has no signature. Local owner pins and approvals remain JWS-protected; only the endpoint address is known.",
+    },
+    requesterAuthentication: "not-applicable",
+    authentication: "Address-only identity, neither a verified person nor a claims issuer",
+    representation:
+      "Only this agent's principal is represented; the correspondent is a mailbox with no agent",
+    serialization:
+      "Unsigned plain text with agent/represented-principal and structured-reply footer",
+    bindings: ["scripted-mailbox/0.1"],
+    unsignedRequestKinds: [],
+  },
+  [CONFIG_AGREEMENT]: localDefinition(
+    CONFIG_AGREEMENT,
+    "Multi-party signed agreement credentials with conditional local completion",
+  ),
+  [CONFIG_QUERY]: localDefinition(
+    CONFIG_QUERY,
+    "Source-signed approved-query answers with durable per-grant caps",
+  ),
   [CONFIG_FORUM]: localDefinition(
     CONFIG_FORUM,
     "Signed record claims to a separately keyed fictional forum; no core re-execution",

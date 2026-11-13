@@ -9,6 +9,179 @@
       "type": "string",
       "const": "agent-profile/0.1"
     },
+    "codeMappings": {
+      "type": "object",
+      "properties": {
+        "receivers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          }
+        },
+        "acceptedLists": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 512,
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          }
+        },
+        "maxStatusAgeSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "assurance": {
+          "default": "recomputed",
+          "type": "string",
+          "enum": [
+            "recomputed",
+            "attested"
+          ]
+        },
+        "approximate": {
+          "type": "string",
+          "enum": [
+            "ask-more",
+            "admit-lowered"
+          ]
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromList": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "toList": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "registry": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "table": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "fromList",
+              "toList",
+              "registry",
+              "table",
+              "version"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "receivers",
+        "acceptedLists",
+        "maxStatusAgeSeconds",
+        "assurance",
+        "approximate",
+        "routes"
+      ],
+      "additionalProperties": false
+    },
+    "attestedDerivers": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "deriver": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "rule": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+          },
+          "purposes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+            }
+          }
+        },
+        "required": [
+          "deriver",
+          "rule",
+          "purposes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "email": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "pattern": "^mailto:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        },
+        "structuredReply": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "endpoint": {
+                "type": "string",
+                "pattern": "^mailto:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+              },
+              "purposes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                }
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              }
+            },
+            "required": [
+              "endpoint",
+              "purposes",
+              "validUntil"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "from",
+        "structuredReply",
+        "pins"
+      ],
+      "additionalProperties": false
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -1255,6 +1428,7 @@
   "required": [
     "x-authored-by",
     "schema",
+    "attestedDerivers",
     "id",
     "parties",
     "sources",

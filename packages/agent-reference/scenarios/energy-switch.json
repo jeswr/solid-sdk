@@ -44,6 +44,38 @@
       "runs": "agent",
       "actor": "urn:fictional:energy-switch:receiver-agent:actor",
       "actsFor": "receiver"
+    },
+    {
+      "id": "coordinator",
+      "identity": "urn:fictional:energy-switch:coordinator",
+      "name": "The switching service",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "coordinator-agent",
+      "identity": "urn:fictional:energy-switch:coordinator-agent",
+      "actor": "urn:fictional:energy-switch:coordinator-agent:actor",
+      "name": "The switching service’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "coordinator"
+    },
+    {
+      "id": "external-receiver",
+      "identity": "urn:fictional:energy-switch:external-receiver",
+      "name": "The old supplier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "external-receiver-agent",
+      "identity": "urn:fictional:energy-switch:external-receiver-agent",
+      "actor": "urn:fictional:energy-switch:external-receiver-agent:actor",
+      "name": "The old supplier’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "external-receiver"
     }
   ],
   "trust": {
@@ -51,6 +83,14 @@
       [
         "owner-agent",
         "receiver-agent"
+      ],
+      [
+        "owner-agent",
+        "coordinator-agent"
+      ],
+      [
+        "receiver-agent",
+        "coordinator-agent"
       ]
     ],
     "ownLists": {
@@ -61,6 +101,12 @@
             "urn:op:energy-switch",
             "urn:op:energy-switch:request"
           ]
+        },
+        {
+          "party": "urn:fictional:energy-switch:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
         }
       ],
       "receiver-agent": [
@@ -69,6 +115,26 @@
           "tasks": [
             "urn:op:energy-switch",
             "urn:op:energy-switch:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:energy-switch:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        },
+        {
+          "party": "urn:fictional:energy-switch:external-receiver",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        }
+      ],
+      "coordinator-agent": [
+        {
+          "party": "urn:fictional:energy-switch:coordinator",
+          "tasks": [
+            "urn:op:agreement"
           ]
         }
       ]
@@ -201,6 +267,36 @@
           ]
         }
       }
+    },
+    {
+      "id": "completion-condition",
+      "issuer": "coordinator",
+      "subject": "urn:fictional:energy-switch:asset",
+      "kind": "switch.date",
+      "value": {
+        "value": "2026-11-20"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:fictional:energy-switch:condition-terms",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:energy-switch:completion-condition",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:energy-switch"
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   ],
   "mandates": [
@@ -211,6 +307,11 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:energy-switch"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
         }
       ],
       "withApproval": []
@@ -222,12 +323,131 @@
           "type": "permission",
           "action": "use",
           "target": "urn:op:energy-switch:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:agreement"
         }
       ],
       "withApproval": []
+    },
+    {
+      "agent": "coordinator-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "external-receiver-agent",
+      "autonomous": [],
+      "withApproval": []
     }
   ],
-  "script": [],
+  "script": [
+    {
+      "id": "reserve-plan",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "hold"
+    },
+    {
+      "id": "accept-owner",
+      "agent": "owner-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-receiver",
+      "agent": "receiver-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-coordinator",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "complete-plan",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "complete",
+      "evidence": [
+        "completion-condition"
+      ]
+    },
+    {
+      "id": "completed",
+      "agent": "coordinator-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.complete-plan.service.status"
+      },
+      "expected": "complete"
+    },
+    {
+      "id": "issue-to-owner",
+      "agent": "owner-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-receiver",
+      "agent": "receiver-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-coordinator",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "present-credential",
+      "agent": "external-receiver-agent",
+      "type": "agreement-present",
+      "service": "coordinator",
+      "credential": {
+        "$ref": "steps.complete-plan.service.credential"
+      },
+      "presenter": "urn:fictional:energy-switch:receiver",
+      "request": {
+        "asset": "urn:fictional:energy-switch:asset",
+        "purpose": "urn:purpose:energy-switch",
+        "at": "2026-11-13T09:00:00.000Z"
+      }
+    },
+    {
+      "id": "credential-verified",
+      "agent": "external-receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.present-credential.ok"
+      },
+      "expected": true
+    }
+  ],
   "inject": [],
   "branches": [
     {
@@ -310,7 +530,8 @@
           "2": "The energy supplier’s agent sends the signed request.",
           "3": "The household’s agent checks the message and prepares a response.",
           "4": "The household’s agent sends the signed request."
-        }
+        },
+        "agreements": []
       },
       "expect": {
         "outcome": "stop",
@@ -540,7 +761,996 @@
       ]
     }
   ],
-  "expect": [],
+  "expect": [
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "external-receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    }
+  ],
   "stress": [
     "disclosure",
     "data-terms",
@@ -550,12 +1760,7 @@
     "commitments": "agreement-credential"
   },
   "assurance": null,
-  "blocked": [
-    {
-      "path": "main",
-      "reason": "Needs a transferable supply agreement credential and service-switch completion/rollback binding; an ordinary local offer/acceptance is not the catalogue’s switching workflow."
-    }
-  ],
+  "blocked": [],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -564,7 +1769,80 @@
     {
       "what": "Energy quote scope preflight",
       "replacedBy": "The supplier signs a real request, while the household holds meter-service-signed readings for billing only; no supplier switch or contract credential is produced"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ],
-  "traceSteps": {}
+  "traceSteps": {
+    "1": "The parties complete and collect their signed agreement.",
+    "2": "The parties complete and collect their signed agreement.",
+    "3": "The parties complete and collect their signed agreement.",
+    "4": "The parties complete and collect their signed agreement.",
+    "5": "The parties complete and collect their signed agreement.",
+    "6": "The parties complete and collect their signed agreement.",
+    "7": "The parties complete and collect their signed agreement.",
+    "8": "The parties complete and collect their signed agreement.",
+    "9": "The parties complete and collect their signed agreement.",
+    "10": "The parties complete and collect their signed agreement.",
+    "11": "The parties complete and collect their signed agreement."
+  },
+  "agreements": [
+    {
+      "service": "coordinator",
+      "definition": {
+        "id": "urn:fictional:energy-switch:agreement",
+        "coordinator": "urn:fictional:energy-switch:coordinator",
+        "parties": [
+          "urn:fictional:energy-switch:owner",
+          "urn:fictional:energy-switch:receiver",
+          "urn:fictional:energy-switch:coordinator"
+        ],
+        "required": [
+          "urn:fictional:energy-switch:owner",
+          "urn:fictional:energy-switch:receiver",
+          "urn:fictional:energy-switch:coordinator"
+        ],
+        "terms": {
+          "asset": "urn:fictional:energy-switch:asset",
+          "purpose": "urn:purpose:energy-switch",
+          "validFrom": "2026-11-13T00:00:00.000Z",
+          "validUntil": "2027-11-13T00:00:00.000Z",
+          "clauses": {
+            "switchDate": "2026-11-20",
+            "supply": "electricity"
+          }
+        },
+        "conditions": [
+          {
+            "kind": "switch.date",
+            "source": "urn:fictional:energy-switch:coordinator",
+            "subject": "urn:fictional:energy-switch:asset",
+            "equals": {
+              "value": "2026-11-20"
+            }
+          }
+        ],
+        "reservations": [
+          {
+            "id": "urn:fictional:energy-switch:hold:owner",
+            "provider": "urn:fictional:energy-switch:owner",
+            "amount": 0,
+            "currency": "GBP"
+          },
+          {
+            "id": "urn:fictional:energy-switch:hold:receiver",
+            "provider": "urn:fictional:energy-switch:receiver",
+            "amount": 0,
+            "currency": "GBP"
+          }
+        ],
+        "budget": {
+          "amount": 0,
+          "currency": "GBP"
+        }
+      }
+    }
+  ]
 }

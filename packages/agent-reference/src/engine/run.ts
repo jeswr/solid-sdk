@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
+
 import type { OdrlRule } from "@jeswr/solid-odrl";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { isDeepStrictEqual } from "util";
+import { ScriptedMailbox } from "../bindings/email.js";
 import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import { SyntheticPaymentRail, underwritingTermsFor } from "../domains/mortgage.js";
@@ -12,6 +14,13 @@ import {
   purposeStoreReleaseCheck,
 } from "../domains/purpose-store.js";
 import type { GateContext } from "../gates/common.js";
+import {
+  type AgreementCredential,
+  LocalAgreementCoordinator,
+  verifyAgreementCredential,
+} from "../mechanisms/agreements.js";
+import { issueMappingAttestation } from "../mechanisms/code-mapping.js";
+import { LocalDatasetHolder } from "../mechanisms/dataset-query.js";
 import { LocalForum, RECORD_LIMITS } from "../mechanisms/forum.js";
 import { LocalDocumentResolver } from "../mechanisms/organizations.js";
 import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
@@ -24,13 +33,17 @@ import { LocalSingleUseRegister, type SingleUseItem } from "../mechanisms/single
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import {
+  CONFIG_AGREEMENT,
   CONFIG_CORROBORATION,
+  CONFIG_EMAIL,
   CONFIG_FORUM,
+  CONFIG_MAPPING,
   CONFIG_ORGANIZATIONS,
   CONFIG_PAYMENT,
   CONFIG_PINNED_LIST,
   CONFIG_PLAIN_LANGUAGE,
   CONFIG_PUBLIC,
+  CONFIG_QUERY,
   CONFIG_REFERENCE_LOCAL,
   CONFIG_SELECTIVE_LOCAL,
 } from "../profile/configurations.js";
@@ -136,7 +149,14 @@ function difference(expected: readonly OutlineEntry[], actual: readonly OutlineE
 function unsupported(profile: DomainProfile, scenario: Scenario, path: string): string | undefined {
   const named = scenario.blocked.find((b) => b.path === path || b.path === "*");
   if (named) return named.reason;
-  if (scenario.assurance)
+  if (
+    scenario.assurance &&
+    !(
+      scenario.assurance === "attested" &&
+      (profile.rules.some((r) => r.assurances.includes("attested")) ||
+        profile.codeMappings?.assurance === "attested")
+    )
+  )
     return scenario.assurance === "proved"
       ? "needs a proof system"
       : scenario.assurance === "joint"
@@ -156,14 +176,34 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
           authority: "mandate-credential",
           identity: "organization-document-local",
           authenticity: "selective-disclosure",
+          transport: "email",
+          "usage-control": "human-approval",
         } as Record<string, string>
-      )[layer] !== suite
+      )[layer] !== suite &&
+      !(
+        (
+          {
+            commitments: ["payment", "agreement-credential"],
+            "data-access": ["by-query", "by-reference-local-holder"],
+            identity: ["organization-document-local", "email-endpoint"],
+            meaning: ["plain-language-upgrade", "registry-lookup"],
+          } as Record<string, string[]>
+        )[layer] ?? []
+      ).includes(suite)
     )
       return `suite ${layer}/${suite} is not implemented by this engine`;
   if (
     Object.keys(scenario.suites).filter(
       (layer) => BASELINE.layers[layer as keyof typeof BASELINE.layers] !== scenario.suites[layer],
     ).length > 1 &&
+    !(
+      scenario.suites.transport === "email" &&
+      scenario.suites.identity === "email-endpoint" &&
+      scenario.suites.meaning === "plain-language-upgrade" &&
+      scenario.suites["usage-control"] === "human-approval" &&
+      scenario.suites.trust === "pinned-list" &&
+      Object.keys(scenario.suites).length === 5
+    ) &&
     !(
       scenario.suites.authority === "mandate-credential" &&
       scenario.suites.identity === "organization-document-local" &&
@@ -327,6 +367,45 @@ async function runPath(
 ): Promise<TraceFile> {
   const registry = withPublicRead(baselineRegistry());
   registry.register({
+    layer: "meaning",
+    id: "registry-lookup",
+    name: "Signed code-list mappings",
+    vocabulary: "profile-selected signed mapping tables",
+    summary:
+      "A derived local statement names the mapping version and original digest and retains its source and quality; current status is resolved afresh.",
+  });
+  registry.register({
+    layer: "transport",
+    id: "email",
+    name: "Plain-text email",
+    binding: "scripted-mailbox/0.1",
+    summary: "Unsigned plain text to a scripted mailbox; the correspondent has no agent or gates.",
+  });
+  registry.register({
+    layer: "identity",
+    id: "email-endpoint",
+    name: "Email endpoint only",
+    resolution: "pinned",
+    summary: "An owner-signed pin recognizes only an address, never a person or claims authority.",
+  });
+  registry.register({
+    layer: "usage-control",
+    id: "human-approval",
+    name: "Approve each email",
+    rulesOnly: false,
+    policyLanguage: "exact-text owner approval",
+    summary:
+      "The principal sees the exact email including its footer before every send; task context is checked.",
+  });
+  registry.register({
+    layer: "commitments",
+    id: "agreement-credential",
+    name: "Local multi-party agreement credentials",
+    agreement: "agreement-credential",
+    summary:
+      "Every required party signs one digest; durable local holds, conditional completion and fresh signed status.",
+  });
+  registry.register({
     layer: "commitments",
     id: "payment",
     name: "Local structured payments",
@@ -401,23 +480,33 @@ async function runPath(
       "A separately keyed fictional forum verifies signed segments and compares records and admitted observations; it never re-runs a core.",
   });
   const local =
-    scenario.suites.accountability === "regulator-claim"
-      ? CONFIG_FORUM
-      : scenario.suites.authenticity === "selective-disclosure"
-        ? CONFIG_SELECTIVE_LOCAL
-        : scenario.suites.authority === "mandate-credential"
-          ? CONFIG_ORGANIZATIONS
-          : scenario.suites["data-access"] === "by-reference-local-holder"
-            ? CONFIG_REFERENCE_LOCAL
-            : scenario.suites.meaning === "plain-language-upgrade"
-              ? CONFIG_PLAIN_LANGUAGE
-              : scenario.suites.commitments === "payment"
-                ? CONFIG_PAYMENT
-                : scenario.suites.reliance === "corroboration"
-                  ? CONFIG_CORROBORATION
-                  : scenario.suites.trust === "pinned-list"
-                    ? CONFIG_PINNED_LIST
-                    : undefined;
+    scenario.suites.meaning === "registry-lookup"
+      ? CONFIG_MAPPING
+      : scenario.suites.transport === "email"
+        ? CONFIG_EMAIL
+        : scenario.suites["data-access"] === "by-query"
+          ? CONFIG_QUERY
+          : scenario.suites.commitments === "agreement-credential"
+            ? CONFIG_AGREEMENT
+            : scenario.suites.accountability === "regulator-claim"
+              ? CONFIG_FORUM
+              : scenario.suites.authenticity === "selective-disclosure"
+                ? CONFIG_SELECTIVE_LOCAL
+                : scenario.suites.authority === "mandate-credential"
+                  ? CONFIG_ORGANIZATIONS
+                  : scenario.suites["data-access"] === "by-reference-local-holder"
+                    ? CONFIG_REFERENCE_LOCAL
+                    : scenario.suites.meaning === "plain-language-upgrade"
+                      ? CONFIG_PLAIN_LANGUAGE
+                      : ["payment", "agreement-credential"].includes(
+                            scenario.suites.commitments ?? "",
+                          )
+                        ? CONFIG_PAYMENT
+                        : scenario.suites.reliance === "corroboration"
+                          ? CONFIG_CORROBORATION
+                          : scenario.suites.trust === "pinned-list"
+                            ? CONFIG_PINNED_LIST
+                            : undefined;
   const configuration = local
     ? {
         id: `${scenario.id}-local`,
@@ -588,6 +677,15 @@ async function runPath(
       doc.typ,
       documentPayload(doc.value),
     );
+  for (const mapping of scenario.mappingTables) {
+    let jws = await signStatement(
+      required(sourceKeys.get(mapping.issuer)),
+      "awp-code-mapping-table+jws",
+      mapping.value,
+    );
+    if (mapping.tamper) jws = `${jws.slice(0, -4)}AAAA`;
+    documents[mapping.value.id] = jws;
+  }
   const resolver = new LocalDocumentResolver(documents);
   const organizationCredentials: Record<string, string> = {};
   for (const credential of scenario.organizationCredentials) {
@@ -624,6 +722,120 @@ async function runPath(
       subject: agent ? agent.identity.actor : subject.identity,
       subjectKey: agent ? agent.actorKey.kid : required(sourceKeys.get(link.subject)).kid,
     });
+  }
+  const capabilityTrust = async (identity: string) =>
+    TrustStore.load({
+      version: 1,
+      owner: identity,
+      keys: [
+        ...agents.map((a) => {
+          const k = cast.get(a.id).actorKey;
+          return {
+            kid: k.kid,
+            alg: k.alg,
+            publicJwk: k.publicJwk,
+            role: "actor" as const,
+            subject: required(a.actor),
+            party: required(parties.get(required(a.actsFor))).identity,
+          };
+        }),
+        ...[...sourceKeys].map(([id, k]) => ({
+          kid: k.kid,
+          alg: k.alg,
+          publicJwk: k.publicJwk,
+          role: agents.some((a) => a.actsFor === id) ? ("party" as const) : ("issuer" as const),
+          subject: required(parties.get(id)).identity,
+        })),
+      ],
+      sourceAuthority: profile.claims.flatMap((c) =>
+        c.sources.map((source) => ({
+          id: `urn:authority:${scenario.id}:${digestOf({ source, kind: c.kind }).slice(8)}`,
+          version: "1",
+          source,
+          claimTypes: [c.kind],
+          subjects: "any" as const,
+        })),
+      ),
+    });
+  if (profile.codeMappings?.assurance === "attested") {
+    for (const mapping of scenario.mappingTables)
+      for (const original of Object.values(signed)) {
+        if (original.statement.codeList !== mapping.value.fromList) continue;
+        const identity = required(parties.get(mapping.issuer)).identity;
+        const issued = await issueMappingAttestation(original.jws, {
+          identity,
+          key: required(sourceKeys.get(mapping.issuer)),
+          policy: profile.codeMappings,
+          trust: await capabilityTrust(identity),
+          resolver,
+          at: now().toISOString(),
+          verifier: identity,
+          record: () => {},
+        });
+        if (issued) documents[issued.ref] = issued.jws;
+      }
+  }
+  const agreementServices = new Map<string, LocalAgreementCoordinator>();
+  const capabilityAnswers: Record<string, unknown> = {};
+  for (const declaration of scenario.agreements) {
+    const identity = required(parties.get(declaration.service)).identity;
+    agreementServices.set(
+      declaration.service,
+      new LocalAgreementCoordinator({
+        identity,
+        key: required(sourceKeys.get(declaration.service)),
+        trust: await capabilityTrust(identity),
+        store: new MemoryStateStore(),
+        ledger: new MemoryLedger(),
+        now: () => now().toISOString(),
+        definition: declaration.definition,
+        mandateActive: (actor) => {
+          const a = agents.find((a) => a.actor === actor);
+          const status = a ? runtimes.get(a.id)?.mandateStatus() : undefined;
+          return !!status?.loaded && !status.revoked;
+        },
+        sink: (e) => recorder.sink(declaration.service).emit(e),
+      }),
+    );
+  }
+  const mailboxes = new Map(
+    scenario.mailboxes.map((m) => [
+      m.party,
+      new ScriptedMailbox(m.address, new MemoryStateStore(), m.replies),
+    ]),
+  );
+  const datasets = new Map<string, LocalDatasetHolder>();
+  for (const d of scenario.datasets) {
+    const identity = required(parties.get(d.holder)).identity;
+    datasets.set(
+      d.holder,
+      new LocalDatasetHolder({
+        identity,
+        key: required(sourceKeys.get(d.holder)),
+        trust: await capabilityTrust(identity),
+        store: new MemoryStateStore(),
+        ledger: new MemoryLedger(),
+        dataset: d.id,
+        rows: d.rows,
+        nonce: `fictional-public-fixture:${scenario.id}`,
+        now: () => now().toISOString(),
+        sink: (e) => recorder.sink(d.holder).emit(e),
+      }),
+    );
+  }
+  const queryGrants: Record<string, string> = {};
+  for (const grant of scenario.queryGrants) {
+    const reader = cast.get(grant.value.reader);
+    queryGrants[grant.id] = await signStatement(
+      required(sourceKeys.get(grant.holder)),
+      "awp-query-grant+jws",
+      {
+        ...grant.value,
+        type: "QueryGrant",
+        issuer: required(parties.get(grant.holder)).identity,
+        reader: { actor: reader.identity.actor, party: reader.identity.party },
+      },
+    );
   }
   const singleUseRegisters: Record<string, LocalSingleUseRegister> = {};
   const escrowAcceptances: string[] = [];
@@ -866,7 +1078,30 @@ async function runPath(
     });
     const trust = await TrustStore.load(cast.trust.get(agent.id));
     const mandate = required(scenario.mandates.find((m) => m.agent === agent.id));
+    const emailPins = profile.email
+      ? await Promise.all(
+          profile.email.pins.map((pin) =>
+            signStatement(cast.get(agent.id).ownerKey, "awp-email-endpoint-pin+jws", {
+              type: "EmailEndpointPin",
+              issuer: cast.get(agent.id).identity.party,
+              ...pin,
+            }),
+          ),
+        )
+      : [];
     const gate: GateContext = {
+      ...(profile.codeMappings?.receivers.includes(agent.actor ?? "")
+        ? { codeMappings: { policy: profile.codeMappings, resolver } }
+        : {}),
+      ...(profile.email
+        ? {
+            email: {
+              from: profile.email.from,
+              structuredReply: profile.email.structuredReply,
+              pins: emailPins,
+            },
+          }
+        : {}),
       configuration: agent.configurations[0] === "public-read" ? PUBLIC_READ : configuration,
       configurations: { [CONFIG_PUBLIC]: PUBLIC_READ },
       ...(profile.authorityChains
@@ -893,6 +1128,7 @@ async function runPath(
       vocabulary: profile.vocabulary,
       identifiers: profile.identifiers,
       sourceAliases: profile.sources,
+      attestedDerivers: profile.attestedDerivers,
       rules: profile.rules.filter((r) => "template" in r),
       assessments: profile.assessments,
       personDecisions: profile.personDecisions,
@@ -1011,6 +1247,94 @@ async function runPath(
       handlers,
       [
         new SyntheticPaymentRail(),
+        {
+          id: "urn:scenario:email",
+          plainTextEmail: true,
+          bindsParameters: true,
+          execute: async (key: string, params: JsonObject) => {
+            const mailbox = required([...mailboxes.values()].find((m) => m.address === params.to));
+            return { conclusion: "completed" as const, observed: mailbox.deliver(key, params) };
+          },
+          reconcile: async (key: string) => {
+            const message = [...mailboxes.values()]
+              .flatMap((m) => m.inbox())
+              .find((m) => m.id === key);
+            return message
+              ? { conclusion: "completed" as const, observed: { digest: digestOf(message) } }
+              : {
+                  conclusion: "not-executed" as const,
+                  reason: "the local mailbox has no such message",
+                };
+          },
+        },
+        {
+          id: "urn:scenario:dataset",
+          bindsParameters: true,
+          execute: async (_key: string, params: JsonObject) => {
+            const answer = await required(datasets.get(String(params.holder))).query(
+              String(params.request),
+            );
+            capabilityAnswers[String(params.request)] = answer;
+            return {
+              conclusion: "completed" as const,
+              observed: JSON.parse(JSON.stringify(answer)) as JsonObject,
+            };
+          },
+          reconcile: async () => ({
+            conclusion: "uncertain" as const,
+            reason: "a saved query counter is never rolled back",
+          }),
+        },
+        {
+          id: "urn:scenario:agreement-presentation",
+          bindsParameters: true,
+          execute: async (_key: string, params: JsonObject) => {
+            const service = required(agreementServices.get(String(params.service))),
+              receiver = String(params.receiver),
+              receiverActor = cast.get(receiver).identity.actor;
+            const answer = await verifyAgreementCredential(
+              params.credential as unknown as AgreementCredential,
+              {
+                identity: receiverActor,
+                trust: await capabilityTrust(receiverActor),
+                ledger: required(ledgers.get(receiver)),
+                now: () => now().toISOString(),
+                sink: (e) => recorder.sink(receiver).emit(e),
+                presenter: String(params.presenter),
+                presentation: String(params.presentation),
+                request: params.request as { asset: string; purpose: string; at: string },
+                resolve: async (ref) =>
+                  ref === service.options.identity ? service.status() : undefined,
+              },
+            );
+            capabilityAnswers[String(params.presentation)] = answer;
+            return {
+              conclusion: "completed" as const,
+              observed: JSON.parse(JSON.stringify(answer)) as JsonObject,
+            };
+          },
+          reconcile: async () => ({
+            conclusion: "uncertain" as const,
+            reason: "verify credential status again",
+          }),
+        },
+        {
+          id: "urn:scenario:agreement",
+          bindsParameters: true,
+          execute: async (_key: string, params: JsonObject) => {
+            const service = required(agreementServices.get(String(params.service)));
+            const answer = await service.request(String(params.request));
+            capabilityAnswers[String(params.request)] = answer;
+            return {
+              conclusion: "completed" as const,
+              observed: JSON.parse(JSON.stringify(answer)) as JsonObject,
+            };
+          },
+          reconcile: async () => ({
+            conclusion: "uncertain" as const,
+            reason: "consult agreement state",
+          }),
+        },
         ...(forum
           ? [
               {
@@ -1066,7 +1390,11 @@ async function runPath(
         ...(organizationCredentials[agent.id]
           ? { organizationMandateJws: organizationCredentials[agent.id] }
           : {}),
-        ...(profile.rules.some((r) => "template" in r && r.assurances.includes("by-source"))
+        ...(profile.rules.some(
+          (r) =>
+            "template" in r &&
+            (r.assurances.includes("by-source") || r.assurances.includes("attested")),
+        )
           ? { sourceKey: cast.get(agent.id).ownerKey }
           : {}),
         core: {
@@ -1090,6 +1418,164 @@ async function runPath(
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
     let result: unknown;
     switch (step.type) {
+      case "facts":
+        result = runtime.admittedStatements();
+        break;
+      case "email-send":
+        result = await runtime.sendEmail({
+          taskId: `urn:scenario:${scenario.id}:${step.id}`,
+          adapter: "urn:scenario:email",
+          to: required(mailboxes.get(step.mailbox)).address,
+          text: step.text,
+          purpose: step.purpose,
+        });
+        break;
+      case "email-receive": {
+        const reply = required(mailboxes.get(step.mailbox)).reply(step.index);
+        result = await runtime.receiveEmail({
+          ...reply,
+          ...(step.from ? { from: step.from } : {}),
+          purpose: step.purpose,
+        });
+        break;
+      }
+      case "email-inbox":
+        result = required(mailboxes.get(step.mailbox)).inbox();
+        break;
+      case "dataset-query": {
+        const actor = cast.get(step.agent),
+          holder = required(datasets.get(step.holder));
+        const request = await signStatement(actor.actorKey, "awp-dataset-query+jws", {
+          type: "DatasetQuery",
+          id: `urn:query:${scenario.id}:${step.id}`,
+          actor: actor.identity.actor,
+          party: actor.identity.party,
+          representation: actor.representationJws,
+          at: now().toISOString(),
+          grant: required(queryGrants[step.grant]),
+          purpose: step.purpose,
+          protocol: step.protocol,
+        });
+        const params = { holder: step.holder, request };
+        await runtime.runTask({
+          taskId: `urn:scenario:${scenario.id}:${step.id}`,
+          kind: "dataset-query",
+          plan: {
+            adapter: "urn:scenario:dataset",
+            key: `urn:scenario:${scenario.id}:${step.id}`,
+            params,
+            activityType: "urn:activity:dataset-query",
+            intent: {
+              action: "use",
+              target: "urn:op:dataset-query",
+              operation: "urn:op:dataset-query",
+              recipient: holder.options.identity,
+              purpose: step.purpose,
+              conversation: `urn:scenario:${scenario.id}:${step.id}`,
+              parameters: params,
+            },
+          },
+        });
+        result = capabilityAnswers[request] ?? null;
+        break;
+      }
+      case "admit-derived":
+        result = await runtime.admitStatements([{ jws: template<string>(step.jws) }], {
+          task,
+          taskId: task,
+          purpose: step.purpose,
+          operation: step.operation,
+        });
+        break;
+      case "agreement-request": {
+        const service = required(agreementServices.get(step.service)),
+          actor = cast.get(step.agent);
+        const request = await signStatement(actor.actorKey, "awp-agreement-request+jws", {
+          type: "AgreementRequest",
+          id: `urn:request:${scenario.id}:${step.id}`,
+          agreement: service.definition.id,
+          actor: actor.identity.actor,
+          party: actor.identity.party,
+          representation: actor.representationJws,
+          at: now().toISOString(),
+          operation: step.operation,
+          termsDigest: step.termsDigest ?? digestOf(service.definition),
+          evidence: step.evidence.map((id) => required(signed[id]).jws),
+        });
+        const params = { service: step.service, request };
+        const run = await runtime.runTask({
+          taskId: `urn:scenario:${scenario.id}:${step.id}`,
+          kind: "agreement",
+          plan: {
+            adapter: "urn:scenario:agreement",
+            key: `urn:scenario:${scenario.id}:${step.id}`,
+            params,
+            activityType: "urn:activity:agreement",
+            intent: {
+              action: "use",
+              target: "urn:op:agreement",
+              operation: "urn:op:agreement",
+              recipient: service.options.identity,
+              purpose: service.definition.terms.purpose,
+              conversation: `urn:scenario:${scenario.id}:${step.id}`,
+              parameters: params,
+            },
+          },
+        });
+        result = { run, service: capabilityAnswers[request] ?? null };
+        break;
+      }
+      case "agreement-present": {
+        const service = required(agreementServices.get(step.service));
+        const credential = template<AgreementCredential>(step.credential);
+        const presenter = required(
+          agents.find((a) => parties.get(a.actsFor ?? "")?.identity === step.presenter),
+        );
+        const sender = cast.get(presenter.id);
+        const presentation = await signStatement(
+          sender.actorKey,
+          "awp-agreement-presentation+jws",
+          {
+            type: "AgreementPresentation",
+            actor: sender.identity.actor,
+            party: sender.identity.party,
+            at: now().toISOString(),
+            representation: sender.representationJws,
+            credentialDigest: digestOf(credential),
+            audience: cast.get(step.agent).identity.actor,
+            request: step.request,
+          },
+        );
+        const params = {
+          service: step.service,
+          receiver: step.agent,
+          credential: credential as unknown as JsonObject,
+          presenter: step.presenter,
+          presentation,
+          request: step.request,
+        };
+        await required(runtimes.get(presenter.id)).runTask({
+          taskId: `urn:scenario:${scenario.id}:${step.id}`,
+          kind: "agreement-presentation",
+          plan: {
+            adapter: "urn:scenario:agreement-presentation",
+            key: `urn:scenario:${scenario.id}:${step.id}`,
+            params,
+            activityType: "urn:activity:agreement-presentation",
+            intent: {
+              action: "distribute",
+              target: "urn:op:agreement",
+              operation: "urn:op:agreement",
+              recipient: cast.get(step.agent).identity.party,
+              purpose: service.definition.terms.purpose,
+              conversation: `urn:scenario:${scenario.id}:${step.id}`,
+              parameters: params,
+            },
+          },
+        });
+        result = capabilityAnswers[presentation] ?? null;
+        break;
+      }
       case "record-segment": {
         const segment = await runtime.exportRecord(template<string>(step.conversation));
         if (step.attack) {
@@ -1238,7 +1724,14 @@ async function runPath(
           discover: step.discover,
           configuration:
             step.configuration === "public-read" ? CONFIG_PUBLIC : configuration.pilotConfiguration,
-          evidence: step.evidence.map((id) => required(signed[id]).evidence),
+          evidence: [
+            ...step.evidence.map((id) => required(signed[id]).evidence),
+            ...step.derivedEvidence.map((jws) => ({
+              role: "credential" as const,
+              format: "jws-compact",
+              value: template<string>(jws),
+            })),
+          ],
           content: step.content.map((part) => ({ ...part, digest: digestContent(part.bytes) })),
         };
         const contents = template<JsonObject>(step.contents);
@@ -1754,7 +2247,9 @@ async function runPath(
       ...scenario.parties.filter(
         (p) =>
           scenario.singleUseRegisters.some((r) => r.party === p.id) ||
-          profile.forum?.party === p.id,
+          profile.forum?.party === p.id ||
+          scenario.agreements.some((a) => a.service === p.id) ||
+          scenario.datasets.some((d) => d.holder === p.id),
       ),
     ].map((p) => ({
       id: p.traceId ?? p.id,

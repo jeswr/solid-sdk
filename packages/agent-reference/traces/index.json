@@ -131,6 +131,36 @@
     "events": 64
   },
   {
+    "file": "care-abroad--baseline.json",
+    "scenario": {
+      "id": "care-abroad",
+      "title": "Health data across a border",
+      "steps": {
+        "1": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+        "2": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+        "3": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+        "4": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version."
+      }
+    },
+    "configuration": "care-abroad-local",
+    "events": 8
+  },
+  {
+    "file": "care-abroad--branch-1--baseline.json",
+    "scenario": {
+      "id": "care-abroad--branch-1",
+      "title": "Health data across a border: No mapping exists for a medicine",
+      "steps": {
+        "1": "The clinic checks the original source and asks the signed registry about the unsupported medicine code.",
+        "2": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+        "3": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version.",
+        "4": "The clinic verifies the original source, the mapping service’s signed result and the current mapping version."
+      }
+    },
+    "configuration": "care-abroad-local",
+    "events": 7
+  },
+  {
     "file": "carer-acts-for-parent--baseline.json",
     "scenario": {
       "id": "carer-acts-for-parent",
@@ -342,6 +372,28 @@
     "events": 16
   },
   {
+    "file": "content-licence--baseline.json",
+    "scenario": {
+      "id": "content-licence",
+      "title": "Licensing a photograph",
+      "steps": {
+        "1": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "2": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "3": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "4": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "5": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "6": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "7": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "8": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "9": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "10": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "11": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right."
+      }
+    },
+    "configuration": "content-licence-local",
+    "events": 137
+  },
+  {
     "file": "content-licence--branch-1--baseline.json",
     "scenario": {
       "id": "content-licence--branch-1",
@@ -350,7 +402,14 @@
         "1": "The publisher’s agent checks the signed statements.",
         "2": "The sister company’s agent sends the signed request.",
         "3": "The publisher’s agent checks the message and prepares a response.",
-        "4": "The publisher’s agent sends the signed request."
+        "4": "The publisher’s agent sends the signed request.",
+        "5": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "6": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "7": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "8": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "9": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "10": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+        "11": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right."
       }
     },
     "configuration": "baseline",
@@ -672,6 +731,28 @@
     "events": 75
   },
   {
+    "file": "energy-switch--baseline.json",
+    "scenario": {
+      "id": "energy-switch",
+      "title": "Switching energy supplier",
+      "steps": {
+        "1": "The parties complete and collect their signed agreement.",
+        "2": "The parties complete and collect their signed agreement.",
+        "3": "The parties complete and collect their signed agreement.",
+        "4": "The parties complete and collect their signed agreement.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement."
+      }
+    },
+    "configuration": "energy-switch-local",
+    "events": 137
+  },
+  {
     "file": "energy-switch--branch-1--baseline.json",
     "scenario": {
       "id": "energy-switch--branch-1",
@@ -680,7 +761,14 @@
         "1": "The household’s agent checks the signed statements.",
         "2": "The energy supplier’s agent sends the signed request.",
         "3": "The household’s agent checks the message and prepares a response.",
-        "4": "The household’s agent sends the signed request."
+        "4": "The household’s agent sends the signed request.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement."
       }
     },
     "configuration": "baseline",
@@ -880,6 +968,28 @@
     "events": 97
   },
   {
+    "file": "find-a-time--baseline.json",
+    "scenario": {
+      "id": "find-a-time",
+      "title": "Two people's agents find a time to meet",
+      "steps": {
+        "1": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "2": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "3": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "4": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "5": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "6": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "7": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "8": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "9": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "10": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "11": "The calendar service signs the free-slot derivation, and each receiving agent verifies it."
+      }
+    },
+    "configuration": "baseline",
+    "events": 69
+  },
+  {
     "file": "find-a-time--branch-1--baseline.json",
     "scenario": {
       "id": "find-a-time--branch-1",
@@ -888,7 +998,14 @@
         "1": "The first person’s agent checks the signed statements.",
         "2": "The second person’s agent sends the signed request.",
         "3": "The first person’s agent checks the message and prepares a response.",
-        "4": "The first person’s agent sends the signed request."
+        "4": "The first person’s agent sends the signed request.",
+        "5": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "6": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "7": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "8": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "9": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "10": "The calendar service signs the free-slot derivation, and each receiving agent verifies it.",
+        "11": "The calendar service signs the free-slot derivation, and each receiving agent verifies it."
       }
     },
     "configuration": "baseline",
@@ -1059,13 +1176,40 @@
     "events": 8
   },
   {
+    "file": "home-purchase--baseline.json",
+    "scenario": {
+      "id": "home-purchase",
+      "title": "Buying a home",
+      "steps": {
+        "1": "The parties complete and collect their signed agreement.",
+        "2": "The parties complete and collect their signed agreement.",
+        "3": "The parties complete and collect their signed agreement.",
+        "4": "The parties complete and collect their signed agreement.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement."
+      }
+    },
+    "configuration": "home-purchase-local",
+    "events": 118
+  },
+  {
     "file": "home-purchase--branch-1--baseline.json",
     "scenario": {
       "id": "home-purchase--branch-1",
       "title": "Buying a home: A message gives a new account for the deposit",
       "steps": {
         "1": "The buyer’s agent checks the signed statements.",
-        "2": "The buyer’s agent proposes the local action."
+        "2": "The buyer’s agent proposes the local action.",
+        "3": "The parties complete and collect their signed agreement.",
+        "4": "The parties complete and collect their signed agreement.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement."
       }
     },
     "configuration": "baseline",
@@ -1078,7 +1222,14 @@
       "title": "Buying a home: The seller is not the registered owner",
       "steps": {
         "1": "The buyer’s agent checks the signed statements.",
-        "2": "The buyer’s agent proposes the local action."
+        "2": "The buyer’s agent proposes the local action.",
+        "3": "The parties complete and collect their signed agreement.",
+        "4": "The parties complete and collect their signed agreement.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement."
       }
     },
     "configuration": "baseline",
@@ -1272,6 +1423,28 @@
     "events": 48
   },
   {
+    "file": "joint-mortgage--baseline.json",
+    "scenario": {
+      "id": "joint-mortgage",
+      "title": "A joint mortgage for two people",
+      "steps": {
+        "1": "The parties complete and collect their signed agreement.",
+        "2": "The parties complete and collect their signed agreement.",
+        "3": "The parties complete and collect their signed agreement.",
+        "4": "The parties complete and collect their signed agreement.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement."
+      }
+    },
+    "configuration": "joint-mortgage-local",
+    "events": 148
+  },
+  {
     "file": "joint-mortgage--branch-1--baseline.json",
     "scenario": {
       "id": "joint-mortgage--branch-1",
@@ -1281,7 +1454,13 @@
         "2": "The lender’s agent sends the signed request.",
         "3": "The first applicant’s agent checks the message and prepares a response.",
         "4": "The first applicant’s agent completes the revoke mandate step.",
-        "5": "The first applicant’s agent sends the signed request."
+        "5": "The first applicant’s agent sends the signed request.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement."
       }
     },
     "configuration": "baseline",
@@ -1296,7 +1475,14 @@
         "1": "The first applicant’s agent checks the signed statements.",
         "2": "The lender’s agent sends the signed request.",
         "3": "The first applicant’s agent checks the message and prepares a response.",
-        "4": "The first applicant’s agent sends the signed request."
+        "4": "The first applicant’s agent sends the signed request.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement."
       }
     },
     "configuration": "baseline",
@@ -1513,6 +1699,40 @@
     },
     "configuration": "baseline",
     "events": 99
+  },
+  {
+    "file": "no-agent-on-the-other-side--baseline.json",
+    "scenario": {
+      "id": "no-agent-on-the-other-side",
+      "title": "The other side has no agent",
+      "steps": {
+        "1": "The customer approves the exact message, and the reply remains unsigned prose.",
+        "2": "The customer approves the exact message, and the reply remains unsigned prose.",
+        "3": "The customer approves the exact message, and the reply remains unsigned prose.",
+        "4": "The customer approves the exact message, and the reply remains unsigned prose.",
+        "5": "The customer approves the exact message, and the reply remains unsigned prose.",
+        "6": "The customer approves the exact message, and the reply remains unsigned prose."
+      }
+    },
+    "configuration": "no-agent-on-the-other-side-local",
+    "events": 23
+  },
+  {
+    "file": "no-agent-on-the-other-side--branch-1--baseline.json",
+    "scenario": {
+      "id": "no-agent-on-the-other-side--branch-1",
+      "title": "The other side has no agent: The reply asks for payment details by email",
+      "steps": {
+        "1": "The customer reviews the exact prose before the next email can leave.",
+        "2": "The customer reviews the exact prose before the next email can leave.",
+        "3": "The customer reviews the exact prose before the next email can leave.",
+        "4": "The customer reviews the exact prose before the next email can leave.",
+        "5": "The customer approves the exact message, and the reply remains unsigned prose.",
+        "6": "The customer approves the exact message, and the reply remains unsigned prose."
+      }
+    },
+    "configuration": "no-agent-on-the-other-side-local",
+    "events": 33
   },
   {
     "file": "no-training-terms--baseline.json",
@@ -2157,6 +2377,48 @@
     "events": 218
   },
   {
+    "file": "research-data-access--baseline.json",
+    "scenario": {
+      "id": "research-data-access",
+      "title": "A researcher queries sensitive data",
+      "steps": {
+        "1": "The holder checks the approved question and releases only its signed answer.",
+        "2": "The holder checks the approved question and releases only its signed answer.",
+        "3": "The holder checks the approved question and releases only its signed answer."
+      }
+    },
+    "configuration": "research-data-access-local",
+    "events": 27
+  },
+  {
+    "file": "research-data-access--branch-1--baseline.json",
+    "scenario": {
+      "id": "research-data-access--branch-1",
+      "title": "A researcher queries sensitive data: A query is outside the approved protocol",
+      "steps": {
+        "1": "The holder checks the approved question and releases only its signed answer.",
+        "2": "The holder checks the approved question and releases only its signed answer.",
+        "3": "The holder checks the approved question and releases only its signed answer."
+      }
+    },
+    "configuration": "research-data-access-local",
+    "events": 16
+  },
+  {
+    "file": "research-data-access--branch-2--baseline.json",
+    "scenario": {
+      "id": "research-data-access--branch-2",
+      "title": "A researcher queries sensitive data: The number of related queries passes the cap",
+      "steps": {
+        "1": "The holder checks the approved question and releases only its signed answer.",
+        "2": "The holder checks the approved question and releases only its signed answer.",
+        "3": "The holder checks the approved question and releases only its signed answer."
+      }
+    },
+    "configuration": "research-data-access-local",
+    "events": 36
+  },
+  {
     "file": "return-and-refund--baseline.json",
     "scenario": {
       "id": "return-and-refund",
@@ -2605,6 +2867,31 @@
     "events": 14
   },
   {
+    "file": "trip-booking--baseline.json",
+    "scenario": {
+      "id": "trip-booking",
+      "title": "Booking a trip",
+      "steps": {
+        "1": "The parties complete and collect their signed agreement.",
+        "2": "The parties complete and collect their signed agreement.",
+        "3": "The parties complete and collect their signed agreement.",
+        "4": "The parties complete and collect their signed agreement.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement.",
+        "12": "The airline receives the passport only for ticketing.",
+        "13": "The airline receives the passport only for ticketing.",
+        "14": "The airline receives the passport only for ticketing."
+      }
+    },
+    "configuration": "trip-booking-local",
+    "events": 175
+  },
+  {
     "file": "trip-booking--branch-1--baseline.json",
     "scenario": {
       "id": "trip-booking--branch-1",
@@ -2617,7 +2904,13 @@
         "5": "The hotel’s agent completes the approve step.",
         "6": "The traveller’s agent checks the message and prepares a response.",
         "7": "The traveller’s agent completes the read content step.",
-        "8": "The traveller’s agent proposes the local action."
+        "8": "The traveller’s agent proposes the local action.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement.",
+        "12": "The airline receives the passport only for ticketing.",
+        "13": "The airline receives the passport only for ticketing.",
+        "14": "The airline receives the passport only for ticketing."
       }
     },
     "configuration": "trip-booking-local",
@@ -2632,7 +2925,17 @@
         "1": "The traveller’s agent checks the signed statements.",
         "2": "The hotel’s agent sends the signed request.",
         "3": "The traveller’s agent checks the message and prepares a response.",
-        "4": "The traveller’s agent sends the signed request."
+        "4": "The traveller’s agent sends the signed request.",
+        "5": "The parties complete and collect their signed agreement.",
+        "6": "The parties complete and collect their signed agreement.",
+        "7": "The parties complete and collect their signed agreement.",
+        "8": "The parties complete and collect their signed agreement.",
+        "9": "The parties complete and collect their signed agreement.",
+        "10": "The parties complete and collect their signed agreement.",
+        "11": "The parties complete and collect their signed agreement.",
+        "12": "The airline receives the passport only for ticketing.",
+        "13": "The airline receives the passport only for ticketing.",
+        "14": "The airline receives the passport only for ticketing."
       }
     },
     "configuration": "trip-booking-local",

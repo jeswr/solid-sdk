@@ -685,7 +685,11 @@ export class OutboundGate {
 
     // 5. Limits and approval. Profile judgement and role approvals cannot be overridden by
     // an autonomous mandate or by the principal substituting their own signature.
-    const person = ctx.personDecisions?.find((p) => p.action === intent.action);
+    const person =
+      ctx.personDecisions?.find((p) => p.action === intent.action) ??
+      (ctx.email && intent.operation === "urn:op:email"
+        ? { action: intent.action, decider: "principal" as const }
+        : undefined);
     const approvals = (
       matched?.rule as
         | (OdrlRule & { approvals?: import("./approvals.js").ApprovalsRule })
@@ -1854,6 +1858,58 @@ export class OutboundGate {
     return finish("go");
   }
 
+  /** UNS-9/9a at an unsigned email boundary; the profile always requires exact-send approval. */
+  checkEmailContext(intent: ActionIntent, text: string, approved = false): readonly CheckVerdict[] {
+    const verdicts: CheckVerdict[] = [],
+      subject = actionDigest(intent),
+      needed = intent.purpose ? this.deps.gate.purposes?.[intent.purpose] : undefined;
+    for (const item of this.deps.memory.context(this.deps.gate.taskId ?? intent.conversation)) {
+      const minimal = item.accepted === true && !!needed?.includes(item.claimType);
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        minimal || approved ? "pass" : "ask-principal",
+        `Email context: ${item.label}; ${item.accepted === true ? "admitted source" : "unstructured or unaccepted source"}.`,
+        {
+          reason: approved
+            ? "approval-given"
+            : minimal
+              ? "minimal-disclosure"
+              : "context-not-clear",
+        },
+      );
+      const terms = evaluateItemTerms(item.terms, {
+        agent: this.deps.identity.actor,
+        action: "distribute",
+        target: item.id,
+        purpose: intent.purpose,
+        recipient: intent.recipient,
+        at: this.deps.now(),
+      });
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        terms.verdict === "pass" || approved ? "pass" : "ask-principal",
+        `The exact email needs a person to review this item's restrictions: ${item.label}.`,
+        {
+          reason: approved
+            ? "approval-given"
+            : terms.verdict === "pass"
+              ? "terms-allow"
+              : "context-not-clear",
+        },
+      );
+    }
+    this.emit({
+      part: "core",
+      kind: "propose",
+      caption: "Agent-written plain text for exact principal review.",
+      chat: { who: "agent", text },
+    });
+    return verdicts;
+  }
   checkEffect(intent: ActionIntent, parameters: JsonObject): boolean {
     if (!this.commitmentShape(intent)) return false;
     const bounded = !!this.deps.gate.principalLimits?.commitments?.[intent.operation];

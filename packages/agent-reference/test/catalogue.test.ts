@@ -80,10 +80,10 @@ it("admits a permitted low-stakes reading through real gates and binds bounded b
   }
 });
 
-it("runs independent joint-mortgage refusals without claiming a joint agreement", async () => {
+it("runs the joint agreement and its independent precommitment refusals", async () => {
   const { profile, scenario } = loadCase(root, "joint-mortgage");
   const paths = await runScenario(profile, scenario);
-  expect(paths[0]?.trace).toBeUndefined();
+  expect(paths[0]?.trace).toBeDefined();
   expect(paths[1]?.actual).toMatchObject({ outcome: "stop", reason: "mandate-withdrawn" });
   expect(paths[1]?.expected).toMatchObject({ outcome: "stop", reason: "mandate-withdrawn" });
   expect(paths[1]?.disagrees).toBe(false);

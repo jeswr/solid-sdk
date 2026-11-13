@@ -192,6 +192,20 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly attestedDerivers?: readonly {
+    readonly deriver: string;
+    readonly rule: string;
+    readonly purposes: readonly string[];
+  }[];
+  readonly codeMappings?: {
+    readonly policy: import("../mechanisms/code-mapping.js").MappingPolicy;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
+  readonly email?: {
+    readonly pins: readonly string[];
+    readonly from: string;
+    readonly structuredReply: string;
+  };
   readonly sink?: TraceSink;
   readonly configuration?: Configuration;
   /**

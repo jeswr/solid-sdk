@@ -3,14 +3,81 @@
   "schema": "agent-profile/0.1",
   "id": "no-agent-on-the-other-side",
   "parties": {
-    "party-1": "A person's agent",
-    "party-2": "A small business with an email address"
+    "party-1": "The customer",
+    "party-2": "A small business with an email address",
+    "reader-agent": "The customer’s agent"
   },
   "claims": [],
-  "purposes": [],
+  "purposes": [
+    {
+      "id": "urn:purpose:business-enquiry",
+      "claims": []
+    }
+  ],
   "rules": [],
   "decisionsForPerson": [],
   "modelReadings": [],
   "vocabulary": {},
-  "operations": []
+  "operations": [
+    {
+      "id": "urn:op:email",
+      "version": "0.1",
+      "label": "Send an approved plain-text email",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:business-enquiry"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:email-bind",
+      "version": "0.1",
+      "label": "Review a proposed commitment from prose",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:business-enquiry"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "email": {
+    "from": "mailto:customer-agent@fictional.example",
+    "structuredReply": "https://fictional.example/structured-reply",
+    "pins": [
+      {
+        "endpoint": "mailto:shop@fictional.example",
+        "purposes": [
+          "urn:purpose:business-enquiry"
+        ],
+        "validUntil": "2026-12-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "readings": [
+    {
+      "claimType": "email.reading",
+      "type": "code",
+      "values": [
+        "available",
+        "claims-acceptance",
+        "contains-instruction"
+      ]
+    }
+  ],
+  "trust": {
+    "levels": [
+      "own-list"
+    ],
+    "onUnknown": "ask-principal"
+  },
+  "standIns": [
+    {
+      "what": "A business with no agent",
+      "replacedBy": "A scripted unsigned mailbox with no key, core or gates. Owner-signed endpoint pins and exact principal approvals govern the customer agent; no real email is sent."
+    }
+  ]
 }

@@ -7,7 +7,12 @@
     "receiver": "The sister company",
     "photographer": "The photographer",
     "owner-agent": "The publisher’s agent",
-    "receiver-agent": "The sister company’s agent"
+    "receiver-agent": "The sister company’s agent",
+    "coordinator": "The licence registrar",
+    "coordinator-agent": "The licence registrar’s agent",
+    "photographer-agent": "The photographer’s agent",
+    "external-receiver": "The publishing platform",
+    "external-receiver-agent": "The publishing platform’s agent"
   },
   "claims": [
     {
@@ -73,6 +78,24 @@
         "urn:purpose:content-licence"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agreement",
+      "version": "0.1",
+      "label": "Accepting the same agreement terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:content-licence"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ]
 }

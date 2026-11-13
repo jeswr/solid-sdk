@@ -26,6 +26,26 @@
     {
       "id": "receiver-agent",
       "name": "The sister company’s agent"
+    },
+    {
+      "id": "coordinator",
+      "name": "The licence registrar"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The licence registrar’s agent"
+    },
+    {
+      "id": "photographer-agent",
+      "name": "The photographer’s agent"
+    },
+    {
+      "id": "external-receiver",
+      "name": "The publishing platform"
+    },
+    {
+      "id": "external-receiver-agent",
+      "name": "The publishing platform’s agent"
     }
   ],
   "scenario": {
@@ -35,7 +55,14 @@
       "1": "The publisher’s agent checks the signed statements.",
       "2": "The sister company’s agent sends the signed request.",
       "3": "The publisher’s agent checks the message and prepares a response.",
-      "4": "The publisher’s agent sends the signed request."
+      "4": "The publisher’s agent sends the signed request.",
+      "5": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+      "6": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+      "7": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+      "8": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+      "9": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+      "10": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right.",
+      "11": "The photographer, publisher and registrar complete the licence; only the publisher presents its use right."
     }
   },
   "configuration": {
@@ -66,13 +93,35 @@
       "name": "The sister company’s agent",
       "actsFor": "receiver",
       "role": "agent"
+    },
+    {
+      "id": "coordinator-agent",
+      "name": "The licence registrar’s agent",
+      "actsFor": "coordinator",
+      "role": "agent"
+    },
+    {
+      "id": "photographer-agent",
+      "name": "The photographer’s agent",
+      "actsFor": "photographer",
+      "role": "agent"
+    },
+    {
+      "id": "external-receiver-agent",
+      "name": "The publishing platform’s agent",
+      "actsFor": "external-receiver",
+      "role": "agent"
     }
   ],
   "generated": {
-    "commit": "572be274a15f6552e8fc1143e7a6770af3224b55",
+    "commit": "27e917b1db852d37b953c0e6abf75dec1e71363a",
     "core": "scripted"
   },
   "standIns": [
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    },
     {
       "what": "Outside organizations and data sources",
       "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -80,6 +129,10 @@
     {
       "what": "Licence-lifecycle-free onward restriction",
       "replacedBy": "The photographer’s signed asset binding and terms allow the publisher but explicitly prohibit its sister company; original synthetic image bytes are present in the stopped proposal"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
     }
   ],
   "events": [
@@ -431,7 +484,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:9c3c4eb912c…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:063cf9cda8f…; never trusted."
         },
         "layers": {
           "header": {
@@ -459,7 +512,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:25ddca25a58858a2eabfdaeb2184b84e3918e90a0de19d32187fdc8a1ce7db9f"
+            "digest": "sha-256:0f369582fc86452a13fea01761317ab336ab783bbbba5d8c935938c4ce89744e"
           },
           "authority": {
             "present": true,
@@ -473,14 +526,15 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:content-licence",
-                  "urn:op:content-licence:request"
+                  "urn:op:content-licence:request",
+                  "urn:op:agreement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:da92a73fd8c0453aca94d1b625584a4ec10710fd09de99c1d38a4ee35d88993a"
+            "digest": "sha-256:873131d6b0d0d378f409c76ae782bc937410ab54b4f5e40d6a9eabd9d22b6504"
           },
           "content": {
             "present": true,
@@ -550,7 +604,7 @@
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:9c3c4eb912c…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:063cf9cda8f…; never trusted."
         },
         "layers": {
           "header": {
@@ -578,7 +632,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:25ddca25a58858a2eabfdaeb2184b84e3918e90a0de19d32187fdc8a1ce7db9f"
+            "digest": "sha-256:0f369582fc86452a13fea01761317ab336ab783bbbba5d8c935938c4ce89744e"
           },
           "authority": {
             "present": true,
@@ -592,14 +646,15 @@
                 "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
                 "operations": [
                   "urn:op:content-licence",
-                  "urn:op:content-licence:request"
+                  "urn:op:content-licence:request",
+                  "urn:op:agreement"
                 ],
                 "validFrom": "2026-11-13T08:59:00.000Z",
                 "validUntil": "2027-01-12T09:00:00.000Z",
                 "issuedAt": "2026-11-13T09:00:00.000Z"
               }
             ],
-            "digest": "sha-256:da92a73fd8c0453aca94d1b625584a4ec10710fd09de99c1d38a4ee35d88993a"
+            "digest": "sha-256:873131d6b0d0d378f409c76ae782bc937410ab54b4f5e40d6a9eabd9d22b6504"
           },
           "content": {
             "present": true,

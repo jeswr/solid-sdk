@@ -255,6 +255,9 @@ export type EffectResult =
  * state authoritatively that nothing was done.
  */
 export interface EffectAdapter {
+  /** Host-installed plain-text email boundary: exact parameters, endpoint pins, context and approval. */
+  readonly plainTextEmail?: boolean;
+  readonly bindsParameters?: boolean;
   /** A record release binds all actual parameters and includes runtime-owned disclosure labels. */
   readonly releasesRecord?: boolean;
   readonly id: string;
