@@ -166,7 +166,7 @@ test("allow similar issues a scoped seven-day rule before approving", async ({ p
   await page
     .getByRole("button", { name: "Approve and allow similar for 7 days", exact: true })
     .click();
-  await expect(page.getByText("Approved, the agent will send within a minute")).toBeVisible();
+  await expect(page.getByText("Approved (waiting for agent)")).toBeVisible();
   const daemon = daemonDouble(page);
   // "Approved" is optimistic; the new mandate and the approval land shortly after.
   await expect
