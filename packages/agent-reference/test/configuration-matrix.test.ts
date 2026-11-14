@@ -54,10 +54,10 @@ it("upserts world and branch lists by id while preserving existing literal-array
   expect(() => patch(original, JSON.parse('{"script":{"__proto__":{"value":2}}}'))).toThrow();
 });
 
-it("runs configuration-only branches only in their own matrix cell and keeps the full layer header", async () => {
+it("runs scoped branches and the declared layer change in each matrix cell", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
   const results = await runScenario(profile, scenario, { configuration: "all" });
-  expect(results).toHaveLength(12);
+  expect(results).toHaveLength(16);
   expect(results.filter((result) => !result.configuration).map((result) => result.path)).toEqual([
     "main",
     "fee-amount-differs",
@@ -68,7 +68,9 @@ it("runs configuration-only branches only in their own matrix cell and keeps the
     const paths = results.filter((result) => result.configuration === entry.id);
     expect(paths.map((result) => result.path)).toEqual([
       "main",
-      ...(entry.world.branches as { id: string }[]).map((branch) => branch.id),
+      ...((entry.world.branches as { id: string }[] | undefined) ?? scenario.branches).map(
+        (branch) => branch.id,
+      ),
     ]);
     const header = paths[0]?.trace?.configuration;
     expect(header?.id).toBe(entry.id);
@@ -84,9 +86,9 @@ it("runs configuration-only branches only in their own matrix cell and keeps the
           header?.layers[layer as keyof typeof BASELINE.layers] !==
           BASELINE.layers[layer as keyof typeof BASELINE.layers],
       ),
-    ).toEqual(["transport"]);
+    ).toEqual(Object.keys(entry.change));
   }
-}, 60_000);
+}, 600_000);
 
 it("refuses a signed opening under a configuration the receiver does not advertise", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-core");

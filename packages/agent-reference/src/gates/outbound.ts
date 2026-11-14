@@ -2,10 +2,12 @@
 import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
 import { IntentScopeNode } from "../model/intent.js";
+import { MessageNode } from "../model/message-nodes.js";
 import { PaymentAccountNode, PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
 import { RdfOrderSuite } from "../settlement/rdf-order.js";
 import { decodeJws } from "../wire/inspect.js";
+import { documentConfiguration, isMessagePacket, packetProofInfo } from "../wire/message-packet.js";
 import { paymentDocumentIn, paymentTrace } from "../wire/payment.js";
 // AUTHORED-BY Claude Opus 5.5
 /**
@@ -543,7 +545,8 @@ export class OutboundGate {
   }
 
   private unsignedAllowed(message: AnyMessage): boolean {
-    const envelope = MessageEnvelopeNode.fromMessage(message);
+    const envelope =
+      message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
     return (configurationById(envelope.configurationId)?.unsignedRequestKinds ?? []).includes(
       envelope.messageKind,
     );
@@ -1605,6 +1608,7 @@ export class OutboundGate {
       approved?: boolean;
       content?: ContentProfile;
       knownTerms?: ReadonlySet<string>;
+      documentDigest?: string;
     } = {},
   ): {
     outcome: OutboundOutcome;
@@ -1617,7 +1621,8 @@ export class OutboundGate {
         ? this.checkedPayments.get(actionDigest(opts.intent))
         : undefined;
     this.activePaymentDocument = paymentDocumentIn(message);
-    const envelope = MessageEnvelopeNode.fromMessage(message);
+    const envelope =
+      message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
     const vocabulary = { ...this.deps.gate.vocabulary, ...opts.content?.vocabulary };
     const purposes = { ...opts.content?.purposes, ...this.deps.gate.purposes };
     const known = {
@@ -1628,7 +1633,7 @@ export class OutboundGate {
       ),
       terms: opts.knownTerms,
     };
-    const digest = digestOf(message);
+    const digest = opts.documentDigest ?? digestOf(message);
     const body = message.body as unknown as JsonObject;
     const purpose =
       opts.intent?.purpose ??
@@ -2445,22 +2450,26 @@ export class OutboundGate {
       known?: KnownContent;
     },
   ): void {
-    const envelope = MessageEnvelopeNode.fromMessage(message);
+    const envelope =
+      message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
     const verdicts: CheckVerdict[] = [];
     if (opts.intent) {
       this.deps.reservePayment?.(opts.intent, envelope.id);
       this.deps.consumeApproval?.(opts.intent);
       this.pendingGo.delete(actionDigest(opts.intent));
     }
-    const signed = wire.format === "awp-jws-compact/0.1";
-    const header = signed ? (decodeJws(wire.jws).header ?? {}) : {};
+    const signed =
+      wire.format === "awp-jws-compact/0.1" ||
+      (isMessagePacket(wire) && documentConfiguration(wire).signed);
+    const header =
+      wire.format === "awp-jws-compact/0.1" ? (decodeJws(wire.jws).header ?? {}) : { alg: "EdDSA" };
     this.verdict(
       verdicts,
       envelope.id,
       "evidence",
       signed || this.unsignedAllowed(message) ? "pass" : "fail",
       signed
-        ? `Signed (JWS ${String(header.alg)}) with ${this.name(this.deps.identity.actor)}'s pinned key, and written to the record.`
+        ? `${isMessagePacket(wire) && packetProofInfo(wire)?.summary.includes("eddsa-rdfc") ? "Signed with eddsa-rdfc-2022" : `Signed (JWS ${String(header.alg)})`} with ${this.name(this.deps.identity.actor)}'s pinned key, and written to the record.`
         : this.unsignedAllowed(message)
           ? "Sent unsigned and with no identifier, as the public read configuration requires; written to the record."
           : "Sent unsigned; written to the record.",

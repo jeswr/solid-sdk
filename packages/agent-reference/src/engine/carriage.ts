@@ -41,6 +41,7 @@ export class ScenarioCarriage {
     private readonly name: (id: string | undefined) => string,
   ) {}
   advertisements(agent: string): { id: string; endpoint?: string }[] {
+    if (this.suite === "direct-http") return [{ id: "direct-local/0.1" }];
     const scope =
       this.scenario.carriage?.parties ??
       this.scenario.parties.filter((party) => party.runs === "agent").map((party) => party.id);
@@ -63,6 +64,8 @@ export class ScenarioCarriage {
     to: string,
     step: string,
   ): Promise<{ input: unknown; binding: string }> {
+    if (this.suite === "direct-http")
+      return { input: carriageBytes(wire), binding: "direct-local/0.1" };
     const parties =
       this.scenario.carriage?.parties ??
       this.scenario.parties.filter((party) => party.runs === "agent").map((party) => party.id);

@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -122,7 +122,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The accounting platform's business.accounts statement is intact and signed with The accounting platform's pinned key."
+      "caption": "The accounting platform's business accounts statement is intact and signed with The accounting platform's pinned key."
     },
     {
       "seq": 2,
@@ -147,7 +147,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:small-business-loan:business.accounts",
-        "text": "The accounting platform is accepted for business.accounts claims."
+        "text": "The accounting platform is accepted for business accounts claims."
       },
       "resolution": {
         "question": "Is The accounting platform an authority for business.accounts claims about The company?",
@@ -160,7 +160,7 @@
         ],
         "answer": "Accepted, for business.accounts claims only."
       },
-      "caption": "The accounting platform's business.accounts statement: The accounting platform is an accepted source for this kind of claim."
+      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -178,7 +178,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The accounting platform's business.accounts statement asks for nothing, so there is no authority to check."
+      "caption": "The accounting platform's business accounts statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -205,7 +205,7 @@
         "id": "urn:terms:small-business-loan:accounts",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The accounting platform's business.accounts statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan."
     },
     {
       "seq": 5,
@@ -235,9 +235,9 @@
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:small-business-loan:business.accounts",
-        "text": "Accept business.accounts from The accounting platform by recorded-by-authority, at most 30 days old."
+        "text": "Accept business accounts from The accounting platform by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The accounting platform's business.accounts statement was not produced in a way A loan for a small company accepts."
+      "caption": "The accounting platform's business accounts statement was not produced in a way A loan for a small company accepts."
     },
     {
       "seq": 6,
@@ -248,7 +248,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: business.accounts. Accepted sources: The accounting platform. Accepted methods: recorded-by-authority.",
+      "caption": "Required claim: business accounts. Accepted sources: The accounting platform. Accepted methods: recorded-by-authority.",
       "refs": [
         {
           "layer": "meaning",
@@ -278,7 +278,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional tax authority's business.tax-filing statement is intact and signed with The fictional tax authority's pinned key."
+      "caption": "The fictional tax authority's business tax filing statement is intact and signed with The fictional tax authority's pinned key."
     },
     {
       "seq": 8,
@@ -303,7 +303,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:small-business-loan:business.tax-filing",
-        "text": "The fictional tax authority is accepted for business.tax-filing claims."
+        "text": "The fictional tax authority is accepted for business tax filing claims."
       },
       "resolution": {
         "question": "Is The fictional tax authority an authority for business.tax-filing claims about The company?",
@@ -316,7 +316,7 @@
         ],
         "answer": "Accepted, for business.tax-filing claims only."
       },
-      "caption": "The fictional tax authority's business.tax-filing statement: The fictional tax authority is an accepted source for this kind of claim."
+      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim."
     },
     {
       "seq": 9,
@@ -334,7 +334,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional tax authority's business.tax-filing statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional tax authority's business tax filing statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 10,
@@ -361,7 +361,7 @@
         "id": "urn:terms:small-business-loan:tax-filing",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The fictional tax authority's business.tax-filing statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan."
     },
     {
       "seq": 11,
@@ -391,9 +391,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:small-business-loan:business.tax-filing",
-        "text": "Accept business.tax-filing from The fictional tax authority by recorded-by-authority, at most 30 days old."
+        "text": "Accept business tax filing from The fictional tax authority by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional tax authority's business.tax-filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The fictional tax authority's business tax filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
     },
     {
       "seq": 12,
@@ -403,7 +403,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional tax authority's business.tax-filing statement is admitted."
+      "caption": "The fictional tax authority's business tax filing statement is admitted."
     },
     {
       "seq": 13,
@@ -413,7 +413,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:small-business-loan:tax-filing",
-        "label": "The fictional tax authority's business.tax-filing statement",
+        "label": "The fictional tax authority's business tax filing statement",
         "claimType": "business.tax-filing",
         "subject": "urn:fictional:small-business-loan:owner",
         "value": null,
@@ -426,7 +426,7 @@
         },
         "provenance": "signed by The fictional tax authority"
       },
-      "caption": "The fictional tax authority's business.tax-filing statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional tax authority's business tax filing statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 14,
@@ -449,7 +449,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The company register's organization.role statement is intact and signed with The company register's pinned key."
+      "caption": "The company register's organization role statement is intact and signed with The company register's pinned key."
     },
     {
       "seq": 15,
@@ -474,7 +474,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:small-business-loan:organization.role",
-        "text": "The company register is accepted for organization.role claims."
+        "text": "The company register is accepted for organization role claims."
       },
       "resolution": {
         "question": "Is The company register an authority for organization.role claims about The director?",
@@ -487,7 +487,7 @@
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "The company register's organization.role statement: The company register is an accepted source for this kind of claim."
+      "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim."
     },
     {
       "seq": 16,
@@ -505,7 +505,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The company register's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The company register's organization role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 17,
@@ -532,7 +532,7 @@
         "id": "urn:terms:small-business-loan:director-role",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The company register's organization.role statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The company register's organization role statement: its terms allow this: use for Small business loan; share for Small business loan."
     },
     {
       "seq": 18,
@@ -562,9 +562,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:small-business-loan:organization.role",
-        "text": "Accept organization.role from The company register by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization role from The company register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The company register's organization.role statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The company register's organization role statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
     },
     {
       "seq": 19,
@@ -574,7 +574,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The company register's organization.role statement is admitted."
+      "caption": "The company register's organization role statement is admitted."
     },
     {
       "seq": 20,
@@ -584,7 +584,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:small-business-loan:director-role",
-        "label": "The company register's organization.role statement",
+        "label": "The company register's organization role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:small-business-loan:director",
         "value": null,
@@ -597,7 +597,7 @@
         },
         "provenance": "signed by The company register"
       },
-      "caption": "The company register's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The company register's organization role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 21,
@@ -650,7 +650,7 @@
         }
       ],
       "reason": "method-not-accepted",
-      "caption": "Required business.accounts was refused: method-not-accepted."
+      "caption": "Required business accounts was refused: method-not-accepted."
     },
     {
       "seq": 24,

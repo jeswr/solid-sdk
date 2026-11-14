@@ -40,7 +40,9 @@ it("keeps generated captions and rule explanations free of identifiers in every 
     traces++;
     const trace = JSON.parse(readFileSync(join(root, "traces", path.trace), "utf8")) as TraceFile;
     for (const event of trace.events) {
-      expect(event.caption, `${path.trace} event ${event.seq}`).not.toMatch(/https?:\/\/|urn:/);
+      expect(event.caption, `${path.trace} event ${event.seq}`).not.toMatch(
+        /https?:\/\/|urn:|\b[A-Za-z][\w-]*\.[A-Za-z][\w.-]*\b|[a-z][A-Z]/,
+      );
       expect(event.rule?.text ?? "", `${path.trace} event ${event.seq}`).not.toMatch(
         /https?:\/\/|urn:/,
       );
@@ -52,7 +54,12 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "runs")).toHaveLength(150);
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(11);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
-  expect(alternatives).toHaveLength(8);
+  expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
+    8,
+  );
+  expect(
+    alternatives.filter((path) => path.configuration === "authenticity-data-integrity"),
+  ).toHaveLength(5);
   expect(alternatives.every((path) => path.status === "runs")).toBe(true);
 });
 
@@ -69,4 +76,19 @@ it("preserves exact original content in principal review even when it contains a
     "fixed-vocabulary",
   );
   expect(event.chat?.text).toBe(text);
+});
+
+it("builds captions from words without dotted identifiers or camel case", () => {
+  const labels = new LabelIndex();
+  const caption = labels.annotations(
+    {
+      part: "inbound-gate",
+      kind: "check",
+      caption: "The lender's mortgage.product statement uses originalDigest from urn:test:source.",
+    },
+    "fixed-vocabulary",
+  ).caption;
+  expect(caption).toContain("mortgage product");
+  expect(caption).toContain("original Digest");
+  expect(caption).not.toMatch(/urn:|\b[a-zA-Z]+\.[a-zA-Z]+\b|[a-z][A-Z]/);
 });

@@ -3,6 +3,11 @@ import "./evidence-item.js";
 /** Complete core object facades over live RDF datasets. Full admission diagnostics are generated. */
 import type { Term } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
+import { MESSAGE_KINDS, REASON_CODES } from "../core/types.js";
+import { entities as generatedEntities } from "../generated/model.js";
+import { AWP } from "../profile/vocabulary.js";
+import { CoreNode, type ModelSpec, makeNode, registerModel } from "./core-node.js";
+import type { EvidenceItemNode } from "./evidence-item.js";
 import type {
   AcceptBody,
   ActionIntent,
@@ -27,12 +32,7 @@ import type {
   ReceiptBody,
   RefuseBody,
   UnsupportedBody,
-} from "../core/types.js";
-import { MESSAGE_KINDS, REASON_CODES } from "../core/types.js";
-import { entities as generatedEntities } from "../generated/model.js";
-import { AWP } from "../profile/vocabulary.js";
-import { CoreNode, type ModelSpec, makeNode, registerModel } from "./core-node.js";
-import type { EvidenceItemNode } from "./evidence-item.js";
+} from "./inputs.js";
 import type { NamedValuesNode } from "./named-values.js";
 import { MessageNode as EnvelopeMessageNode } from "./nodes.js";
 
@@ -1292,6 +1292,18 @@ export class AgreementNode extends CoreNode<Agreement> {
 
 export class MessageNode extends CoreNode<AnyMessage> {
   readonly modelName = "Message";
+  get conversationId(): string {
+    return this.conversation;
+  }
+  get configurationId(): string {
+    return this.configuration;
+  }
+  get messageKind(): MessageKind {
+    return this.kind;
+  }
+  get participant(): ParticipantRefNode {
+    return this.from;
+  }
   /** Compatibility builder for the earlier envelope-only API. Use toNode for a complete document. */
   static create(id: string, kind: MessageKind, dataset = new Store()): EnvelopeMessageNode {
     return EnvelopeMessageNode.create(id, kind, dataset);
@@ -1543,3 +1555,21 @@ export class IntentEvidenceRefNode extends CoreNode<IntentEvidenceRef> {
   }
 }
 registerModel("IntentEvidenceRef", intentEvidenceRefSpec, IntentEvidenceRefNode);
+
+/** Message ingress is narrower than general document admission. */
+export function requireMessageNode(root: string, dataset: Store): MessageNode {
+  const node = new MessageNode(root, dataset);
+  const kinds = MESSAGE_KINDS.filter((kind) =>
+    node.types.has(AWP + kind[0]!.toUpperCase() + kind.slice(1)),
+  );
+  if (!node.types.has(AWP + "Message") || kinds.length !== 1 || kinds[0] !== node.kind)
+    throw new TypeError("message-kind-type-mismatch");
+  return node;
+}
+
+/** Kind-specific protocol surface of the live Message wrapper. */
+export interface MessageView<K extends MessageKind = MessageKind>
+  extends Omit<MessageNode["live"], "kind" | "body"> {
+  readonly kind: K;
+  readonly body: BodyByKind[K];
+}

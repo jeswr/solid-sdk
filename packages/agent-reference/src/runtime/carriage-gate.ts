@@ -16,8 +16,15 @@ import { validateMessage } from "../core/schema.js";
 import type { AnyMessage } from "../core/types.js";
 import type { InboundGate } from "../gates/inbound.js";
 import { type SigningKey, verifyCompact } from "../mechanisms/jws.js";
+import { MessageNode } from "../model/message-nodes.js";
+import { configurationById } from "../profile/configurations.js";
 import { peekWire } from "../trace/packet.js";
 import { carriageWire } from "../wire/carriage.js";
+import {
+  documentConfiguration,
+  isMessagePacket,
+  verifyMessagePacket,
+} from "../wire/message-packet.js";
 import type { StepResult } from "./agent.js";
 
 export interface CarriageDelivery {
@@ -54,6 +61,19 @@ export async function signedReadable(
   key: SigningKey,
   name: (id: string | undefined) => string,
 ): Promise<string> {
+  if (isMessagePacket(wire)) {
+    const cfg = configurationById(documentConfiguration(wire).configuration);
+    const suite =
+      cfg?.integrity.status === "selected" && cfg.integrity.mechanism === "data-integrity"
+        ? "data-integrity"
+        : "jws";
+    const checked = await verifyMessagePacket(wire, {
+      suite,
+      resolve: (id) => (id.replace(/^urn:awp:key:/, "") === key.kid ? key : undefined),
+    });
+    if (!checked.ok) throw new CarriageError("bad-signature", checked.detail);
+    return readableCopy(new MessageNode(checked.root, checked.dataset).live, name);
+  }
   const value = wire as { jws?: string };
   if (typeof value?.jws !== "string")
     throw new CarriageError(

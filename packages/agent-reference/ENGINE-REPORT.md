@@ -2266,3 +2266,361 @@ of all six fixture graphs/signatures, the 165-path corpus and the unchanged orac
 Codegen drift, typecheck, lint, build, scenarios and both guards retain the final results
 above. The capacity inventory was refreshed from that final run; source digests for
 fresh joint-protocol ciphertext can differ between runs without changing any decision.
+
+## Brief 22d
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Offline implementation in progress, no commits. No settlement source is edited. Existing
+limits and the immutable 161-path oracle are preserved. Checkpoints below describe actual
+completed work; later paragraphs supersede provisional results.
+
+**Part 0 — done.** The 16 unsupported-envelope failures were the payment-era unsigned
+`awp-action-intent/0.1` records, not unrecognised signatures on offers/invoices/receipts.
+The converter now retains the exact unsigned record as a presentation and links the real
+signed credentials carried alongside it. It invents no signature on the intent; its
+binding to the acceptance remains the original outer message's signature. Signed parts
+are materialised before presentations, irrespective of their retained list positions;
+a standalone unsigned intent without signed parts is refused. Original source JWS bytes
+and their deterministic projections are unchanged. The proof-graph regression was an
+ordering ambiguity: the writer retained both graphs, but put the blank outer DI proof
+graph before the named original-JWS graph. Flat `@included` now puts named graphs before
+blank graphs, so the original compact proof remains directly inspectable. Both target
+tests pass: complete corpus **1/1**, proof graphs **16/16**. Other reference tests:
+**674 passed, 7 skipped in 66 files**. `tsc` passed before attachment implementation.
+`node scripts/oracle-snapshot.mjs /tmp/oracle-check.json` plus parsed deep comparison:
+**161 paths, unchanged**; the live oracle test also passes in the reference run.
+
+**Part 1 — implemented checkpoint.** The unchanged default document bounds now carry all
+capacity cases in the complete corpus. The writer extracts owned named-value trees whose
+N-Quads representation exceeds **8 KiB**, and literal lexical values exceeding **8 KiB**.
+Trees travel as `application/n-quads`; literals retain their exact UTF-8 lexical bytes
+with `text/plain;charset=utf-8` and a signed datatype. The signed reference records
+`awp:attachmentDigest` (`sha-256:<hex>`), `awp:byteLength`, encoding format and, for literals,
+`awp:attachmentDatatype`. Original collection classes remain on graph references. Attachments
+are canonical base64 in the JSON-safe packet, outside the signed JSON-LD document.
+Final carriage caps are **2 MiB per attachment, 8 MiB per packet, 32 attachments and 32,768
+quads per RDF payload**. The initial 1 MiB experiment was too small for an expanded RDF
+payload, so these new carriage caps supersede it; no existing bound/configuration changed.
+All declared/encoded sizes are checked before decoding/hashing, then all lengths/digests
+before any attachment parsing. Missing, extra, duplicate, modified, truncated and oversized
+attachments have named refusals. Referenced graph payloads are admitted under their digest;
+live named-value wrappers resolve those admitted graphs without expanding the signed
+reference dataset. The materialised projection is used only for SHACL and exact original-JWS
+projection comparisons. Nine focused carriage tests pass; the complete corpus passes its
+new default-bound attachment assertions, including the original 26 capacity documents.
+Context terms/hash and shapes are updated. Original corpus equality tests remain.
+
+**Parts 2–3 — substantial implementation; remaining adapters are explicit.** `emit`
+constructs `MessageNode.toNode`, prepares attachments, runs the outbound release over its
+live graph facade, signs the complete document with the configured wire suite, retains the
+exact document/attachments in the durable outbox, and records that same graph. JWS can
+detach its redundant encoded payload when retaining it would exceed existing bounds;
+verification reconstructs only the JCS bytes of the already bounded document. No envelope
+projection is emitted. New document ingress verifies with pinned actor material, admits
+attachments, validates the complete materialised shape, requires Message plus exactly one
+matching kind, and hands the same admitted dataset's live wrapper to the runtime/gates.
+The wrapper facades enumerate protocol fields but read current RDF on every access;
+`fromNode` snapshots are not gate operands. Native action scopes now retain their full
+ActionIntent graph. Explicit copying is confined to persistence, host rendering and
+record/mapping boundaries, where structuredClone cannot clone live views.
+
+Original issuer JWS role/typ verification and pinned-key/source checks remain. Integrity
+also checks each embedded credential against its complete deterministic original projection;
+only structural credential/value links are traversed, so a domain IRI shared with the
+message's OperationRef does not accidentally become part of a credential's closure.
+Selective-disclosure/chain mechanisms still receive their exact original envelope bytes.
+The hostile empty-chain fixture is preserved as an unsigned presentation alongside real
+signed parts and still fails its original representation mechanism. Prior credential
+references resolve from an explicit bounded 4,096-entry digest cache, never the network;
+missing/substituted bytes fail. Retained original message proofs rebuild the cache after
+restart. Tests cover live graph mutation, a sender-signed tampered issuer projection,
+resolved/missing prior digests, and approval survival across restart.
+
+Message-release approvals use the selected suite's full-document digest, recomputed from
+the held graph on resume. **Not complete:** earlier action approvals (before a message or
+an effect exists) still bind the established action/terms/order intent; changing that
+requires moving their construction boundary. The legacy signed/unsigned input adapter is
+retained for hostile/compatibility fixtures; it has not become context-pinned RDF ingress.
+Policy evaluation, several stored-fact/mandate readers and the other existing function
+exceptions are also not claimed as a completed RDF migration. Native received message
+bodies/evidence and emitted release operands are live graph views. The fifteen core
+model declarations now alias the wrappers' live surfaces; construction/persistence input
+contracts are explicitly in `src/model/inputs.ts`. The unmodified checker/allow-list report
+**0 hard failures, 213 existing allowances**; no allowance is added.
+
+**Part 4 — implemented for native document packets; legacy inspector entries remain.**
+`PacketView` has `jsonld` (the exact transmitted signed string, including its context),
+`context` (IRI or IRIs), `rdf` (the same graph via n3.Writer/SDK serialization: TriG for
+named proof graphs, Turtle otherwise), and attachment digest/mediaType/byteLength without
+bytes. Existing layers remain. Blank labels are normalised within each dataset so parser
+counters do not change reproducible traces. The new trace JSON Schema distinguishes
+complete document packets from historical hostile-input inspector entries; it refuses
+partial document fields. Graph-equivalence/schema tests pass. A full example packet is
+recorded below after final scenario generation.
+
+**Part 5 — implemented and tested checkpoint.** Both mortgage scenarios declare
+`authenticity-data-integrity` matrix configurations selecting `eddsa-rdfc-2022`. Native
+runtime dispatch, pinned-method resolution, direct carriage for a non-transport matrix
+change, payment-contract verification and packet metadata all use the selected suite.
+The matrix test compares every ordered decision/check/reason tuple with JWS for every
+baseline path in both journeys. This test plus graph-ingress validation passed **3/3**.
+Final regenerated matrix counts follow below.
+
+**Part 6 — implemented.** The claim-caption builder calls mortgage product claims the
+lender's signed product terms and turns other claim names into words. Shared RDF label
+rendering removes dotted identifiers and splits camel-case tokens in generated captions
+and rule explanations; original content/inspector identifiers remain exact. A focused
+caption test covers dotted names, camel case and URNs. Final corpus checks follow below.
+
+**Settlement lane handover.** No `src/settlement/` file was edited. Complete message proofs
+are retained losslessly as bounded `awp-jsonld-gzip:` records; gzip invents no signature.
+`verifyRecordedMessage` verifies those original documents with their attachments and also
+supports old compact proofs. `wire/payment.ts` uses it for offer/acceptance authority.
+Large RDF orders can use the generic RDF attachment packet through the existing payment
+wire helpers; pure `liftPaymentObjects` still binds the exact shown object and admitted
+facts. Transport envelope caps are separate finite carriage bounds (12 MiB packet JSON,
+base64-derived outer cap); ordinary control/discovery envelopes keep the old limits.
+Native adapter authors must retain complete packet proofs and call the shared verifier,
+rather than assuming every recorded proof string itself is a compact JWS.
+
+**Integration refinements during final checks.** Private joint shares/partials/packets and
+audit openings, plus their original credential/envelope proofs, now travel as attachments
+even below 8 KiB. This preserves the existing rule that traces never reveal their bytes
+while still recording the exact signed reference document. No trace redaction is applied
+to `jsonld` or `rdf`. Ordinary large values retain the fixed threshold. Native replay
+records additionally bind the full selected-suite document digest; the legacy logical
+digest remains for compatibility record comparisons. Inbound verification now admits a
+native packet once, and the arrival trace is rendered from that very admitted dataset
+before its integrity verdict; verification ledger records emit no trace events, preserving
+check order. Test-only timeouts were increased for exhaustive graph/crypto matrix runs;
+no production bound was changed.
+
+**Resume checkpoint (14 November, after the interrupted run).** Read the existing 22d
+section and working-tree inventory first; no finished part was restarted. The resumed
+package build passed, including **174 live data paths; 163 runs / 11 disagree / 9 blocked**
+in the 183-row manifest (five new DI rows). The prescribed snapshot to
+`/tmp/oracle-check.json`, compared as parsed JSON, has **161 unchanged baseline paths**.
+The guard passes with **0 hard failures and 213 allowances**; its status inventory was
+refreshed by `--write-status` without adding an allowance. The initial full test run
+reported a joint-scenario timeout; final results below will supersede that run. Three
+formatter errors in the interrupted edits were corrected.
+
+The resumed implementation fills additional gaps: hostile scenario re-signing and
+signature stripping now use native document carriage, so those recorded arrivals also
+have the actual document and graph. Held message continuations persist their exact
+unsigned document and attachment bytes, rather than reconstructing them from their
+compatibility rendering. Resume checks attachment integrity and the selected-suite
+document digest before release; changed saved renderings cannot substitute content.
+Focused tests cover successful restart and tampered held bytes. Restored message graphs
+are explicitly connected to the prior-credential resolver.
+
+Attachment admission now checks caps before document verification as well as before
+attachment hashing. Owned value trees reject cycles, shared subtrees, root-class
+substitution and collisions with the signed graph or another attachment. The additional
+carriage depth cap is **32 RDF value-tree edges**; it changes no existing default. Five
+adversarial structure tests and the existing cap/digest/length tests pass. The corpus test
+now pins all **26 original capacity occurrences** by their fixture type/path, even when
+a compact retained proof makes a later representation fit inline.
+
+Native credential fitness metadata and representation operands now stay on the admitted
+dataset. The loaded owner mandate retains its original credential graph and exposes live
+named policy values. Indexed live-field lookup removes repeated full-list scans without
+caching values or collection membership; graph mutation remains visible in its test.
+Presentations also require their embedded signed parts to match their retained envelope,
+so substituting another valid credential cannot change the inspector's signed-parts view.
+
+**Part 2's remaining approval boundary — stopped without changing the design.**
+`continueStart`, `applyReply`, `performPlanMessage` and `runEffect` still authorize/park
+their action before `emit` constructs a message (and local effects need not emit a
+message at all). Their approvals retain the existing exact ActionIntent/terms/order
+bindings. There is a concrete self-reference in the paid-acceptance path:
+`performReply` embeds the principal's approval JWS in the acceptance's evidence, and
+`verifyPaymentProofs` requires that original approval. A digest of the entire acceptance
+therefore includes that approval's own `actionDigest` and signature. Replacing its action
+binding by that same whole-message digest would require constructing a cryptographic
+hash fixed point. The selected document digest excludes the outer message proof only;
+silently excluding this embedded approval would change what the design says is signed.
+Moving the approval outside the protected document, defining an approved projection, or
+changing the approval/contract exchange would require a design decision. None is made.
+Non-payment pre-action approvals likewise have no existing exact message to bind at their
+current construction boundary. Consequently **Part 2 remains partial**, although native
+emit/receive and message-release approvals now use the complete document. This is not
+a passing claim for the stronger "every approval names the exact future message" rule.
+The 213 existing function/signature exceptions still expose the remaining legacy policy,
+stored-fact and protocol adapters; no new exception is introduced to conceal them.
+
+**Resume validation scheduling.** The initial full test run was stopped after its known
+joint timeout, and the first closing test attempt was stopped while trace generation
+was still writing artifacts. The definitive suite is run after the final build, so the
+recorded joint hashes and manifest are stable during artifact assertions. The standalone
+cohort test passes in **74.74 seconds** after indexed wrapper reads; the three exhaustive
+joint-path rows now have an explicit **300-second test timeout**, leaving every production
+limit unchanged. No evaluation source, settlement source, dependency or oracle is edited.
+
+**Final build and artifact checkpoint.** The final build of the frozen source passes;
+all **174 live paths** are regenerated. The prescribed snapshot again compares equal
+to the immutable **161-path** oracle. A separate read-only audit validates every trace
+against the exported schema and compares each distinct packet’s parsed JSON-LD graph
+with its recorded TriG/Turtle graph using canonical N-Quads: **174 traces, 1,851 packets,
+910 distinct documents, 1,510 packets with attachment metadata; zero graph differences**.
+All **five DI rows** have exactly their JWS row’s ordered decisions, including the three
+mortgage payment refusal branches. Every caption passes the dotted-identifier, URI and
+camel-case checks. The 20 original capacity message occurrences are present; the six
+original intent occurrences are additionally pinned by the full corpus test. The full
+package test suite is still running at this checkpoint. Separate closing checks already
+pass: lint (zero errors), typecheck, codegen guard (eight projects), agent-layer guard,
+and RDF guard (**0 hard failures / 213 unchanged allowances**). Full generation retains
+**218 admission errors and 23 warnings**; no generator rule was weakened.
+
+Transport boundary refinements pass **19 tests**: a bare document media-type marker or
+invalid encoded copy cannot enable the larger carriage limits, while a real bounded
+document copy can. Held-message restart/refusal tests pass under both authenticity
+suites (**42 content tests**). New attachment metadata keys are refused rather than
+silently ignored. No production default or running configuration bound changed.
+
+**One complete recorded packet.** From `traces/mortgage-core--authenticity-data-integrity.json`, event 9.
+`jsonld` is the exact signed string, `context` names its context, `rdf` is the same
+dataset written through the wire serializer, and this small packet has no attachments.
+Larger packets carry only each attachment’s digest, media type and byte length here.
+
+```json
+{
+  "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-core-main:sam-agent:0002\",\"type\":[\"Message\",\"Describe\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/authenticity-data-integrity/0.1\",\"kind\":\"describe\",\"conversation\":\"urn:awp:engine-mortgage-core-main:sam-agent:0001\",\"from\":{\"id\":\"urn:awp:n:AF6lkUuwaI_t-8PTxo2ZP40m_Ra0CbYvgTBCjQwPd9A\",\"type\":\"ParticipantRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"onBehalfOf\":\"https://sam.example/#me\",\"operator\":\"https://agents.hostco.example/#org\"},\"to\":{\"id\":\"urn:awp:n:c7wAIy1c83TxBlkRLCLFraRgOzGQ1lBjsz6jih57ah4\",\"type\":\"AudienceRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"party\":\"https://northbank.example/#org\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:VzY0vao6Uo0-B9QlartX4FQDXY90wMDvWJduOMF-wmE\",\"type\":\"DescribeBody\"},\"proof\":{\"type\":\"DataIntegrityProof\",\"cryptosuite\":\"eddsa-rdfc-2022\",\"verificationMethod\":\"urn:awp:key:GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o\",\"proofPurpose\":\"assertionMethod\",\"created\":\"2026-11-13T09:00:00.000Z\",\"proofValue\":\"z26A84mYz3xqtmk9eXbNQUaSgbgr6SyqtQ7KxeyUwBb5kFjw3XcNpfs67HxByCi9ijofEeAtkVhJviZMaiJgozzzn\"}}",
+  "context": "https://w3id.org/jeswr/awp/context/v1",
+  "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-core-main:sam-agent:0002> a awp:Describe, awp:Message;\n    awp:body <urn:awp:n:VzY0vao6Uo0-B9QlartX4FQDXY90wMDvWJduOMF-wmE>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/authenticity-data-integrity/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-core-main:sam-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:AF6lkUuwaI_t-8PTxo2ZP40m_Ra0CbYvgTBCjQwPd9A>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/describe>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:c7wAIy1c83TxBlkRLCLFraRgOzGQ1lBjsz6jih57ah4>;\n    sec:proof _:awp0.\n<urn:awp:n:VzY0vao6Uo0-B9QlartX4FQDXY90wMDvWJduOMF-wmE> a awp:DescribeBody.\n<urn:awp:n:AF6lkUuwaI_t-8PTxo2ZP40m_Ra0CbYvgTBCjQwPd9A> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://sam.example/#me>;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:operator <https://agents.hostco.example/#org>.\n<urn:awp:n:c7wAIy1c83TxBlkRLCLFraRgOzGQ1lBjsz6jih57ah4> a awp:AudienceRef;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:party <https://northbank.example/#org>.\n_:awp0 {\n_:awp1 a sec:DataIntegrityProof;\n    <http://purl.org/dc/terms/created> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    sec:cryptosuite \"eddsa-rdfc-2022\"^^sec:cryptosuiteString;\n    sec:proofPurpose sec:assertionMethod;\n    sec:proofValue \"z26A84mYz3xqtmk9eXbNQUaSgbgr6SyqtQ7KxeyUwBb5kFjw3XcNpfs67HxByCi9ijofEeAtkVhJviZMaiJgozzzn\"^^sec:multibase;\n    sec:verificationMethod <urn:awp:key:GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o>\n}\n",
+  "attachments": [],
+  "id": "urn:awp:engine-mortgage-core-main:sam-agent:0002",
+  "from": "Sam’s agent",
+  "to": "The fictional lender’s agent",
+  "kind": "describe",
+  "carriage": {
+    "suite": "direct-http",
+    "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
+  },
+  "layers": {
+    "header": {
+      "present": true,
+      "summary": "From Sam’s agent to The fictional lender’s agent; describe; signed (eddsa-rdfc-2022, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
+      "raw": {
+        "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+        "configuration": "https://w3id.org/jeswr/awp#config/authenticity-data-integrity/0.1",
+        "id": "urn:awp:engine-mortgage-core-main:sam-agent:0002",
+        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
+        "kind": "describe",
+        "from": {
+          "actor": "https://agents.hostco.example/sam#agent",
+          "onBehalfOf": "https://sam.example/#me",
+          "operator": "https://agents.hostco.example/#org"
+        },
+        "to": {
+          "actor": "https://northbank.example/agents/intake#agent",
+          "party": "https://northbank.example/#org"
+        },
+        "createdAt": "2026-11-13T09:00:00.000Z",
+        "expiresAt": "2026-11-13T15:00:00.000Z",
+        "proof": {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "eddsa-rdfc-2022",
+          "verificationMethod": "urn:awp:key:GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+          "proofPurpose": "assertionMethod",
+          "created": "2026-11-13T09:00:00.000Z",
+          "proofValue": "z26A84mYz3xqtmk9eXbNQUaSgbgr6SyqtQ7KxeyUwBb5kFjw3XcNpfs67HxByCi9ijofEeAtkVhJviZMaiJgozzzn"
+        }
+      },
+      "digest": "sha-256:ffbe56aaeade999777409aa0ebe7f3516afdff0fd41b3e327e6d284cb098afed"
+    },
+    "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+    },
+    "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+    },
+    "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+    },
+    "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+        "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001"
+      }
+    }
+  }
+}
+```
+
+**Closing test corrections checkpoint.** The broad reference run found a stale matrix
+assertion expecting 12 mortgage-main rows; the new DI cell makes 16. The corrected test
+checks the ordinary branches when a cell does not replace them and checks that cell's
+actual declared changed layer. Its complete focused rerun passes **6/6** (250.32 s).
+The same broad run later reported a worker's default V8 heap exhaustion before producing
+its corpus report; it is not claimed green. The corpus capture spies now clear their
+call/context/result histories on every sample, rather than retaining entire historical
+runtime/ledger graphs through a large multi-configuration scenario. All captured plain
+models, counts, the 26 required occurrence checks and every equality assertion remain.
+A fresh corpus run under the unchanged default heap is in progress. No production bound
+or heap setting is raised. The separate package fixture invocation passes **17/17**;
+closing typecheck and lint pass with **zero errors** (96 warnings / 441 infos in lint).
+These checkpoint results will be superseded by the actual completed-run totals below.
+
+**Final status after the resumed run.** Parts **0, 1, 3, 4, 5 and 6 are done** at the
+boundaries and with the explicit existing allowances described above. **Part 2 is partial**:
+native message emission/reception, full graph release and held-message approval binding
+are implemented; pre-action approvals still have the construction/self-reference issue
+recorded above. The legacy input and remaining policy/store/protocol readers are not
+claimed to have completed a broader RDF migration. No decision or existing admission
+bound was changed to get a pass, and no settlement source was edited.
+
+The corrected corpus run now passes under the **unchanged default V8 heap** in **706.88 s**.
+It captures **174 paths / 1,851 packet occurrences / 909 distinct messages / 730 distinct
+ActionIntents / 51 Agreements**, or **1,690 distinct models**, with **zero round-trip or
+shape failures**. All **26 original capacity occurrences** are explicitly checked. The
+current, larger corpus has **71 expanded documents** exceeding plain default writing
+bounds: 22 invokes, 16 deliveries, 16 descriptions, 11 acceptances and six intents.
+Every one writes and reads successfully using attachments under the unchanged default
+document bounds and the stated separate carriage bounds. None is left unsupported.
+The per-sample mock-history clearing resolves the corpus worker's retention problem
+without dropping a model, path, assertion or refusal check.
+
+Across the completed broad run and the successful focused reruns, all **706 distinct
+reference tests in 73 files pass**, with **seven explicitly skipped optional real-result
+proof tests**, and the existing **17 package fixture tests pass**. To avoid concealing
+how this was verified: the broad invocation itself recorded 704 passes, the stale matrix
+failure and the corpus worker error; its corrected matrix file then passed 6/6 and the
+corrected corpus file passed 1/1. The entire broad invocation was not repeated after those
+test-only corrections. There is no remaining observed test failure. The production source
+was frozen before the final build and artifact audit; only these two test corrections
+followed them.
+
+**Last commands and actual results** (Node 24.22.3 first on PATH, offline):
+
+| Command / check | Result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference build` | PASS; TypeScript, schema drift, generated copy and trace generation; 174 live paths, manifest **163 runs / 11 disagree / 9 blocked** across 183 rows. `/tmp/22d-definitive-build.log`. |
+| `node packages/agent-reference/scripts/oracle-snapshot.mjs /tmp/oracle-check.json` and parsed JSON deep comparison | PASS; **161 baseline paths unchanged**. The immutable file has no diff. `/tmp/22d-definitive-oracle.log`. |
+| `pnpm --filter @jeswr/agent-reference test` | Broad-run history: 704 passes / 7 optional skips, one stale 12-versus-16 matrix assertion, one corpus worker error. Both corrected and rerun below; this original invocation is not misreported as exit 0. `/tmp/22d-definitive-tests.log`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/configuration-matrix.test.ts` | PASS, **6/6**, including all 16 mortgage-main matrix paths and their actual changed layers. `/tmp/22d-matrix-corrected.log`. |
+| `BRIEF22C_MODEL_REPORT=/tmp/22d-complete-model-final.json pnpm --filter @jeswr/agent-reference exec vitest run test/complete-model.test.ts` | PASS, **1/1**, all 1,690 model round trips and 71 default-bound attachment cases; original 26 occurrence assertions retained. `/tmp/22d-corpus-corrected.log`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run --config eval/e0/vitest.config.ts` | PASS, **17/17 existing fixture tests**. This does not invoke the live `eval:e0` command. `/tmp/22d-fixtures-final.log`. |
+| `pnpm --filter @jeswr/agent-reference typecheck` | PASS after the capture/matrix corrections. `/tmp/22d-typecheck-after-capture-fix.log`. |
+| `pnpm --filter @jeswr/agent-reference lint`, plus Biome on the corrected test helper/matrix file | PASS, zero errors; full run reports 96 warnings / 441 informational diagnostics. `/tmp/22d-definitive-lint.log`, `/tmp/22d-test-harness-lint.log`. |
+| `pnpm run check:codegen` | PASS, eight generated projects. Package byte-drift tests also pass in the broad run. `/tmp/22d-check-codegen.log`. |
+| `node scripts/check-agent-layers.mjs` | PASS. `/tmp/22d-agent-layers.log`. |
+| `node packages/agent-reference/scripts/check-rdf-pipeline.mjs` | PASS, **0 hard failures / 213 existing allowances**. No allow-list addition; the status inventory records the reduction. `/tmp/22d-pipeline-final.log`. |
+| `node /tmp/22d-artifact-audit.mjs` | PASS; schema and every distinct JSON-LD/RDF graph pair, all 1,851 complete packet views, five DI decision-equivalence rows, all captions and unchanged oracle decisions. `/tmp/22d-artifact-audit.log`. |
+| Scope audit and `git diff --check` | PASS; no diff in `src/settlement/`, `src/core/limits.ts`, the oracle, the allowance list, dependency manifests or lockfile. |
+
+The working copy remains on `claude/project-thread-ee3kq8-msg`. Nothing was committed,
+installed, published or sent over the network. No personal-agent suite, coverage command,
+live evaluation run or full-workspace gate was run. The existing settlement flows and
+tests were exercised; no settlement source was edited.

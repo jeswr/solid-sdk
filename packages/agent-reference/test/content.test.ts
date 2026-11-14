@@ -8,7 +8,7 @@ import { OutboundGate } from "../src/gates/outbound.js";
 import { evaluateItemTerms } from "../src/gates/quality.js";
 import { signApproval } from "../src/mechanisms/mandate.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
-import { CONFIG_ED25519 } from "../src/profile/configurations.js";
+import { CONFIG_AUTHENTICITY_DI, CONFIG_ED25519 } from "../src/profile/configurations.js";
 import { type ContentProfile, freeStrings } from "../src/profile/content.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { idSource, testKey } from "../src/reference/keys.js";
@@ -19,6 +19,7 @@ import { MemoryLedger } from "../src/store/ledger.js";
 import { MemoryStateStore } from "../src/store/state.js";
 import { BASELINE } from "../src/suites/baseline.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
+import { type MessagePacket, packetDocumentDigest } from "../src/wire/message-packet.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("missing test fixture value");
@@ -188,7 +189,7 @@ describe("UNS context and text", () => {
   });
 });
 
-async function runtimeFixture(contentProfile?: ContentProfile) {
+async function runtimeFixture(contentProfile?: ContentProfile, configuration = CONFIG_ED25519) {
   const cast = new Cast(() => new Date(AT), {
     keys: async (id) => ({
       owner: await testKey(`${id}/owner`),
@@ -279,7 +280,7 @@ async function runtimeFixture(contentProfile?: ContentProfile) {
       trust,
       mandateJws: cast.get("s").mandateJws,
       representationJws: cast.get("s").representationJws,
-      accepted: [CONFIG_ED25519],
+      accepted: [configuration],
       handlers: [handler],
       core: { id: "urn:test:scripted-core", version: "1", kind: "scripted" },
       store,
@@ -295,9 +296,9 @@ async function runtimeFixture(contentProfile?: ContentProfile) {
     terms: { purpose: PURPOSE },
     models: [],
     discover: false,
-    configuration: CONFIG_ED25519,
+    configuration,
   });
-  const bank = await cast.runtime("b", [handler]);
+  const bank = await cast.runtime("b", [handler], [], [configuration]);
   const accepted = await bank.runtime.receive(required(start.outbound[0]).wire);
   await rt.receive(required(accepted.outbound[0]).wire);
   const claim = {
@@ -337,10 +338,17 @@ it("holds before the outbox, survives restart, approves exact text once, and pre
   });
   expect(Object.keys(store.load().outbox)).toEqual(before);
   const pending = required(held.pendingApproval);
+  const stored = store.load().pending[pending.actionDigest]!.continuation as JsonObject;
+  const document = stored.document as unknown as MessagePacket;
+  expect(document.format).toBe("awp-jsonld/0.1");
+  expect(pending.intent.parameters.messageDigest).toBe(await packetDocumentDigest(document, "jws"));
   const approved = await cast.approval("s", pending.actionDigest, conv);
   const resumed = await create();
   const result = await resumed.submitApproval(approved);
   expect(result.outbound).toHaveLength(1);
+  expect(await packetDocumentDigest(result.outbound[0]!.wire as MessagePacket, "jws")).toBe(
+    pending.intent.parameters.messageDigest,
+  );
   expect(
     (result.outbound[0]?.message.body as { observed?: JsonObject } | undefined)?.observed
       ?.unusualField,
@@ -376,6 +384,63 @@ it("holds before the outbox, survives restart, approves exact text once, and pre
       value: "x",
     }),
   ).rejects.toThrow("missing-context");
+});
+
+it.each(
+  (["jws", "data-integrity"] as const).flatMap((suite) =>
+    [false, true].map((tampered) => ({ suite, tampered })),
+  ),
+)("retains held attachment bytes across restart ($suite, tampered: $tampered)", async ({
+  suite,
+  tampered,
+}) => {
+  const { rt, cast, start, store, create } = await runtimeFixture(
+    undefined,
+    suite === "data-integrity" ? CONFIG_AUTHENTICITY_DI : CONFIG_ED25519,
+  );
+  const conv = start.conversation!;
+  const text = "The private balance is 31400. ".repeat(350);
+  const held = await rt.sendReceipt(conv, {
+    activity: "urn:test:activity",
+    outcome: "completed",
+    observed: { unusualField: text },
+    final: false,
+  });
+  const pending = required(held.pendingApproval);
+  const state = store.load();
+  const continuation = state.pending[pending.actionDigest]!.continuation as JsonObject;
+  const document = continuation.document as unknown as MessagePacket;
+  expect(document.attachments.length).toBeGreaterThan(0);
+  if (tampered) {
+    const attachment = document.attachments[0]!;
+    const bytes = Buffer.from(attachment.bytes, "base64");
+    bytes[10] = bytes[10]! ^ 1;
+    (attachment as { bytes: string }).bytes = bytes.toString("base64");
+  } else {
+    // The retained graph is authoritative; a changed compatibility rendering cannot replace it.
+    ((continuation.message as JsonObject).body as JsonObject).observed = {
+      unusualField: "different text",
+    };
+  }
+  store.save(state);
+  const resumed = await create();
+  const result = await resumed.submitApproval(await cast.approval("s", pending.actionDigest, conv));
+  if (tampered)
+    expect(result).toMatchObject({
+      disposition: "rejected",
+      reason: "approval-denied",
+      outbound: [],
+    });
+  else {
+    expect(result.outbound).toHaveLength(1);
+    expect(
+      (result.outbound[0]!.message.body as { observed?: JsonObject }).observed?.unusualField,
+    ).toBe(text);
+    expect((result.outbound[0]!.wire as MessagePacket).attachments).toEqual(document.attachments);
+    expect(await packetDocumentDigest(result.outbound[0]!.wire as MessagePacket, suite)).toBe(
+      pending.intent.parameters.messageDigest,
+    );
+  }
 });
 
 it("cannot use an approval for different text, a different conversation, or an unheld action", async () => {

@@ -159,7 +159,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted",
     "method": "sparq-aggregate/1",
     "package": "sparq-verifiable-aggregate",
@@ -203,7 +203,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The self-employed worker's income.platform-list statement is intact and signed with The self-employed worker's pinned key."
+      "caption": "The self-employed worker's income platform list statement is intact and signed with The self-employed worker's pinned key."
     },
     {
       "seq": 2,
@@ -228,7 +228,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:platform-income:income.platform-list",
-        "text": "The self-employed worker is accepted for income.platform-list claims."
+        "text": "The self-employed worker is accepted for income platform list claims."
       },
       "resolution": {
         "question": "Is The self-employed worker an authority for income.platform-list claims about The self-employed worker?",
@@ -241,7 +241,7 @@
         ],
         "answer": "Accepted, for income.platform-list claims only."
       },
-      "caption": "The self-employed worker's income.platform-list statement: The self-employed worker is an accepted source for this kind of claim."
+      "caption": "The self-employed worker's income platform list statement: The self-employed worker is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -259,7 +259,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The self-employed worker's income.platform-list statement asks for nothing, so there is no authority to check."
+      "caption": "The self-employed worker's income platform list statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -286,7 +286,7 @@
         "id": "urn:terms:platform-income:supplied-platforms",
         "text": "Its terms allow this: use for Platform income; share for Platform income."
       },
-      "caption": "The self-employed worker's income.platform-list statement: its terms allow this: use for Platform income; share for Platform income."
+      "caption": "The self-employed worker's income platform list statement: its terms allow this: use for Platform income; share for Platform income."
     },
     {
       "seq": 5,
@@ -316,9 +316,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:platform-income:income.platform-list",
-        "text": "Accept income.platform-list from The self-employed worker by self-reported, at most 30 days old."
+        "text": "Accept income platform list from The self-employed worker by self-reported, at most 30 days old."
       },
-      "caption": "The self-employed worker's income.platform-list statement is fit for Proving income from several platforms: self-reported, 0 days old."
+      "caption": "The self-employed worker's income platform list statement is fit for Proving income from several platforms: self-reported, 0 days old."
     },
     {
       "seq": 6,
@@ -336,7 +336,7 @@
         }
       ],
       "reason": "completeness-not-established",
-      "caption": "An accepted completeness statement for income.platform-list, its subject and period is required."
+      "caption": "An accepted completeness statement for income platform list, its subject and period is required."
     },
     {
       "seq": 7,
@@ -347,7 +347,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "completeness-not-established",
-      "caption": "The self-employed worker's income.platform-list statement is refused and kept out of memory."
+      "caption": "The self-employed worker's income platform list statement is refused and kept out of memory."
     }
   ]
 }

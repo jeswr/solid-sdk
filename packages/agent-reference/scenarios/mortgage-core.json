@@ -2305,5 +2305,14 @@
     "13": "North Bank returns a signed decision in principle.",
     "14": "Each side checks its own record."
   },
-  "useCase": "mortgage-in-principle"
+  "useCase": "mortgage-in-principle",
+  "configurations": [
+    {
+      "id": "authenticity-data-integrity",
+      "change": {
+        "authenticity": "data-integrity"
+      },
+      "world": {}
+    }
+  ]
 }

@@ -70,6 +70,42 @@ export abstract class CoreNode<T> extends RdfNode {
   protected get spec(): ModelSpec {
     return modelSpec(this.modelName);
   }
+  /** A live protocol-field facade over this wrapper, never a fromNode snapshot.
+   * Enumeration and JSON serialization are explicit projections at host/store boundaries.
+   */
+  get live(): T {
+    const fields = Object.keys(this.spec.fields);
+    return new Proxy(this, {
+      ownKeys: () => fields.filter((key) => this.getField(key) !== undefined),
+      getOwnPropertyDescriptor: (_target, key) =>
+        typeof key === "string" && fields.includes(key) && this.getField(key) !== undefined
+          ? { enumerable: true, configurable: true }
+          : undefined,
+      has: (_target, key) =>
+        typeof key === "string" && fields.includes(key) && this.getField(key) !== undefined,
+      get: (_target, key) => {
+        if (key === "toJSON") return undefined;
+        if (typeof key === "string" && fields.includes(key)) {
+          const value = this.getField(key);
+          return value instanceof CoreNode
+            ? value.live
+            : value instanceof NamedValuesNode
+              ? value.live
+              : Array.isArray(value)
+                ? value.map((item) => (item instanceof CoreNode ? item.live : item))
+                : value;
+        }
+        const value = Reflect.get(this, key, this);
+        return typeof value === "function" ? value.bind(this) : value;
+      },
+      set: (_target, key, value) => {
+        if (typeof key !== "string" || !fields.includes(key))
+          throw new TypeError("Unknown model field");
+        this.setField(key, value);
+        return true;
+      },
+    }) as unknown as T;
+  }
   getField(name: string): unknown {
     const field = Object.hasOwn(this.spec.fields, name) ? this.spec.fields[name] : undefined;
     if (!field) throw new TypeError(`Unknown ${this.modelName} field ${name}`);
@@ -174,7 +210,15 @@ export abstract class CoreNode<T> extends RdfNode {
         undefined,
       );
       this.markPresent(field.term);
-      for (const [i, item] of value.entries()) {
+      // Materialise real signed evidence before unsigned presentations, regardless
+      // of their list position. Positions still preserve the exact original order.
+      const items = [...value.entries()];
+      if (field.model === "EvidenceItem")
+        items.sort(
+          ([, a], [, b]) =>
+            Number(/^[[{]/.test(String(a.value))) - Number(/^[[{]/.test(String(b.value))),
+        );
+      for (const [i, item] of items) {
         const node =
           item instanceof CoreNode
             ? item

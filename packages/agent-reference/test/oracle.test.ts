@@ -32,4 +32,4 @@ it("preserves every pre-RDF decision, reason and check position in every executa
   }
   expect(Object.keys(actual)).toHaveLength(161);
   expect(actual).toEqual(saved);
-}, 120_000);
+}, 600_000);

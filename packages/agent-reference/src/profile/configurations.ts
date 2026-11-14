@@ -20,7 +20,7 @@ export interface ConfigurationDefinition {
   readonly integrity:
     | {
         readonly status: "selected";
-        readonly mechanism: "jws-compact";
+        readonly mechanism: "jws-compact" | "data-integrity";
         readonly alg: "EdDSA" | "ES256";
         readonly curve: "Ed25519" | "P-256";
         readonly specs: readonly string[];
@@ -72,7 +72,8 @@ const COMMON = {
   replayProtection:
     "unique message id + createdAt/expiresAt window + persistent seen-set; " +
     "same id with different content = replay-conflict",
-  serialization: "awp-json 0.1 (UTF-8 JSON payload; digests use RFC 8785 JCS + SHA-256)",
+  serialization:
+    "Pinned JSON-LD 1.1 with content-addressed attachments; document JWS proofs and digests use RFC 8785 JCS + SHA-256",
   bindings: ["direct-local/0.1", "email-mime/0.1", "mcp-tool/2026-07-28", "a2a-data-part/1.0"],
 } as const;
 
@@ -115,11 +116,24 @@ const localDefinition = (id: string, label: string): ConfigurationDefinition => 
 export function alternativeWireId(id: string): string {
   return `${AWP}config/${id}/0.1`;
 }
+export const CONFIG_AUTHENTICITY_DI = alternativeWireId("authenticity-data-integrity");
 export const CONFIG_TRANSPORT_EMAIL = alternativeWireId("transport-email");
 export const CONFIG_TRANSPORT_A2A = alternativeWireId("transport-a2a");
 export const CONFIG_TRANSPORT_MCP = alternativeWireId("transport-mcp");
 
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_AUTHENTICITY_DI]: {
+    ...localDefinition(CONFIG_AUTHENTICITY_DI, "Signed RDF with Data Integrity"),
+    integrity: {
+      status: "selected",
+      mechanism: "data-integrity",
+      alg: "EdDSA",
+      curve: "Ed25519",
+      specs: ["Data Integrity", "eddsa-rdfc-2022", "RDFC-1.0"],
+    },
+    serialization:
+      "Pinned JSON-LD; content-addressed attachments; eddsa-rdfc-2022 over canonical RDF",
+  },
   [CONFIG_TRANSPORT_EMAIL]: {
     ...localDefinition(CONFIG_TRANSPORT_EMAIL, "Signed messages by email"),
     bindings: ["email-mime/0.1"],

@@ -10,6 +10,7 @@
 
 import { digestOf } from "../core/canonical.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
+import { copyData } from "../model/copy.js";
 import type { LabelIndex } from "../model/labels.js";
 import { liftPaymentObjects, paymentTrace, readPaymentObjects } from "../wire/payment.js";
 import type { TraceEvent, TraceEventInput } from "./types.js";
@@ -91,7 +92,7 @@ export class TraceRecorder {
           let promised = this.settlements.get(key);
           if (!promised) {
             const snapshot = settlementFacts?.snapshot();
-            const document = snapshot ? undefined : structuredClone(settlementDocument);
+            const document = snapshot ? undefined : copyData(settlementDocument);
             promised = (async () =>
               paymentTrace(snapshot ?? liftPaymentObjects(await readPaymentObjects(document))))();
             // Observe errors immediately; complete() still fails rather than publishing missing facts.

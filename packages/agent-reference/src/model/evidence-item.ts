@@ -5,15 +5,24 @@ import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import { CredentialNode } from "@jeswr/solid-vc";
 import { TermAs } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { digestBytes } from "../core/canonical.js";
+import { canonicalJson, digestBytes } from "../core/canonical.js";
 import { DEFAULT_LIMITS } from "../core/limits.js";
-import type { EvidenceItem, JsonObject } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
 import { inspectEvidenceEnvelope, inspectEvidenceJws } from "../wire/evidence-jws.js";
 import { type PublicKeyRecord, verifyCompact } from "../wire/jws-compact.js";
+import { attachmentTerm, materializeAttachments } from "./attachments.js";
 import { CoreNode, type ModelSpec, makeNode, registerModel } from "./core-node.js";
+import type { EvidenceItem, JsonObject } from "./inputs.js";
 import { NamedValuesNode, scopedId } from "./named-values.js";
 import { RdfNode } from "./nodes.js";
+
+const credentialResolvers = new WeakMap<Store, (digest: string) => string | undefined>();
+export function bindCredentialResolver(
+  dataset: Store,
+  resolve: (digest: string) => string | undefined,
+): void {
+  credentialResolvers.set(dataset, resolve);
+}
 
 const VC = "https://www.w3.org/2018/credentials#";
 const SEC = "https://w3id.org/security#";
@@ -40,12 +49,15 @@ export class EmbeddedCredentialNode extends RdfNode {
     return new CredentialNode(TermAs.term(this), this.dataset, DataFactory);
   }
   get originalJws(): string {
-    const envelope = this.text(AWP + "envelopeBytes");
+    const envelopeTerm = this.one(AWP + "envelopeBytes");
+    const envelope = envelopeTerm ? attachmentTerm(this.dataset, envelopeTerm).value : undefined;
     if (envelope !== undefined) return envelope;
     const graph = this.one(SEC + "proof");
     if (!graph || graph.termType !== "NamedNode")
       throw new TypeError("Missing original proof graph");
-    const proofs = this.dataset.getQuads(null, DataFactory.namedNode(AWP + "jws"), null, graph);
+    const proofs = this.dataset
+      .getQuads(null, DataFactory.namedNode(AWP + "jws"), null, graph)
+      .map((q) => ({ ...q, object: attachmentTerm(this.dataset, q.object) }));
     if (
       proofs.length !== 1 ||
       proofs[0]?.object.termType !== "Literal" ||
@@ -116,7 +128,7 @@ export class EmbeddedCredentialNode extends RdfNode {
   ): EmbeddedCredentialNode {
     if (!value.startsWith("{") && !value.startsWith("["))
       return EmbeddedCredentialNode.fromJws(value, id, dataset);
-    const envelope = inspectEvidenceEnvelope(value, format);
+    const envelope = inspectEvidenceEnvelope(value, format, { allowEmpty: true });
     const node = new EmbeddedCredentialNode(id, dataset);
     node.types.add(VC + "VerifiablePresentation");
     node.setText(AWP + "envelopeBytes", value);
@@ -124,6 +136,23 @@ export class EmbeddedCredentialNode extends RdfNode {
       AWP + "statementPayload",
       NamedValuesNode.from(envelope.payload, scopedId(id, "payload"), dataset),
     );
+    // The payment intent is an unsigned record carried alongside real signatures.
+    // Retain those signed parts as credentials, without claiming that any of them
+    // signed the intent. The outer message binds the presentation as a whole.
+    if (format === "awp-action-intent/0.1" || !envelope.credentials.length) {
+      const credentials = dataset.getSubjects(
+        DataFactory.namedNode(RDF_TYPE),
+        DataFactory.namedNode(VC + "VerifiableCredential"),
+        DataFactory.defaultGraph(),
+      );
+      if (!credentials.length) throw new TypeError("Intent presentation needs its signed parts");
+      for (const credential of credentials)
+        dataset.addQuad(
+          node as never,
+          DataFactory.namedNode(VC + "verifiableCredential"),
+          credential,
+        );
+    }
     for (const [index, jws] of envelope.credentials.entries()) {
       const credential = EmbeddedCredentialNode.fromJws(
         jws,
@@ -143,10 +172,42 @@ export class EmbeddedCredentialNode extends RdfNode {
       (term) => new EmbeddedCredentialNode(TermAs.term(term), this.dataset),
     );
   }
-  get payload(): JsonObject {
+  get subjectPayload(): NamedValuesNode {
     const subject = this.child(VC + "credentialSubject", EmbeddedSubjectNode);
     if (!subject) throw new TypeError("Missing embedded subject");
-    return subject.payload.toObject();
+    return subject.payload;
+  }
+  get payload(): JsonObject {
+    return this.subjectPayload.live as JsonObject;
+  }
+  /** Projection alone grants no source standing; original role/typ verification is separate. */
+  projectionMatches(format?: string): boolean {
+    try {
+      if (this.types.has(VC + "VerifiablePresentation")) {
+        if (!format) return false;
+        const original = inspectEvidenceEnvelope(this.originalJws, format, { allowEmpty: true });
+        const payload = this.child(AWP + "statementPayload", NamedValuesNode);
+        const credentials = this.credentials;
+        const sameParts =
+          format === "awp-action-intent/0.1" ||
+          !original.credentials.length ||
+          canonicalJson(credentials.map((c) => c.originalJws).sort()) ===
+            canonicalJson([...original.credentials].sort());
+        return (
+          !!payload &&
+          sameParts &&
+          canonicalJson(payload.toValue()) === canonicalJson(original.payload) &&
+          credentials.every((c) => c.projectionMatches())
+        );
+      }
+      const expected = EmbeddedCredentialNode.fromJws(this.originalJws, this.id, new Store());
+      const actual = credentialClosure(this);
+      return (
+        actual.size === expected.dataset.size && [...expected.dataset].every((q) => actual.has(q))
+      );
+    } catch {
+      return false;
+    }
   }
   /** Verify the original bytes, then require exactly their deterministic RDF projection. */
   async verifyOriginal(options: {
@@ -182,6 +243,7 @@ class EmbeddedSubjectNode extends RdfNode {
   }
 }
 function credentialClosure(node: EmbeddedCredentialNode): Store {
+  node = new EmbeddedCredentialNode(node.id, materializeAttachments(node.dataset));
   const output = new Store();
   const pending: Term[] = [TermAs.term(node)];
   const seen = new Set<string>();
@@ -194,11 +256,26 @@ function credentialClosure(node: EmbeddedCredentialNode): Store {
       if (quad.predicate.value === SEC + "proof")
         for (const proofQuad of node.dataset.getQuads(null, null, null, quad.object as never))
           output.addQuad(proofQuad);
-      else if (
-        quad.object.termType === "NamedNode" &&
-        node.dataset.countQuads(quad.object, null, null, null)
-      )
-        pending.push(quad.object);
+      else if (quad.object.termType === "NamedNode") {
+        const structural = [
+          VC + "credentialSubject",
+          VC + "verifiableCredential",
+          AWP + "statementPayload",
+          "https://schema.org/itemListElement",
+        ].includes(quad.predicate.value);
+        const nestedValue =
+          quad.predicate.value === "https://schema.org/value" &&
+          [AWP + "NamedValueCollection", AWP + "NullValue", "https://schema.org/ItemList"].some(
+            (type) =>
+              node.dataset.countQuads(
+                quad.object as never,
+                DataFactory.namedNode(RDF_TYPE),
+                DataFactory.namedNode(type),
+                null,
+              ),
+          );
+        if (structural || nestedValue) pending.push(quad.object);
+      }
     }
   }
   return output;
@@ -224,7 +301,10 @@ export class EvidenceItemNode extends CoreNode<EvidenceItem> {
     return this.text(AWP + "credentialDigest");
   }
   get statement(): string {
-    return this.credential?.originalJws ?? missing();
+    return (
+      this.credential?.originalJws ??
+      this.resolvePrior(credentialResolvers.get(this.dataset) ?? (() => undefined))
+    );
   }
   set statement(value: string) {
     this.setNode(

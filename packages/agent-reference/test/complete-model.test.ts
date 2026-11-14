@@ -2,11 +2,13 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 
 import { canonicalNQuads } from "@jeswr/solid-vc";
-import { writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { expect, it } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
 import { BoundsError, resolveLimits } from "../src/core/limits.js";
+import { materializeAttachments } from "../src/model/attachments.js";
 import { ActionIntentNode, AgreementNode, MessageNode } from "../src/model/message-nodes.js";
+import { readAttachmentDocument, writeAttachmentDocument } from "../src/wire/attachments.js";
 import { readDocument, writeDocument } from "../src/wire/document.js";
 import { captureModelCorpus } from "./helpers/model-corpus.js";
 
@@ -23,6 +25,18 @@ it("round-trips every executable trace packet, action intent and agreement throu
     sourceDigest: string;
     bytes?: number;
   }[] = [];
+  const required = JSON.parse(
+    readFileSync(new URL("fixtures/message-model-capacity.json", import.meta.url), "utf8"),
+  ) as {
+    capacity: { type: string; field: string }[];
+  };
+  expect(required.capacity).toHaveLength(26);
+  const requiredCounts = new Map<string, number>();
+  for (const item of required.capacity) {
+    const key = item.type + "\0" + item.field;
+    requiredCounts.set(key, (requiredCounts.get(key) ?? 0) + 1);
+  }
+  const carriageCounts = new Map<string, number>();
   // Test-only capacity for the expanded representation. Default carriage bounds
   // remain unchanged and every refusal at those bounds is recorded separately.
   const expandedLimits = resolveLimits({
@@ -40,6 +54,31 @@ it("round-trips every executable trace packet, action intent and agreement throu
     try {
       const node = toNode(value);
       expect(node.toObject()).toStrictEqual(value);
+      const key = type + "\0" + field;
+      let carriageChecked = false;
+      const checkCarriage = async () => {
+        if (carriageChecked) return;
+        const packet = await writeAttachmentDocument(node);
+        const transported = await readAttachmentDocument(
+          JSON.stringify(packet.document),
+          packet.attachments,
+        );
+        if (!transported.ok) throw new Error(`Attachment carriage: ${transported.detail}`);
+        expect(await canonicalNQuads([...materializeAttachments(transported.dataset)])).toBe(
+          await canonicalNQuads([...node.dataset]),
+        );
+        const AttachedView = node.constructor as new (
+          id: string,
+          dataset: import("n3").Store,
+        ) => typeof node;
+        expect(new AttachedView(transported.root, transported.dataset).toObject()).toStrictEqual(
+          value,
+        );
+        carriageChecked = true;
+        carriageCounts.set(key, (carriageCounts.get(key) ?? 0) + 1);
+      };
+      // Pin all 26 original capacity occurrences, even if a later compact proof fits inline.
+      if (requiredCounts.has(key)) await checkCarriage();
       let limits: import("../src/core/limits.js").PilotLimits | undefined;
       let doc: import("../src/wire/document.js").JsonLdDocument;
       try {
@@ -47,6 +86,8 @@ it("round-trips every executable trace packet, action intent and agreement throu
       } catch (error) {
         if (!(error instanceof BoundsError)) throw error;
         capacity.push({ type, field, reason: error.code, sourceDigest: digestOf(value) });
+        await checkCarriage();
+
         limits = expandedLimits;
         doc = await writeDocument(node, { limits });
         capacity[capacity.length - 1]!.bytes = Buffer.byteLength(JSON.stringify(doc));
@@ -97,4 +138,6 @@ it("round-trips every executable trace packet, action intent and agreement throu
   expect(intents).toBeGreaterThan(100);
   expect(agreements).toBeGreaterThan(10);
   expect(failures).toEqual([]);
-}, 600_000);
+  for (const [key, count] of requiredCounts)
+    expect(carriageCounts.get(key) ?? 0, key).toBeGreaterThanOrEqual(count);
+}, 1_200_000);

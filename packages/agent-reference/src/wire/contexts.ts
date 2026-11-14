@@ -15,7 +15,7 @@ export const ODRL_CONTEXT = "https://w3id.org/jeswr/awp/context/odrl/v1";
 const pins = new Map([
   [
     ANSWERABLE_CONTEXT,
-    ["v1.jsonld", "6e95141750f3e10532d6c9c50ac33178114ec90ad042fb8246d51b1228041ce4"],
+    ["v1.jsonld", "cf3736755efe1878dc344b67f77a13722534dbeb79f6c039f702a473805a70e1"],
   ],
   [
     VC_CONTEXT,
@@ -40,13 +40,18 @@ export class DocumentError extends Error {
   }
 }
 
-/** Check the exact bundled bytes before returning a fresh copy. No transport exists here. */
+/** Hash-check each bundled context once, then serve fresh copies of that pinned snapshot. No transport exists here. */
+const bundled = new Map<string, Record<string, unknown>>();
 export function bundledContext(iri: string): Record<string, unknown> {
+  const cached = bundled.get(iri);
+  if (cached) return structuredClone(cached);
   const pin = pins.get(iri);
   if (!pin) throw new DocumentError("context-not-accepted");
   const [file, expected] = pin;
   const bytes = readFileSync(new URL(`../../vocab/context/${file}`, import.meta.url));
-  return readPinnedContext(bytes.toString("utf8"), expected as string);
+  const context = readPinnedContext(bytes.toString("utf8"), expected as string);
+  bundled.set(iri, structuredClone(context));
+  return context;
 }
 
 /** Validate immutable context bytes before interpreting them. Used by the fixed loader only. */
@@ -95,7 +100,8 @@ function applyContext(active: Context, value: unknown): Context {
     for (const entry of value) next = applyContext(next, entry);
     return next;
   }
-  if (typeof value === "string") return applyContext(next, bundledContext(value)["@context"]);
+  if (typeof value === "string")
+    return applyContext(next, (bundled.get(value) ?? bundledContext(value))["@context"]);
   if (!isObject(value)) throw new DocumentError("context-not-accepted");
   for (const [term, definition] of Object.entries(value)) {
     if (term.startsWith("@")) continue;
@@ -117,7 +123,7 @@ function checkContexts(value: unknown): void {
     if (contexts.length === 0) throw new DocumentError("context-not-accepted");
     for (const context of contexts) {
       if (typeof context !== "string") throw new DocumentError("context-not-accepted");
-      bundledContext(context);
+      if (!bundled.has(context)) bundledContext(context);
     }
   }
   for (const [key, item] of Object.entries(value)) if (key !== "@context") checkContexts(item);
@@ -135,6 +141,7 @@ function checkKeys(value: unknown, inherited: Context): void {
     .filter(([key]) => key === "@type" || active.get(key) === "@type")
     .flatMap(([, item]) => (Array.isArray(item) ? item : [item]));
   for (const type of types.filter((item): item is string => typeof item === "string").sort()) {
+    if (!active.has(type) && !isSafeAbsoluteIri(type)) throw new DocumentError("undefined-term");
     const definition = active.get(type);
     if (isObject(definition) && definition["@context"] !== undefined)
       active = applyContext(active, definition["@context"]);

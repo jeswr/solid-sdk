@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -122,7 +122,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional vehicle register's vehicle.keeper statement is intact and signed with The fictional vehicle register's pinned key."
+      "caption": "The fictional vehicle register's vehicle keeper statement is intact and signed with The fictional vehicle register's pinned key."
     },
     {
       "seq": 2,
@@ -147,7 +147,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:sell-a-car:vehicle.keeper",
-        "text": "The fictional vehicle register is accepted for vehicle.keeper claims."
+        "text": "The fictional vehicle register is accepted for vehicle keeper claims."
       },
       "resolution": {
         "question": "Is The fictional vehicle register an authority for vehicle.keeper claims about The seller?",
@@ -160,7 +160,7 @@
         ],
         "answer": "Accepted, for vehicle.keeper claims only."
       },
-      "caption": "The fictional vehicle register's vehicle.keeper statement: The fictional vehicle register is an accepted source for this kind of claim."
+      "caption": "The fictional vehicle register's vehicle keeper statement: The fictional vehicle register is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -178,7 +178,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional vehicle register's vehicle.keeper statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional vehicle register's vehicle keeper statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -205,7 +205,7 @@
         "id": "urn:terms:sell-a-car:keeper",
         "text": "Its terms allow this: use for Sell a car; share for Sell a car."
       },
-      "caption": "The fictional vehicle register's vehicle.keeper statement: its terms allow this: use for Sell a car; share for Sell a car."
+      "caption": "The fictional vehicle register's vehicle keeper statement: its terms allow this: use for Sell a car; share for Sell a car."
     },
     {
       "seq": 5,
@@ -235,9 +235,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:sell-a-car:vehicle.keeper",
-        "text": "Accept vehicle.keeper from The fictional vehicle register by recorded-by-authority, at most 30 days old."
+        "text": "Accept vehicle keeper from The fictional vehicle register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional vehicle register's vehicle.keeper statement is fit for Selling a used car to a stranger: recorded-by-authority, 0 days old."
+      "caption": "The fictional vehicle register's vehicle keeper statement is fit for Selling a used car to a stranger: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -247,7 +247,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional vehicle register's vehicle.keeper statement is admitted."
+      "caption": "The fictional vehicle register's vehicle keeper statement is admitted."
     },
     {
       "seq": 7,
@@ -257,7 +257,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:sell-a-car:keeper",
-        "label": "The fictional vehicle register's vehicle.keeper statement",
+        "label": "The fictional vehicle register's vehicle keeper statement",
         "claimType": "vehicle.keeper",
         "subject": "urn:fictional:sell-a-car:owner",
         "value": null,
@@ -270,7 +270,7 @@
         },
         "provenance": "signed by The fictional vehicle register"
       },
-      "caption": "The fictional vehicle register's vehicle.keeper statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional vehicle register's vehicle keeper statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,

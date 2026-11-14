@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -112,7 +112,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional attacker's product.recall statement is intact and signed with The fictional attacker's pinned key."
+      "caption": "The fictional attacker's product recall statement is intact and signed with The fictional attacker's pinned key."
     },
     {
       "seq": 2,
@@ -151,7 +151,7 @@
         ],
         "answer": "No register answers for this source."
       },
-      "caption": "The fictional attacker's product.recall statement: The fictional attacker is not accepted as a source for this kind of claim."
+      "caption": "The fictional attacker's product recall statement: The fictional attacker is not accepted as a source for this kind of claim."
     },
     {
       "seq": 3,
@@ -169,7 +169,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional attacker's product.recall statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional attacker's product recall statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -180,7 +180,7 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-unknown",
-      "caption": "The fictional attacker's product.recall statement is refused and kept out of memory."
+      "caption": "The fictional attacker's product recall statement is refused and kept out of memory."
     },
     {
       "seq": 5,
@@ -229,7 +229,7 @@
         }
       ],
       "reason": "source-unknown",
-      "caption": "Required product.recall was refused: source-unknown."
+      "caption": "Required product recall was refused: source-unknown."
     },
     {
       "seq": 8,

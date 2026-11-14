@@ -105,7 +105,7 @@ it("sends three gated notices, records acknowledgements and preserves a late ack
     paths[0]?.trace?.events.filter((e) => e.kind === "message-out" && e.packet?.kind === "invoke"),
   ).toHaveLength(3);
   const last = paths[0]?.trace?.events.findLast((e) => e.caption.startsWith("Duty audit:"));
-  expect(last?.caption.match(/"status":"acknowledged"/g)).toHaveLength(3);
+  expect(last?.caption.match(/Notification acknowledged/g)).toHaveLength(3);
   const world = patch(scenario, required(scenario.branches[0]).change);
   world.branches = [];
   world.expect = [];
@@ -116,8 +116,8 @@ it("sends three gated notices, records acknowledgements and preserves a late ack
   );
   const [late] = await runScenario(profile, world, { compare: false });
   const audit = late?.trace?.events.findLast((e) => e.caption.startsWith("Duty audit:"));
-  expect(audit?.caption).toContain('"status":"missed"');
-  expect(audit?.caption).toContain('"acknowledgedAt"');
+  expect(audit?.caption).toContain("missed");
+  expect(audit?.caption).toContain("acknowledged by its recipient");
 });
 
 function required<T>(value: T | undefined): T {

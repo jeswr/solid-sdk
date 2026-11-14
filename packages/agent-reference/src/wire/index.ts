@@ -1,4 +1,13 @@
 // AUTHORED-BY Codex GPT-6
+
+export {
+  ATTACHMENT_LIMITS,
+  ATTACHMENT_THRESHOLD,
+  type AttachmentDocument,
+  type DocumentAttachment,
+  readAttachmentDocument,
+  writeAttachmentDocument,
+} from "./attachments.js";
 export {
   type Authenticity,
   canonicalise,
@@ -19,3 +28,9 @@ export {
   toTurtle,
   writeDocument,
 } from "./document.js";
+export {
+  isMessagePacket,
+  type MessagePacket,
+  verifyMessagePacket,
+  writeMessagePacket,
+} from "./message-packet.js";

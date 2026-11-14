@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -111,7 +111,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The policyholder's unstructured-content statement is intact and signed with The policyholder's pinned key."
+      "caption": "The policyholder's unstructured content statement is intact and signed with The policyholder's pinned key."
     },
     {
       "seq": 2,
@@ -149,7 +149,7 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured-content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -167,7 +167,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The policyholder's unstructured-content statement asks for nothing, so there is no authority to check."
+      "caption": "The policyholder's unstructured content statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -194,7 +194,7 @@
         "id": "urn:terms:insurance-claim-photos:original",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 5,
@@ -226,7 +226,7 @@
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
         "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -236,7 +236,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The policyholder's unstructured-content statement is admitted."
+      "caption": "The policyholder's unstructured content statement is admitted."
     },
     {
       "seq": 7,
@@ -246,7 +246,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-claim-photos:original",
-        "label": "The policyholder's unstructured-content statement",
+        "label": "The policyholder's unstructured content statement",
         "claimType": "unstructured-content",
         "subject": "urn:fictional:insurance-claim-photos:owner",
         "value": null,
@@ -259,7 +259,7 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -282,7 +282,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The policyholder's unstructured-content statement is intact and signed with The policyholder's pinned key."
+      "caption": "The policyholder's unstructured content statement is intact and signed with The policyholder's pinned key."
     },
     {
       "seq": 9,
@@ -320,7 +320,7 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured-content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -338,7 +338,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The policyholder's unstructured-content statement asks for nothing, so there is no authority to check."
+      "caption": "The policyholder's unstructured content statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -365,7 +365,7 @@
         "id": "urn:terms:insurance-claim-photos:photo",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 12,
@@ -397,7 +397,7 @@
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
         "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -407,7 +407,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The policyholder's unstructured-content statement is admitted."
+      "caption": "The policyholder's unstructured content statement is admitted."
     },
     {
       "seq": 14,
@@ -417,7 +417,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-claim-photos:photo",
-        "label": "The policyholder's unstructured-content statement",
+        "label": "The policyholder's unstructured content statement",
         "claimType": "unstructured-content",
         "subject": "urn:fictional:insurance-claim-photos:owner",
         "value": null,
@@ -430,7 +430,7 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -453,7 +453,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The accepted repair garage's repair.estimate statement is intact and signed with The accepted repair garage's pinned key."
+      "caption": "The accepted repair garage's repair estimate statement is intact and signed with The accepted repair garage's pinned key."
     },
     {
       "seq": 16,
@@ -478,7 +478,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:estimate:garage",
-        "text": "The accepted repair garage is accepted for repair.estimate claims."
+        "text": "The accepted repair garage is accepted for repair estimate claims."
       },
       "resolution": {
         "question": "Is The accepted repair garage an authority for repair.estimate claims about The policyholder?",
@@ -491,7 +491,7 @@
         ],
         "answer": "Accepted, for repair.estimate claims only."
       },
-      "caption": "The accepted repair garage's repair.estimate statement: The accepted repair garage is an accepted source for this kind of claim."
+      "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim."
     },
     {
       "seq": 17,
@@ -509,7 +509,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The accepted repair garage's repair.estimate statement asks for nothing, so there is no authority to check."
+      "caption": "The accepted repair garage's repair estimate statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 18,
@@ -536,7 +536,7 @@
         "id": "urn:terms:insurance-claim-photos:estimate",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 19,
@@ -571,9 +571,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:repair.estimate",
-        "text": "Accept repair.estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
+        "text": "Accept repair estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The accepted repair garage's repair.estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The accepted repair garage's repair estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 20,
@@ -583,7 +583,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The accepted repair garage's repair.estimate statement is admitted."
+      "caption": "The accepted repair garage's repair estimate statement is admitted."
     },
     {
       "seq": 21,
@@ -593,7 +593,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-claim-photos:estimate",
-        "label": "The accepted repair garage's repair.estimate statement",
+        "label": "The accepted repair garage's repair estimate statement",
         "claimType": "repair.estimate",
         "subject": "urn:fictional:insurance-claim-photos:owner",
         "value": null,
@@ -606,7 +606,7 @@
         },
         "provenance": "signed by The accepted repair garage"
       },
-      "caption": "The accepted repair garage's repair.estimate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accepted repair garage's repair estimate statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 22,
@@ -770,7 +770,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with The insurer’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The insurer’s agent's pinned key, and written to the record."
     },
     {
       "seq": 30,
@@ -789,6 +789,16 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\"},\"to\":{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\"},\"evidence\":{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\"},\"@included\":[{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\"},\"input\":{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos:request\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:insurance-claim-photos:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\"}]},{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:receiver\",\"proofGraph\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\",\"type\":\"PropertyValue\",\"domainValue\":\"unstructured-content\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\"}},{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db\",\"byteLength\":\"9518\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"@graph\":[{\"id\":\"urn:awp:n:OAUldQodYh9yF6SUcUJxYte2NTUJF5aHNMpgU7bs1UM\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MWU4MGY1MjM3M2YyZDEwOGRlYWY2NDQxMWE5NDY4ZDg6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.IDbbOw31aGYM0vKlJ4jqDuixG_IEsBZvzdAspfZuJuZAC19pP6hgGmyf5mmz8tVNhvZqZx5bp4wOr4E7V4y5Dw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z1VMMnJsNll3bndhMTV0UUFxT1VOYmJiaG1CQ0hCNHFCQ1dCSm1JSG1YMCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0In0sImlkIjoidXJuOmF3cDpuOnA2ODZhTzV2N2NabDJZcDVCV1NsQXJnNUktbERBSDY1cURaY1RPaE9UUjAiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpLTmlHdlpTblU3ZllLdzlRUUE5V2diNUp2elNiNU1nd3RVUjFETWtsTmswIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp0X21WcHJRX3BfQVdabUJlaHNYV0kwaFNFM3R5d3JKb0diU0RJdV84YjBFIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOktOaUd2WlNuVTdmWUt3OVFRQTlXZ2I1SnZ6U2I1TWd3dFVSMURNa2xOazAiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlpUNFQ2UmR1WlV6ZF9fVUxEUFVQSGpzQ0FaRHBReGg5eWFFbUEyYmhTRjAifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0IiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46N3pnNjktUzBLaEhPZXdIZlNieFJqaUV5Q251RGJnS3JoVlQzQXVkMXZJbyIsImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoidW5zdHJ1Y3R1cmVkLWNvbnRlbnQiLCJpZCI6InVybjphd3A6bjpaVDRUNlJkdVpVemRfX1VMRFBVUEhqc0NBWkRwUXhoOXlhRW1BMmJoU0YwIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjo3emc2OS1TMEtoSE9ld0hmU2J4UmppRXlDbnVEYmdLcmhWVDNBdWQxdklvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjo4a3ZhSjBPRFlfYWstVVpJU0F3N0tUSy1oYmY4bGNqSzlfU3FHbHE3RG9rIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6MzE1OTc2NmRhNTRlMzE4ZjhkZTU1MjI0ZjE5ZmFmMDBiZmUxNTQwMWJhM2RkYzhiOTAzMjg1ZGMyNjE4MzNkYiIsImJ5dGVMZW5ndGgiOiI5NTE4IiwiaWQiOiJ1cm46YXdwOm46OGt2YUowT0RZX2FrLVVaSVNBdzdLVEstaGJmOGxjaks5X1NxR2xxN0RvayIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46T0FVbGRRb2RZaDl5RjZTVWNVSnhZdGUyTlRVSkY1YUhOTXBnVTdiczFVTSIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk1XVTRNR1kxTWpNM00yWXlaREV3T0dSbFlXWTJORFF4TVdFNU5EWTRaRGc2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tbHVjM1Z5WVc1alpTMWpiR0ZwYlMxd2FHOTBiM002Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpJaXdpZFhKdU9tOXdPbWx1YzNWeVlXNWpaUzFqYkdGcGJTMXdhRzkwYjNNNmNtVnhkV1Z6ZENJc0luVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbVJsWTJsemFXOXVJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LklEYmJPdzMxYUdZTTB2S2xKNGpxRHVpeEdfSUVzQlp2emRBc3BmWnVKdVpBQzE5cFA2aGdHbXlmNW1tejh0Vk5odlpxWng1YnA0d09yNEU3VjR5NUR3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpwNjg2YU81djdjWmwyWXA1QldTbEFyZzVJLWxEQUg2NXFEWmNUT2hPVFIwIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLW1haW46cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnRfbVZwclFfcF9BV1ptQmVoc1hXSTBoU0UzdHl3ckpvR2JTREl1XzhiMEUifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpnVUwycmw2WXdud2ExNXRRQXFPVU5iYmJobUJDSEI0cUJDV0JKbUlIbVgwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1tYWluOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.7k6SJlkcMSHVxqaSVuVDaycK_7xz0l8TG1ALDNFQfkNpwAam8_OmUkkdR6LKBvmufXvqHIEodp-p0MD93AAcAw\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA>;\n    sec:proof _:awp0.\n<urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:insurance-claim-photos>;\n    awp:basis <urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464>;\n    awp:input <urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0>;\n    awp:operation <urn:op:insurance-claim-photos:request>.\n<urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA>.\n<urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0> a awp:ParticipantRef;\n    awp:actor <urn:fictional:insurance-claim-photos:receiver-agent:actor>;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:receiver>.\n<urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA> a awp:AudienceRef;\n    awp:actor <urn:fictional:insurance-claim-photos:owner-agent:actor>;\n    awp:party <urn:fictional:insurance-claim-photos:owner>.\n<urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0>.\n<urn:op:insurance-claim-photos:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo>;\n    vc:issuer <urn:fictional:insurance-claim-photos:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok>.\n<urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db\";\n    awp:byteLength 9518.\n<urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"unstructured-content\".\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z1VMMnJsNll3bndhMTV0UUFxT1VOYmJiaG1CQ0hCNHFCQ1dCSm1JSG1YMCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0In0sImlkIjoidXJuOmF3cDpuOnA2ODZhTzV2N2NabDJZcDVCV1NsQXJnNUktbERBSDY1cURaY1RPaE9UUjAiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpLTmlHdlpTblU3ZllLdzlRUUE5V2diNUp2elNiNU1nd3RVUjFETWtsTmswIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp0X21WcHJRX3BfQVdabUJlaHNYV0kwaFNFM3R5d3JKb0diU0RJdV84YjBFIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOktOaUd2WlNuVTdmWUt3OVFRQTlXZ2I1SnZ6U2I1TWd3dFVSMURNa2xOazAiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlpUNFQ2UmR1WlV6ZF9fVUxEUFVQSGpzQ0FaRHBReGg5eWFFbUEyYmhTRjAifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0IiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46N3pnNjktUzBLaEhPZXdIZlNieFJqaUV5Q251RGJnS3JoVlQzQXVkMXZJbyIsImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoidW5zdHJ1Y3R1cmVkLWNvbnRlbnQiLCJpZCI6InVybjphd3A6bjpaVDRUNlJkdVpVemRfX1VMRFBVUEhqc0NBWkRwUXhoOXlhRW1BMmJoU0YwIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjo3emc2OS1TMEtoSE9ld0hmU2J4UmppRXlDbnVEYmdLcmhWVDNBdWQxdklvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjo4a3ZhSjBPRFlfYWstVVpJU0F3N0tUSy1oYmY4bGNqSzlfU3FHbHE3RG9rIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6MzE1OTc2NmRhNTRlMzE4ZjhkZTU1MjI0ZjE5ZmFmMDBiZmUxNTQwMWJhM2RkYzhiOTAzMjg1ZGMyNjE4MzNkYiIsImJ5dGVMZW5ndGgiOiI5NTE4IiwiaWQiOiJ1cm46YXdwOm46OGt2YUowT0RZX2FrLVVaSVNBdzdLVEstaGJmOGxjaks5X1NxR2xxN0RvayIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46T0FVbGRRb2RZaDl5RjZTVWNVSnhZdGUyTlRVSkY1YUhOTXBnVTdiczFVTSIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk1XVTRNR1kxTWpNM00yWXlaREV3T0dSbFlXWTJORFF4TVdFNU5EWTRaRGc2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tbHVjM1Z5WVc1alpTMWpiR0ZwYlMxd2FHOTBiM002Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpJaXdpZFhKdU9tOXdPbWx1YzNWeVlXNWpaUzFqYkdGcGJTMXdhRzkwYjNNNmNtVnhkV1Z6ZENJc0luVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbVJsWTJsemFXOXVJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LklEYmJPdzMxYUdZTTB2S2xKNGpxRHVpeEdfSUVzQlp2emRBc3BmWnVKdVpBQzE5cFA2aGdHbXlmNW1tejh0Vk5odlpxWng1YnA0d09yNEU3VjR5NUR3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpwNjg2YU81djdjWmwyWXA1QldTbEFyZzVJLWxEQUg2NXFEWmNUT2hPVFIwIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLW1haW46cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnRfbVZwclFfcF9BV1ptQmVoc1hXSTBoU0UzdHl3ckpvR2JTREl1XzhiMEUifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpnVUwycmw2WXdud2ExNXRRQXFPVU5iYmJobUJDSEI0cUJDV0JKbUlIbVgwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1tYWluOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.7k6SJlkcMSHVxqaSVuVDaycK_7xz0l8TG1ALDNFQfkNpwAam8_OmUkkdR6LKBvmufXvqHIEodp-p0MD93AAcAw\"\n}\n<urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A> {\n<urn:awp:n:OAUldQodYh9yF6SUcUJxYte2NTUJF5aHNMpgU7bs1UM> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MWU4MGY1MjM3M2YyZDEwOGRlYWY2NDQxMWE5NDY4ZDg6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.IDbbOw31aGYM0vKlJ4jqDuixG_IEsBZvzdAspfZuJuZAC19pP6hgGmyf5mmz8tVNhvZqZx5bp4wOr4E7V4y5Dw\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db",
+            "mediaType": "application/n-quads",
+            "byteLength": 9518
+          }
+        ],
         "id": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
         "from": "The insurer’s agent",
         "to": "The policyholder’s agent",
@@ -818,9 +828,9 @@
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
-                "alg": "EdDSA",
                 "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
-                "typ": "awp-message+jws"
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
               }
             },
             "digest": "sha-256:732291fe460e44633094d7c463e20adb0201996c4131cf92abb0d8585f137296"
@@ -909,6 +919,16 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\"},\"to\":{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\"},\"evidence\":{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\"},\"@included\":[{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\"},\"input\":{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos:request\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:insurance-claim-photos:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\"}]},{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:receiver\",\"proofGraph\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\",\"type\":\"PropertyValue\",\"domainValue\":\"unstructured-content\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\"}},{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db\",\"byteLength\":\"9518\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"@graph\":[{\"id\":\"urn:awp:n:OAUldQodYh9yF6SUcUJxYte2NTUJF5aHNMpgU7bs1UM\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MWU4MGY1MjM3M2YyZDEwOGRlYWY2NDQxMWE5NDY4ZDg6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.IDbbOw31aGYM0vKlJ4jqDuixG_IEsBZvzdAspfZuJuZAC19pP6hgGmyf5mmz8tVNhvZqZx5bp4wOr4E7V4y5Dw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z1VMMnJsNll3bndhMTV0UUFxT1VOYmJiaG1CQ0hCNHFCQ1dCSm1JSG1YMCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0In0sImlkIjoidXJuOmF3cDpuOnA2ODZhTzV2N2NabDJZcDVCV1NsQXJnNUktbERBSDY1cURaY1RPaE9UUjAiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpLTmlHdlpTblU3ZllLdzlRUUE5V2diNUp2elNiNU1nd3RVUjFETWtsTmswIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp0X21WcHJRX3BfQVdabUJlaHNYV0kwaFNFM3R5d3JKb0diU0RJdV84YjBFIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOktOaUd2WlNuVTdmWUt3OVFRQTlXZ2I1SnZ6U2I1TWd3dFVSMURNa2xOazAiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlpUNFQ2UmR1WlV6ZF9fVUxEUFVQSGpzQ0FaRHBReGg5eWFFbUEyYmhTRjAifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0IiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46N3pnNjktUzBLaEhPZXdIZlNieFJqaUV5Q251RGJnS3JoVlQzQXVkMXZJbyIsImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoidW5zdHJ1Y3R1cmVkLWNvbnRlbnQiLCJpZCI6InVybjphd3A6bjpaVDRUNlJkdVpVemRfX1VMRFBVUEhqc0NBWkRwUXhoOXlhRW1BMmJoU0YwIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjo3emc2OS1TMEtoSE9ld0hmU2J4UmppRXlDbnVEYmdLcmhWVDNBdWQxdklvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjo4a3ZhSjBPRFlfYWstVVpJU0F3N0tUSy1oYmY4bGNqSzlfU3FHbHE3RG9rIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6MzE1OTc2NmRhNTRlMzE4ZjhkZTU1MjI0ZjE5ZmFmMDBiZmUxNTQwMWJhM2RkYzhiOTAzMjg1ZGMyNjE4MzNkYiIsImJ5dGVMZW5ndGgiOiI5NTE4IiwiaWQiOiJ1cm46YXdwOm46OGt2YUowT0RZX2FrLVVaSVNBdzdLVEstaGJmOGxjaks5X1NxR2xxN0RvayIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46T0FVbGRRb2RZaDl5RjZTVWNVSnhZdGUyTlRVSkY1YUhOTXBnVTdiczFVTSIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk1XVTRNR1kxTWpNM00yWXlaREV3T0dSbFlXWTJORFF4TVdFNU5EWTRaRGc2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tbHVjM1Z5WVc1alpTMWpiR0ZwYlMxd2FHOTBiM002Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpJaXdpZFhKdU9tOXdPbWx1YzNWeVlXNWpaUzFqYkdGcGJTMXdhRzkwYjNNNmNtVnhkV1Z6ZENJc0luVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbVJsWTJsemFXOXVJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LklEYmJPdzMxYUdZTTB2S2xKNGpxRHVpeEdfSUVzQlp2emRBc3BmWnVKdVpBQzE5cFA2aGdHbXlmNW1tejh0Vk5odlpxWng1YnA0d09yNEU3VjR5NUR3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpwNjg2YU81djdjWmwyWXA1QldTbEFyZzVJLWxEQUg2NXFEWmNUT2hPVFIwIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLW1haW46cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnRfbVZwclFfcF9BV1ptQmVoc1hXSTBoU0UzdHl3ckpvR2JTREl1XzhiMEUifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpnVUwycmw2WXdud2ExNXRRQXFPVU5iYmJobUJDSEI0cUJDV0JKbUlIbVgwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1tYWluOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.7k6SJlkcMSHVxqaSVuVDaycK_7xz0l8TG1ALDNFQfkNpwAam8_OmUkkdR6LKBvmufXvqHIEodp-p0MD93AAcAw\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA>;\n    sec:proof _:awp0.\n<urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:insurance-claim-photos>;\n    awp:basis <urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464>;\n    awp:input <urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0>;\n    awp:operation <urn:op:insurance-claim-photos:request>.\n<urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA>.\n<urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0> a awp:ParticipantRef;\n    awp:actor <urn:fictional:insurance-claim-photos:receiver-agent:actor>;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:receiver>.\n<urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA> a awp:AudienceRef;\n    awp:actor <urn:fictional:insurance-claim-photos:owner-agent:actor>;\n    awp:party <urn:fictional:insurance-claim-photos:owner>.\n<urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0>.\n<urn:op:insurance-claim-photos:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo>;\n    vc:issuer <urn:fictional:insurance-claim-photos:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"unstructured-content\".\n<urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok>.\n<urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db\";\n    awp:byteLength 9518.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z1VMMnJsNll3bndhMTV0UUFxT1VOYmJiaG1CQ0hCNHFCQ1dCSm1JSG1YMCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0In0sImlkIjoidXJuOmF3cDpuOnA2ODZhTzV2N2NabDJZcDVCV1NsQXJnNUktbERBSDY1cURaY1RPaE9UUjAiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpLTmlHdlpTblU3ZllLdzlRUUE5V2diNUp2elNiNU1nd3RVUjFETWtsTmswIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp0X21WcHJRX3BfQVdabUJlaHNYV0kwaFNFM3R5d3JKb0diU0RJdV84YjBFIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOktOaUd2WlNuVTdmWUt3OVFRQTlXZ2I1SnZ6U2I1TWd3dFVSMURNa2xOazAiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlpUNFQ2UmR1WlV6ZF9fVUxEUFVQSGpzQ0FaRHBReGg5eWFFbUEyYmhTRjAifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0IiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46N3pnNjktUzBLaEhPZXdIZlNieFJqaUV5Q251RGJnS3JoVlQzQXVkMXZJbyIsImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoidW5zdHJ1Y3R1cmVkLWNvbnRlbnQiLCJpZCI6InVybjphd3A6bjpaVDRUNlJkdVpVemRfX1VMRFBVUEhqc0NBWkRwUXhoOXlhRW1BMmJoU0YwIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjo3emc2OS1TMEtoSE9ld0hmU2J4UmppRXlDbnVEYmdLcmhWVDNBdWQxdklvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjo4a3ZhSjBPRFlfYWstVVpJU0F3N0tUSy1oYmY4bGNqSzlfU3FHbHE3RG9rIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6MzE1OTc2NmRhNTRlMzE4ZjhkZTU1MjI0ZjE5ZmFmMDBiZmUxNTQwMWJhM2RkYzhiOTAzMjg1ZGMyNjE4MzNkYiIsImJ5dGVMZW5ndGgiOiI5NTE4IiwiaWQiOiJ1cm46YXdwOm46OGt2YUowT0RZX2FrLVVaSVNBdzdLVEstaGJmOGxjaks5X1NxR2xxN0RvayIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46T0FVbGRRb2RZaDl5RjZTVWNVSnhZdGUyTlRVSkY1YUhOTXBnVTdiczFVTSIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk1XVTRNR1kxTWpNM00yWXlaREV3T0dSbFlXWTJORFF4TVdFNU5EWTRaRGc2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tbHVjM1Z5WVc1alpTMWpiR0ZwYlMxd2FHOTBiM002Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpJaXdpZFhKdU9tOXdPbWx1YzNWeVlXNWpaUzFqYkdGcGJTMXdhRzkwYjNNNmNtVnhkV1Z6ZENJc0luVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbVJsWTJsemFXOXVJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LklEYmJPdzMxYUdZTTB2S2xKNGpxRHVpeEdfSUVzQlp2emRBc3BmWnVKdVpBQzE5cFA2aGdHbXlmNW1tejh0Vk5odlpxWng1YnA0d09yNEU3VjR5NUR3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpwNjg2YU81djdjWmwyWXA1QldTbEFyZzVJLWxEQUg2NXFEWmNUT2hPVFIwIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLW1haW46cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnRfbVZwclFfcF9BV1ptQmVoc1hXSTBoU0UzdHl3ckpvR2JTREl1XzhiMEUifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpnVUwycmw2WXdud2ExNXRRQXFPVU5iYmJobUJDSEI0cUJDV0JKbUlIbVgwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1tYWluOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.7k6SJlkcMSHVxqaSVuVDaycK_7xz0l8TG1ALDNFQfkNpwAam8_OmUkkdR6LKBvmufXvqHIEodp-p0MD93AAcAw\"\n}\n<urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A> {\n<urn:awp:n:OAUldQodYh9yF6SUcUJxYte2NTUJF5aHNMpgU7bs1UM> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MWU4MGY1MjM3M2YyZDEwOGRlYWY2NDQxMWE5NDY4ZDg6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.IDbbOw31aGYM0vKlJ4jqDuixG_IEsBZvzdAspfZuJuZAC19pP6hgGmyf5mmz8tVNhvZqZx5bp4wOr4E7V4y5Dw\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db",
+            "mediaType": "application/n-quads",
+            "byteLength": 9518
+          }
+        ],
         "id": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
         "from": "The insurer’s agent",
         "to": "The policyholder’s agent",
@@ -938,9 +958,9 @@
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
-                "alg": "EdDSA",
                 "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
-                "typ": "awp-message+jws"
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
               }
             },
             "digest": "sha-256:732291fe460e44633094d7c463e20adb0201996c4131cf92abb0d8585f137296"
@@ -1057,7 +1077,7 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The insurer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The insurer’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 34,
@@ -1312,7 +1332,7 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 47,
@@ -1352,7 +1372,7 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 49,
@@ -1392,7 +1412,7 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 51,
@@ -1433,7 +1453,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 53,
@@ -1451,7 +1471,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 54,
@@ -1474,7 +1494,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 55,
@@ -1492,7 +1512,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 56,
@@ -1515,7 +1535,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The accepted repair garage's repair.estimate statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The accepted repair garage's repair estimate statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 57,
@@ -1533,7 +1553,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 58,
@@ -1608,7 +1628,7 @@
         "who": "agent",
         "text": "May I send this exact text to The insurer for Insurance claim photos?\nI found damage to the vehicle after a fictional accident. The garage has inspected it.\nUnstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
       },
-      "caption": "The text is held before release; approval binds message digest sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54."
+      "caption": "The text is held before release; approval binds message digest sha-256:f204bdee74ab40089d384a62812dd7beb7ef9c114c76735c05704abeb4d79a72."
     },
     {
       "seq": 62,
@@ -1771,7 +1791,7 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 70,
@@ -1811,7 +1831,7 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 72,
@@ -1851,7 +1871,7 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 74,
@@ -1892,7 +1912,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 76,
@@ -1910,7 +1930,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 77,
@@ -1933,7 +1953,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured-content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 78,
@@ -1951,7 +1971,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured-content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 79,
@@ -1974,7 +1994,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The accepted repair garage's repair.estimate statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The accepted repair garage's repair estimate statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 80,
@@ -1992,7 +2012,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair.estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 81,
@@ -2106,7 +2126,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with The policyholder’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The policyholder’s agent's pinned key, and written to the record."
     },
     {
       "seq": 86,
@@ -2125,6 +2145,36 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\"},\"to\":{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\"},\"evidence\":[{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\"}],\"content\":[{\"id\":\"urn:content:insurance-claim-photos:original\"},{\"id\":\"urn:content:insurance-claim-photos:photo\"}],\"@included\":[{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\"},\"input\":{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\"},\"format\":\"jws-compact\",\"position\":\"3\",\"role\":\"credential\"},{\"id\":\"urn:content:insurance-claim-photos:original\",\"type\":\"ContentPart\",\"bytes\":\"I found damage to the vehicle after a fictional accident. The garage has inspected it.\",\"digest\":\"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\",\"mediaType\":\"text/plain\",\"position\":\"0\"},{\"id\":\"urn:content:insurance-claim-photos:photo\",\"type\":\"ContentPart\",\"bytes\":{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\"},\"digest\":\"sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\",\"mediaType\":\"image/png\",\"position\":\"1\"},{\"id\":\"urn:op:insurance-claim-photos\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\"}]},{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\"},{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\"},{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"issuer\":\"urn:fictional:insurance-claim-photos:garage\",\"proofGraph\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\"},{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\",\"type\":[\"ItemList\",\"Attachment\"],\"attachmentDigest\":\"sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc\",\"byteLength\":\"52451\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\"}]},{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:scenario:insurance-claim-photos:original\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\"}},{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2\",\"byteLength\":\"9512\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\"}},{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7\",\"byteLength\":\"23743\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\"}},{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01\",\"byteLength\":\"23731\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\"}},{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64\",\"byteLength\":\"25181\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"@graph\":[{\"id\":\"urn:awp:n:ZNqkvDD-wrlB7NgcQwvblOZHckB4hn7vIwT7sl_-F0I\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Yjk3MDMwNWFmMDc2Mjg2ZDU1N2VjMmY3ZDE0NzE1NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Qe_zAMw5qmmvfTGxKj2bn_mW62GyCdFYiAhIcBLqVEKZVJ0Zu0KUHlc_IQAySz4KoSA9Ck4TBGwskPyHN12qBg\"}]},{\"id\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\",\"@graph\":[{\"id\":\"urn:awp:n:i8ugH6fXk3TdutO0GScUekR5TlyPk6z1deyfBqgLW6c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjpmZWQzY2UzNjQ1N2ExZTkyMjg3N2NiMjdlNWMzZjY1MmMzODZkNzEwZTVkNjIwZGNlMmExMzYyMzQxZGJkYTE0IiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.nLp6t4-bHtc1eonuxQmf1z77tbSncCtKb5d9iG11-kkRds7Qx-8sFWIJYRD8zLXKjxVVlVwjuHlMsmjBFe-PDQ\"}]},{\"id\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\",\"@graph\":[{\"id\":\"urn:awp:n:s3pRGW66gtMNknvfP9fx1fPTvkrr2aXfCewVS1iP7lo\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1Njo3ZjAxNTgzZTI0ZTY0ZWNhY2I2OTBjYTZiZWU5NThmYjVkNjc3ZTc0YzkxZTY1M2UyZDNmZmRjMjcxODBkY2UyIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.XiDZr8vOZCPRQ3OlkV-QLE_hOG1OF_p9-tH6nKY0M4B97-GHF0cC7xpoxmac37N47NzWfewLyYhTrfDbIiMAAg\"}]},{\"id\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\",\"@graph\":[{\"id\":\"urn:awp:n:xqM4ArKxWhb_4ETzXyXoE1-QGo-rD2VjfzK4O9QlKVk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ4QjJYZlowejlTMkV3VzVYdjNlQmh5NFRRY1ozZjVZUjl2QjBNRU5WOHciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhbW91bnQiOjEyMDAsImN1cnJlbmN5IjoiR0JQIiwic2V2ZXJpdHkiOiJzZXJpb3VzIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3Rvczplc3RpbWF0ZSIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiY2xhaW1UeXBlIjoicmVwYWlyLmVzdGltYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmVzdGltYXRlIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19XX19fQ.-ezvPtnhV1UNOHzN680MI_HCOu6O9unsYF366iWpW1a2aBdUkG51Y4kATHhK7OTBKjEiIOyHwVyiba4bpvL5Cw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..8RkAudFxzRAAv50xI8ooEwYIfSBdHw_DQOGGsr9IUR38shilEWwc-y6Y3cnsvu-4aEf1lr2adAztKnzqU1XhCg\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-insurance-claim-photos-main:owner-agent:0002> a awp:Invoke, awp:Message;\n    awp:authorship <urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo>;\n    awp:body <urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:content <urn:content:insurance-claim-photos:original>, <urn:content:insurance-claim-photos:photo>;\n    awp:conversation <urn:awp:engine-insurance-claim-photos-main:owner-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw>, <urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU>, <urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk>, <urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:content, awp:evidence;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw>;\n    sec:proof _:awp0.\n<urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo> a awp:MessageAuthorship;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:owner>;\n    awp:method \"model-output\".\n<urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:insurance-claim-photos>;\n    awp:basis <urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A>;\n    awp:input <urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8>;\n    awp:operation <urn:op:insurance-claim-photos>.\n<urn:content:insurance-claim-photos:original> a awp:ContentPart;\n    <https://schema.org/encodingFormat> \"text/plain\";\n    <https://schema.org/position> 0;\n    awp:bytes \"I found damage to the vehicle after a fictional accident. The garage has inspected it.\";\n    awp:digest \"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\".\n<urn:content:insurance-claim-photos:photo> a awp:ContentPart;\n    <https://schema.org/encodingFormat> \"image/png\";\n    <https://schema.org/position> 1;\n    awp:bytes <urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334>;\n    awp:digest \"sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\".\n<urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU>.\n<urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU> a awp:EvidenceItem;\n    <https://schema.org/position> 1;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/credential>;\n    vc:verifiableCredential <urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU>.\n<urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk> a awp:EvidenceItem;\n    <https://schema.org/position> 3;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/credential>;\n    vc:verifiableCredential <urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg>.\n<urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g> a awp:EvidenceItem;\n    <https://schema.org/position> 2;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/credential>;\n    vc:verifiableCredential <urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA>.\n<urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:owner>;\n    awp:actor <urn:fictional:insurance-claim-photos:owner-agent:actor>.\n<urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw> a awp:AudienceRef;\n    awp:actor <urn:fictional:insurance-claim-photos:receiver-agent:actor>;\n    awp:party <urn:fictional:insurance-claim-photos:receiver>.\n<urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU>.\n<urn:op:insurance-claim-photos> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334> a <https://schema.org/ItemList>, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc\";\n    awp:byteLength 52451.\n<urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M>;\n    vc:credentialSubject <urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo>;\n    vc:issuer <urn:fictional:insurance-claim-photos:owner>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q>;\n    vc:credentialSubject <urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY>;\n    vc:issuer <urn:fictional:insurance-claim-photos:owner>.\n<urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI>;\n    vc:credentialSubject <urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo>;\n    vc:issuer <urn:fictional:insurance-claim-photos:garage>.\n<urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI>;\n    vc:credentialSubject <urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E>;\n    vc:issuer <urn:fictional:insurance-claim-photos:owner>.\n<urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk>.\n<urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7\";\n    awp:byteLength 23743.\n<urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2\";\n    awp:byteLength 9512.\n<urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64\";\n    awp:byteLength 25181.\n<urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4>.\n<urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"items\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:items>;\n    <https://schema.org/value> <urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg>.\n<urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg> a <https://schema.org/ItemList>;\n    <https://schema.org/itemListElement> <urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc>.\n<urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"0\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:0>;\n    <https://schema.org/value> <urn:scenario:insurance-claim-photos:original>.\n<urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01\";\n    awp:byteLength 23731.\n<urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE>.\n<urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc>.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..8RkAudFxzRAAv50xI8ooEwYIfSBdHw_DQOGGsr9IUR38shilEWwc-y6Y3cnsvu-4aEf1lr2adAztKnzqU1XhCg\"\n}\n<urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q> {\n<urn:awp:n:i8ugH6fXk3TdutO0GScUekR5TlyPk6z1deyfBqgLW6c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjpmZWQzY2UzNjQ1N2ExZTkyMjg3N2NiMjdlNWMzZjY1MmMzODZkNzEwZTVkNjIwZGNlMmExMzYyMzQxZGJkYTE0IiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.nLp6t4-bHtc1eonuxQmf1z77tbSncCtKb5d9iG11-kkRds7Qx-8sFWIJYRD8zLXKjxVVlVwjuHlMsmjBFe-PDQ\"\n}\n<urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M> {\n<urn:awp:n:ZNqkvDD-wrlB7NgcQwvblOZHckB4hn7vIwT7sl_-F0I> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Yjk3MDMwNWFmMDc2Mjg2ZDU1N2VjMmY3ZDE0NzE1NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Qe_zAMw5qmmvfTGxKj2bn_mW62GyCdFYiAhIcBLqVEKZVJ0Zu0KUHlc_IQAySz4KoSA9Ck4TBGwskPyHN12qBg\"\n}\n<urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI> {\n<urn:awp:n:s3pRGW66gtMNknvfP9fx1fPTvkrr2aXfCewVS1iP7lo> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1Njo3ZjAxNTgzZTI0ZTY0ZWNhY2I2OTBjYTZiZWU5NThmYjVkNjc3ZTc0YzkxZTY1M2UyZDNmZmRjMjcxODBkY2UyIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.XiDZr8vOZCPRQ3OlkV-QLE_hOG1OF_p9-tH6nKY0M4B97-GHF0cC7xpoxmac37N47NzWfewLyYhTrfDbIiMAAg\"\n}\n<urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI> {\n<urn:awp:n:xqM4ArKxWhb_4ETzXyXoE1-QGo-rD2VjfzK4O9QlKVk> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ4QjJYZlowejlTMkV3VzVYdjNlQmh5NFRRY1ozZjVZUjl2QjBNRU5WOHciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhbW91bnQiOjEyMDAsImN1cnJlbmN5IjoiR0JQIiwic2V2ZXJpdHkiOiJzZXJpb3VzIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3Rvczplc3RpbWF0ZSIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiY2xhaW1UeXBlIjoicmVwYWlyLmVzdGltYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmVzdGltYXRlIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19XX19fQ.-ezvPtnhV1UNOHzN680MI_HCOu6O9unsYF366iWpW1a2aBdUkG51Y4kATHhK7OTBKjEiIOyHwVyiba4bpvL5Cw\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc",
+            "mediaType": "application/n-quads",
+            "byteLength": 52451
+          },
+          {
+            "digest": "sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2",
+            "mediaType": "application/n-quads",
+            "byteLength": 9512
+          },
+          {
+            "digest": "sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7",
+            "mediaType": "application/n-quads",
+            "byteLength": 23743
+          },
+          {
+            "digest": "sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01",
+            "mediaType": "application/n-quads",
+            "byteLength": 23731
+          },
+          {
+            "digest": "sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64",
+            "mediaType": "application/n-quads",
+            "byteLength": 25181
+          }
+        ],
         "id": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
         "from": "The policyholder’s agent",
         "to": "The insurer’s agent",
@@ -2154,9 +2204,9 @@
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
-                "alg": "EdDSA",
                 "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
-                "typ": "awp-message+jws"
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
               }
             },
             "digest": "sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54"
@@ -2206,12 +2256,13 @@
                 {
                   "id": "urn:content:insurance-claim-photos:original",
                   "mediaType": "text/plain",
-                  "bytes": "I found damage to the vehicle after a fictional accident. The garage has inspected it.",
-                  "digest": "sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14"
+                  "digest": "sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14",
+                  "bytes": "I found damage to the vehicle after a fictional accident. The garage has inspected it."
                 },
                 {
                   "id": "urn:content:insurance-claim-photos:photo",
                   "mediaType": "image/png",
+                  "digest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2",
                   "bytes": [
                     137,
                     80,
@@ -2281,8 +2332,7 @@
                     66,
                     96,
                     130
-                  ],
-                  "digest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+                  ]
                 }
               ]
             },
@@ -2487,6 +2537,36 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\"},\"to\":{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\"},\"evidence\":[{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\"}],\"content\":[{\"id\":\"urn:content:insurance-claim-photos:original\"},{\"id\":\"urn:content:insurance-claim-photos:photo\"}],\"@included\":[{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\"},\"input\":{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\"},\"format\":\"jws-compact\",\"position\":\"3\",\"role\":\"credential\"},{\"id\":\"urn:content:insurance-claim-photos:original\",\"type\":\"ContentPart\",\"bytes\":\"I found damage to the vehicle after a fictional accident. The garage has inspected it.\",\"digest\":\"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\",\"mediaType\":\"text/plain\",\"position\":\"0\"},{\"id\":\"urn:content:insurance-claim-photos:photo\",\"type\":\"ContentPart\",\"bytes\":{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\"},\"digest\":\"sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\",\"mediaType\":\"image/png\",\"position\":\"1\"},{\"id\":\"urn:op:insurance-claim-photos\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\"}]},{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\"},{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\"},{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"issuer\":\"urn:fictional:insurance-claim-photos:garage\",\"proofGraph\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\"},{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\",\"type\":[\"ItemList\",\"Attachment\"],\"attachmentDigest\":\"sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc\",\"byteLength\":\"52451\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\"}]},{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:scenario:insurance-claim-photos:original\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\"}},{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2\",\"byteLength\":\"9512\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\"}},{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7\",\"byteLength\":\"23743\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\"}},{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01\",\"byteLength\":\"23731\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\"}},{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64\",\"byteLength\":\"25181\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"@graph\":[{\"id\":\"urn:awp:n:ZNqkvDD-wrlB7NgcQwvblOZHckB4hn7vIwT7sl_-F0I\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Yjk3MDMwNWFmMDc2Mjg2ZDU1N2VjMmY3ZDE0NzE1NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Qe_zAMw5qmmvfTGxKj2bn_mW62GyCdFYiAhIcBLqVEKZVJ0Zu0KUHlc_IQAySz4KoSA9Ck4TBGwskPyHN12qBg\"}]},{\"id\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\",\"@graph\":[{\"id\":\"urn:awp:n:i8ugH6fXk3TdutO0GScUekR5TlyPk6z1deyfBqgLW6c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjpmZWQzY2UzNjQ1N2ExZTkyMjg3N2NiMjdlNWMzZjY1MmMzODZkNzEwZTVkNjIwZGNlMmExMzYyMzQxZGJkYTE0IiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.nLp6t4-bHtc1eonuxQmf1z77tbSncCtKb5d9iG11-kkRds7Qx-8sFWIJYRD8zLXKjxVVlVwjuHlMsmjBFe-PDQ\"}]},{\"id\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\",\"@graph\":[{\"id\":\"urn:awp:n:s3pRGW66gtMNknvfP9fx1fPTvkrr2aXfCewVS1iP7lo\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1Njo3ZjAxNTgzZTI0ZTY0ZWNhY2I2OTBjYTZiZWU5NThmYjVkNjc3ZTc0YzkxZTY1M2UyZDNmZmRjMjcxODBkY2UyIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.XiDZr8vOZCPRQ3OlkV-QLE_hOG1OF_p9-tH6nKY0M4B97-GHF0cC7xpoxmac37N47NzWfewLyYhTrfDbIiMAAg\"}]},{\"id\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\",\"@graph\":[{\"id\":\"urn:awp:n:xqM4ArKxWhb_4ETzXyXoE1-QGo-rD2VjfzK4O9QlKVk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ4QjJYZlowejlTMkV3VzVYdjNlQmh5NFRRY1ozZjVZUjl2QjBNRU5WOHciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhbW91bnQiOjEyMDAsImN1cnJlbmN5IjoiR0JQIiwic2V2ZXJpdHkiOiJzZXJpb3VzIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3Rvczplc3RpbWF0ZSIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiY2xhaW1UeXBlIjoicmVwYWlyLmVzdGltYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmVzdGltYXRlIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19XX19fQ.-ezvPtnhV1UNOHzN680MI_HCOu6O9unsYF366iWpW1a2aBdUkG51Y4kATHhK7OTBKjEiIOyHwVyiba4bpvL5Cw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..8RkAudFxzRAAv50xI8ooEwYIfSBdHw_DQOGGsr9IUR38shilEWwc-y6Y3cnsvu-4aEf1lr2adAztKnzqU1XhCg\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-insurance-claim-photos-main:owner-agent:0002> a awp:Invoke, awp:Message;\n    awp:authorship <urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo>;\n    awp:body <urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:content <urn:content:insurance-claim-photos:original>, <urn:content:insurance-claim-photos:photo>;\n    awp:conversation <urn:awp:engine-insurance-claim-photos-main:owner-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw>, <urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU>, <urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk>, <urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:content, awp:evidence;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw>;\n    sec:proof _:awp0.\n<urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo> a awp:MessageAuthorship;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:owner>;\n    awp:method \"model-output\".\n<urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:insurance-claim-photos>;\n    awp:basis <urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A>;\n    awp:input <urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8>;\n    awp:operation <urn:op:insurance-claim-photos>.\n<urn:content:insurance-claim-photos:original> a awp:ContentPart;\n    <https://schema.org/encodingFormat> \"text/plain\";\n    <https://schema.org/position> 0;\n    awp:bytes \"I found damage to the vehicle after a fictional accident. The garage has inspected it.\";\n    awp:digest \"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\".\n<urn:content:insurance-claim-photos:photo> a awp:ContentPart;\n    <https://schema.org/encodingFormat> \"image/png\";\n    <https://schema.org/position> 1;\n    awp:bytes <urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334>;\n    awp:digest \"sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\".\n<urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU>.\n<urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU> a awp:EvidenceItem;\n    <https://schema.org/position> 1;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/credential>;\n    vc:verifiableCredential <urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU>.\n<urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk> a awp:EvidenceItem;\n    <https://schema.org/position> 3;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/credential>;\n    vc:verifiableCredential <urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg>.\n<urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g> a awp:EvidenceItem;\n    <https://schema.org/position> 2;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/credential>;\n    vc:verifiableCredential <urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA>.\n<urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:owner>;\n    awp:actor <urn:fictional:insurance-claim-photos:owner-agent:actor>.\n<urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw> a awp:AudienceRef;\n    awp:actor <urn:fictional:insurance-claim-photos:receiver-agent:actor>;\n    awp:party <urn:fictional:insurance-claim-photos:receiver>.\n<urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU>.\n<urn:op:insurance-claim-photos> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334> a <https://schema.org/ItemList>, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc\";\n    awp:byteLength 52451.\n<urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M>;\n    vc:credentialSubject <urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo>;\n    vc:issuer <urn:fictional:insurance-claim-photos:owner>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q>;\n    vc:credentialSubject <urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY>;\n    vc:issuer <urn:fictional:insurance-claim-photos:owner>.\n<urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI>;\n    vc:credentialSubject <urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo>;\n    vc:issuer <urn:fictional:insurance-claim-photos:garage>.\n<urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI>;\n    vc:credentialSubject <urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E>;\n    vc:issuer <urn:fictional:insurance-claim-photos:owner>.\n<urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"items\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:items>;\n    <https://schema.org/value> <urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg>.\n<urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4>.\n<urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk>.\n<urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc>.\n<urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE>.\n<urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg> a <https://schema.org/ItemList>;\n    <https://schema.org/itemListElement> <urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc>.\n<urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2\";\n    awp:byteLength 9512.\n<urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7\";\n    awp:byteLength 23743.\n<urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64\";\n    awp:byteLength 25181.\n<urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01\";\n    awp:byteLength 23731.\n<urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"0\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:0>;\n    <https://schema.org/value> <urn:scenario:insurance-claim-photos:original>.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..8RkAudFxzRAAv50xI8ooEwYIfSBdHw_DQOGGsr9IUR38shilEWwc-y6Y3cnsvu-4aEf1lr2adAztKnzqU1XhCg\"\n}\n<urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M> {\n<urn:awp:n:ZNqkvDD-wrlB7NgcQwvblOZHckB4hn7vIwT7sl_-F0I> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Yjk3MDMwNWFmMDc2Mjg2ZDU1N2VjMmY3ZDE0NzE1NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Qe_zAMw5qmmvfTGxKj2bn_mW62GyCdFYiAhIcBLqVEKZVJ0Zu0KUHlc_IQAySz4KoSA9Ck4TBGwskPyHN12qBg\"\n}\n<urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q> {\n<urn:awp:n:i8ugH6fXk3TdutO0GScUekR5TlyPk6z1deyfBqgLW6c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjpmZWQzY2UzNjQ1N2ExZTkyMjg3N2NiMjdlNWMzZjY1MmMzODZkNzEwZTVkNjIwZGNlMmExMzYyMzQxZGJkYTE0IiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.nLp6t4-bHtc1eonuxQmf1z77tbSncCtKb5d9iG11-kkRds7Qx-8sFWIJYRD8zLXKjxVVlVwjuHlMsmjBFe-PDQ\"\n}\n<urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI> {\n<urn:awp:n:xqM4ArKxWhb_4ETzXyXoE1-QGo-rD2VjfzK4O9QlKVk> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ4QjJYZlowejlTMkV3VzVYdjNlQmh5NFRRY1ozZjVZUjl2QjBNRU5WOHciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhbW91bnQiOjEyMDAsImN1cnJlbmN5IjoiR0JQIiwic2V2ZXJpdHkiOiJzZXJpb3VzIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3Rvczplc3RpbWF0ZSIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiY2xhaW1UeXBlIjoicmVwYWlyLmVzdGltYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmVzdGltYXRlIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19XX19fQ.-ezvPtnhV1UNOHzN680MI_HCOu6O9unsYF366iWpW1a2aBdUkG51Y4kATHhK7OTBKjEiIOyHwVyiba4bpvL5Cw\"\n}\n<urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI> {\n<urn:awp:n:s3pRGW66gtMNknvfP9fx1fPTvkrr2aXfCewVS1iP7lo> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1Njo3ZjAxNTgzZTI0ZTY0ZWNhY2I2OTBjYTZiZWU5NThmYjVkNjc3ZTc0YzkxZTY1M2UyZDNmZmRjMjcxODBkY2UyIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.XiDZr8vOZCPRQ3OlkV-QLE_hOG1OF_p9-tH6nKY0M4B97-GHF0cC7xpoxmac37N47NzWfewLyYhTrfDbIiMAAg\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc",
+            "mediaType": "application/n-quads",
+            "byteLength": 52451
+          },
+          {
+            "digest": "sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2",
+            "mediaType": "application/n-quads",
+            "byteLength": 9512
+          },
+          {
+            "digest": "sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7",
+            "mediaType": "application/n-quads",
+            "byteLength": 23743
+          },
+          {
+            "digest": "sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01",
+            "mediaType": "application/n-quads",
+            "byteLength": 23731
+          },
+          {
+            "digest": "sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64",
+            "mediaType": "application/n-quads",
+            "byteLength": 25181
+          }
+        ],
         "id": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
         "from": "The policyholder’s agent",
         "to": "The insurer’s agent",
@@ -2516,9 +2596,9 @@
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
-                "alg": "EdDSA",
                 "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
-                "typ": "awp-message+jws"
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
               }
             },
             "digest": "sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54"
@@ -2568,12 +2648,13 @@
                 {
                   "id": "urn:content:insurance-claim-photos:original",
                   "mediaType": "text/plain",
-                  "bytes": "I found damage to the vehicle after a fictional accident. The garage has inspected it.",
-                  "digest": "sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14"
+                  "digest": "sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14",
+                  "bytes": "I found damage to the vehicle after a fictional accident. The garage has inspected it."
                 },
                 {
                   "id": "urn:content:insurance-claim-photos:photo",
                   "mediaType": "image/png",
+                  "digest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2",
                   "bytes": [
                     137,
                     80,
@@ -2643,8 +2724,7 @@
                     66,
                     96,
                     130
-                  ],
-                  "digest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+                  ]
                 }
               ]
             },
@@ -2879,7 +2959,7 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The policyholder’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The policyholder’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 90,
@@ -2917,7 +2997,7 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured-content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
     },
     {
       "seq": 91,
@@ -2955,7 +3035,7 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured-content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
     },
     {
       "seq": 92,
@@ -2980,7 +3060,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:estimate:garage",
-        "text": "The accepted repair garage is accepted for repair.estimate claims."
+        "text": "The accepted repair garage is accepted for repair estimate claims."
       },
       "resolution": {
         "question": "Is The accepted repair garage an authority for repair.estimate claims about The policyholder?",
@@ -2993,7 +3073,7 @@
         ],
         "answer": "Accepted, for repair.estimate claims only."
       },
-      "caption": "The accepted repair garage's repair.estimate statement: The accepted repair garage is an accepted source for this kind of claim."
+      "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim."
     },
     {
       "seq": 93,
@@ -3042,7 +3122,7 @@
         "id": "urn:terms:insurance-claim-photos:original",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 95,
@@ -3069,7 +3149,7 @@
         "id": "urn:terms:insurance-claim-photos:photo",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured-content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 96,
@@ -3096,7 +3176,7 @@
         "id": "urn:terms:insurance-claim-photos:estimate",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The accepted repair garage's repair.estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 97,
@@ -3123,7 +3203,7 @@
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
         "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 98,
@@ -3150,7 +3230,7 @@
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
         "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured-content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 99,
@@ -3180,9 +3260,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:repair.estimate",
-        "text": "Accept repair.estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
+        "text": "Accept repair estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The accepted repair garage's repair.estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The accepted repair garage's repair estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
     },
     {
       "seq": 100,
@@ -3202,7 +3282,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-claim-photos:original",
-        "label": "The policyholder's unstructured-content statement",
+        "label": "The policyholder's unstructured content statement",
         "claimType": "unstructured-content",
         "subject": "urn:fictional:insurance-claim-photos:owner",
         "value": null,
@@ -3215,7 +3295,7 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 102,
@@ -3225,7 +3305,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-claim-photos:photo",
-        "label": "The policyholder's unstructured-content statement",
+        "label": "The policyholder's unstructured content statement",
         "claimType": "unstructured-content",
         "subject": "urn:fictional:insurance-claim-photos:owner",
         "value": null,
@@ -3238,7 +3318,7 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 103,
@@ -3248,7 +3328,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-claim-photos:estimate",
-        "label": "The accepted repair garage's repair.estimate statement",
+        "label": "The accepted repair garage's repair estimate statement",
         "claimType": "repair.estimate",
         "subject": "urn:fictional:insurance-claim-photos:owner",
         "value": null,
@@ -3261,7 +3341,7 @@
         },
         "provenance": "signed by The accepted repair garage"
       },
-      "caption": "The accepted repair garage's repair.estimate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accepted repair garage's repair estimate statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 104,
@@ -3299,7 +3379,7 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; claim content.opinion."
+      "caption": "Model-output reading of unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; claim content opinion."
     },
     {
       "seq": 107,
@@ -3307,7 +3387,7 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; claim damage.severity."
+      "caption": "Model-output reading of unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; claim damage severity."
     },
     {
       "seq": 108,

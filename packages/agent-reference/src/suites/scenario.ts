@@ -135,14 +135,14 @@ export function scenarioRegistry() {
       binding,
       summary: "Opaque signed message bytes over an in-process HTTP exchange.",
     });
-  // The wire cryptosuite exists; scenario execution stays blocked until its gate configuration is installed.
   registry.register({
     layer: "authenticity",
     id: "data-integrity",
     name: "Data Integrity",
     mechanism: "eddsa-rdfc-2022",
     algs: ["EdDSA"],
-    summary: "Canonical RDF proof; the graph-gate lane supplies runtime dispatch.",
+    summary:
+      "Complete JSON-LD documents signed with eddsa-rdfc-2022; embedded issuer JWSs retain their original verification.",
   });
   return registry;
 }

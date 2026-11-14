@@ -55,7 +55,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -446,7 +446,7 @@
       "agent": "reader-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:578622feee73c8e80a67dc03c50bab440784f7efb87c6f6c84628675f2226986; claim email.reading."
+      "caption": "Model-output reading of unstructured data sha-256:578622feee73c8e80a67dc03c50bab440784f7efb87c6f6c84628675f2226986; claim email reading."
     }
   ]
 }

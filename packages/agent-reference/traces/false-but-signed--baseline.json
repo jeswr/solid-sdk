@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -104,7 +104,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The employer's annual-income statement is intact and signed with The employer's pinned key."
+      "caption": "The employer's annual income statement is intact and signed with The employer's pinned key."
     },
     {
       "seq": 2,
@@ -142,7 +142,7 @@
         ],
         "answer": "Accepted, for annual-income claims only."
       },
-      "caption": "The employer's annual-income statement: The employer is an accepted source for this kind of claim."
+      "caption": "The employer's annual income statement: The employer is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -160,7 +160,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The employer's annual-income statement asks for nothing, so there is no authority to check."
+      "caption": "The employer's annual income statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -187,7 +187,7 @@
         "id": "urn:terms:income",
         "text": "Its terms allow this: ."
       },
-      "caption": "The employer's annual-income statement: its terms allow this: ."
+      "caption": "The employer's annual income statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -224,7 +224,7 @@
         "id": "urn:profile:false-but-signed:annual-income",
         "text": "Accept annual-income from The employer, The fictional tax register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The employer's annual-income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
+      "caption": "The employer's annual income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -253,7 +253,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "completeness-not-established",
-      "caption": "The employer's annual-income statement is refused and kept out of memory."
+      "caption": "The employer's annual income statement is refused and kept out of memory."
     },
     {
       "seq": 8,
@@ -276,7 +276,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional tax register's annual-income statement is intact and signed with The fictional tax register's pinned key."
+      "caption": "The fictional tax register's annual income statement is intact and signed with The fictional tax register's pinned key."
     },
     {
       "seq": 9,
@@ -314,7 +314,7 @@
         ],
         "answer": "Accepted, for annual-income claims only."
       },
-      "caption": "The fictional tax register's annual-income statement: The fictional tax register is an accepted source for this kind of claim."
+      "caption": "The fictional tax register's annual income statement: The fictional tax register is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -332,7 +332,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional tax register's annual-income statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional tax register's annual income statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -359,7 +359,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The fictional tax register's annual-income statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The fictional tax register's annual income statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 12,
@@ -396,7 +396,7 @@
         "id": "urn:profile:false-but-signed:annual-income",
         "text": "Accept annual-income from The employer, The fictional tax register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional tax register's annual-income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
+      "caption": "The fictional tax register's annual income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -425,7 +425,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "completeness-not-established",
-      "caption": "The fictional tax register's annual-income statement is refused and kept out of memory."
+      "caption": "The fictional tax register's annual income statement is refused and kept out of memory."
     },
     {
       "seq": 15,

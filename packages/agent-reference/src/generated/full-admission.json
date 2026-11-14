@@ -1302,6 +1302,12 @@
     "message": "http://www.w3.org/ns/shacl#maxInclusive: numeric bounds require a numeric projection"
   },
   {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#60ccb8128088b488b9b68d65ba2f704fe9f66e48b9bb5a4d8703d88282b8e4a1-Attachment-attachmentDigest",
+    "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
+  },
+  {
     "code": "missing-cardinality",
     "severity": "warning",
     "subject": "http://www.w3.org/ns/odrl/2/duty",

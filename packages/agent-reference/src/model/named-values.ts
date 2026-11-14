@@ -9,6 +9,7 @@ import { digestBytes, isIri } from "../core/canonical.js";
 import { assertJsonBounds, DEFAULT_LIMITS } from "../core/limits.js";
 import type { Json, JsonObject } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
+import { attachmentGraph, attachmentTerm } from "./attachments.js";
 import { RdfNode } from "./nodes.js";
 
 export const SCHEMA = "https://schema.org/";
@@ -20,6 +21,11 @@ export function scopedId(parent: string, field: string): string {
   );
 }
 const FIELD = "urn:awp:legacy-field:";
+const liveCollections = new WeakMap<object, NamedValuesNode>();
+/** Recover the graph behind an actual live view; object properties cannot forge this association. */
+export function namedValuesOf(value: unknown): NamedValuesNode | undefined {
+  return value !== null && typeof value === "object" ? liveCollections.get(value) : undefined;
+}
 export function parameterIri(key: string): string {
   return isIri(key) && isSafeAbsoluteIri(key) ? key : FIELD + encodeURIComponent(key);
 }
@@ -52,7 +58,72 @@ export class NamedValueNode extends RdfNode {
 
 /** ItemList for arrays; NamedValueCollection for objects. Positions retain duplicates/order. */
 export class NamedValuesNode extends RdfNode {
+  /** Property access resolves the current typed RDF value, including verified attachments. */
+  get live(): JsonObject | Json[] {
+    const array = !this.isObject;
+    const target = array ? [] : {};
+    const keys = () => {
+      const entries = this.entries;
+      const names = entries.map((entry) => entry.name);
+      if (new Set(names).size !== names.length) throw new TypeError("Duplicate parameter name");
+      if (array && names.some((name, index) => name !== String(index)))
+        throw new TypeError("Invalid array entry name");
+      return names;
+    };
+    // Indexed lookups keep iteration linear without caching a value or membership.
+    // Every access still observes edits to the admitted store and attachment graph.
+    const entryFor = (name: string): NamedValueNode | undefined => {
+      const graph = attachmentGraph(this.dataset, this.id) ?? this.dataset;
+      const terms = graph
+        .getSubjects(DataFactory.namedNode(SCHEMA + "name"), DataFactory.literal(name), null)
+        .filter((term) =>
+          graph.countQuads(
+            this as never,
+            DataFactory.namedNode(SCHEMA + "itemListElement"),
+            term,
+            null,
+          ),
+        );
+      if (terms.length > 1) throw new TypeError("Duplicate parameter name");
+      if (!terms[0]) return undefined;
+      const entry = new NamedValueNode(terms[0], graph);
+      if (entry.propertyID !== parameterIri(entry.name))
+        throw new TypeError("Parameter name/IRI mismatch");
+      return entry;
+    };
+    const length = () => {
+      const graph = attachmentGraph(this.dataset, this.id) ?? this.dataset;
+      return graph.countQuads(
+        this as never,
+        DataFactory.namedNode(SCHEMA + "itemListElement"),
+        null,
+        null,
+      );
+    };
+    const view = new Proxy(target, {
+      ownKeys: () => (array ? [...keys(), "length"] : keys()),
+      getOwnPropertyDescriptor: (target, key) =>
+        key === "length" && array
+          ? { ...Object.getOwnPropertyDescriptor(target, "length")!, value: length() }
+          : typeof key === "string" && entryFor(key)
+            ? { enumerable: true, configurable: true }
+            : undefined,
+      has: (_target, key) => typeof key === "string" && !!entryFor(key),
+      get: (target, key) => {
+        if (key === "length" && array) return length();
+        const entry = typeof key === "string" ? entryFor(key) : undefined;
+        return entry ? liveValue(entry.domainValue, entry.dataset) : Reflect.get(target, key);
+      },
+      set: () => {
+        throw new TypeError("Domain values are read-only RDF views");
+      },
+    }) as JsonObject | Json[];
+    liveCollections.set(view, this);
+    return view;
+  }
   get entries(): readonly NamedValueNode[] {
+    const graph = attachmentGraph(this.dataset, this.id);
+    if (graph) return new NamedValuesNode(this.id, graph).entries;
     const entries = [...objectTerms(this, SCHEMA + "itemListElement")].map(
       (t) => new NamedValueNode(TermAs.term(t), this.dataset),
     );
@@ -71,7 +142,7 @@ export class NamedValuesNode extends RdfNode {
     const pairs = this.entries.map((entry) => {
       if (entry.propertyID !== parameterIri(entry.name))
         throw new TypeError("Parameter name/IRI mismatch");
-      return [entry.name, readValue(entry.domainValue, this.dataset, seen, depth + 1)] as const;
+      return [entry.name, readValue(entry.domainValue, entry.dataset, seen, depth + 1)] as const;
     });
     seen.delete(this.id);
     if (!this.isObject) {
@@ -150,6 +221,7 @@ function decimalLexical(value: number): string {
   );
 }
 export function readValue(term: Term, dataset: Store, seen = new Set<string>(), depth = 0): Json {
+  term = attachmentTerm(dataset, term);
   if (term.termType === "Literal") {
     if (term.language) throw new TypeError("Language literal has no legacy scalar representation");
     switch (term.datatype.value) {
@@ -179,4 +251,15 @@ export function readValue(term: Term, dataset: Store, seen = new Set<string>(), 
 }
 function missing(field: string): never {
   throw new TypeError(`Missing named value ${field}`);
+}
+
+/** Typed live domain values; no object snapshot enters a gate through this accessor. */
+export function liveValue(term: Term, dataset: Store): Json {
+  term = attachmentTerm(dataset, term);
+  if (term.termType === "NamedNode") {
+    const node = new NamedValuesNode(term, dataset);
+    if (node.types.has(AWP + "NamedValueCollection") || node.types.has(SCHEMA + "ItemList"))
+      return node.live;
+  }
+  return readValue(term, dataset);
 }

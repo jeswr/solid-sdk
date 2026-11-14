@@ -101,7 +101,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -144,7 +144,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The unverified account sender's deposit.account statement is intact and signed with The unverified account sender's pinned key."
+      "caption": "The unverified account sender's deposit account statement is intact and signed with The unverified account sender's pinned key."
     },
     {
       "seq": 2,
@@ -178,7 +178,7 @@
         ],
         "answer": "Not accepted for deposit.account."
       },
-      "caption": "The unverified account sender's deposit.account statement: The unverified account sender is not accepted as a source for this kind of claim."
+      "caption": "The unverified account sender's deposit account statement: The unverified account sender is not accepted as a source for this kind of claim."
     },
     {
       "seq": 3,
@@ -196,7 +196,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The unverified account sender's deposit.account statement asks for nothing, so there is no authority to check."
+      "caption": "The unverified account sender's deposit account statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -207,7 +207,7 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-not-authoritative",
-      "caption": "The unverified account sender's deposit.account statement is refused and kept out of memory."
+      "caption": "The unverified account sender's deposit account statement is refused and kept out of memory."
     },
     {
       "seq": 5,
@@ -256,7 +256,7 @@
         }
       ],
       "reason": "source-not-authoritative",
-      "caption": "Required deposit.account was refused: source-not-authoritative."
+      "caption": "Required deposit account was refused: source-not-authoritative."
     },
     {
       "seq": 8,

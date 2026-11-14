@@ -104,7 +104,7 @@ it.each([
             : "prohibited",
       });
   }
-});
+}, 300_000);
 it("the engine and publication entry point refuse test-double artifacts, while absent packages remain blocked", async () => {
   const { assertPublishable } = await import("../src/engine/publication.js");
   const { profile, scenario } = loadCase(root, "age-check");

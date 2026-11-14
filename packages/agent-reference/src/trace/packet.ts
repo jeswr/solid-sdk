@@ -19,6 +19,12 @@ import {
 } from "../profile/content.js";
 import type { WireMessage } from "../store/state.js";
 import { decodeJws } from "../wire/inspect.js";
+import {
+  documentConfiguration,
+  isMessagePacket,
+  packetDocumentView,
+  packetProofInfo,
+} from "../wire/message-packet.js";
 
 export { peekWire } from "../wire/inspect.js";
 
@@ -133,15 +139,20 @@ export function packetView(
   },
 ): PacketView {
   const { name } = opts;
-  const signed = wire?.format === "awp-jws-compact/0.1";
-  const jwsHeader = signed ? decodeJws(wire.jws).header : undefined;
+  const signed =
+    wire?.format === "awp-jws-compact/0.1" ||
+    (isMessagePacket(wire) && documentConfiguration(wire).signed);
+  const nativeProof = isMessagePacket(wire) ? packetProofInfo(wire) : undefined;
+  const jwsHeader =
+    wire?.format === "awp-jws-compact/0.1" ? decodeJws(wire.jws).header : nativeProof?.raw;
   const reps = evidenceOf(message, "representation");
   const creds = evidenceOf(message, "credential");
   const terms = termsOf(message);
   const header: PacketLayerView = {
     present: true,
     summary: `From ${name(message.from.actor)} to ${name(message.to?.actor)}; ${message.kind}; ${
-      signed ? `signed (JWS ${str(jwsHeader?.alg)}, pinned actor key)` : "unsigned"
+      nativeProof?.summary ??
+      (signed ? `signed (JWS ${str(jwsHeader?.alg)}, pinned actor key)` : "unsigned")
     }; valid ${message.createdAt} to ${message.expiresAt}; a unique message identifier prevents replay.`,
     raw: {
       profile: message.profile,
@@ -220,6 +231,7 @@ export function packetView(
     },
   };
   return {
+    ...packetDocumentView(wire),
     id: message.id,
     from: name(message.from.actor),
     to: name(message.to?.actor),

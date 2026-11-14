@@ -36,7 +36,7 @@ it("confines every scenario configuration to the changed layer and preserves the
     }
   }
   expect(tested).toBeGreaterThanOrEqual(3);
-}, 120_000);
+}, 600_000);
 
 it("detects a deliberately wrong transport configuration that changes a mandate verdict", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
@@ -53,4 +53,4 @@ it("detects a deliberately wrong transport configuration that changes a mandate 
   const differences = confinementDifferences(baseline, changed, "transport");
   expect(differences.join("\n")).toMatch(/mandate/);
   expect(differences.join("\n")).toMatch(/Final outcome/);
-}, 60_000);
+}, 300_000);

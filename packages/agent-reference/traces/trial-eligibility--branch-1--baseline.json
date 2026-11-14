@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -106,7 +106,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The family practice's medication.completeness statement is intact and signed with The family practice's pinned key."
+      "caption": "The family practice's medication completeness statement is intact and signed with The family practice's pinned key."
     },
     {
       "seq": 2,
@@ -131,7 +131,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:trial-eligibility:medication.completeness",
-        "text": "The family practice is accepted for medication.completeness claims."
+        "text": "The family practice is accepted for medication completeness claims."
       },
       "resolution": {
         "question": "Is The family practice an authority for medication.completeness claims about The volunteer?",
@@ -144,7 +144,7 @@
         ],
         "answer": "Accepted, for medication.completeness claims only."
       },
-      "caption": "The family practice's medication.completeness statement: The family practice is an accepted source for this kind of claim."
+      "caption": "The family practice's medication completeness statement: The family practice is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -162,7 +162,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The family practice's medication.completeness statement asks for nothing, so there is no authority to check."
+      "caption": "The family practice's medication completeness statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -189,7 +189,7 @@
         "id": "urn:terms:trial-eligibility:completeness",
         "text": "Its terms allow this: use for Trial eligibility; share for Trial eligibility."
       },
-      "caption": "The family practice's medication.completeness statement: its terms allow this: use for Trial eligibility; share for Trial eligibility."
+      "caption": "The family practice's medication completeness statement: its terms allow this: use for Trial eligibility; share for Trial eligibility."
     },
     {
       "seq": 5,
@@ -219,9 +219,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:trial-eligibility:medication.completeness",
-        "text": "Accept medication.completeness from The family practice by recorded-by-authority, at most 30 days old."
+        "text": "Accept medication completeness from The family practice by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The family practice's medication.completeness statement is fit for Proving eligibility for a clinical trial: recorded-by-authority, 0 days old."
+      "caption": "The family practice's medication completeness statement is fit for Proving eligibility for a clinical trial: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -231,7 +231,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The family practice's medication.completeness statement is admitted."
+      "caption": "The family practice's medication completeness statement is admitted."
     },
     {
       "seq": 7,
@@ -241,7 +241,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:trial-eligibility:completeness",
-        "label": "The family practice's medication.completeness statement",
+        "label": "The family practice's medication completeness statement",
         "claimType": "medication.completeness",
         "subject": "urn:fictional:trial-eligibility:owner",
         "value": null,
@@ -258,7 +258,7 @@
         },
         "provenance": "signed by The family practice"
       },
-      "caption": "The family practice's medication.completeness statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The family practice's medication completeness statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -281,7 +281,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The family practice's medication.list statement is intact and signed with The family practice's pinned key."
+      "caption": "The family practice's medication list statement is intact and signed with The family practice's pinned key."
     },
     {
       "seq": 9,
@@ -306,7 +306,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:trial-eligibility:medication.list",
-        "text": "The family practice is accepted for medication.list claims."
+        "text": "The family practice is accepted for medication list claims."
       },
       "resolution": {
         "question": "Is The family practice an authority for medication.list claims about The volunteer?",
@@ -319,7 +319,7 @@
         ],
         "answer": "Accepted, for medication.list claims only."
       },
-      "caption": "The family practice's medication.list statement: The family practice is an accepted source for this kind of claim."
+      "caption": "The family practice's medication list statement: The family practice is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -337,7 +337,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The family practice's medication.list statement asks for nothing, so there is no authority to check."
+      "caption": "The family practice's medication list statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -364,7 +364,7 @@
         "id": "urn:terms:trial-eligibility:medicines",
         "text": "Its terms allow this: use for Trial eligibility; share for Trial eligibility."
       },
-      "caption": "The family practice's medication.list statement: its terms allow this: use for Trial eligibility; share for Trial eligibility."
+      "caption": "The family practice's medication list statement: its terms allow this: use for Trial eligibility; share for Trial eligibility."
     },
     {
       "seq": 12,
@@ -394,9 +394,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:trial-eligibility:medication.list",
-        "text": "Accept medication.list from The family practice by recorded-by-authority, at most 30 days old."
+        "text": "Accept medication list from The family practice by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The family practice's medication.list statement is fit for Proving eligibility for a clinical trial: recorded-by-authority, 0 days old."
+      "caption": "The family practice's medication list statement is fit for Proving eligibility for a clinical trial: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -414,7 +414,7 @@
         }
       ],
       "reason": "completeness-not-established",
-      "caption": "An accepted completeness statement for medication.list, its subject and period is required."
+      "caption": "An accepted completeness statement for medication list, its subject and period is required."
     },
     {
       "seq": 14,
@@ -425,7 +425,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "completeness-not-established",
-      "caption": "The family practice's medication.list statement is refused and kept out of memory."
+      "caption": "The family practice's medication list statement is refused and kept out of memory."
     }
   ]
 }

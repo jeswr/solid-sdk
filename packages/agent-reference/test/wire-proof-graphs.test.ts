@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+
+import { RequiredAs, TermFrom } from "@rdfjs/wrapper";
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
-import { EvidenceItemNode } from "../src/model/evidence-item.js";
+import { EmbeddedCredentialNode, EvidenceItemNode } from "../src/model/evidence-item.js";
 import { testKey } from "../src/reference/keys.js";
 import { digest, sign, verify } from "../src/wire/authenticity.js";
 import { readDocument, writeDocument } from "../src/wire/document.js";
@@ -144,4 +146,38 @@ it("models selective/chain envelopes as presentations without inventing an envel
   expect(() =>
     EvidenceItemNode.toNode({ role: "credential", format: "unknown-envelope", value: "{}" }),
   ).toThrow("Unsupported");
+});
+
+it("refuses substituting a valid but unrelated signed part into a retained presentation", async () => {
+  const key = await testKey("22d/presentation-parts");
+  const statement = (value: number) =>
+    signCompact(key, "awp-statement+jws", {
+      issuer: "urn:test:issuer",
+      claimType: "count",
+      value,
+    });
+  const original = await statement(1);
+  const node = EvidenceItemNode.toNode({
+    role: "credential",
+    format: "selective-disclosure+jws",
+    value: JSON.stringify({ credential: original }),
+  });
+  const presentation = node.credential!;
+  expect(presentation.projectionMatches(node.format)).toBe(true);
+  const replacement = EmbeddedCredentialNode.fromJws(
+    await statement(2),
+    "urn:test:replacement",
+    node.dataset,
+  );
+  RequiredAs.object(
+    presentation,
+    "https://www.w3.org/2018/credentials#verifiableCredential",
+    replacement,
+    TermFrom.instance,
+  );
+  expect(await replacement.verifyOriginal({ typ: "awp-statement+jws", resolve: () => key })).toBe(
+    true,
+  );
+  expect(presentation.originalJws).toBe(node.statement);
+  expect(presentation.projectionMatches(node.format)).toBe(false);
 });

@@ -224,7 +224,7 @@ it("models an unregistered notice key, insufficient borrowing credentials, and a
   expect(
     request?.refs?.some((ref) => ref.id === "urn:fictional:insurance-claim-photos:garage"),
   ).toBe(true);
-  expect(request?.caption).toContain("repair.estimate");
+  expect(request?.caption).toContain("repair estimate");
   expect(
     events.some((e) => e.agent === "receiver-agent" && e.fact?.claimType === "repair.estimate"),
   ).toBe(false);

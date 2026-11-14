@@ -43,6 +43,7 @@ import type { ConversationState } from "../core/conversation.js";
 import type {
   ActionIntent,
   Agreement,
+  AnyMessage,
   Iri,
   Json,
   JsonObject,
@@ -53,6 +54,8 @@ import type { TransmissionRecord } from "../runtime/transmission.js";
 
 export interface SeenEntry {
   readonly digest: string;
+  /** Selected suite digest of the complete admitted native document. */
+  readonly documentDigest?: string;
   readonly expiresAt: string;
   /** `processing` while (or if interrupted while) dispatching; then the final disposition. */
   readonly disposition: string;
@@ -67,6 +70,8 @@ export interface OutboxEntry {
   readonly kind: string;
   readonly toActor?: Iri;
   readonly wire: WireMessage;
+  /** Host rendering projection; the exact signed document remains in wire. */
+  readonly message?: AnyMessage;
   readonly createdAt: string;
   /** Set when a binding confirmed it took the message (only with hand-off tracking). */
   readonly handedOff?: string;
@@ -84,6 +89,7 @@ export interface OutboxEntry {
 
 /** A binding-neutral wire unit: a compact JWS, or an unsigned public request. */
 export type WireMessage =
+  | import("../wire/message-packet.js").MessagePacket
   | { readonly format: "awp-jws-compact/0.1"; readonly jws: string }
   | { readonly format: "awp-unsigned-json/0.1"; readonly payload: string };
 

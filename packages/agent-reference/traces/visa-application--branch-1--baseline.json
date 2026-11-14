@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -110,7 +110,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The foreign bank's funds.balance statement is intact and signed with The foreign bank's pinned key."
+      "caption": "The foreign bank's funds balance statement is intact and signed with The foreign bank's pinned key."
     },
     {
       "seq": 2,
@@ -149,7 +149,7 @@
         ],
         "answer": "No register answers for this source."
       },
-      "caption": "The foreign bank's funds.balance statement: The foreign bank is not accepted as a source for this kind of claim."
+      "caption": "The foreign bank's funds balance statement: The foreign bank is not accepted as a source for this kind of claim."
     },
     {
       "seq": 3,
@@ -167,7 +167,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The foreign bank's funds.balance statement asks for nothing, so there is no authority to check."
+      "caption": "The foreign bank's funds balance statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -178,7 +178,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "source-unknown",
-      "caption": "Required claim: funds.balance. Accepted sources: The foreign bank. Accepted methods: recorded-by-authority.",
+      "caption": "Required claim: funds balance. Accepted sources: The foreign bank. Accepted methods: recorded-by-authority.",
       "refs": [
         {
           "layer": "meaning",

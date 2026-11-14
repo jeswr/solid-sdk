@@ -1,9 +1,24 @@
 // AUTHORED-BY Codex GPT-6
+
+import { digestBytes as credentialDigest } from "../core/canonical.js";
 import { mapCodeClaim } from "../mechanisms/code-mapping.js";
 import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/selective.js";
+import { copyData } from "../model/copy.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
+import {
+  bindCredentialResolver,
+  type EmbeddedCredentialNode,
+  EvidenceItemNode,
+} from "../model/evidence-item.js";
+import { MessageNode, requireMessageNode } from "../model/message-nodes.js";
 import type { PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
+import {
+  documentConfiguration,
+  isMessagePacket,
+  nativeDocumentLimits,
+  verifyMessagePacket,
+} from "../wire/message-packet.js";
 import {
   liftPaymentObjects,
   paymentDocumentIn,
@@ -139,6 +154,22 @@ const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
 
 export class InboundGate {
   private activePaymentDocument: unknown;
+  private readonly credentialBytes = new Map<string, string>();
+  rememberCredentials(message: AnyMessage): void {
+    if (message instanceof MessageNode)
+      bindCredentialResolver(message.dataset, (digest) => this.credentialBytes.get(digest));
+    for (const item of message.evidence ?? []) {
+      try {
+        const value = item.value;
+        const digest = credentialDigest(value);
+        if (!this.credentialBytes.has(digest) && this.credentialBytes.size >= 4096)
+          this.credentialBytes.delete(this.credentialBytes.keys().next().value!);
+        this.credentialBytes.set(digest, value);
+      } catch {
+        /* Missing prior digests fail at integrity, never fetch. */
+      }
+    }
+  }
   /** Authority settled per conversation (the representation statement accepted). */
   private corroborationPool: Claim[] = [];
   private claimFailure: { outcome: "refuse" | "ask-more"; reason: string } | undefined;
@@ -223,7 +254,48 @@ export class InboundGate {
     let signedBy: { subject: Iri; alg: KeyAlg; kid: string } | undefined;
     const rawDigest = digestBytes(JSON.stringify(w).slice(0, limits.maxEnvelopeBytes * 2));
 
-    if (w.format === "awp-jws-compact/0.1" && typeof w.jws === "string") {
+    let graphMessage: AnyMessage | undefined;
+    if (isMessagePacket(wire)) {
+      let declared: ReturnType<typeof documentConfiguration>;
+      try {
+        declared = documentConfiguration(wire);
+      } catch {
+        return { ok: false, reason: "malformed", detail: "invalid-rdf-document" };
+      }
+      const config = configurationById(declared.configuration);
+      const suite =
+        config?.integrity.status === "selected" && config.integrity.mechanism === "data-integrity"
+          ? "data-integrity"
+          : "jws";
+      const resolve = (id: string) =>
+        this.deps.trust.resolver("actor")(id.replace(/^urn:awp:key:/, ""));
+      const checked = await verifyMessagePacket(wire, {
+        suite,
+        resolve,
+        unsigned: !declared.signed,
+        limits: nativeDocumentLimits(limits),
+      });
+      if (!checked.ok) return { ok: false, reason: checked.reason, detail: checked.detail };
+      const node = requireMessageNode(checked.root, checked.dataset);
+      bindCredentialResolver(node.dataset, (digest) => this.credentialBytes.get(digest));
+      graphMessage = node.live;
+      const pinned = checked.kid ? resolve(checked.kid) : undefined;
+      if (declared.signed && !pinned)
+        return { ok: false, reason: "unknown-key", detail: "message key is not pinned" };
+      if (pinned) signedBy = { subject: pinned.subject, alg: pinned.alg, kid: pinned.kid };
+      verification = {
+        type: "verification",
+        protectedObject: digestBytes(wire.jsonld),
+        property: pinned ? "integrity-and-key-attribution" : "none-unsigned",
+        mechanism: pinned ? suite : "none",
+        verifier: identity.actor,
+        at,
+        ...(pinned ? { verificationMaterial: pinned.kid, attributedTo: pinned.subject } : {}),
+        outcome: pinned ? "valid" : "not-applicable",
+        limitations: ["integrity and pinned-key attribution only; not source authority"],
+      };
+      this.deps.record(verification);
+    } else if (w.format === "awp-jws-compact/0.1" && typeof w.jws === "string") {
       const v = await verifyCompact(w.jws, {
         resolve: this.deps.trust.resolver("actor"),
         typ: TYP.message,
@@ -291,10 +363,12 @@ export class InboundGate {
       };
     }
 
-    const checked = validateMessage(payload);
+    const checked = graphMessage
+      ? { ok: true as const, message: graphMessage }
+      : validateMessage(payload);
     if (!checked.ok) return { ok: false, reason: checked.reason, detail: checked.detail };
     const msg = checked.message;
-    const envelope = MessageEnvelopeNode.fromMessage(msg);
+    const envelope = msg instanceof MessageNode ? msg : MessageEnvelopeNode.fromMessage(msg);
     const sender = envelope.from;
     const kind = envelope.kind;
     if (!sender || !kind) throw new Error("internal: incomplete validated envelope");
@@ -357,6 +431,20 @@ export class InboundGate {
         );
     }
 
+    if (graphMessage) {
+      for (const item of msg.evidence ?? []) {
+        if (!(item instanceof EvidenceItemNode))
+          return fail("evidence-invalid", "message evidence is not a graph wrapper");
+        try {
+          void item.value;
+        } catch {
+          return fail("evidence-invalid", "prior-credential-missing-or-digest-mismatch");
+        }
+        if (item.credential && !item.credential.projectionMatches(item.format))
+          return fail("evidence-invalid", "original-credential-projection-mismatch");
+      }
+      this.rememberCredentials(msg);
+    }
     for (const item of msg.evidence ?? [])
       if (item.format === "selective-disclosure+jws") {
         const verified = await verifySelectivePresentation(
@@ -407,7 +495,13 @@ export class InboundGate {
    */
   async assessRepresentation(
     jws: string,
-    expect: { actor: Iri; party?: Iri; operation: Iri; actorKid?: string },
+    expect: {
+      actor: Iri;
+      party?: Iri;
+      operation: Iri;
+      actorKid?: string;
+      credential?: EmbeddedCredentialNode;
+    },
   ): Promise<RepresentationAssessment> {
     const at = this.deps.now();
     const base = {
@@ -432,7 +526,13 @@ export class InboundGate {
       at,
     });
     this.deps.record(check.verification);
-    const s = check.payload;
+    const s =
+      check.payload && expect.credential
+        ? expect.credential.originalJws === jws && expect.credential.projectionMatches()
+          ? (expect.credential
+              .payload as unknown as import("../mechanisms/statements.js").RepresentationStatement)
+          : undefined
+        : check.payload;
     if (!s || check.verification.outcome !== "valid")
       return done({ ...base, outcome: "not-accepted", reason: "representation-invalid" });
     const wrongParty = expect.party !== undefined && s.party !== expect.party;
@@ -578,6 +678,9 @@ export class InboundGate {
         party: msg.from.onBehalfOf,
         operation: handler.description.id,
         ...(kid ? { actorKid: kid } : {}),
+        ...(item instanceof EvidenceItemNode && item.credential
+          ? { credential: item.credential }
+          : {}),
       });
       if (last.outcome === "accepted") return last;
     }
@@ -697,7 +800,14 @@ export class InboundGate {
   labelOf(c: Claim): string {
     const label =
       this.deps.gate.claimLabel?.(c as unknown as Record<string, unknown>) ??
-      `${this.name(c.issuer)}'s ${c.claimType} statement`;
+      `${this.name(c.issuer)}'s ${
+        c.claimType === "mortgage.product"
+          ? "signed product terms"
+          : c.claimType
+              .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+              .replace(/[._-]/g, " ")
+              .toLowerCase() + " statement"
+      }`;
     const mapping = (c as JsonObject).derivation as JsonObject | undefined;
     return mapping?.type === "code-mapping" && mapping.approximate === true
       ? `${label} (approximate mapping; reduced standing)`
@@ -751,7 +861,13 @@ export class InboundGate {
       check = reading;
     }
     this.deps.record(check.verification);
-    const s = check.payload;
+    const verifiedPayload = check.payload;
+    const s =
+      verifiedPayload &&
+      item instanceof EvidenceItemNode &&
+      item.credential?.types.has("https://www.w3.org/2018/credentials#VerifiableCredential")
+        ? (item.credential.payload as Claim)
+        : verifiedPayload;
     if (!s || check.verification.outcome !== "valid")
       return {
         verdict: "fail",
@@ -898,7 +1014,7 @@ export class InboundGate {
       const taskId = this.deps.gate.taskId ?? task;
       this.deps.memory.relianceHolds[`${taskId}|${c.id ?? digestOf(c)}`] = {
         task: taskId,
-        statement: structuredClone(c) as JsonObject,
+        statement: copyData(c) as JsonObject,
         digest: digestOf(c),
         reason,
       };
@@ -1398,8 +1514,8 @@ export class InboundGate {
       original = {
         id: c.id ?? digestOf(c),
         digest: digestOf(c),
-        statement: structuredClone(c as JsonObject),
-        evidence: structuredClone(item),
+        statement: copyData(c as JsonObject),
+        evidence: copyData(item),
       };
       c = result.statement as Claim;
       const originalRecord = { type: "mapping-original", mapped: c.id, original };

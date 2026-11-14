@@ -7,6 +7,7 @@ import { readFileSync } from "fs";
 import jsonld from "jsonld";
 import { DataFactory, Store } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
+import { digestBytes } from "../core/canonical.js";
 import { BoundsError, DEFAULT_LIMITS, type PilotLimits, parseBoundedJson } from "../core/limits.js";
 import { MESSAGE_KINDS } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
@@ -123,15 +124,32 @@ export async function documentDataset(
     format: "application/n-quads",
     documentLoader: jsonLdLoader,
   });
-  return parseRdf(quads as unknown as string, "application/n-quads", {
+  const parsed = await parseRdf(quads as unknown as string, "application/n-quads", {
     documentLoader,
     maxBytes: limits.maxEnvelopeBytes * 16,
     maxJsonDepth: limits.maxJsonDepth * 2 + 4,
     maxQuads: limits.maxJsonNodes * 4,
   });
+  // Parser-local blank labels must not leak process-global counters into traces.
+  // Relabelling preserves blank-node identity within this exact dataset.
+  const labels = new Map<string, ReturnType<typeof DataFactory.blankNode>>();
+  const term = <T extends import("@jeswr/fetch-rdf").Term>(value: T): T => {
+    if (value.termType !== "BlankNode") return value;
+    let replacement = labels.get(value.value);
+    if (!replacement) {
+      replacement = DataFactory.blankNode("awp" + labels.size);
+      labels.set(value.value, replacement);
+    }
+    return replacement as unknown as T;
+  };
+  return new Store(
+    [...parsed].map((q) =>
+      DataFactory.quad(term(q.subject), q.predicate, term(q.object), term(q.graph)),
+    ),
+  );
 }
 
-async function validateRoot(dataset: Store, root: string): Promise<void> {
+export async function validateRoot(dataset: Store, root: string): Promise<void> {
   const types = dataset
     .getObjects(namedNode(root), namedNode(RDF_TYPE), null)
     .map((node) => node.value);
@@ -167,6 +185,7 @@ async function validateRoot(dataset: Store, root: string): Promise<void> {
   }
 }
 
+const admittedDocuments = new Map<string, { dataset: Store; root: string }>();
 /** The sole public bytes-to-dataset boundary. No remote I/O and no object leaves it. */
 export async function readDocument(
   bytes: string | Uint8Array,
@@ -179,6 +198,9 @@ export async function readDocument(
       throw new DocumentError("too-large", "bounds-exceeded");
     const format = mediaType.split(";")[0]?.trim().toLowerCase();
     if (format !== "application/ld+json") throw new DocumentError("unsupported-media-type");
+    const key = digestBytes(bytes) + JSON.stringify(limits) + (options.suite ?? "jws");
+    const cached = admittedDocuments.get(key);
+    if (cached) return { ok: true, root: cached.root, dataset: new Store([...cached.dataset]) };
     const document = readJson(bytes, limits);
     const id = document.id ?? document["@id"];
     if (
@@ -191,6 +213,9 @@ export async function readDocument(
     const dataset = await documentDataset(document, limits);
     if (options.suite === "data-integrity") assertBlankNodeLimit(dataset);
     await validateRoot(dataset, id);
+    if (admittedDocuments.size >= 32)
+      admittedDocuments.delete(admittedDocuments.keys().next().value!);
+    admittedDocuments.set(key, { dataset: new Store([...dataset]), root: id });
     return { ok: true, dataset, root: id };
   } catch (error) {
     return refusal(error);
@@ -277,7 +302,13 @@ export async function writeDocument(
     framed = {
       "@context": ANSWERABLE_CONTEXT,
       ...root,
-      "@included": nodes.filter((entry) => entry !== root),
+      "@included": nodes
+        .filter((entry) => entry !== root)
+        .sort(
+          (a, b) =>
+            Number(String(a.id ?? a["@id"]).startsWith("_:")) -
+            Number(String(b.id ?? b["@id"]).startsWith("_:")),
+        ),
     };
   } else framed = await jsonld.frame(compacted, frame, frameOptions);
   const document = stable(framed) as JsonLdDocument;
@@ -285,8 +316,13 @@ export async function writeDocument(
   const roundTrip = await documentDataset(document, options.limits);
   assertBlankNodeLimit(dataset);
   assertBlankNodeLimit(roundTrip);
-  if ((await digestQuads([...dataset])) !== (await digestQuads([...roundTrip])))
-    throw new DocumentError("graph-loss-on-write");
+  const hasBlanks = [...dataset, ...roundTrip].some((q) =>
+    [q.subject, q.object, q.graph].some((t) => t.termType === "BlankNode"),
+  );
+  const equal = hasBlanks
+    ? (await digestQuads([...dataset])) === (await digestQuads([...roundTrip]))
+    : dataset.size === roundTrip.size && [...dataset].every((q) => roundTrip.has(q));
+  if (!equal) throw new DocumentError("graph-loss-on-write");
   return document;
 }
 

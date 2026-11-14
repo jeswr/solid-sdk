@@ -4,6 +4,7 @@ import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { RequiredAs } from "@rdfjs/wrapper";
 import { Store } from "n3";
 import { AWP } from "../profile/vocabulary.js";
+import { type NamedValuesNode, namedValuesOf } from "./named-values.js";
 import { RdfNode } from "./nodes.js";
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";
@@ -65,6 +66,8 @@ export class StatementQualityNode extends RdfNode {
 
   static from(input: QualityInput | StatementQualityNode): StatementQualityNode {
     if (input instanceof StatementQualityNode) return input;
+    const values = namedValuesOf(input);
+    if (values) return new PayloadQualityNode(values);
     const node = new StatementQualityNode("urn:awp:statement-quality", new Store());
     node.types.add(VC + "VerifiableCredential");
     // A metadata-only derived input may not name its issuer. Do not invent one: that
@@ -132,5 +135,69 @@ export class StatementPeriodNode extends RdfNode {
   }
   set end(value: string) {
     this.setText(SCHEMA + "endDate", value);
+  }
+}
+
+/** Metadata in a complete retained-JWS credential is read from its admitted named values.
+ * No second metadata graph is constructed, so changes remain visible to the gate.
+ */
+class PayloadQualityNode extends StatementQualityNode {
+  constructor(private readonly values: NamedValuesNode) {
+    super(values.id, values.dataset);
+  }
+  private field(name: string): string | undefined {
+    const value = (this.values.live as Record<string, unknown>)[name];
+    return typeof value === "string" ? value : undefined;
+  }
+  override get issuer(): string | undefined {
+    const issuer = this.field("issuer");
+    return issuer && isSafeAbsoluteIri(issuer) ? issuer : undefined;
+  }
+  override get claimSubject(): string | undefined {
+    const subject = this.field("subject");
+    return subject && isSafeAbsoluteIri(subject) ? subject : undefined;
+  }
+  override get claims(): QualitySubjectNode {
+    return new PayloadSubjectNode(this.values);
+  }
+  override get issuedAt(): string | undefined {
+    return this.field("issuedAt");
+  }
+  override get validUntil(): string | undefined {
+    return this.field("validUntil");
+  }
+}
+
+class PayloadSubjectNode extends QualitySubjectNode {
+  constructor(private readonly values: NamedValuesNode) {
+    super(values.id, values.dataset);
+  }
+  private field(name: string): string | undefined {
+    const value = (this.values.live as Record<string, unknown>)[name];
+    return typeof value === "string" ? value : undefined;
+  }
+  override get claimType(): string {
+    return this.field("claimType") ?? "";
+  }
+  override get method(): string | undefined {
+    return this.field("method");
+  }
+  override get asOf(): string | undefined {
+    return this.field("asOf");
+  }
+  override get period(): StatementPeriodNode | undefined {
+    const values = namedValuesOf((this.values.live as Record<string, unknown>).period);
+    return values ? new PayloadPeriodNode(values) : undefined;
+  }
+}
+class PayloadPeriodNode extends StatementPeriodNode {
+  constructor(private readonly values: NamedValuesNode) {
+    super(values.id, values.dataset);
+  }
+  override get start(): string {
+    return String((this.values.live as Record<string, unknown>).start ?? "");
+  }
+  override get end(): string {
+    return String((this.values.live as Record<string, unknown>).end ?? "");
   }
 }

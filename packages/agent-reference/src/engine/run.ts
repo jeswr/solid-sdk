@@ -40,6 +40,7 @@ import { LocalSingleUseRegister, type SingleUseItem } from "../mechanisms/single
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { LabelIndex } from "../model/labels.js";
+import { MessageNode } from "../model/message-nodes.js";
 import { PaymentFacts } from "../model/payment.js";
 import {
   alternativeWireId,
@@ -78,6 +79,7 @@ import { scenarioRegistry } from "../suites/scenario.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
 import { decisionsOf, firstBranchDivergence } from "./compare.js";
@@ -2268,14 +2270,22 @@ async function runPath(
             hostileMessage = target as typeof hostileMessage;
             if (!injection.resign)
               throw new Error("body injection requires explicit hostile re-signing");
-            wire = {
-              format: "awp-jws-compact/0.1",
-              jws: await signStatement(cast.get(item.from).actorKey, TYP.message, target),
-            };
+            const config = configurationById(hostileMessage.configuration);
+            const key = cast.get(item.from).actorKey;
+            wire = await writeMessagePacket(MessageNode.toNode(hostileMessage), {
+              suite:
+                config?.integrity.status === "selected" &&
+                config.integrity.mechanism === "data-integrity"
+                  ? "data-integrity"
+                  : "jws",
+              key,
+              verificationMethod: "urn:awp:key:" + key.kid,
+              created: hostileMessage.createdAt,
+            });
           } else wire = target as typeof wire;
         }
         if (step.stripSignature)
-          wire = { format: "awp-unsigned-json/0.1", payload: JSON.stringify(hostileMessage) };
+          wire = await writeMessagePacket(MessageNode.toNode(hostileMessage), { unsigned: true });
         if (step.outboundAtStep)
           recorder.label((who, event, current) =>
             who === (required(parties.get(step.agent)).traceId ?? step.agent) &&

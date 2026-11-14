@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -123,7 +123,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional company register's company.exists statement is intact and signed with The fictional company register's pinned key."
+      "caption": "The fictional company register's company exists statement is intact and signed with The fictional company register's pinned key."
     },
     {
       "seq": 2,
@@ -148,7 +148,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:company-register",
-        "text": "The fictional company register is accepted for company.exists claims."
+        "text": "The fictional company register is accepted for company exists claims."
       },
       "resolution": {
         "question": "Is The fictional company register an authority for company.exists claims about The supplier?",
@@ -161,7 +161,7 @@
         ],
         "answer": "Accepted, for company.exists claims only."
       },
-      "caption": "The fictional company register's company.exists statement: The fictional company register is an accepted source for this kind of claim."
+      "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -179,7 +179,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional company register's company.exists statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional company register's company exists statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -206,7 +206,7 @@
         "id": "urn:terms:company",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional company register's company.exists statement: its terms allow this: ."
+      "caption": "The fictional company register's company exists statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -236,9 +236,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:supplier-onboarding:company.exists",
-        "text": "Accept company.exists from The fictional company register by recorded-by-authority, at most 30 days old."
+        "text": "Accept company exists from The fictional company register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional company register's company.exists statement is fit for Taking on a new supplier: recorded-by-authority, 0 days old."
+      "caption": "The fictional company register's company exists statement is fit for Taking on a new supplier: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -248,7 +248,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional company register's company.exists statement is admitted."
+      "caption": "The fictional company register's company exists statement is admitted."
     },
     {
       "seq": 7,
@@ -258,7 +258,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:supplier-onboarding:company",
-        "label": "The fictional company register's company.exists statement",
+        "label": "The fictional company register's company exists statement",
         "claimType": "company.exists",
         "subject": "urn:fictional:supplier",
         "value": null,
@@ -271,7 +271,7 @@
         },
         "provenance": "signed by The fictional company register"
       },
-      "caption": "The fictional company register's company.exists statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -294,7 +294,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The supplier’s bank's bank.account-owner statement is intact and signed with The supplier’s bank's pinned key."
+      "caption": "The supplier’s bank's bank account owner statement is intact and signed with The supplier’s bank's pinned key."
     },
     {
       "seq": 9,
@@ -328,7 +328,7 @@
         ],
         "answer": "Not accepted for bank.account-owner."
       },
-      "caption": "The supplier’s bank's bank.account-owner statement: The supplier’s bank is not accepted as a source for this kind of claim."
+      "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is not accepted as a source for this kind of claim."
     },
     {
       "seq": 10,
@@ -346,7 +346,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The supplier’s bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier’s bank's bank account owner statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -357,7 +357,7 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-not-authoritative",
-      "caption": "The supplier’s bank's bank.account-owner statement is refused and kept out of memory."
+      "caption": "The supplier’s bank's bank account owner statement is refused and kept out of memory."
     },
     {
       "seq": 12,
@@ -577,7 +577,7 @@
         }
       ],
       "reason": "source-not-authoritative",
-      "caption": "Required bank.account-owner was refused: source-not-authoritative."
+      "caption": "Required bank account owner was refused: source-not-authoritative."
     },
     {
       "seq": 22,

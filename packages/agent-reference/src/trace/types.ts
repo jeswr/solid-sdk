@@ -86,6 +86,14 @@ export interface PacketLayerView {
 }
 
 export interface PacketView {
+  readonly jsonld?: string;
+  readonly context?: string | readonly string[];
+  readonly rdf?: string;
+  readonly attachments?: readonly {
+    readonly digest: string;
+    readonly mediaType: string;
+    readonly byteLength: number;
+  }[];
   readonly id: string;
   readonly from: string;
   readonly to: string;

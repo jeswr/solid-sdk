@@ -85,7 +85,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "84d6a82e80288ffa53b88f4f947a956ac1bbfa56",
     "core": "scripted"
   },
   "standIns": [
@@ -116,7 +116,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The buyer's invoice.valid statement is intact and signed with The buyer's pinned key."
+      "caption": "The buyer's invoice valid statement is intact and signed with The buyer's pinned key."
     },
     {
       "seq": 2,
@@ -141,7 +141,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:invoice-finance",
-        "text": "The buyer is accepted for invoice.valid claims."
+        "text": "The buyer is accepted for invoice valid claims."
       },
       "resolution": {
         "question": "Is The buyer an authority for invoice.valid claims about The invoice supplier?",
@@ -154,7 +154,7 @@
         ],
         "answer": "Accepted, for invoice.valid claims only."
       },
-      "caption": "The buyer's invoice.valid statement: The buyer is an accepted source for this kind of claim."
+      "caption": "The buyer's invoice valid statement: The buyer is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -172,7 +172,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The buyer's invoice.valid statement asks for nothing, so there is no authority to check."
+      "caption": "The buyer's invoice valid statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -199,7 +199,7 @@
         "id": "urn:terms:invoice-finance:item",
         "text": "Its terms allow this: use for Invoice finance."
       },
-      "caption": "The buyer's invoice.valid statement: its terms allow this: use for Invoice finance."
+      "caption": "The buyer's invoice valid statement: its terms allow this: use for Invoice finance."
     },
     {
       "seq": 5,
@@ -229,9 +229,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:invoice-finance:invoice.valid",
-        "text": "Accept invoice.valid from The buyer by recorded-by-authority, at most 1 days old."
+        "text": "Accept invoice valid from The buyer by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The buyer's invoice.valid statement is fit for Financing an invoice once: recorded-by-authority, 0 days old."
+      "caption": "The buyer's invoice valid statement is fit for Financing an invoice once: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -241,7 +241,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The buyer's invoice.valid statement is admitted."
+      "caption": "The buyer's invoice valid statement is admitted."
     },
     {
       "seq": 7,
@@ -251,7 +251,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:invoice-finance:item",
-        "label": "The buyer's invoice.valid statement",
+        "label": "The buyer's invoice valid statement",
         "claimType": "invoice.valid",
         "subject": "urn:fictional:invoice-finance:subject",
         "value": null,
@@ -264,7 +264,7 @@
         },
         "provenance": "signed by The buyer"
       },
-      "caption": "The buyer's invoice.valid statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
