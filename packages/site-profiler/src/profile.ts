@@ -7,7 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { registerCookieSecrets, secretRedactor } from "@jeswr/site-executor";
+import { registerCookieSecrets, type SecretCookie, secretRedactor } from "@jeswr/site-executor";
 import type { Extraction, LearnMethod, LoginRoute, Operation, SiteModel } from "@jeswr/site-model";
 import type { Browser } from "playwright";
 import { crawl, navigationLinks } from "./crawl.js";
@@ -145,9 +145,20 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
   const context = await browser.newContext({ serviceWorkers: "block" });
   const cookieSecrets = new Set<string>();
   const loginCookieNames = new Set<string>();
+  let cookieModel: Pick<SiteModel, "login" | "operations"> | undefined;
+  const retainedCookies = new Map<string, SecretCookie>();
+  const cookieContext = () => ({ loginCookieNames: [...loginCookieNames], model: cookieModel });
+  const reregisterCookies = () => {
+    for (const cookie of retainedCookies.values())
+      registerCookieSecrets(cookieSecrets, cookie, cookieContext());
+  };
   const recorder = new Recorder(origin, (cookie, loginResponse) => {
-    if (loginResponse) loginCookieNames.add(cookie.name);
-    registerCookieSecrets(cookieSecrets, cookie, { loginCookieNames: [...loginCookieNames] });
+    retainedCookies.set(JSON.stringify([cookie.name, cookie.value, cookie.httpOnly]), cookie);
+    if (loginResponse && !loginCookieNames.has(cookie.name)) {
+      loginCookieNames.add(cookie.name);
+      reregisterCookies();
+    }
+    registerCookieSecrets(cookieSecrets, cookie, cookieContext());
   });
   await recorder.attach(context);
   const maxProfileMs = options.maxProfileMs ?? 180_000;
@@ -173,18 +184,18 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     timer = setTimeout(() => reject(new Error("Profile time limit exceeded")), maxProfileMs);
   });
   const learn = async (): Promise<ProfileResult> => {
-    const cookieContext = () => ({
-      loginCookieNames: [...loginCookieNames],
-    });
     const readCookies = async () => {
       const cookies = await context.cookies();
-      for (const cookie of cookies) registerCookieSecrets(cookieSecrets, cookie, cookieContext());
+      recorder.rememberCookies(cookies);
       return cookies;
     };
     // 8a. Sign in first (user-authorised), so the crawl also sees signed-in pages.
     let login: LoginObservation | undefined;
     if (options.login) {
       login = await performLogin(context, recorder, startUrl, options.login);
+      for (const name of login.sessionCookies) loginCookieNames.add(name);
+      reregisterCookies();
+      await readCookies();
       if (!login.success) warnings.push(`login: ${login.error ?? "failed"}`);
     }
 
@@ -495,6 +506,9 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       }
     }
 
+    cookieModel = { operations };
+    reregisterCookies();
+
     // 9. Verify reads.
     const verifier = playwrightReplayer(context, recorder, "verify");
     let verifiedOps = operations;
@@ -598,6 +612,8 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       flows,
     };
     if (loginRoutes.length) model.login = loginRoutes;
+    cookieModel = model;
+    reregisterCookies();
     if (!verifiedOps.some((op) => op.actionType === s("SearchAction")))
       warnings.push("no search operation learned");
     const tokenFields = [
@@ -630,7 +646,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     ];
     // Demonstration cleanup can remove the landing resource before read verification.
     // Its recorded response and learned read still supply the witnessed response policy.
-    const writeResponses = learnWriteResponses(operations, recorder.trace, origin);
+    const writeResponses = learnWriteResponses(operations, recorder.trace, origin, verifiedOps);
     const redact = secretRedactor(new Set(secrets));
     for (const [id, policy] of Object.entries(writeResponses)) {
       const encoded = JSON.stringify(policy);

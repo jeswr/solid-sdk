@@ -9,7 +9,7 @@ import { parseSetCookie, type SecretCookie } from "@jeswr/site-executor";
 import type { BrowserContext, Request, Response } from "playwright";
 import { formFields } from "./form-body.js";
 import { isCsrfFieldName } from "./forms.js";
-import { responsePageError } from "./response-evidence.js";
+import { responseFlash, responsePageError } from "./response-evidence.js";
 import type { Phase, RecordedRequest } from "./types.js";
 import { isDangerousLink, isStatic, truncate } from "./util.js";
 
@@ -272,8 +272,11 @@ export class Recorder {
     if (!TEXT_TYPES.test(entry.contentType ?? "")) return;
     try {
       const body = await res.text();
-      if (entry.phase === "demonstration" && /html|json/i.test(entry.contentType ?? ""))
+      if (entry.phase === "demonstration" && /html|json/i.test(entry.contentType ?? "")) {
         entry.responsePageError = responsePageError(body, entry.contentType);
+        entry.responsePageFailure = responsePageError(body, entry.contentType, false);
+        entry.responseFlash = responseFlash(body, entry.contentType);
+      }
       const t = truncate(body, BODY_LIMIT);
       entry.bodySample = t.text;
       if (t.truncated) entry.bodyTruncated = true;

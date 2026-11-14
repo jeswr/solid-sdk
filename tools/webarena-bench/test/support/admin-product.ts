@@ -102,6 +102,52 @@ export function productDemonstration(origin: string, item = productFixture()): D
             );
           });
         editUrl = page.url();
+        const createdId = /\/id\/(\d+)/.exec(editUrl)?.[1];
+        if (!createdId) throw new Error("Created product has no numeric identity");
+        // Witness the ordinary learned grid read filtered by the newly assigned ID.
+        await productGrid(page, origin);
+        const clearFilters = page.locator('[data-action="grid-filter-reset"]:visible').first();
+        if (await clearFilters.isVisible()) {
+          await clearFilters.click();
+          await page.waitForLoadState("networkidle");
+        }
+        const clearSearch = page.locator("input#fulltext:visible").first();
+        await clearSearch.fill("");
+        await clearSearch.press("Enter");
+        await page.waitForLoadState("networkidle");
+        await page.locator('[data-action="grid-filter-expand"]:visible').first().click();
+        await page.locator('input[name="entity_id[from]"]:visible').first().fill(createdId);
+        await page.locator('input[name="entity_id[to]"]:visible').first().fill(createdId);
+        const [readBack] = await Promise.all([
+          page.waitForResponse((r) => {
+            const url = new URL(r.url());
+            return (
+              url.searchParams.get("namespace") === "product_listing" &&
+              url.searchParams.get("filters[entity_id][from]") === createdId &&
+              url.searchParams.get("filters[entity_id][to]") === createdId &&
+              r.status() === 200
+            );
+          }),
+          page.locator('[data-action="grid-filter-apply"]:visible').first().click(),
+        ]);
+        const verified = (await readBack.json()) as {
+          items: Array<{ entity_id: string; name: string; sku: string }>;
+          totalRecords: number;
+        };
+        if (
+          verified.items.length !== 1 ||
+          verified.totalRecords !== 1 ||
+          String(verified.items[0]?.entity_id) !== createdId ||
+          verified.items[0]?.name !== item.name ||
+          verified.items[0]?.sku !== item.sku
+        )
+          throw new Error(
+            `Read-back must match exactly the demonstration's own product (expected ID ${createdId}; total ${verified.totalRecords}; IDs ${verified.items.map((row) => row.entity_id).join(",")}; name match ${verified.items[0]?.name === item.name}; SKU match ${verified.items[0]?.sku === item.sku})`,
+          );
+        await page.locator('[data-action="grid-filter-reset"]:visible').first().click();
+        await page.waitForLoadState("networkidle");
+        await page.goto(editUrl);
+        await page.waitForLoadState("networkidle");
         await page.locator('input[name="product[price]"]').fill("23.45");
         await Promise.all([
           page.waitForNavigation({ waitUntil: "networkidle" }),

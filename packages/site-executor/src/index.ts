@@ -76,6 +76,15 @@ export {
 } from "./match.js";
 export { describeUrl, guardUrl, isLoopbackHost, OriginError, siteOrigin } from "./origin.js";
 export {
+  createdObjectType,
+  jsonEnvelope,
+  jsonFailure,
+  landingItemValues,
+  responseFlash,
+  responsePageError,
+  sentInputValue,
+} from "./response-evidence.js";
+export {
   MIN_REDACTION_LENGTH,
   normaliseSecretText,
   registerSecret,
@@ -90,4 +99,9 @@ export {
   UriTemplateError,
 } from "./uri-template.js";
 export { BindingError, idFromIri, resolveParameter, validateValue } from "./values.js";
-export { matchesCreatedIdentity, type WriteResponsePolicy } from "./write-response.js";
+export {
+  matchesCreatedIdentity,
+  readBackIdentityMatches,
+  verifiedReadBackItem,
+  type WriteResponsePolicy,
+} from "./write-response.js";

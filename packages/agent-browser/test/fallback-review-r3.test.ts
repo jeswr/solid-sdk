@@ -132,7 +132,7 @@ describe("fallback review r3 Chromium regressions", () => {
           res.end();
         } else if (url.pathname === "/products/id/42") {
           res.setHeader("content-type", "application/json");
-          res.end('{"saved":true}');
+          res.end('{"saved":true,"id":"42","name":"Example Widget"}');
         } else res.end("<p>Start</p>");
       });
     });
@@ -202,8 +202,21 @@ describe("fallback review r3 Chromium regressions", () => {
       id: createId,
       actionType: `${SCHEMA}CreateAction`,
       label: "Create product",
-      inputs: [],
-      request: { method: "POST", urlTemplate: `${origin}/products` },
+      inputs: [
+        {
+          name: "name",
+          path: [`${SCHEMA}object`, `${SCHEMA}name`],
+          range: "http://www.w3.org/2001/XMLSchema#string",
+          required: true,
+          location: "form",
+          default: "Example Widget",
+        },
+      ],
+      request: {
+        method: "POST",
+        urlTemplate: `${origin}/products`,
+        contentType: "application/x-www-form-urlencoded",
+      },
       session: "none",
       effect: "irreversible-write",
       provenance: {
@@ -224,6 +237,15 @@ describe("fallback review r3 Chromium regressions", () => {
       writeResponses: {
         [createId]: {
           createdLocationPattern: "/products/id/{id}",
+          extraction: {
+            format: "json" as const,
+            itemType: `${SCHEMA}Product`,
+            fields: [
+              { property: `${SCHEMA}identifier`, path: "/id" },
+              { property: `${SCHEMA}name`, path: "/name" },
+            ],
+          },
+          inputEvidence: { input: "name", property: `${SCHEMA}name` },
           success: { format: "json" as const, path: "/saved", value: "true" },
         },
       },

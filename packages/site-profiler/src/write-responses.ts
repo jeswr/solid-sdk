@@ -1,8 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Response policies come only from complete, causally linked demonstration traffic.
 import {
+  createdObjectType,
   type ExecutorOptions,
+  jsonPointer,
+  landingItemValues,
   matchesCreatedIdentity,
+  readBackIdentityMatches,
+  responseFlash,
+  sentInputValue,
   type WriteResponsePolicy,
 } from "@jeswr/site-executor";
 import { type Operation, responseIdentity, SCHEMA } from "@jeswr/site-model";
@@ -29,15 +35,20 @@ function safeUrl(value: string, origin: string): URL | undefined {
   }
 }
 
-function failedPage(r: RecordedRequest): boolean {
+function failedPage(r: RecordedRequest, completionOnly = false): boolean {
   if (
     r.blocked ||
-    (r.bodyTruncated && r.responsePageError === undefined) ||
+    (r.bodyTruncated &&
+      (completionOnly
+        ? r.responsePageFailure === undefined || r.responseFlash === undefined
+        : r.responsePageError === undefined)) ||
     r.status === undefined ||
     r.status < 200 ||
     r.status >= 400
   )
     return true;
+  if (completionOnly)
+    return r.responsePageFailure ?? responsePageError(r.bodySample ?? "", r.contentType, false);
   if (r.responsePageError !== undefined) return r.responsePageError;
   return responsePageError(r.bodySample ?? "", r.contentType);
 }
@@ -75,10 +86,14 @@ export function learnWriteResponses(
   operations: readonly Operation[],
   trace: readonly RecordedRequest[],
   origin: string,
+  learnedOperations: readonly Operation[] = operations,
 ): NonNullable<ExecutorOptions["writeResponses"]> {
   const policies: NonNullable<ExecutorOptions["writeResponses"]> = {};
   for (const op of operations) {
     if (op.effect === "read" || op.provenance.method !== "demonstration") continue;
+    const completionOnly = ["UpdateAction", "DeleteAction", "VoteAction"].some(
+      (type) => op.actionType === `${SCHEMA}${type}`,
+    );
     const witnesses: WriteResponsePolicy[] = [];
     let rejected = false;
     for (const write of trace.filter(
@@ -119,7 +134,7 @@ export function learnWriteResponses(
         current.status < 200 ||
         current.status >= 300 ||
         !current.bodySample ||
-        chain.some(failedPage) ||
+        chain.some((r) => failedPage(r, completionOnly)) ||
         chain.slice(1).some((r) => safeUrl(r.url, origin)?.pathname !== first.pathname)
       ) {
         rejected = true;
@@ -129,38 +144,137 @@ export function learnWriteResponses(
       const reads = operations.filter(
         (read) => read.effect === "read" && read.extraction && matchRequest(read.request, current),
       );
-      const itemReads = identity
-        ? reads.filter((read) =>
-            read.extraction?.fields.some(
-              (f) => !f.untrusted && [`${SCHEMA}identifier`, `${SCHEMA}url`].includes(f.property),
-            ),
-          )
-        : reads;
-      const read = itemReads.find((read) => {
+      const submitted = matchRequest(op.request, write) ?? {};
+      let inputEvidence: WriteResponsePolicy["inputEvidence"];
+      const read = reads.find((read) => {
         const ex = read.extraction;
         if (!ex) return false;
+        if (completionOnly) return true;
+        if (!identity || ex.itemType !== createdObjectType(op)) return false;
+        const main = landingItemValues(ex, current.bodySample ?? "");
+        if (!main) return false;
         const items = applyExtraction(
           { ...ex, fields: ex.fields.filter((f) => !f.untrusted) },
           current.bodySample ?? "",
           current.url,
         );
-        return identity
-          ? items.some((item) => {
-              const ids = item[`${SCHEMA}identifier`] ?? [];
-              const urls = item[`${SCHEMA}url`] ?? [];
-              const pattern = locationPattern(first, read, current);
-              return (
-                pattern &&
-                (ids.length > 0 || urls.length > 0) &&
-                ids.every((id) => id === identity.identifier) &&
-                urls.every((url) => matchesCreatedIdentity(pattern, first.href, url, origin))
-              );
-            })
-          : items.some((item) => Object.keys(item).length);
+        const item = items[0];
+        const pattern = locationPattern(first, read, current);
+        if (items.length !== 1 || !item || !pattern) return false;
+        const ids = item[`${SCHEMA}identifier`] ?? [];
+        const urls = item[`${SCHEMA}url`] ?? [];
+        if (
+          !(ids.length || urls.length) ||
+          !ids.every((id) => id === identity.identifier) ||
+          !urls.every((url) => matchesCreatedIdentity(pattern, first.href, url, origin))
+        )
+          return false;
+        // Only a declared, submitted input that is actually sent can prove success.
+        for (const p of op.inputs) {
+          const value = sentInputValue(op, submitted, p.name, origin);
+          if (!value || value.includes("[redacted]") || !p.path.length) continue;
+          const property = [...main].find(
+            ([, values]) => values.length === 1 && values[0] === value,
+          )?.[0];
+          if (property) {
+            inputEvidence = { input: p.name, property };
+            return true;
+          }
+        }
+        return false;
       });
-      // A learned item read must actually contain the redirected identity. With no
-      // item read (e.g. JS-rendered admin form), status and exact route are the evidence.
-      if ((itemReads.length && !read) || (!identity && !read)) {
+      // A script-only landing can use a learned, witnessed identity read instead.
+      let readBack: WriteResponsePolicy["readBack"];
+      if (!completionOnly && !read && !reads.length && identity) {
+        outer: for (const candidate of learnedOperations) {
+          const ex = candidate.extraction;
+          if (
+            candidate.effect !== "read" ||
+            candidate.request.method !== "GET" ||
+            !ex ||
+            ex.itemType !== createdObjectType(op)
+          )
+            continue;
+          for (const follow of trace) {
+            if (
+              follow.seq <= current.seq ||
+              follow.blocked ||
+              follow.bodyTruncated ||
+              follow.status === undefined ||
+              follow.status < 200 ||
+              follow.status >= 300 ||
+              !follow.bodySample ||
+              failedPage(follow) ||
+              !(
+                follow.phase === "crawl" ||
+                (follow.phase === "demonstration" && follow.demonstration === write.demonstration)
+              )
+            )
+              continue;
+            const values = matchRequest(candidate.request, follow);
+            if (!values || new URL(follow.url).origin !== origin) continue;
+            if (ex.format === "json" && ex.totalPath !== undefined) {
+              try {
+                if (jsonPointer(JSON.parse(follow.bodySample), ex.totalPath) !== 1) continue;
+              } catch {
+                continue;
+              }
+            }
+            const items = applyExtraction(ex, follow.bodySample, follow.url);
+            const trusted = applyExtraction(
+              { ...ex, fields: ex.fields.filter((f) => !f.untrusted) },
+              follow.bodySample,
+              follow.url,
+            );
+            const item = items[0];
+            const ids = trusted[0]?.[`${SCHEMA}identifier`] ?? [];
+            if (
+              items.length !== 1 ||
+              !item ||
+              !readBackIdentityMatches(
+                ids,
+                trusted[0]?.[`${SCHEMA}url`] ?? [],
+                identity.identifier,
+                origin,
+              ) ||
+              Object.values(item).some((vs) => vs.length > 100 || vs.some((v) => v.length > 4000))
+            )
+              continue;
+            const bind: NonNullable<WriteResponsePolicy["readBack"]>["bind"] = {};
+            let hasIdentity = false;
+            for (const p of candidate.inputs) {
+              const value = values[p.name] ?? p.default;
+              if (value === undefined) continue;
+              if (
+                value === identity.identifier &&
+                sentInputValue(candidate, values, p.name, origin) === value
+              ) {
+                bind[p.name] = { identity: true };
+                hasIdentity = true;
+              } else {
+                const input = op.inputs.find(
+                  (input) => sentInputValue(op, submitted, input.name, origin) === value,
+                );
+                bind[p.name] = input ? { input: input.name } : { value };
+              }
+            }
+            if (!hasIdentity || candidate.inputs.some((p) => p.required && !bind[p.name])) continue;
+            for (const p of op.inputs) {
+              const value = sentInputValue(op, submitted, p.name, origin);
+              if (!p.path.length || !value || value.includes("[redacted]")) continue;
+              const property = Object.keys(item).find(
+                (property) => item[property]?.length === 1 && item[property]?.[0] === value,
+              );
+              if (property) {
+                inputEvidence = { input: p.name, property };
+                readBack = { operation: candidate.id, bind };
+                break outer;
+              }
+            }
+          }
+        }
+      }
+      if (!completionOnly && ((!read && !readBack) || !inputEvidence)) {
         rejected = true;
         continue;
       }
@@ -173,8 +287,13 @@ export function learnWriteResponses(
         createdLocationPattern: pattern,
         redirectCount: chain.length - 1,
         finalStatus: current.status,
+        ...(completionOnly ? { completionOnly: true } : { inputEvidence }),
       };
       if (read?.extraction) policy.extraction = structuredClone(read.extraction);
+      if (readBack) policy.readBack = readBack;
+      const flashes =
+        current.responseFlash ?? responseFlash(current.bodySample, current.contentType);
+      if (completionOnly && flashes.length) policy.successFlash = flashes;
       witnesses.push(policy);
     }
     // Conflicting or incomplete demonstrations never widen a policy.

@@ -13,7 +13,7 @@ import {
 } from "@jeswr/site-model";
 import { learnedPagination } from "./pagination.js";
 import type { CandidateParam, EndpointCandidate, Label } from "./types.js";
-import { s, sab, singular, slug, xsd } from "./util.js";
+import { s, sab, singular, slug, varName, xsd } from "./util.js";
 
 const SEARCH_PARAM = /^(q|query|search|keyword|keywords|term|s|text)$/i;
 const VAULT_PARAM = /^(user(name)?|email|login|pass(word)?|pwd)$/i;
@@ -181,7 +181,16 @@ export function toParameter(
     !SEARCH_PARAM.test(p.name)
   ) {
     const decoded = decodeURIComponent(p.name);
-    if (example !== undefined) param.default = example;
+    // A later identity-filtered read-back must not narrow every future list read.
+    // Retain the initial witnessed filter scope, including its explicit absence.
+    const first = c.samples.find(
+      (sample) => sample.status !== undefined && sample.status >= 200 && sample.status < 300,
+    );
+    const initialFilter = first
+      ? [...new URL(first.url).searchParams].find(([name]) => varName(name) === p.name)?.[1]
+      : example;
+    const defaultValue = /^filters?\[/.test(decoded) ? initialFilter : example;
+    if (defaultValue !== undefined) param.default = defaultValue;
     if (/page.?size|limit|per.?page/i.test(decoded) && /^\d+$/.test(example ?? ""))
       param.default = String(Math.min(Number(example), 25));
     if (/page.?size|limit|per.?page/i.test(decoded))

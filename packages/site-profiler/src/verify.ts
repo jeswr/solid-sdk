@@ -5,6 +5,7 @@
 // session exists) signed in. Sets the session requirement and provenance counters, flags reads whose
 // extraction finds nothing, and drops reads that fail both ways. Never replays a write.
 
+import { jsonEnvelope, jsonFailure } from "@jeswr/site-executor";
 import type { CsrfRule, Operation, RequestTemplate } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
 import { parseForms } from "./forms.js";
@@ -316,15 +317,7 @@ export function readable(op: Operation, response: ReplayResponse | undefined): b
     if (response.contentType && !/json/i.test(response.contentType)) return false;
     try {
       const doc: unknown = JSON.parse(response.body);
-      if (
-        doc &&
-        typeof doc === "object" &&
-        !Array.isArray(doc) &&
-        Object.entries(doc).some(
-          ([k, v]) => /^(error|redirect|ajaxRedirect)$/i.test(k) && Boolean(v),
-        )
-      )
-        return false;
+      if (jsonFailure(doc) || jsonEnvelope(doc, op.extraction.itemPath).failed) return false;
     } catch {
       return false;
     }

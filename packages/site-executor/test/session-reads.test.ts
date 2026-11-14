@@ -243,7 +243,7 @@ describe("read routing and expired sessions", () => {
   });
 });
 
-it("extracts an on-origin created identifier from a 302 without replaying the POST", async () => {
+it("r11 refuses a route-only 302 created identity without replaying the POST", async () => {
   const op = operation("create");
   op.actionType = "https://schema.org/CreateAction";
   op.effect = "irreversible-write";
@@ -265,8 +265,8 @@ it("extracts an on-origin created identifier from a 302 without replaying the PO
     gate: { authorize: async () => ({ kind: "allow" }) },
   });
   const result = await executor.execute(actionRequest("[] a schema:CreateAction."));
-  expect(result.status).toBe("done");
+  expect(result.outcome?.status).toBe("uncertain");
   expect(calls).toEqual(["POST", "GET"]);
-  expect(result.outcome?.result).toBe(`${origin}/products/edit/id/42/`);
-  expect(result.observations.map((o) => o.turtle).join("\n")).toContain('schema:identifier "42"');
+  expect(result.outcome?.result).toBeUndefined();
+  expect(result.committed).toHaveLength(1);
 });

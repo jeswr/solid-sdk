@@ -441,6 +441,14 @@ writeResponses: {
   "urn:create": {
     createdLocationPattern: "/products/id/{id}",
     errorLocationPatterns: ["/errors/validation"],
+    extraction: {
+      format: "json", itemType: "https://schema.org/Product",
+      fields: [
+        { property: "https://schema.org/identifier", path: "/id" },
+        { property: "https://schema.org/name", path: "/name" },
+      ],
+    },
+    inputEvidence: { input: "name", property: "https://schema.org/name" },
     success: { format: "json", path: "/saved", value: "true" },
   },
 }
@@ -452,8 +460,8 @@ No declaration means a redirect cannot supply an identity and the write is Uncer
 The profiler learns these declarations from witnessed demonstrations and returns `writeResponses`
 beside its model. Forward that result directly instead of writing host-specific patterns.
 Learned policies can also require `redirectCount` (exact witnessed hop count), `finalStatus`
-(the witnessed 2xx status), and `extraction` (the learned landing read). Extraction must produce
-complete items and, when Location has an identity, include that trusted identity. These checks
+(the witnessed 2xx status). Created identities require `extraction` (one main item of the
+operation's object type), or `readBack`, and `inputEvidence` (a submitted input matching an item field). These checks
 add evidence requirements; the first-Location, same-resource and origin rules still apply.
 
 Review r7 regressions are in the `review r7` groups of `test/review-r6.test.ts`: executor-owned
@@ -506,3 +514,62 @@ are rejected. `matchesCreatedIdentity` shares that check with the profiler.
 For a form served at an identity alias, the learned policy's extraction may resolve its single
 matching on-origin canonical permalink for Referer. The permalink must fit the learned route
 and the guarded form's identity; unrelated or ambiguous links never become request context.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Round-11 success evidence
+
+Exhaustion requires a 2xx probe with an explicitly empty JSON collection and the same
+keys on every envelope ancestor as the resolve read's first page. Collection contents
+and declared paging fields are excluded from shape comparison. The shared executor
+`jsonFailure` predicate rejects `ok:false`, `success:false`, error/errors, exception,
+validationErrors and error/fail status envelopes on every ancestor. A changed shape,
+failure marker, missing root or non-success response leaves completeness unknown.
+
+A created-location policy needs a learned single main item of the operation's object
+type, with an identifier matching the route identity, or the learned read-back below. Arrays and repeated-item selectors
+remain collections even when they contain one matching row. The policy's `inputEvidence`
+records a submitted input name and main-item property. Learning and execution require
+an exact field match to the concrete value sent. Untrusted title/name text may satisfy
+only this equality check; it remains untrusted in observations and flow bindings.
+Missing or changed evidence yields Uncertain and retains the repeat guard. No route/status
+fallback creates an identity. Updates, deletes and votes may instead learn `completionOnly`
+policies; these never promote a landing URL to a created identity.
+
+Alerts (`role=alert`), assertive live regions and error/validation regions block only
+created-identity promotion and learning a created-location policy. Non-creating writes
+keep their route/status outcome rules. A successful demonstration landing records its
+flash regions as `successFlash`: sorted hashes of stable attributes and normalized text,
+used only for equality, never as instructions. The same flash is success evidence; a
+changed, additional or missing flash at runtime yields Uncertain. Password pages and
+shared JSON failure evidence still fail closed.
+Login-discovered session cookie names and model declarations feed every profiler cookie
+context. Re-register all retained cookie values as soon as their classification is known,
+before returning traces or warnings. Round-11 regressions live in the profiler's
+`test/review-r11.test.ts`, `test/write-responses.test.ts` and `test/generic-browser.test.ts`.
+
+HTML main-item learning requires one record under `main` whose permalink identifies the
+landing resource. A witnessed `-` permalink can replace only the display slug immediately
+after the same numeric parent ID; every other path segment must agree. Parent collections,
+different parents and multiple matching records remain collections. Order detail pages retain
+their Order type and can expose heading identity and deliveryMethod as submitted-value evidence.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+When a script-rendered landing has no main-item extraction, `readBack` in the same
+`writeResponses` artifact names an already learned GET operation and its input bindings.
+A `{ identity: true }` binding sends the newly assigned identity; `{ input: "name" }`
+binds a concrete submitted input, and `{ value: "1" }` retains a witnessed read control.
+The demonstration or its follow-up crawl must witness the read returning exactly one
+item of the created type, with that identity and an `inputEvidence` field equal to a
+submitted value. A collection landing cannot use a row match to promote its URL.
+
+After the approved write, the executor authorizes this read through the read gate and
+runs it with the current session, origin guard, budgets, extraction and redaction. Only
+exactly one matching identity and the recorded input-to-field equality promote the
+created URL. Missing/unlearned reads, denied reads, duplicates, partial results or changed
+fields yield Uncertain and retain the write fingerprint; the write is never retried.
+Untrusted prose participates only in the bounded equality check. The shared SiteModel
+contract stays unchanged; persist the policy artifact alongside the RDF model.
+`site-profiler/test/write-readback.test.ts` covers matching/different delete flashes,
+script-rendered creation, duplicate results, name/identity mismatch, a denied gate and
+unlearned reads. The live product demonstration witnesses an ordinary ID-range grid read
+before editing or cleaning up its own product.

@@ -277,7 +277,9 @@ read test does not establish mutation coverage or a benchmark score.
 
 `test/support/admin-product.ts` is a UI demonstration for the local Magento fixture, outside
 production source. It creates `SAB Test Widget <random>` with unique SKU, price 12.34 and
-quantity 5, changes the price to 23.45, then deletes its verified row through the grid action.
+quantity 5, witnesses a read-only grid filtered by its newly assigned ID, changes the price
+to 23.45, then deletes its verified row through the grid action. The profiler returns the
+learned identity read-back in `writeResponses` for script-rendered create landings.
 It blocks background preference/bookmark writes. Cleanup requires exactly one complete match
 and checks the response's name, exact SKU and created ID before selecting its checkbox,
 including when saved columns hide those fields.
@@ -296,9 +298,10 @@ a similarly named neighbour with a distinct SKU. A broad name search matching bo
 before write approval. The delete Flow resolves the intended SKU and names that product in
 its approval, re-resolves on retry, deletes it, then confirms the neighbour still exists.
 The opt-in fixture configures a resolver whose concrete query scope equals the witnessed delete
-form, rather than exempting grid transport defaults. It forwards the profiler's demonstration-learned `writeResponses` beside the RDF model. The delete redirect has no
-created-location declaration: it emits Uncertain with no identity, and subsequent complete grid
-reads verify deletion and the surviving neighbour. The resolver scope adaptation belongs only to the opt-in test. Production profiling retains
+form, rather than exempting grid transport defaults. It forwards the profiler's demonstration-learned
+`writeResponses` beside the RDF model. The delete redirect uses its learned completionOnly
+policy and emits Completed without a created identity. Subsequent complete grid reads verify
+deletion and the surviving neighbour. The resolver scope adaptation belongs only to the opt-in test. Production profiling retains
 its learned model and stores response policies in the profile JSON sidecar.
 Exactly two create POSTs, one update POST and one delete POST are required; an identical
 repeated create is blocked within the task. Grid reads check both prices and disappearance.

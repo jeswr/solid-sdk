@@ -157,9 +157,41 @@ describe("r9 display money", () => {
 });
 
 describe("r9 redirect identities", () => {
+  function creation() {
+    const op = operation("create", "irreversible-write");
+    op.inputs = [
+      {
+        name: "item",
+        path: [`${S}object`],
+        range: `${S}Product`,
+        required: false,
+        location: "form",
+        default: "42",
+      },
+      {
+        name: "name",
+        path: [`${S}object`, `${S}name`],
+        range: `${X}string`,
+        required: false,
+        location: "form",
+        default: "Example widget",
+      },
+    ];
+    op.request.contentType = "application/x-www-form-urlencoded";
+    return op;
+  }
   const pattern: WriteResponsePolicy = {
     createdLocationPattern: "/products/id/{id}",
     errorLocationPatterns: ["/errors/validation"],
+    extraction: {
+      format: "json",
+      itemType: `${S}Product`,
+      fields: [
+        { property: `${S}identifier`, path: "/identifier" },
+        { property: `${S}name`, path: "/name" },
+      ],
+    },
+    inputEvidence: { input: "name", property: `${S}name` },
     success: { format: "json", path: "/saved", value: "true" },
   };
   it.each([
@@ -170,7 +202,7 @@ describe("r9 redirect identities", () => {
     "failed success",
     "modelled error",
   ])("returns Uncertain without bindings for %s", async (mode) => {
-    const create = operation("create", "irreversible-write");
+    const create = creation();
     const update = operation("update", "reversible-write");
     update.inputs = [
       { name: "id", path: [], range: `${X}string`, required: true, location: "form" },
@@ -222,7 +254,11 @@ describe("r9 redirect identities", () => {
               location: mode === "validation hop" ? "/errors/validation" : "/products/id/43",
             },
           });
-        return Response.json({ saved: mode !== "failed success", identifier: "42" });
+        return Response.json({
+          saved: mode !== "failed success",
+          identifier: "42",
+          name: "Example widget",
+        });
       },
     });
     const request = actionRequest("[] a schema:CreateAction.");
@@ -243,7 +279,7 @@ describe("r9 redirect identities", () => {
   it.each([
     301, 302, 303,
   ])("promotes only a declared and verified first-hop identity after %s", async (status) => {
-    const create = operation("create", "irreversible-write");
+    const create = creation();
     create.actionType = `${S}CreateAction`;
     const calls: string[] = [];
     const result = await createExecutor({
@@ -255,7 +291,7 @@ describe("r9 redirect identities", () => {
         calls.push(init?.method ?? "GET");
         return init?.method === "POST"
           ? new Response(null, { status, headers: { location: "/products/id/42" } })
-          : Response.json({ saved: true });
+          : Response.json({ saved: true, identifier: "42", name: "Example widget" });
       },
     }).execute(actionRequest("[] a schema:CreateAction."));
     expect(result.outcome).toMatchObject({ status: "completed", result: `${O}/products/id/42` });
@@ -264,7 +300,7 @@ describe("r9 redirect identities", () => {
   });
   it("binds a verified created identifier after same-resource hops, never after contradictory final facts", async () => {
     for (const contradictory of [false, true]) {
-      const create = operation("create", "irreversible-write");
+      const create = creation();
       if (contradictory)
         create.extraction = {
           format: "json",
@@ -309,7 +345,12 @@ describe("r9 redirect identities", () => {
             });
           if (url.pathname === "/update")
             expect(new URLSearchParams(String(init?.body)).get("id")).toBe("42");
-          return Response.json({ saved: true, id: contradictory ? "99" : "42" });
+          return Response.json({
+            saved: true,
+            id: contradictory ? "99" : "42",
+            identifier: "42",
+            name: "Example widget",
+          });
         },
       }).execute(actionRequest("[] a schema:CreateAction."));
       expect(result.outcome?.status).toBe(contradictory ? "uncertain" : "completed");

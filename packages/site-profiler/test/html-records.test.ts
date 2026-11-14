@@ -85,3 +85,35 @@ it("preserves price-based extraction for product article cards", () => {
   expect(htmlRecordExtractions(product)).toEqual([]);
   expect(proposeHtmlExtraction(product)?.itemType).toBe(`${s}Product`);
 });
+
+it("r11 reads a single order's identifier and submitted delivery field without typing it as a product", () => {
+  const body =
+    '<main><h1>Order <span class="order-id">42</span></h1><p>Delivery: <span class="delivery">express</span></p><p class="price">£20.00</p></main>';
+  const extraction = proposeHtmlExtraction(body, "https://shop.test/orders/42");
+  expect(extraction?.itemType).toBe(`${s}Order`);
+  expect(extraction?.itemPath).toBeUndefined();
+  if (!extraction) throw new Error("Missing order extraction");
+  expect(applyExtraction(extraction, body, "https://shop.test/orders/42")[0]).toMatchObject({
+    [`${s}identifier`]: ["42"],
+    [`${s}deliveryMethod`]: ["express"],
+  });
+});
+
+it.each([
+  "single resource",
+  "parent collection",
+  "other parent",
+  "multiple comments",
+])("r11 promotes a comment to a main-item extraction only on its own witnessed permalink (%s)", (kind) => {
+  const permalink = kind === "other parent" ? "/topics/99/-/comment/51" : "/topics/42/-/comment/51";
+  const body = `<main><article class="entry"><h1><a href="/topics/42/example-story">Example story</a></h1><time datetime="2026-11-13T10:00:00Z"></time></article><article class="comment"><div class="comment__body">Example reply</div><a class="comment__permalink" href="${permalink}">Permalink</a></article>${kind === "multiple comments" ? '<article class="comment"><div class="comment__body">Other reply</div><a class="comment__permalink" href="/topics/42/-/comment/52">Permalink</a></article>' : ""}</main>`;
+  const page =
+    kind === "parent collection"
+      ? "https://forum.test/topics/42/example-story"
+      : "https://forum.test/topics/42/example-story/comment/51";
+  const extraction = htmlRecordExtractions(body, page).find((ex) => ex.itemType === `${s}Comment`);
+  expect(extraction).toBeDefined();
+  expect(extraction?.itemPath).toBe(kind === "single resource" ? undefined : "article.comment");
+  if (extraction && kind === "single resource")
+    expect(applyExtraction(extraction, body, page)[0]?.[`${s}text`]).toEqual(["Example reply"]);
+});

@@ -146,6 +146,14 @@ describe("execution outcomes", () => {
           : fetch(url, init),
       gate: { authorize: async () => ({ kind: "allow" }) },
     }).execute(request());
+    if (mode !== "extracted-iri") {
+      // A legacy route/status policy has neither a main item nor a submitted-value pairing.
+      expect(result.outcome?.status).toBe("uncertain");
+      expect(result.outcome?.result).toBeUndefined();
+      expect(result.committed).toHaveLength(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      return;
+    }
     expect(result.status).toBe("done");
     expect(result.outcome).toEqual({
       status: "completed",
@@ -161,13 +169,12 @@ describe("execution outcomes", () => {
     const store = new Store(quads);
     expect(store.getQuads(null, `${SAB}status`, `${SAB}Completed`, null)).toHaveLength(1);
     expect(store.getQuads(null, `${S}result`, `${origin}/orders/42`, null)).toHaveLength(1);
-    if (mode !== "303-without-extraction")
-      expect(
-        store.getQuads(`${origin}/orders/42`, `${S}orderNumber`, null, null)[0]?.object.value,
-      ).toBe("42");
+    expect(
+      store.getQuads(`${origin}/orders/42`, `${S}orderNumber`, null, null)[0]?.object.value,
+    ).toBe("42");
     expect(turtle).not.toContain("Buy another");
     expect(turtle).not.toContain("UntrustedText");
-    expect(fetch).toHaveBeenCalledTimes(mode === "extracted-iri" ? 1 : 2);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("emits Uncertain with the authorized money when the write returns 500", async () => {

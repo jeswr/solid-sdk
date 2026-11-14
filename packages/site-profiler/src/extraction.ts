@@ -395,7 +395,7 @@ function docSelector(doc: Document, el: Element): string {
   return own;
 }
 
-function detailExtraction(doc: Document): Extraction | undefined {
+function detailExtraction(doc: Document, endpoint?: string): Extraction | undefined {
   const h1 = descendants(doc).find((e) => e.name === "h1");
   const priceEl = priceElIn(doc);
   if (!h1 || !priceEl) return undefined;
@@ -439,7 +439,18 @@ function detailExtraction(doc: Document): Extraction | undefined {
       });
     }
   }
-  return { format: "html", itemType: s("Product"), fields };
+  const itemType = endpoint ? (endpointItemType(endpoint)?.itemType ?? s("Product")) : s("Product");
+  if (itemType === s("Order")) {
+    const identifier = descendants(h1).find(
+      (el) => attr(el, "itemprop") === "identifier" || classes(el).includes("order-id"),
+    );
+    if (identifier) fields.push({ property: s("identifier"), path: docSelector(doc, identifier) });
+    const delivery = descendants(doc).find(
+      (el) => attr(el, "itemprop") === "deliveryMethod" || classes(el).includes("delivery"),
+    );
+    if (delivery) fields.push({ property: s("deliveryMethod"), path: docSelector(doc, delivery) });
+  }
+  return { format: "html", itemType, fields };
 }
 
 /** Propose an Extraction for an HTML page: repeated items first, else a product detail layout. */
@@ -450,7 +461,7 @@ export function proposeHtmlExtraction(html: string, endpoint?: string): Extracti
   const lists = findLists(doc);
   const best = lists[0];
   if (best) return listExtraction(best);
-  return detailExtraction(doc);
+  return detailExtraction(doc, endpoint);
 }
 
 // ---------------------------------------------------------------------------------------------

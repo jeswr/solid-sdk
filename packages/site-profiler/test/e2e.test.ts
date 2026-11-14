@@ -86,7 +86,7 @@ afterAll(async () => {
 });
 
 describe("profiling the test shop", () => {
-  it("returns a learned checkout redirect policy alongside the model", () => {
+  it("r11 learns a checkout policy only with the main order and submitted delivery evidence", () => {
     const checkout = model.operations.find((o) => o.effect === "payment");
     expect(checkout).toBeDefined();
     const policy = result.writeResponses[checkout?.id ?? ""];
@@ -94,6 +94,8 @@ describe("profiling the test shop", () => {
       createdLocationPattern: "/orders/{id}",
       redirectCount: 1,
       finalStatus: 200,
+      extraction: { itemType: s("Order") },
+      inputEvidence: { input: "delivery", property: s("deliveryMethod") },
     });
     expect(
       result.trace.some((r) => r.redirectedFrom !== undefined && r.phase === "demonstration"),

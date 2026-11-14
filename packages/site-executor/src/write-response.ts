@@ -1,20 +1,40 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Executor-local declarations until created-location/success evidence joins the shared contract.
+
+import type { Operation } from "@jeswr/site-model";
 import { type Extraction, responseIdentity, SCHEMA } from "@jeswr/site-model";
 import { attribute, elementText, jsonPointer, parseHtml, selectElement } from "./dom.js";
 import { extract } from "./extract.js";
 import { guardUrl } from "./origin.js";
+import {
+  createdObjectType,
+  landingItemValues,
+  responseFlash,
+  responsePageError,
+  sentInputValue,
+} from "./response-evidence.js";
 import { BindingError } from "./values.js";
 
 export interface WriteResponsePolicy {
   /** On-origin URL/path with whole-segment {variables}, e.g. /products/id/{id}. */
   createdLocationPattern: string;
   errorLocationPatterns?: string[];
+  /** Non-creating writes can complete at a collection without promoting its URL. */
+  completionOnly?: boolean;
+  /** Exact submitted input and main-item field used as positive creation evidence. */
+  inputEvidence?: { input: string; property: string };
   /** Exact redirect count and final status witnessed by the profiler. */
   redirectCount?: number;
   finalStatus?: number;
   /** Learned read of the landing resource, checked before admitting its identity. */
   extraction?: Extraction;
+  /** A learned GET returning exactly one item by the created identity. */
+  readBack?: {
+    operation: string;
+    bind: Record<string, { identity: true } | { input: string } | { value: string }>;
+  };
+  /** Opaque hashes of flash regions witnessed on a successful completion landing. */
+  successFlash?: string[];
   success?:
     | { format: "json"; path: string; value: string }
     | { format: "html"; selector: string; attribute?: string; value?: string };
@@ -48,6 +68,8 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
       policy.finalStatus >= 300)
   )
     throw new BindingError("invalid write-response final status");
+  if (policy.successFlash?.some((hash) => !/^[a-f0-9]{64}$/.test(hash)))
+    throw new BindingError("invalid write-response flash evidence");
   for (const error of policy.errorLocationPatterns ?? []) patternPath(error, origin);
 }
 
@@ -80,6 +102,9 @@ export async function verifiedCreatedLocation(
   body: string,
   origin: string,
   finalStatus?: number,
+  operation?: Operation,
+  inputs: Record<string, string> = {},
+  readBack?: (identity: string) => Promise<boolean>,
 ): Promise<string | undefined> {
   if (!policy || !hops.length) return undefined;
   if (
@@ -117,37 +142,142 @@ export async function verifiedCreatedLocation(
     const value = success.attribute ? attribute(el, success.attribute) : elementText(el);
     if (success.value !== undefined && value !== success.value) return undefined;
   }
-  if (policy.extraction) {
-    try {
-      const out = await extract(policy.extraction, body, {
-        baseUrl: finalUrl.href,
-        redact: (value) => value,
-      });
-      const identity = responseIdentity(first.href);
-      if (
-        out.truncation.items ||
-        out.truncation.values ||
-        !out.items.length ||
-        (identity &&
-          !out.items.some((item) => {
-            const ids = item.values.get(`${SCHEMA}identifier`) ?? [];
-            const urls = [
-              ...(item.values.get(`${SCHEMA}url`) ?? []),
-              ...(item.iri ? [item.iri] : []),
-            ];
-            return (
-              (ids.length > 0 || urls.length > 0) &&
-              ids.every((id) => id === identity.identifier) &&
-              urls.every((url) =>
-                matchesCreatedIdentity(policy.createdLocationPattern, first.href, url, origin),
-              )
-            );
-          }))
-      )
-        return undefined;
-    } catch {
+  const ex = policy.extraction;
+  const contentType =
+    ex?.format === "json" || /^\s*[[{]/.test(body) ? "application/json" : "text/html";
+  if (policy.completionOnly) {
+    if (
+      responsePageError(body, contentType, false) ||
+      JSON.stringify(responseFlash(body, contentType)) !== JSON.stringify(policy.successFlash ?? [])
+    )
       return undefined;
-    }
+  } else if (responsePageError(body, contentType)) return undefined;
+  if (policy.completionOnly) {
+    // A completion policy must never be used to bypass creation evidence.
+    if (
+      !operation ||
+      !["UpdateAction", "DeleteAction", "VoteAction"].some(
+        (type) => operation.actionType === `${SCHEMA}${type}`,
+      )
+    )
+      return undefined;
+    return first.href;
+  }
+  const identity = responseIdentity(first.href);
+  const templateParts = new URL(
+    policy.createdLocationPattern.replaceAll("{", "%7B").replaceAll("}", "%7D"),
+    origin,
+  ).pathname.split("/");
+  const identitySlot = templateParts.indexOf("%7Bid%7D");
+  const slotValue =
+    identitySlot >= 0
+      ? decodeURIComponent(first.pathname.split("/")[identitySlot] ?? "")
+      : undefined;
+  const evidence = policy.inputEvidence;
+  if (
+    !operation ||
+    !identity ||
+    identity.identifier !== slotValue ||
+    (!policy.readBack && (!ex || ex.itemType !== createdObjectType(operation))) ||
+    !evidence
+  )
+    return undefined;
+  if (policy.readBack) return (await readBack?.(identity.identifier)) ? first.href : undefined;
+  if (!ex) return undefined;
+  const main = landingItemValues(ex, body);
+  const submitted = sentInputValue(operation, inputs, evidence.input, origin);
+  // Equality is allowed for untrusted prose only as this narrow success check; it
+  // does not make that field trusted or available for later flow bindings.
+  if (
+    !main ||
+    !submitted ||
+    main.get(evidence.property)?.length !== 1 ||
+    main.get(evidence.property)?.[0] !== submitted
+  )
+    return undefined;
+  try {
+    const out = await extract(ex, body, { baseUrl: finalUrl.href, redact: (value) => value });
+    const item = out.items[0];
+    if (out.truncation.items || out.truncation.values || out.items.length !== 1 || !item)
+      return undefined;
+    const ids = item.values.get(`${SCHEMA}identifier`) ?? [];
+    const urls = [...(item.values.get(`${SCHEMA}url`) ?? []), ...(item.iri ? [item.iri] : [])];
+    if (
+      !(ids.length || urls.length) ||
+      !ids.every((id) => id === identity.identifier) ||
+      !urls.every((url) =>
+        matchesCreatedIdentity(policy.createdLocationPattern, first.href, url, origin),
+      )
+    )
+      return undefined;
+  } catch {
+    return undefined;
   }
   return first.href;
+}
+
+/** Trusted identity claims from a detail or filtered-list read must agree. */
+export function readBackIdentityMatches(
+  ids: readonly string[],
+  urls: readonly string[],
+  identity: string,
+  origin: string,
+): boolean {
+  if (!(ids.length || urls.length) || !ids.every((id) => id === identity)) return false;
+  return urls.every((value) => {
+    try {
+      const url = guardUrl(value, origin);
+      return !url.search && responseIdentity(url.href)?.identifier === identity;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Creation read-back equality is bounded and never upgrades untrusted fields into flow facts. */
+export async function verifiedReadBackItem(
+  extraction: Extraction,
+  body: string,
+  baseUrl: string,
+  identity: string,
+  property: string,
+  submitted: string,
+  redact: (value: string) => string,
+): Promise<boolean> {
+  if (responsePageError(body, extraction.format === "json" ? "application/json" : "text/html"))
+    return false;
+  try {
+    const out = await extract(extraction, body, { baseUrl, redact });
+    const item = out.items[0];
+    if (out.truncation.items || out.truncation.values || out.items.length !== 1 || !item)
+      return false;
+    const ids = item.values.get(`${SCHEMA}identifier`) ?? [];
+    const urls = [...(item.values.get(`${SCHEMA}url`) ?? []), ...(item.iri ? [item.iri] : [])];
+    if (
+      !readBackIdentityMatches(ids, urls, identity, new URL(baseUrl).origin) ||
+      redact(identity) !== identity
+    )
+      return false;
+    const equality = await extract(
+      {
+        ...extraction,
+        fields: extraction.fields
+          .filter((f) => f.property === property)
+          .map((f) => ({ ...f, untrusted: false })),
+      },
+      body,
+      { baseUrl, redact },
+    );
+    const values = equality.items[0]?.values.get(property);
+    return (
+      !equality.truncation.items &&
+      !equality.truncation.values &&
+      equality.items.length === 1 &&
+      values?.length === 1 &&
+      values[0] === submitted &&
+      redact(submitted) === submitted
+    );
+  } catch {
+    return false;
+  }
 }

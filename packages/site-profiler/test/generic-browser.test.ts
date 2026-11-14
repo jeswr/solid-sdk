@@ -20,6 +20,23 @@ const site = createServer((req, res) => {
     res.setHeader("content-type", "text/html");
     res.end(body);
   };
+  if (path === "/short-login" && req.method === "POST") {
+    res.writeHead(303, { location: "/short-landing" });
+    return res.end();
+  }
+  if (path === "/short-landing") {
+    res.setHeader("set-cookie", "key=Ab7xQ2; Path=/");
+    return html("<h1>Signed in Ab7xQ2</h1>");
+  }
+  if (path === "/short-login") {
+    if (req.headers.cookie?.includes("key="))
+      return html(
+        '<h1>Example Ab7xQ2</h1><script>fetch("/blocked/Ab7xQ2", { method: "POST" }).catch(()=>{})</script>',
+      );
+    return html(
+      '<form method="post"><input name="username"><input name="password" type="password"><button>Sign in</button></form>',
+    );
+  }
   if (path === "/portal/search") {
     html(
       '<script>fetch("/portal/filtered-data?search=none",{headers:{"X-Requested-With":"XMLHttpRequest"}})</script>',
@@ -233,4 +250,25 @@ it("redacts a bracketed CSRF token first encountered on a demonstration-only pag
   expect(
     result.model.operations.find((o) => o.request.method === "POST")?.csrf?.[0]?.target.name,
   ).toBe("entry[_token]");
+});
+
+it("r11 propagates login redirect GET cookie classifications before returning traces and warnings", async () => {
+  const result = await profileSite({
+    startUrl: `${origin}/short-login`,
+    browser,
+    maxPages: 1,
+    verify: false,
+    login: { username: "alex", password: "fictional-password" },
+  });
+  expect(result.model.login?.[0]?.sessionCookies).toContain("key");
+  expect(
+    result.trace.some(
+      (r) => r.phase === "login" && r.method === "GET" && r.setCookieNames?.includes("key"),
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(result.trace)).toContain("[redacted]");
+  for (const secret of ["Ab7xQ2", "Cd8yR3"])
+    expect(JSON.stringify({ trace: result.trace, warnings: result.warnings })).not.toContain(
+      secret,
+    );
 });

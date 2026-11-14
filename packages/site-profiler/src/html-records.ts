@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Evidence-based HTML records. Selectors are learned from the DOM, never a site's theme.
+
 import type { Extraction, FieldRule } from "@jeswr/site-model";
+import { responseIdentity } from "@jeswr/site-model";
 import {
   attr,
   classes,
@@ -55,6 +57,28 @@ function field(
     ...(attribute ? { attribute } : {}),
     ...(untrusted ? { untrusted: true } : attribute === "href" ? { datatype: "iri" } : {}),
   };
+}
+
+/** A witnessed dash permalink can omit only a display slug after the same parent ID. */
+function mainPermalink(page: URL, item: URL): boolean {
+  if (item.origin !== page.origin) return false;
+  if (
+    item.pathname === page.pathname ||
+    page.pathname.slice(0, page.pathname.lastIndexOf("/")) === item.pathname
+  )
+    return true;
+  const left = page.pathname.split("/"),
+    right = item.pathname.split("/");
+  if (left.length !== right.length) return false;
+  const changed = left.flatMap((part, index) => (part === right[index] ? [] : [index]));
+  const at = changed[0];
+  return (
+    changed.length === 1 &&
+    at !== undefined &&
+    right[at] === "-" &&
+    /^\d+$/.test(left[at - 1] ?? "") &&
+    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/i.test(left[at] ?? "")
+  );
 }
 
 /** Separate typed views when one document contains posts, comments and a profile. */
@@ -140,9 +164,28 @@ export function htmlRecordExtractions(html: string, endpoint?: string): Extracti
         ) ?? (comment && heading ? descendants(heading).find((e) => e.name === "a") : undefined);
       if (author) fields.push(field(root, author, "author", undefined, true));
     }
+    const page = endpoint && !endpoint.includes("{") ? new URL(endpoint) : undefined;
+    const urlField = fields.find((f) => f.property === s("url"));
+    const target = urlField && els.find((el) => path(root, el) === urlField.path);
+    const href = target && attr(target, "href");
+    let ancestor = root.parent;
+    while (ancestor && !(ancestor.type === "tag" && ancestor.name === "main"))
+      ancestor = ancestor.parent;
+    const itemUrl = href && page ? new URL(href, page) : undefined;
+    const main =
+      records.length === 1 &&
+      ancestor &&
+      page &&
+      itemUrl &&
+      responseIdentity(page.href)?.identifier === responseIdentity(itemUrl.href)?.identifier &&
+      responseIdentity(page.href) &&
+      mainPermalink(page, itemUrl);
+    if (main)
+      for (const f of fields)
+        f.path = `${path(doc, root)} ${f.path.replace(/^:scope\s*>?\s*/, "")}`.trim();
     out.push({
       format: "html",
-      itemPath: selector,
+      ...(main ? {} : { itemPath: selector }),
       itemType: s(comment ? "Comment" : date ? "DiscussionForumPosting" : "CreativeWork"),
       idField: s("url"),
       fields,

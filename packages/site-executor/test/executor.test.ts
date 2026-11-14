@@ -411,7 +411,20 @@ describe("flows", () => {
       model: shopModel(shop.url),
       sessions,
       gate,
-      writeResponses: { "urn:op:checkout": { createdLocationPattern: "/orders/{id}" } },
+      writeResponses: {
+        "urn:op:checkout": {
+          createdLocationPattern: "/orders/{id}",
+          extraction: {
+            format: "html",
+            itemType: `${S}Order`,
+            fields: [
+              { property: `${S}identifier`, path: ".number" },
+              { property: `${S}orderDelivery`, path: ".delivery" },
+            ],
+          },
+          inputEvidence: { input: "delivery", property: `${S}orderDelivery` },
+        },
+      },
     });
     const ask = await executor.execute(buy());
     expect(ask.status).toBe("needs-approval");
@@ -510,7 +523,20 @@ describe("flows", () => {
       model,
       sessions,
       gate,
-      writeResponses: { "urn:op:checkout": { createdLocationPattern: "/orders/{id}" } },
+      writeResponses: {
+        "urn:op:checkout": {
+          createdLocationPattern: "/orders/{id}",
+          extraction: {
+            format: "html",
+            itemType: `${S}Order`,
+            fields: [
+              { property: `${S}identifier`, path: ".number" },
+              { property: `${S}orderDelivery`, path: ".delivery" },
+            ],
+          },
+          inputEvidence: { input: "delivery", property: `${S}orderDelivery` },
+        },
+      },
     });
     const first = await executor.execute(buy());
     expect(first.approval?.effect).toBe("reversible-write");

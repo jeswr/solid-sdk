@@ -9,6 +9,7 @@ import type { AnyNode, Element } from "domhandler";
 import { DataFactory, type Quad_Object, Writer } from "n3";
 import { displayDateTime, displayDecimal } from "./display-values.js";
 import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "./dom.js";
+import { jsonEnvelope } from "./response-evidence.js";
 import { expandIri, RDF, XSD } from "./values.js";
 
 const { namedNode, literal, blankNode } = DataFactory;
@@ -43,6 +44,8 @@ export interface ExtractOutput {
   total?: number;
   /** Only an explicit JSON array at a valid root can prove exhaustion. */
   collectionState?: "empty" | "nonempty" | "invalid" | "unknown";
+  /** Keys on each collection ancestor, retained for matching exhaustion envelopes. */
+  envelopeKeys?: string[][];
   turtle: string;
   truncation: { items: boolean; values: boolean };
   /** Re-render retained structured values with newly discovered secrets. */
@@ -118,6 +121,7 @@ function rawItems(
   truncation: ExtractOutput["truncation"],
   account: (rule: FieldRule | undefined, count: number) => void,
   onTotal: (value: unknown, count: number) => void,
+  onEnvelope: (keys: string[][] | undefined) => void,
   onCollection: (state: NonNullable<ExtractOutput["collectionState"]>) => void,
 ): Map<FieldRule, RawValue[]>[] {
   let roots: unknown[];
@@ -131,25 +135,9 @@ function rawItems(
       throw new ExtractionError("response is not valid JSON");
     }
     const root = extraction.itemPath ? jsonPointer(doc, extraction.itemPath) : doc;
-    const isError = (value: unknown): boolean =>
-      value !== null &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      Object.entries(value).some(
-        ([key, member]) =>
-          (/^(error|errors|redirect|ajaxRedirect)$/i.test(key) && !!member) ||
-          (/^success$/i.test(key) && member === false) ||
-          (/^status$/i.test(key) &&
-            typeof member === "string" &&
-            /^(error|failed|failure)$/i.test(member)),
-      );
-    // Error envelopes can wrap the declared root; item data itself is not an envelope.
-    const path = extraction.itemPath?.split("/") ?? [];
-    const errorEnvelope =
-      isError(doc) ||
-      path
-        .slice(1)
-        .some((_part, index) => isError(jsonPointer(doc, path.slice(0, index + 1).join("/"))));
+    const envelope = jsonEnvelope(doc, extraction.itemPath);
+    const errorEnvelope = envelope.failed;
+    onEnvelope(Array.isArray(root) ? envelope.keys : undefined);
     const validItem = (value: unknown) =>
       value !== null &&
       typeof value === "object" &&
@@ -244,6 +232,7 @@ export async function extract(
     quadCount = 0;
   const truncation = { items: false, values: false };
   let total: number | undefined;
+  let envelopeKeys: string[][] | undefined;
   let collectionState: ExtractOutput["collectionState"];
   const retained = rawItems(
     extraction,
@@ -265,6 +254,9 @@ export async function extract(
         throw new ExtractionError("invalid list total");
       total = value;
       if (value > count) truncation.items = true;
+    },
+    (keys) => {
+      envelopeKeys = keys;
     },
     (state) => {
       collectionState = state;
@@ -441,6 +433,7 @@ export async function extract(
   return {
     items,
     collectionState,
+    envelopeKeys,
     turtle: await render(options.redact),
     truncation,
     render,

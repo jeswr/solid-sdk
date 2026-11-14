@@ -80,11 +80,13 @@ import {
 } from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { outcomeTurtle } from "./outcome.js";
+import { createdObjectType, sentInputValue } from "./response-evidence.js";
 import { registerSecret, secretRedactor } from "./secrets.js";
 import {
   assertSelectionFilters,
   itemName,
   nextSelectionPage,
+  pagingKind,
   requestsAll,
   resolveSelection,
   type SelectionEvidence,
@@ -98,6 +100,7 @@ import {
   matchesCreatedIdentity,
   validateWriteResponsePolicy,
   verifiedCreatedLocation,
+  verifiedReadBackItem,
   type WriteResponsePolicy,
 } from "./write-response.js";
 
@@ -693,7 +696,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     compiled: CompiledRequest,
     committed?: () => void,
     csrfPrepared = false,
-  ): Promise<{ observation: ObservationRecord; items: ExtractedItem[] }> {
+  ): Promise<{ observation: ObservationRecord; items: ExtractedItem[]; responseBody: string }> {
     if (!csrfPrepared) await prepareCsrf(ctx, compiled, values);
     const accept =
       operation.extraction?.format === "json"
@@ -752,25 +755,120 @@ export function createExecutor(options: ExecutorOptions): Executor {
           res.body,
           origin,
           res.status,
+          operation,
+          values,
+          async (identity) => {
+            const policy = writeResponses[operation.id];
+            const declaration = policy?.readBack;
+            const read = declaration && operations.get(declaration.operation);
+            const evidence = policy?.inputEvidence;
+            if (
+              !declaration ||
+              read?.effect !== "read" ||
+              read.request.method !== "GET" ||
+              !read.extraction ||
+              read.extraction.itemType !== createdObjectType(operation) ||
+              !evidence
+            )
+              return false;
+            if (read.session === "signed-in" && !ctx.jar.length && !Object.keys(ctx.headers).length)
+              return false;
+            const bindings: Record<string, string> = {};
+            for (const [name, binding] of Object.entries(declaration.bind)) {
+              if (!read.inputs.some((p) => p.name === name)) return false;
+              const value =
+                "identity" in binding
+                  ? identity
+                  : "input" in binding
+                    ? values[binding.input]
+                    : binding.value;
+              if (value === undefined) return false;
+              bindings[name] = value;
+            }
+            const resolved = operationValues(read, bindings);
+            // Verify identity transmission after every required input has been supplied.
+            const identityBound = Object.entries(declaration.bind).some(
+              ([name, binding]) =>
+                "identity" in binding && sentInputValue(read, resolved, name, origin) === identity,
+            );
+            const submitted = sentInputValue(operation, values, evidence.input, origin);
+            if (
+              !identityBound ||
+              !submitted ||
+              Object.values(resolved).some((value) => redactWith(ctx)(value) !== value)
+            )
+              return false;
+            const compiledRead = compileOperation(read, resolved, origin);
+            const target: Target = {
+              kind: "operation",
+              id: read.id,
+              label: redactWith(ctx)(read.label),
+              actionType: read.actionType,
+            };
+            const decision = await budget(
+              ctx,
+              gate.authorize({
+                site: origin,
+                target,
+                effect: "read",
+                inputs: resolved,
+                summary: `Verify created item on ${new URL(origin).host}`,
+                digest: approvalDigest({
+                  site: origin,
+                  modelVersion: model.version,
+                  target,
+                  effect: "read",
+                  inputs: resolved,
+                  binding: {
+                    operation: read,
+                    url: compiledRead.url.href,
+                    readBackOf: operation.id,
+                  },
+                }),
+              }),
+            );
+            if (decision.kind !== "allow") return false;
+            const result = await runOperation(ctx, read, resolved, compiledRead);
+            return (
+              result.observation.status >= 200 &&
+              result.observation.status < 300 &&
+              (await verifiedReadBackItem(
+                read.extraction,
+                result.responseBody,
+                result.observation.url,
+                identity,
+                evidence.property,
+                submitted,
+                redactWith(ctx),
+              ))
+            );
+          },
         )
       : undefined;
     if (redirectedWrite && !createdLocation)
-      throw new HttpError("write redirect has no verified created identity; outcome is uncertain");
-    const identity = createdLocation ? responseIdentity(createdLocation) : undefined;
+      throw new HttpError("write redirect lacks required success evidence; outcome is uncertain");
+    const identity =
+      createdLocation && !writeResponses[operation.id]?.completionOnly
+        ? responseIdentity(createdLocation)
+        : undefined;
     const safeIdentity =
       identity &&
       redactWith(ctx)(identity.url) === identity.url &&
       redactWith(ctx)(identity.identifier) === identity.identifier
         ? identity
         : undefined;
-    // Server redirects identify the result even when its HTML form is rendered only by JS.
+    // Only the verified single-item policy can turn a redirect into result facts.
     const extraction =
       operation.extraction ??
       (safeIdentity
         ? {
             format: "json" as const,
             itemType:
-              endpointItemType(createdLocation ?? compiled.url.href)?.itemType ?? `${SCHEMA}Thing`,
+              writeResponses[operation.id]?.extraction?.itemType ??
+              operations.get(writeResponses[operation.id]?.readBack?.operation ?? "")?.extraction
+                ?.itemType ??
+              endpointItemType(createdLocation ?? compiled.url.href)?.itemType ??
+              `${SCHEMA}Thing`,
             idField: `${SCHEMA}url`,
             fields: [
               { property: `${SCHEMA}url`, path: "/url", datatype: "iri" },
@@ -780,11 +878,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         : undefined);
     if (!extraction) {
       return {
+        responseBody: res.body,
         observation: {
           operation: operation.id,
           status: res.status,
           url: res.url.href,
-          ...(createdLocation ? { createdLocation } : {}),
+          ...(safeIdentity ? { createdLocation } : {}),
         },
         items: [],
       };
@@ -811,11 +910,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         "created redirect identity conflicts with the final response; outcome is uncertain",
       );
     return {
+      responseBody: res.body,
       observation: {
         operation: operation.id,
         status: res.status,
         url: res.url.href,
-        ...(createdLocation ? { createdLocation } : {}),
+        ...(safeIdentity ? { createdLocation } : {}),
         output: out,
         inputs: { ...values },
         compiled: {
@@ -1244,6 +1344,28 @@ export function createExecutor(options: ExecutorOptions): Executor {
           probe.observation.status >= 200 &&
           probe.observation.status < 300 &&
           probe.observation.output?.collectionState === "empty" &&
+          record.output.envelopeKeys !== undefined &&
+          probe.observation.output.envelopeKeys !== undefined &&
+          JSON.stringify(
+            record.output.envelopeKeys.map((keys) =>
+              keys.filter(
+                (key) =>
+                  !read.inputs.some(
+                    (p) => pagingKind(p.name) && decodeURIComponent(p.name) === key,
+                  ),
+              ),
+            ),
+          ) ===
+            JSON.stringify(
+              probe.observation.output.envelopeKeys.map((keys) =>
+                keys.filter(
+                  (key) =>
+                    !read.inputs.some(
+                      (p) => pagingKind(p.name) && decodeURIComponent(p.name) === key,
+                    ),
+                ),
+              ),
+            ) &&
           probe.items.length === 0 &&
           !!probe.observation.output &&
           !probe.observation.output.truncation.items &&

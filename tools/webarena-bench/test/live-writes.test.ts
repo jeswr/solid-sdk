@@ -293,8 +293,8 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
             return { kind: "act", turtle: await action(removeSelection, { search: item.sku }) };
           },
           (input) => {
-            expect(last(input.history)?.status).toBe("error");
-            expect(last(input.history)?.observations).toContain("sab:Uncertain");
+            expect(last(input.history)?.status).toBe("done");
+            expect(last(input.history)?.observations).toContain("sab:Completed");
             expect(last(input.history)?.observations).not.toContain("schema:result");
             expect(posts()).toHaveLength(4);
             return { kind: "act", turtle: readTurtle };
