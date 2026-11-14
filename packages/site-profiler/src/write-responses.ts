@@ -45,9 +45,11 @@ export function learnWriteResponses(
     if (op.effect === "read" || op.provenance.method !== "demonstration") continue;
     if (requiresEffectVerification(op)) {
       const verification = learnEffectVerification(op, learnedOperations, trace, origin);
-      // A not-found deletion also needs a session liveness read; without one it stays Uncertain.
+      // A deletion (not-found or collection absence) also needs a session liveness read;
+      // without one it stays Uncertain.
       const liveness =
-        verification?.notFound &&
+        verification &&
+        op.actionType === `${SCHEMA}DeleteAction` &&
         learnLivenessRead(op, verification, operations, learnedOperations, trace, origin);
       if (verification && liveness) verification.liveness = liveness;
       if (verification)

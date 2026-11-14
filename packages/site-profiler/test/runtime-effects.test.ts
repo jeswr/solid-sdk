@@ -178,7 +178,10 @@ interface NotFoundBodies {
   runtimeContentType?: string;
 }
 
-/** A login page served during sign-in and the refused anonymous replay of the liveness URL. */
+/**
+ * A login page served during sign-in and the refused credentials-only control replay of the
+ * liveness URL (round 20: only control replays are liveness evidence).
+ */
 function anonymousRefusalEvidence(
   record: (seq: number, change: Partial<RecordedRequest>) => RecordedRequest,
   urls = [`${origin}/stores/main/listing`],
@@ -199,6 +202,7 @@ function anonymousRefusalEvidence(
         demonstration: undefined,
         url,
         resourceType: "replay-anonymous",
+        credentialsOnlyControl: true,
         cookieNames: [],
         authenticationContext: "anonymous-context",
         status: 302,
@@ -2041,8 +2045,16 @@ it.each([
       r.requestHeaders["x-store-id"] = "main";
     }
   }
-  const policies = learnWriteResponses([f.write, f.read], f.trace, origin);
-  expect(policies[f.write.id]?.verification).toBeDefined();
+  // Round 20 (decision 4): collection absence needs the session liveness proof too.
+  f.trace.push(
+    f.record(100, {
+      url: `${origin}/stores/main/listing`,
+      bodySample: JSON.stringify(f.liveBody()),
+    }),
+    ...anonymousRefusalEvidence(f.record),
+  );
+  const policies = learnWriteResponses([f.write, f.read, f.live], f.trace, origin);
+  expect(policies[f.write.id]?.verification?.liveness?.operation).toBe(f.live.id);
   if (mode === "query substitution")
     f.read.request.urlTemplate = f.read.request.urlTemplate.replace(
       "namespace=main",
@@ -2058,7 +2070,7 @@ it.each([
         site: origin,
         generatedAt: provenance.learnedAt,
         version: "1",
-        operations: [f.write, f.read],
+        operations: [f.write, f.read, f.live],
         flows: [],
       }),
     ),
@@ -2068,9 +2080,14 @@ it.each([
       update: async () => {},
     },
     gate: { authorize: async () => ({ kind: "allow" }) },
-    fetch: async (_url, init) => {
+    fetch: async (url, init) => {
       const method = init?.method ?? "GET";
       calls.push(method);
+      // The liveness read needs the vault header; its credentials-only control is refused.
+      if (new URL(String(url)).pathname === "/stores/main/listing")
+        return new Headers(init?.headers).has("authorization")
+          ? Response.json(f.liveBody())
+          : new Response(null, { status: 302, headers: { location: "/login" } });
       return Response.json(
         method === "POST"
           ? {}
@@ -2090,7 +2107,7 @@ it.each([
     values: () => [],
   });
   expect(result.outcome?.status).toBe(mode.endsWith("substitution") ? "uncertain" : "completed");
-  expect(calls).toEqual(mode.endsWith("substitution") ? [] : ["GET", "POST", "GET"]);
+  expect(calls).toEqual(mode.endsWith("substitution") ? [] : ["GET", "POST", "GET", "GET", "GET"]);
 });
 
 it("refuses collection learning from old body-free evidence without its envelope shape", () => {
@@ -2319,8 +2336,9 @@ it.each([
 
 it.each([
   ["verified", "completed"],
-  ["anonymous control challenge", "completed"],
-  ["anonymous control login page", "completed"],
+  // Round 20: the control must give the pinned kind (a login redirect to /login here).
+  ["anonymous control challenge", "uncertain"],
+  ["anonymous control login page", "uncertain"],
   ["anonymous control succeeds", "uncertain"],
   ["anonymous control bare 401", "uncertain"],
   ["anonymous control blocked", "uncertain"],
@@ -2330,6 +2348,7 @@ it.each([
   expect(policy?.verification?.liveness?.anonymous).toEqual({
     refusal: "login-redirect",
     loginRoutes: [`${origin}/login`],
+    route: `${origin}/login`,
   });
   expect(result.outcome?.status).toBe(outcome);
   expect(result.committed).toHaveLength(1);
@@ -2356,11 +2375,33 @@ it("r18 a matching not-found deletion without a learned liveness read is Uncerta
   expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "GET", "GET"]);
 });
 
-it("r18 collection absence is unchanged and needs no liveness read", async () => {
-  const { result, policy } = await replay("DeleteAction", "verified", true);
+// Round 20 (decision 4): collection absence needs the same liveness proof as a 404.
+it("r20 collection absence completes only with a passing liveness proof", async () => {
+  const { result, policy, calls } = await replay("DeleteAction", "verified", true);
   expect(policy?.verification?.notFound).toBeUndefined();
-  expect(policy?.verification?.liveness).toBeUndefined();
+  expect(policy?.verification?.liveness?.anonymous).toEqual({
+    refusal: "login-redirect",
+    loginRoutes: [`${origin}/login`],
+    route: `${origin}/login`,
+  });
   expect(result.outcome?.status).toBe("completed");
+  const listed = calls.filter((c) => c.url === `${origin}/stores/main/listing`);
+  expect(listed.map((c) => c.headers.has("cookie"))).toEqual([true, false]);
+});
+
+it.each([
+  "no liveness",
+  "liveness login",
+  "liveness empty",
+  "anonymous control succeeds",
+  "anonymous control challenge",
+  "anonymous control other redirect",
+])("r20 collection absence with %s is Uncertain", async (mode) => {
+  const { result, policy } = await replay("DeleteAction", mode, true);
+  expect(policy?.verification?.notFound).toBeUndefined();
+  expect(policy?.verification?.liveness === undefined).toBe(mode === "no liveness");
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
 });
 
 /** The deletion fixture with its 404 probe, plus one liveness witness changed by `change`. */

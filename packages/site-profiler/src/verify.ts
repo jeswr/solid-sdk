@@ -5,7 +5,14 @@
 // session exists) signed in. Sets the session requirement and provenance counters, flags reads whose
 // extraction finds nothing, and drops reads that fail both ways. Never replays a write.
 
-import { guardUrl, jsonEnvelope, jsonFailure, jsonRootFailure } from "@jeswr/site-executor";
+import {
+  guardUrl,
+  isSessionCredentialCookie,
+  jsonEnvelope,
+  jsonFailure,
+  jsonRootFailure,
+  type SecretCookie,
+} from "@jeswr/site-executor";
 import type { CsrfRule, Operation, RequestTemplate } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
 import { parseForms } from "./forms.js";
@@ -35,6 +42,14 @@ export interface Replayer {
       values?: Record<string, string>;
       /** Authorize each actual URL, including preparatory CSRF requests, before transmission. */
       authorize?: (url: string) => Promise<void>;
+      /**
+       * With `signedIn: false`: a credentials-only control. The request carries the signed-in
+       * context's cookies minus those classified as session credentials (and no session
+       * headers), so it differs from the signed-in read only by its credentials.
+       */
+      credentialsOnly?: boolean;
+      /** Marks a credentials-only control fetch that verifies a redirect target as a login route. */
+      loginRouteProbe?: { hopOf?: string };
     },
   ): Promise<ReplayResponse>;
 }
@@ -202,20 +217,39 @@ export async function findProbeUrl(
   return undefined;
 }
 
-/** A Replayer over a Playwright context (signed in) and plain fetch (signed out), recording into the trace. */
+/**
+ * A Replayer over a Playwright context (signed in) and plain fetch (signed out), recording into
+ * the trace. `credentialCookie` is the shared session-credential cookie classification used by
+ * credentials-only controls; without it the context-free classification applies.
+ */
 export function playwrightReplayer(
   context: import("playwright").BrowserContext,
   recorder: Recorder,
   phase: "probe" | "verify",
+  credentialCookie: (cookie: SecretCookie) => boolean = (cookie) =>
+    isSessionCredentialCookie(cookie),
 ): Replayer {
   return {
-    async get(url, { signedIn, headers: requestHeaders, request, csrf, values, authorize }) {
+    async get(
+      url,
+      {
+        signedIn,
+        headers: requestHeaders,
+        request,
+        csrf,
+        values,
+        authorize,
+        credentialsOnly,
+        loginRouteProbe,
+      },
+    ) {
       const prev = recorder.phase;
       recorder.phase = phase;
       try {
         url = guardUrl(url, recorder.siteOrigin).href;
         let res: ReplayResponse;
         let authenticationContext: string;
+        let keptCookieNames: string[] = [];
         if (signedIn) {
           recorder.rememberCookies(await context.cookies(url));
           const bound = { ...values };
@@ -307,10 +341,23 @@ export function playwrightReplayer(
           if (headers["content-type"]) res.contentType = headers["content-type"];
           if (headers.location) res.location = headers.location;
         } else {
-          authenticationContext = recorder.authenticationContext(requestHeaders ?? {}, []);
+          // A credentials-only control keeps every cookie the shared classification does not
+          // mark as a session credential; a plain anonymous replay sends none.
+          const kept = credentialsOnly
+            ? (await context.cookies(url)).filter((cookie) => {
+                recorder.rememberCookies([cookie]);
+                return !credentialCookie(cookie);
+              })
+            : [];
+          keptCookieNames = kept.map((cookie) => cookie.name);
+          authenticationContext = recorder.authenticationContext(requestHeaders ?? {}, kept);
+          const sent = new Headers(requestHeaders);
+          sent.delete("cookie");
+          if (kept.length)
+            sent.set("cookie", kept.map((cookie) => `${cookie.name}=${cookie.value}`).join("; "));
           await authorize?.(url);
           const r = await fetch(url, {
-            headers: requestHeaders,
+            headers: sent,
             redirect: "manual",
             signal: AbortSignal.timeout(5000),
           });
@@ -339,6 +386,14 @@ export function playwrightReplayer(
           status: res.status,
           bodySample: res.body,
         };
+        if (!signedIn && credentialsOnly) {
+          entry.credentialsOnlyControl = true;
+          entry.cookieNames = keptCookieNames;
+          if (loginRouteProbe) {
+            entry.loginRouteProbe = true;
+            if (loginRouteProbe.hopOf !== undefined) entry.loginRouteHopOf = loginRouteProbe.hopOf;
+          }
+        }
         if (res.authenticationFailure) {
           entry.responsePageFailure = true;
           entry.authenticationChallenge = true;

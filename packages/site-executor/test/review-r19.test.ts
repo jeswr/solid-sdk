@@ -34,24 +34,40 @@ it.each<[string, Partial<AnonymousAnswer>, string | undefined]>([
     "login-redirect",
   ],
   ["a 401 challenge", { status: 401, challenge: true }, "authentication-status"],
+  // Round 20 (decision 3): refusal wording is read only from headings, the title, the login
+  // form's labels and buttons and message-like JSON keys, never from body text or codes.
   [
-    "a 403 asking to sign in",
+    "a 403 heading asking to sign in",
+    {
+      status: 403,
+      contentType: "text/html",
+      body: "<main><h1>Please sign in to continue</h1></main>",
+    },
+    "authentication-status",
+  ],
+  [
+    "a 401 JSON message asking to log in",
+    { status: 401, contentType: "application/json", body: '{"message":"Login required"}' },
+    "authentication-status",
+  ],
+  [
+    "a 403 asking to sign in in body text",
     {
       status: 403,
       contentType: "text/html",
       body: "<main><p>Please sign in to continue.</p></main>",
     },
-    "authentication-status",
+    undefined,
   ],
   [
-    "a 401 JSON login_required",
+    "a 401 JSON login_required code",
     { status: 401, contentType: "application/json", body: '{"error":"login_required"}' },
-    "authentication-status",
+    undefined,
   ],
   [
-    "a 401 NotAuthenticated",
+    "a 401 NotAuthenticated code",
     { status: 401, contentType: "application/json", body: '{"code":"NotAuthenticated"}' },
-    "authentication-status",
+    undefined,
   ],
   [
     "a 403 login page",
@@ -219,7 +235,9 @@ const live: Operation = {
   extraction: listing,
 };
 
-function policy(anonymous: unknown = { refusal: "login-redirect", loginRoutes: login }) {
+function policy(
+  anonymous: unknown = { refusal: "login-redirect", loginRoutes: login, route: login[0] },
+) {
   // null: a legacy sidecar written before round 19, without anonymous evidence.
   return {
     createdLocationPattern: "/",
@@ -348,11 +366,13 @@ it("completes an honest deletion whose anonymous control is refused, and sends i
   expect(anonymous?.headers.get("accept")).toBe("application/json");
 });
 
-it.each<[string, () => Response, string]>([
+const pinned = (refusal: string) => policy({ refusal, loginRoutes: login });
+it.each<[string, () => Response, string, WriteResponsePolicy?]>([
   [
     "a 401 challenge",
     () => new Response("", { status: 401, headers: { "www-authenticate": "Bearer" } }),
     "completed",
+    pinned("authentication-status"),
   ],
   [
     "a login page",
@@ -361,6 +381,21 @@ it.each<[string, () => Response, string]>([
         headers: { "content-type": "text/html" },
       }),
     "completed",
+    pinned("login-page"),
+  ],
+  // Round 20 (decision 2): the control must give the pinned kind.
+  [
+    "a 401 challenge where a login redirect was learned",
+    () => new Response("", { status: 401, headers: { "www-authenticate": "Bearer" } }),
+    "uncertain",
+  ],
+  [
+    "a login page where a login redirect was learned",
+    () =>
+      new Response('<form><input type="password"></form>', {
+        headers: { "content-type": "text/html" },
+      }),
+    "uncertain",
   ],
   ["the same rows", () => Response.json(rows), "uncertain"],
   ["a bare 401", () => new Response("", { status: 401 }), "uncertain"],
@@ -394,8 +429,8 @@ it.each<[string, () => Response, string]>([
     () => Response.json(rows, { headers: { "www-authenticate": "Bearer" } }),
     "uncertain",
   ],
-])("an anonymous control answering %s leaves the deletion %s", async (_name, anonymous, outcome) => {
-  const { result, listed } = await deleteItem(anonymous);
+])("an anonymous control answering %s leaves the deletion %s", async (_name, anonymous, outcome, learned) => {
+  const { result, listed } = await deleteItem(anonymous, learned ? { policy: learned } : {});
   expect(result.outcome?.status).toBe(outcome);
   expect(result.committed).toHaveLength(1);
   expect(listed.map((c) => c.headers.has("cookie"))).toEqual([true, false]);

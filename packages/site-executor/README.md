@@ -690,8 +690,8 @@ match: the response has the extraction's format, carries no failure or authentic
 (the shared `responsePageError` predicate) and at least one row with an item-level field. The
 structure is the JSON envelope (collection ancestor keys, or the main item's keys) or the HTML
 element paths leading to the rows. A missing, unusable, denied, failed or different liveness
-response leaves the deletion Uncertain with its fingerprint retained. Collection absence is
-unchanged and needs no liveness read.
+response leaves the deletion Uncertain with its fingerprint retained. (Round 20: collection
+absence needs the liveness read too.)
 
 An element-less HTML 404 (empty, bare text, doctype plus text) is one scalar text document:
 its exact normalised text is the signature structure and the scalar token and status rules
@@ -723,3 +723,36 @@ CSRF rules (its token cannot be sent anonymously, so the control would not be th
 The not-found phrases also cover "logged in/out", "session expired/ended/timed out", "members
 only", "private", "sign up" and "register" (whole words; they only reject).
 `test/review-r19.test.ts` and `site-profiler/test/review-r19.test.ts` cover the round-19 review.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 20: the control is a **credentials-only control**. It differs from the credentialed
+liveness read only by its credentials: no session headers and none of the cookies the shared
+classification (`isSessionCredentialCookie` with the vault's declared credential cookies and
+the login routes' `sessionCookies`) marks as session credentials; every other cookie (consent,
+age gate, cookie check, bot cookies) is kept. A credential cookie kept by mistake makes the
+control render, so the deletion ends Uncertain (fails safe). The refusal is pinned: the learned
+`anonymous.refusal` kind (`login-redirect`, `authentication-status`, `login-page` or
+`login-envelope`) and, for a redirect or login envelope, `anonymous.route` (one of
+`loginRoutes`) must be reproduced exactly (`refusalEvidence` plus `sameRefusal`); a legacy
+routed declaration without `route` validates but never completes. Refusal wording
+(`refusalText`) is read only from the document title, headings outside layout chrome, the
+login form's labels and buttons, and message-like JSON values; body text, plain text, JSON
+codes and chrome (top bars, menus) wherever it sits never count. A login page is a login
+document (`isLoginDocument`): a password control or learned-route login form outside chrome,
+inside the main region when one is marked, and no item rows (articles, marked-up items, table
+data rows, grid rows) or listing (three or more list items) beside it. The login JSON
+envelope kind needs an explicit expiry or authentication flag on the root object
+(`ajaxExpired: 1`, `sessionExpired: true`, `authenticated: false`, ...) AND redirect values
+(`ajaxRedirect`, `redirect`, `loginUrl`, ...) that all resolve to one learned login route on
+the same origin. A deletion verified by an empty identity-filtered collection now needs the
+same `sessionLive` proof as 404 absence; without a learned liveness read it is Uncertain.
+Verified login routes (decision 5): `refusalTarget` gives a refusal's same-origin redirect
+target (a Location, or a flagged envelope's redirect value). The profiler may add it to
+`loginRoutes` only after fetching that exact URL as a credentials-only control (read gate
+first) and seeing a login document, directly or after one same-origin hop to an already-learned
+login route. `anonymous.verifiedRoutes` records each such route with its evidence
+(`{ route, url, via? }`); validation requires the route in `loginRoutes`, the evidence URL on
+that origin and path, and a hop to another learned route. The runtime pin is unchanged: the
+control must reproduce the exact pinned route.
+`test/review-r20.test.ts` and `site-profiler/test/review-r20.test.ts` cover the round-20
+review.

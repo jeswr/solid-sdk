@@ -7,7 +7,7 @@ import type { Operation } from "@jeswr/site-model";
 import { type Extraction, responseIdentity, SCHEMA } from "@jeswr/site-model";
 import { attribute, elementText, jsonPointer, parseHtml, selectElement } from "./dom.js";
 import { extract } from "./extract.js";
-import { AUTHENTICATION_REFUSALS, type LivenessRead } from "./liveness.js";
+import { AUTHENTICATION_REFUSALS, type LivenessRead, ROUTED_REFUSALS } from "./liveness.js";
 import { guardUrl } from "./origin.js";
 import {
   createdObjectType,
@@ -168,7 +168,13 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
         !AUTHENTICATION_REFUSALS.includes(anonymous.refusal) ||
         !Array.isArray(anonymous.loginRoutes) ||
         anonymous.loginRoutes.length > 16 ||
-        (anonymous.refusal === "login-redirect" && !anonymous.loginRoutes.length)
+        (ROUTED_REFUSALS.includes(anonymous.refusal) && !anonymous.loginRoutes.length) ||
+        // The pinned route is one of the learned login routes, and only routed kinds carry
+        // one. A legacy routed declaration without it is accepted but never completes.
+        (anonymous.route !== undefined &&
+          (!ROUTED_REFUSALS.includes(anonymous.refusal) ||
+            typeof anonymous.route !== "string" ||
+            !anonymous.loginRoutes.includes(anonymous.route)))
       )
         throw new BindingError("invalid liveness read");
       for (const route of anonymous.loginRoutes) {
@@ -181,6 +187,37 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
         }
         if (`${url.origin}${url.pathname}` !== route)
           throw new BindingError("invalid liveness read");
+      }
+      // Verified routes: each is a learned route whose evidence URL has that origin and path;
+      // a hop leads to another learned route.
+      const verified = anonymous.verifiedRoutes;
+      if (verified !== undefined) {
+        if (!Array.isArray(verified) || verified.length > 16)
+          throw new BindingError("invalid liveness read");
+        for (const entry of verified) {
+          try {
+            if (
+              !entry ||
+              typeof entry !== "object" ||
+              typeof entry.route !== "string" ||
+              typeof entry.url !== "string" ||
+              !anonymous.loginRoutes.includes(entry.route)
+            )
+              throw new BindingError("invalid liveness read");
+            const url = guardUrl(entry.url, origin);
+            if (`${url.origin}${url.pathname}` !== entry.route)
+              throw new BindingError("invalid liveness read");
+            if (entry.via !== undefined) {
+              if (typeof entry.via !== "string") throw new BindingError("invalid liveness read");
+              const via = guardUrl(entry.via, origin);
+              const hop = `${via.origin}${via.pathname}`;
+              if (hop === entry.route || !anonymous.loginRoutes.includes(hop))
+                throw new BindingError("invalid liveness read");
+            }
+          } catch {
+            throw new BindingError("invalid liveness read");
+          }
+        }
       }
     }
   }

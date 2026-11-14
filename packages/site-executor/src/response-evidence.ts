@@ -34,7 +34,7 @@ export function authenticationText(value: string): boolean {
   return AUTHENTICATION_WORDS.test(text) || (!/\s/.test(text) && authenticationMarker(text));
 }
 /** Message-like members (title, detail, message, msg, description, error_description, ...). */
-const isMessageKey = (key: string): boolean =>
+export const isMessageKey = (key: string): boolean =>
   /message|msg|detail|description|title|summary|hint|reason|cause|notice/.test(
     key.toLowerCase().replace(/[^a-z0-9]/g, ""),
   );

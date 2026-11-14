@@ -1,30 +1,33 @@
 // AUTHORED-BY Claude Opus 5.5
 // Learn one session liveness read from the demonstration: never a guessed or unwitnessed URL,
-// and only one whose anonymous replay was refused for lack of authentication.
+// and only one whose credentials-only control replay was refused for lack of authentication.
 import {
-  type AuthenticationRefusal,
-  authenticationRefusal,
   compileOperation,
   createApprovalGate,
   type EffectVerification,
   type Gate,
   guardUrl,
   isHtmlInputType,
+  isLoginDocument,
   type LivenessRead,
   livenessSignature,
   matchesLivenessSignature,
+  type RefusalEvidence,
+  refusalEvidence,
+  refusalTarget,
   requiresEffectVerification,
   sentInputValue,
+  type VerifiedLoginRoute,
 } from "@jeswr/site-executor";
 import { type Operation, SCHEMA, selectionWitnesses } from "@jeswr/site-model";
-import { parseHtml, selectAll } from "./html.js";
+import { attr, parseHtml, selectAll } from "./html.js";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
 import { isDangerousLink, sab } from "./util.js";
 import type { Replayer } from "./verify.js";
 import { learnEffectVerification } from "./write-effect.js";
 
-/** At most this many ranked candidates per deletion are replayed anonymously by the profiler. */
+/** At most this many ranked candidates per deletion are replayed as controls by the profiler. */
 const ANONYMOUS_PROBES = 3;
 
 const identityProperties = ["object", "identifier", "sku", "productID", "orderNumber"].map(
@@ -76,9 +79,11 @@ function exactUrl(url: string): string | undefined {
 }
 
 /**
- * Login routes learned from the profiling session: the login operation's endpoint, the URL the
- * sign-in form was posted to, and every page served during sign-in that carried a password form.
- * Each is a same-origin origin-plus-path; a refusal redirect must lead to one of them.
+ * Login routes learned narrowly from the profiling session: the login operation's endpoint, the
+ * URL of each sign-in page that is a login document (its password form is the page's content,
+ * not a quick-login box beside item rows or a main listing), and the action target of that
+ * page's password form when the sign-in posted to it. Each is a same-origin origin-plus-path;
+ * a refusal redirect or login envelope must lead to one of them.
  */
 export function learnedLoginRoutes(
   operations: readonly Operation[],
@@ -86,64 +91,180 @@ export function learnedLoginRoutes(
   origin: string,
 ): string[] {
   const routes = new Set<string>();
-  const add = (href: string) => {
+  const route = (href: string, base?: string) => {
     try {
-      const url = new URL(href);
-      if (url.origin === origin && !isDangerousLink(url.href))
-        routes.add(url.origin + url.pathname);
+      const url = new URL(href, base);
+      if (url.origin !== origin || isDangerousLink(url.href)) return;
+      return url.origin + url.pathname;
     } catch {
-      /* Not a URL: no route. */
+      return;
     }
+  };
+  const add = (href: string, base?: string) => {
+    const found = route(href, base);
+    if (found) routes.add(found);
   };
   for (const op of operations)
     if (op.actionType === sab("LoginAction") && !op.request.urlTemplate.includes("{"))
       add(op.request.urlTemplate);
-  for (const r of trace) {
-    if (r.phase !== "login" || r.blocked) continue;
-    if (r.method === "POST") add(r.url);
-    else if (
-      r.method === "GET" &&
-      r.status !== undefined &&
-      r.status >= 200 &&
-      r.status < 300 &&
-      /html/i.test(r.contentType ?? "") &&
-      r.bodySample &&
-      selectAll(parseHtml(r.bodySample), "input").some((el) => isHtmlInputType(el, "password"))
+  const signIn = trace.filter((r) => r.phase === "login" && !r.blocked);
+  const targets = new Set<string>();
+  for (const r of signIn) {
+    if (
+      r.method !== "GET" ||
+      r.status === undefined ||
+      r.status < 200 ||
+      r.status >= 300 ||
+      !/html/i.test(r.contentType ?? "") ||
+      !r.bodySample ||
+      r.bodyTruncated ||
+      !isLoginDocument(r.bodySample, r.url)
     )
-      add(r.url);
+      continue;
+    add(r.url);
+    for (const form of selectAll(parseHtml(r.bodySample), "form")) {
+      if (!selectAll(form, "input").some((el) => isHtmlInputType(el, "password"))) continue;
+      const action = attr(form, "action")?.trim();
+      const target = route(action || r.url, r.url);
+      if (target) targets.add(target);
+    }
+  }
+  for (const r of signIn) {
+    const target = r.method === "POST" ? route(r.url) : undefined;
+    if (target && targets.has(target)) routes.add(target);
   }
   return [...routes].sort().slice(0, 16);
 }
 
-/** Anonymous replays (no credentials, no cookies) of exactly this URL recorded in the trace. */
-function anonymousReplays(trace: readonly RecordedRequest[], url: string): RecordedRequest[] {
+/**
+ * Credentials-only control replays of exactly this URL recorded in the trace: the signed-in
+ * context's cookies minus the session credentials. A plain cookieless replay (verification's
+ * signed-out replay) is never evidence, because a gate on a non-credential cookie answers it
+ * differently from an expired session that still holds that cookie.
+ */
+function controlReplays(trace: readonly RecordedRequest[], url: string): RecordedRequest[] {
   return trace.filter(
     (r) =>
       r.resourceType === "replay-anonymous" &&
+      r.credentialsOnlyControl === true &&
+      !r.loginRouteProbe &&
       r.method === "GET" &&
       !r.blocked &&
       exactUrl(r.url) === url,
   );
 }
 
+/** Origin plus path of a same-origin, non-dangerous URL. */
+function routeOf(href: string, origin: string, base?: string): string | undefined {
+  try {
+    const url = new URL(href, base);
+    return url.origin === origin && !isDangerousLink(url.href)
+      ? url.origin + url.pathname
+      : undefined;
+  } catch {
+    return;
+  }
+}
+
+/** A complete 2xx HTML answer that is a login document. */
+function loginDocumentAnswer(r: RecordedRequest, routes: readonly string[], origin: string) {
+  return (
+    r.status !== undefined &&
+    r.status >= 200 &&
+    r.status < 300 &&
+    /html/i.test(r.contentType ?? "") &&
+    !r.bodyTruncated &&
+    !!r.bodySample &&
+    isLoginDocument(r.bodySample, r.url, routes, origin)
+  );
+}
+
 /**
- * The refusal witnessed for a candidate: at least one anonymous replay of the exact bound URL,
- * every one an authentication refusal that fails the liveness signature. A replay that timed
+ * Login routes verified from refusal redirect targets (decision 5): the profiler fetched the
+ * exact target URL as a credentials-only control and every such fetch answered a login
+ * document, or redirected once, on the same origin, to an already-learned login route whose
+ * fetched answer (every one) was a login document. A target that served anything else, or was
+ * never fetched, stays unverified.
+ */
+export function verifiedLoginRoutes(
+  trace: readonly RecordedRequest[],
+  origin: string,
+  learned: readonly string[],
+): VerifiedLoginRoute[] {
+  const probes = trace.filter(
+    (r) =>
+      r.resourceType === "replay-anonymous" &&
+      r.credentialsOnlyControl === true &&
+      r.loginRouteProbe === true &&
+      r.method === "GET" &&
+      !r.blocked,
+  );
+  const targets = new Map<string, RecordedRequest[]>();
+  for (const r of probes) {
+    if (r.loginRouteHopOf !== undefined) continue;
+    const url = exactUrl(r.url);
+    if (url) targets.set(url, [...(targets.get(url) ?? []), r]);
+  }
+  const out: VerifiedLoginRoute[] = [];
+  for (const [url, fetched] of targets) {
+    const route = routeOf(url, origin);
+    if (!route || learned.includes(route)) continue;
+    let via: string | undefined;
+    const ok = fetched.every((r) => {
+      if (loginDocumentAnswer(r, learned, origin)) return true;
+      if (r.status === undefined || r.status < 300 || r.status >= 400 || !r.redirectedTo)
+        return false;
+      const hop = exactUrl(r.redirectedTo);
+      const hopRoute = hop ? routeOf(hop, origin) : undefined;
+      if (!hop || !hopRoute || hopRoute === route || !learned.includes(hopRoute)) return false;
+      if (via !== undefined && via !== hop) return false;
+      const answers = probes.filter((q) => q.loginRouteHopOf === url && exactUrl(q.url) === hop);
+      if (!answers.length || !answers.every((q) => loginDocumentAnswer(q, learned, origin)))
+        return false;
+      via = hop;
+      return true;
+    });
+    if (ok) out.push({ route, url, ...(via !== undefined ? { via } : {}) });
+  }
+  return out.sort((a, b) => a.route.localeCompare(b.route));
+}
+
+/** The sign-in routes plus the verified redirect-target routes, with their evidence. */
+function livenessLoginRoutes(
+  operations: readonly Operation[],
+  trace: readonly RecordedRequest[],
+  origin: string,
+): { loginRoutes: string[]; verifiedRoutes: VerifiedLoginRoute[] } {
+  const learned = learnedLoginRoutes(operations, trace, origin);
+  const verified = verifiedLoginRoutes(trace, origin, learned);
+  const loginRoutes = [...new Set([...learned, ...verified.map((v) => v.route)])]
+    .sort()
+    .slice(0, 16);
+  return {
+    loginRoutes,
+    verifiedRoutes: verified.filter((v) => loginRoutes.includes(v.route)),
+  };
+}
+
+/**
+ * The refusal witnessed for a candidate: at least one credentials-only control replay of the
+ * exact bound URL, every one an authentication refusal of the same kind (and, for a redirect or
+ * login envelope, the same login route) that fails the liveness signature. A replay that timed
  * out or failed is never recorded with a status, so it is no evidence.
  */
-function anonymousRefusal(
+function controlRefusal(
   trace: readonly RecordedRequest[],
   candidate: LivenessCandidate,
   loginRoutes: readonly string[],
   origin: string,
-): AuthenticationRefusal | undefined {
-  const replays = anonymousReplays(trace, candidate.url);
-  let refusal: AuthenticationRefusal | undefined;
+): RefusalEvidence | undefined {
+  const replays = controlReplays(trace, candidate.url);
+  let refusal: RefusalEvidence | undefined;
   for (const r of replays) {
     const redirect = r.status !== undefined && r.status >= 300 && r.status < 400;
     if (r.status === undefined || (r.bodyTruncated && !redirect)) return;
     const body = r.bodySample ?? "";
-    const kind = authenticationRefusal(
+    const kind = refusalEvidence(
       {
         url: r.url,
         status: r.status,
@@ -157,6 +278,7 @@ function anonymousRefusal(
     );
     if (
       !kind ||
+      (refusal && (refusal.kind !== kind.kind || refusal.route !== kind.route)) ||
       matchesLivenessSignature(
         candidate.read.signature,
         r.status,
@@ -182,7 +304,7 @@ interface LivenessCandidate {
 }
 
 /**
- * Ranked liveness candidates for a not-found deletion: signed-in, read-gated GETs witnessed in
+ * Ranked liveness candidates for a deletion (not-found or collection absence): signed-in, read-gated GETs witnessed in
  * the deletion's authentication context, returning success with at least one item-level field
  * and no failure or authentication marker. Collection reads are preferred, then reads with
  * fewer inputs, then the earliest witness. Inputs are the witnessed constants only, a candidate
@@ -304,12 +426,13 @@ export function livenessCandidates(
 }
 
 /**
- * The liveness read for a not-found deletion: the best-ranked candidate whose exact bound URL
- * the trace holds an anonymous replay of, refused for lack of authentication (a redirect to a
- * learned login route, a 401/403 with WWW-Authenticate or authentication wording, or a login
- * page) without reproducing the liveness signature. A read that renders for anonymous visitors,
- * an anonymous replay that timed out or failed, a plain 403/5xx, a non-login redirect, or a read
- * restored without any anonymous evidence never qualifies.
+ * The liveness read for a deletion: the best-ranked candidate whose exact bound URL the trace
+ * holds credentials-only control replays of, every one refused for lack of authentication with
+ * one kind (a redirect to a learned login route, a login JSON envelope, a 401/403 with
+ * WWW-Authenticate or narrow authentication wording, or a login page) without reproducing the
+ * liveness signature. The kind and route are pinned. A read that renders without the session
+ * credentials, a replay that timed out or failed, a plain 403/5xx, a non-login redirect, a
+ * cookieless replay, or a read restored without control evidence never qualifies.
  */
 export function learnLivenessRead(
   operation: Operation,
@@ -319,7 +442,7 @@ export function learnLivenessRead(
   trace: readonly RecordedRequest[],
   origin: string,
 ): LivenessRead | undefined {
-  const loginRoutes = learnedLoginRoutes(operations, trace, origin);
+  const { loginRoutes, verifiedRoutes } = livenessLoginRoutes(operations, trace, origin);
   for (const candidate of livenessCandidates(
     operation,
     verification,
@@ -328,21 +451,27 @@ export function learnLivenessRead(
     trace,
     origin,
   )) {
-    const refusal = anonymousRefusal(trace, candidate, loginRoutes, origin);
+    const refusal = controlRefusal(trace, candidate, loginRoutes, origin);
     if (refusal)
       return {
         ...candidate.read,
-        anonymous: { refusal, loginRoutes },
+        anonymous: {
+          refusal: refusal.kind,
+          loginRoutes,
+          ...(refusal.route !== undefined ? { route: refusal.route } : {}),
+          ...(verifiedRoutes.length ? { verifiedRoutes } : {}),
+        },
       };
   }
   return;
 }
 
 /**
- * Replay the best liveness candidates of each not-found deletion once without credentials or
- * cookies, so the trace holds the anonymous evidence learning needs. Only witnessed, read-gated
- * GETs are sent: each URL is authorized through the gate before anything is transmitted, and a
- * URL already replayed anonymously is not sent again.
+ * Replay the best liveness candidates of each verified deletion (not-found or collection
+ * absence) once as a credentials-only control (the signed-in context's cookies minus the
+ * session credentials, no session headers), so the trace holds the evidence learning needs.
+ * Only witnessed, read-gated GETs are sent: each URL is authorized through the gate before
+ * anything is transmitted, and a URL already replayed as a control is not sent again.
  */
 export async function probeLivenessReads(
   operations: readonly Operation[],
@@ -361,7 +490,7 @@ export async function probeLivenessReads(
     )
       continue;
     const verification = learnEffectVerification(operation, learnedOperations, trace, origin);
-    if (!verification?.notFound) continue;
+    if (!verification) continue;
     const candidates = livenessCandidates(
       operation,
       verification,
@@ -371,10 +500,8 @@ export async function probeLivenessReads(
       origin,
     );
     for (const candidate of candidates.slice(0, ANONYMOUS_PROBES)) {
-      if (probed.has(candidate.url) || anonymousReplays(trace, candidate.url).length) continue;
-      probed.add(candidate.url);
       const read = candidate.operation;
-      const authorize = async (url: string) => {
+      const authorizer = (summary: string, purpose: string) => async (url: string) => {
         const guarded = guardUrl(url, origin);
         const decision = await gate.authorize({
           site: origin,
@@ -386,28 +513,89 @@ export async function probeLivenessReads(
           },
           effect: "read",
           inputs: candidate.values,
-          summary: `Check that ${guarded.host} refuses a signed-in read without the session`,
-          digest: JSON.stringify([read.id, guarded.href, candidate.values, "anonymous"]),
+          summary: summary.replace("{host}", guarded.host),
+          digest: JSON.stringify([read.id, guarded.href, candidate.values, purpose]),
         });
         if (decision.kind !== "allow") throw new Error("Anonymous liveness read denied");
       };
-      try {
-        await authorize(candidate.url);
-      } catch {
-        continue;
+      const control = async (
+        url: string,
+        authorize: (url: string) => Promise<void>,
+        accept: string,
+        extra: Record<string, string>,
+        loginRouteProbe?: { hopOf?: string },
+      ) => {
+        try {
+          await authorize(url);
+        } catch {
+          return;
+        }
+        return replayer
+          .get(url, {
+            signedIn: false,
+            credentialsOnly: true,
+            headers: { ...extra, accept, "cache-control": "no-cache", pragma: "no-cache" },
+            authorize,
+            ...(loginRouteProbe ? { loginRouteProbe } : {}),
+          })
+          .catch(() => undefined);
+      };
+      if (!probed.has(candidate.url) && !controlReplays(trace, candidate.url).length) {
+        probed.add(candidate.url);
+        await control(
+          candidate.url,
+          authorizer("Check that {host} refuses a signed-in read without the session", "anonymous"),
+          candidate.extraction.format === "json" ? "application/json" : "text/html",
+          read.request.headers ?? {},
+        );
       }
-      await replayer
-        .get(candidate.url, {
-          signedIn: false,
-          headers: {
-            ...read.request.headers,
-            accept: candidate.extraction.format === "json" ? "application/json" : "text/html",
-            "cache-control": "no-cache",
-            pragma: "no-cache",
+      // Decision 5: verify each refusal's redirect target that is no learned login route yet by
+      // fetching it as a credentials-only control (read gate first, no redirect followed except
+      // one same-origin hop to an already-learned login route).
+      const learned = learnedLoginRoutes(operations, trace, origin);
+      for (const replay of controlReplays(trace, candidate.url)) {
+        if (replay.status === undefined) continue;
+        const target = refusalTarget(
+          {
+            url: replay.url,
+            status: replay.status,
+            ...(replay.contentType !== undefined ? { contentType: replay.contentType } : {}),
+            body: replay.bodySample ?? "",
+            ...(replay.redirectedTo !== undefined ? { location: replay.redirectedTo } : {}),
           },
-          authorize,
-        })
-        .catch(() => undefined);
+          origin,
+        );
+        const route = target && routeOf(target, origin);
+        if (
+          !target ||
+          !route ||
+          learned.includes(route) ||
+          probed.has(`route ${target}`) ||
+          trace.some((r) => r.loginRouteProbe && !r.loginRouteHopOf && exactUrl(r.url) === target)
+        )
+          continue;
+        probed.add(`route ${target}`);
+        const verify = authorizer(
+          "Check that {host} serves its sign-in page at a refusal's redirect target",
+          "login-route",
+        );
+        const answer = await control(target, verify, "text/html", {}, {});
+        const hop = answer?.location && exactUrl(new URL(answer.location, target).href);
+        const hopRoute = hop && routeOf(hop, origin);
+        if (
+          answer &&
+          answer.status >= 300 &&
+          answer.status < 400 &&
+          hop &&
+          hopRoute &&
+          hopRoute !== route &&
+          learned.includes(hopRoute) &&
+          !probed.has(`hop ${target} ${hop}`)
+        ) {
+          probed.add(`hop ${target} ${hop}`);
+          await control(hop, verify, "text/html", {}, { hopOf: target });
+        }
+      }
     }
   }
 }

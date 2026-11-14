@@ -163,17 +163,32 @@ function fixture() {
 
 type Answer = { status: number; contentType?: string; body: string; location?: string };
 
-/** A replayer that records anonymous replays into the trace, as the Playwright replayer does. */
+type Sent = {
+  url: string;
+  signedIn: boolean;
+  headers?: Record<string, string>;
+  credentialsOnly?: boolean;
+};
+/**
+ * A replayer that records anonymous replays into the trace, as the Playwright replayer does:
+ * a credentials-only control (round 20) is flagged, a plain cookieless replay is not.
+ */
 function recordingReplayer(
   trace: RecordedRequest[],
-  answer: (url: URL, signedIn: boolean) => Answer | "timeout",
-  sent: { url: string; signedIn: boolean; headers?: Record<string, string> }[] = [],
+  answer: (url: URL, signedIn: boolean, control: boolean) => Answer | "timeout",
+  sent: Sent[] = [],
 ): Replayer {
   return {
-    async get(url, { signedIn, headers, authorize }) {
+    async get(url, { signedIn, headers, authorize, credentialsOnly }) {
       await authorize?.(url);
-      sent.push({ url, signedIn, ...(headers ? { headers } : {}) });
-      const out = answer(new URL(url), signedIn);
+      const control = !signedIn && credentialsOnly === true;
+      sent.push({
+        url,
+        signedIn,
+        ...(headers ? { headers } : {}),
+        ...(control ? { credentialsOnly } : {}),
+      });
+      const out = answer(new URL(url), signedIn, control);
       if (out === "timeout") throw new Error("The operation was aborted due to timeout");
       trace.push({
         seq: 1000 + trace.length,
@@ -185,6 +200,7 @@ function recordingReplayer(
         requestHeaders: headers ?? {},
         cookieNames: [],
         authenticationContext: signedIn ? "fictional-context" : "anonymous-context",
+        ...(control ? { credentialsOnlyControl: true } : {}),
         status: out.status,
         bodySample: out.body,
         ...(out.contentType ? { contentType: out.contentType } : {}),
@@ -373,6 +389,7 @@ it("r19 learns the listing when its anonymous replay redirects to the learned lo
     anonymous: {
       refusal: "login-redirect",
       loginRoutes: [`${origin}/login`, `${origin}/login_check`],
+      route: `${origin}/login`,
     },
   });
   // At runtime, an expired session reads the public listing with and without cookies alike:
@@ -408,7 +425,7 @@ it("r19 a verification read restored as signed-in without anonymous evidence is 
     item("43", 13, { status: 404, contentType: "text/plain;charset=UTF-8", bodySample: "" }),
     item("77", 20),
   );
-  const sent: { url: string; signedIn: boolean; headers?: Record<string, string> }[] = [];
+  const sent: Sent[] = [];
   const replayer = recordingReplayer(
     f.trace,
     (url) =>
@@ -472,7 +489,7 @@ function submitFixture() {
 
 it("r19 the honest Postmill-style /submit liveness read completes the deletion", async () => {
   const { f, submit, page } = submitFixture();
-  const sent: { url: string; signedIn: boolean; headers?: Record<string, string> }[] = [];
+  const sent: Sent[] = [];
   const replayer = recordingReplayer(
     f.trace,
     (url, signedIn) =>
@@ -485,12 +502,15 @@ it("r19 the honest Postmill-style /submit liveness read completes the deletion",
   );
   const { verified, policy } = await learn(f, [f.write, f.read, submit], replayer);
   expect(verified.find((o) => o.id === submit.id)?.session).toBe("signed-in");
-  // verify already replayed /submit anonymously, so the profiler's probe sends nothing more.
-  expect(sent.filter((s) => s.url === `${origin}/submit` && !s.signedIn)).toHaveLength(1);
+  // verify replayed /submit without cookies, which is no liveness evidence (round 20), so the
+  // profiler's probe sends one credentials-only control.
+  expect(
+    sent.filter((s) => s.url === `${origin}/submit` && !s.signedIn).map((s) => s.credentialsOnly),
+  ).toEqual([undefined, true]);
   expect(policy?.verification?.liveness).toMatchObject({
     operation: "urn:submit",
     bind: {},
-    anonymous: { refusal: "login-redirect" },
+    anonymous: { refusal: "login-redirect", route: `${origin}/login` },
   });
   const respond =
     (anonymous: () => Response) =>
@@ -542,12 +562,12 @@ it("r19 the profiler replays liveness candidates anonymously through the read ga
     learnWriteResponses(ops, f.trace, origin, verified)[f.write.id]?.verification?.liveness,
   ).toBeUndefined();
   const order: string[] = [];
-  const sent: { url: string; signedIn: boolean; headers?: Record<string, string> }[] = [];
+  const sent: Sent[] = [];
   const replayer = recordingReplayer(
     f.trace,
     () => {
       order.push("sent");
-      return { status: 401, contentType: "application/json", body: '{"error":"login_required"}' };
+      return { status: 401, contentType: "application/json", body: '{"message":"Login required"}' };
     },
     sent,
   );
@@ -575,6 +595,7 @@ it("r19 the profiler replays liveness candidates anonymously through the read ga
     {
       url: `${origin}/stores/main/listing`,
       signedIn: false,
+      credentialsOnly: true,
       headers: {
         "x-requested-with": "XMLHttpRequest",
         accept: "application/json",
@@ -646,6 +667,7 @@ it("r19 every anonymous replay of the exact URL must be refused, and a refusal t
       demonstration: undefined,
       url: `${origin}/stores/main/listing`,
       resourceType: "replay-anonymous",
+      credentialsOnlyControl: true,
       cookieNames: [],
       ...change,
     });
@@ -654,6 +676,15 @@ it("r19 every anonymous replay of the exact URL must be refused, and a refusal t
       ?.liveness;
   const refused = replay(300, { status: 302, redirectedTo: `${origin}/login`, bodySample: "" });
   expect(liveness([refused])).toBeDefined();
+  // Round 20: a plain cookieless replay is no evidence, only a credentials-only control is.
+  expect(liveness([{ ...refused, credentialsOnlyControl: undefined }])).toBeUndefined();
+  // Every control must give one refusal kind and one route.
+  expect(
+    liveness([
+      refused,
+      replay(306, { status: 401, authenticationChallenge: true, bodySample: "" }),
+    ]),
+  ).toBeUndefined();
   // A second anonymous replay that rendered the listing withdraws the evidence.
   expect(
     liveness([refused, replay(301, { bodySample: JSON.stringify(f.liveBody()) })]),

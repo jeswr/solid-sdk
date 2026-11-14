@@ -83,7 +83,12 @@ import {
   summarise,
 } from "./gate.js";
 import { isHtmlInputType } from "./html-controls.js";
-import { authenticationRefusal, type LivenessRead, matchesLivenessSignature } from "./liveness.js";
+import {
+  type LivenessRead,
+  matchesLivenessSignature,
+  refusalEvidence,
+  sameRefusal,
+} from "./liveness.js";
 import { effectiveEffect, matchRequest, maxEffect, normaliseEffect, type Target } from "./match.js";
 import {
   addAmounts,
@@ -298,9 +303,11 @@ type VerificationRead = {
   authorize: (url: URL) => Promise<boolean>;
   preparation?: boolean;
   /**
-   * The anonymous liveness control: no session headers and no cookies are sent, nothing the
-   * response sets reaches the session, and an authentication challenge is reported rather
-   * than thrown, because a refusal is the expected answer.
+   * The credentials-only liveness control: the same request without the session credentials.
+   * No session headers and none of the cookies the shared classification marks as session
+   * credentials are sent; every other cookie is kept. Nothing the response sets reaches the
+   * session, and an authentication challenge is reported rather than thrown, because a
+   * refusal is the expected answer.
    */
   anonymous?: boolean;
 };
@@ -510,18 +517,20 @@ export function createExecutor(options: ExecutorOptions): Executor {
     }
   }
 
+  /** The shared cookie classification with this run's declared credential cookies. */
+  function cookieContext(ctx: RunContext): CookieSecretContext {
+    return {
+      ...credentialContext,
+      declaredNames: [...(credentialContext.declaredNames ?? []), ...(ctx.credentialCookies ?? [])],
+    };
+  }
+
   function authenticationContext(ctx: RunContext): string {
     return JSON.stringify([
       ctx.jar
         .filter(
           (cookie) =>
-            isSessionCredentialCookie(cookie, {
-              ...credentialContext,
-              declaredNames: [
-                ...(credentialContext.declaredNames ?? []),
-                ...(ctx.credentialCookies ?? []),
-              ],
-            }) &&
+            isSessionCredentialCookie(cookie, cookieContext(ctx)) &&
             (cookie.expires === undefined ||
               cookie.expires < 0 ||
               cookie.expires > now().getTime() / 1000),
@@ -610,7 +619,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         h.set("cache-control", "no-cache");
         h.set("pragma", "no-cache");
       }
-      const cookies = anonymous ? [] : cookiesFor(ctx.jar, url, now());
+      const applicable = cookiesFor(ctx.jar, url, now());
+      // The control differs from the credentialed read only by its credentials: a cookie
+      // misclassified as a non-credential makes the control render, which fails safe.
+      const cookies = anonymous
+        ? applicable.filter((cookie) => !isSessionCredentialCookie(cookie, cookieContext(ctx)))
+        : applicable;
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       // Fetch's Headers object is authoritative for trimming and header names.
       // Capture session values after the final header decoration on every hop.
@@ -1035,7 +1049,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
           after.status >= 200 &&
           after.status < 300 &&
           !!read.extraction &&
-          emptyEffectCollection(read.extraction, after.body, baseline)
+          emptyEffectCollection(read.extraction, after.body, baseline) &&
+          // An empty identity-filtered collection is the 200-status twin of a privacy 404:
+          // it counts only with the same session liveness proof.
+          (await sessionLive(ctx, operation, declaration, stable))
         );
       }
       if (after.status < 200 || after.status >= 300 || !read.extraction) return false;
@@ -1075,9 +1092,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
   /**
    * Run the learned liveness read through the read gate, with the verification cache bypass
    * and freshness rules, and require its learned success signature. Then send the same read
-   * once with no credentials and no cookies (read gate first, same cache bypass, no redirect
-   * followed): it must be an authentication refusal that does not reproduce the signature, so
-   * the proof depends on the credentials. A missing, unusable, denied, redirected, stale or
+   * once as a credentials-only control (no session headers and no session credential cookies,
+   * every other cookie kept; read gate first, same cache bypass, no redirect followed): it must
+   * be refused with the pinned refusal kind and route and not reproduce the signature, so the
+   * proof depends on the credentials alone. A missing, unusable, denied, redirected, stale or
    * different response, or an anonymous answer that is not a refusal, proves nothing.
    */
   async function sessionLive(
@@ -1185,7 +1203,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
       )
     )
       return false;
-    // The anonymous control: the same read, without credentials, must be refused.
+    // The credentials-only control: the same read without the session credentials must be
+    // refused with the pinned kind (and, for a redirect or login envelope, the pinned route).
     const control = { authorize: authorizer(true), anonymous: true };
     if (!(await control.authorize(compiled.url))) return false;
     const anon = await send(
@@ -1201,20 +1220,23 @@ export function createExecutor(options: ExecutorOptions): Executor {
     );
     if (anon.stale || !stable() || anon.redirectLocations.length > 1) return false;
     return (
-      authenticationRefusal(
-        {
-          url: compiled.url.href,
-          status: anon.status,
-          ...(anon.contentType !== undefined ? { contentType: anon.contentType } : {}),
-          body: anon.body,
-          ...(anon.redirectLocations[0] !== undefined
-            ? { location: anon.redirectLocations[0] }
-            : {}),
-          challenge: anon.challenge === true,
-        },
-        anonymous.loginRoutes,
-        origin,
-      ) !== undefined &&
+      sameRefusal(
+        anonymous,
+        refusalEvidence(
+          {
+            url: compiled.url.href,
+            status: anon.status,
+            ...(anon.contentType !== undefined ? { contentType: anon.contentType } : {}),
+            body: anon.body,
+            ...(anon.redirectLocations[0] !== undefined
+              ? { location: anon.redirectLocations[0] }
+              : {}),
+            challenge: anon.challenge === true,
+          },
+          anonymous.loginRoutes,
+          origin,
+        ),
+      ) &&
       !matchesLivenessSignature(
         liveness.signature,
         anon.status,

@@ -503,8 +503,8 @@ operation's endpoint, the sign-in form's post target and every sign-in page with
 control). A replay that timed out or failed records nothing, so it is no evidence, and neither
 is a plain 403/5xx, a non-login redirect, a page rendered for anonymous visitors, or a read
 restored as signed-in without anonymous evidence. After the deleted-resource probe,
-`probeLivenessReads` replays the best three candidates of each not-found deletion once without
-credentials or cookies, each URL authorized through the read gate first; a URL already replayed
+`probeLivenessReads` replays the best three candidates of each verified deletion once as a
+credentials-only control (round 20), each URL authorized through the read gate first; a URL already replayed
 anonymously is not sent again. Reads with CSRF rules are never candidates. Replays record
 `authenticationChallenge` when the answer carried WWW-Authenticate.
 
@@ -512,3 +512,29 @@ Immediate-baseline change evidence now needs every earlier sent write of the ses
 completed before the read started; if any earlier write has no recorded completion there is no
 change evidence. Round-19 regressions are in `test/review-r19.test.ts` and
 `test/runtime-effects.test.ts`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 20: liveness evidence comes only from **credentials-only control** replays
+(`credentialsOnlyControl: true` on a `replay-anonymous` entry): `playwrightReplayer` sends the
+browser context's cookies minus those the shared classification marks as session credentials
+(the profile passes `isSessionCredentialCookie` with the login cookies and learned model), and
+no session headers. Verification's plain cookieless replays are never liveness evidence, so a
+site gating on a consent, age or cookie-check cookie cannot pass its gate off as an
+authentication refusal. Every control replay of the exact URL must give one refusal kind and,
+for a redirect or login envelope, one login route; both are pinned in the policy
+(`anonymous.refusal`, `anonymous.route`). `learnedLoginRoutes` is narrow: the login
+operation's endpoint, sign-in pages that are login documents (`isLoginDocument`: the password
+form is the page's content, never a quick-login box beside item rows or a main listing), and
+the action targets of those pages' password forms when the sign-in posted to them; other
+sign-in-phase POSTs are not routes. `probeLivenessReads` and `learnWriteResponses` now cover
+every verified deletion, so collection absence learns (and needs) a liveness read too.
+Decision 5: after a candidate's control, `probeLivenessReads` fetches each refusal's
+redirect target that is not yet a login route (`refusalTarget`: a same-origin Location or
+flagged envelope redirect) once as a credentials-only control, read gate first, with no
+redirect followed except one same-origin hop to an already-learned login route (recorded as
+`loginRouteProbe` / `loginRouteHopOf`). `verifiedLoginRoutes` accepts the target only when
+every such fetch answered a complete 2xx login document (or every hop did); the policy records
+the route and its evidence in `anonymous.verifiedRoutes`. A target serving anything else,
+another origin or a target never fetched (for example because the gate denied it) stays
+rejected.
+Round-20 regressions are in `test/review-r20.test.ts`.

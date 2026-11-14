@@ -85,10 +85,17 @@ export {
   AUTHENTICATION_REFUSALS,
   type AuthenticationRefusal,
   authenticationRefusal,
+  isLoginDocument,
   type LivenessRead,
   type LivenessSignature,
   livenessSignature,
   matchesLivenessSignature,
+  type RefusalEvidence,
+  ROUTED_REFUSALS,
+  refusalEvidence,
+  refusalTarget,
+  sameRefusal,
+  type VerifiedLoginRoute,
 } from "./liveness.js";
 export {
   effectiveEffect,

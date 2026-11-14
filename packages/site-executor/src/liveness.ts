@@ -2,14 +2,10 @@
 // Session liveness proof: a learned read that only answers with data in a live session.
 import { createHash } from "node:crypto";
 import type { Extraction } from "@jeswr/site-model";
+import type { AnyNode, Element } from "domhandler";
 import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "./dom.js";
 import { isHtmlInputType } from "./html-controls.js";
-import {
-  elementChildren,
-  jsonEnvelope,
-  mainDocumentText,
-  responsePageError,
-} from "./response-evidence.js";
+import { isMessageKey, jsonEnvelope, responsePageError } from "./response-evidence.js";
 
 /** Status, media type and opaque structure of a learned read's success response. */
 export interface LivenessSignature {
@@ -28,22 +24,47 @@ export interface LivenessRead {
   bind: Record<string, { value: string }>;
   signature: LivenessSignature;
   /**
-   * Learned proof that the read depends on the credentials: an anonymous replay of the exact
-   * bound URL was refused for lack of authentication (the kind recorded here), and the learned
-   * login routes a refusal redirect may lead to. Without it the deletion stays Uncertain.
+   * Learned proof that the read depends on the credentials: a credentials-only control replay
+   * of the exact bound URL (the same request without the session credentials, every other
+   * cookie kept) was refused for lack of authentication. `refusal` pins the kind, `route` the
+   * learned login route a redirect or login envelope led to, and `loginRoutes` the learned
+   * login routes. At runtime the control must give the same kind and route; without this
+   * evidence the deletion stays Uncertain.
    */
-  anonymous: { refusal: AuthenticationRefusal; loginRoutes: string[] };
+  anonymous: {
+    refusal: AuthenticationRefusal;
+    loginRoutes: string[];
+    route?: string;
+    /** Login routes learned from verified redirect targets, with their evidence. */
+    verifiedRoutes?: VerifiedLoginRoute[];
+  };
 }
 
-/** How a site refuses a read without credentials. */
-export type AuthenticationRefusal = "login-redirect" | "authentication-status" | "login-page";
+/** How a site refuses a read without its session credentials. */
+export type AuthenticationRefusal =
+  | "login-redirect"
+  | "authentication-status"
+  | "login-page"
+  | "login-envelope";
 export const AUTHENTICATION_REFUSALS: readonly AuthenticationRefusal[] = [
   "login-redirect",
   "authentication-status",
   "login-page",
+  "login-envelope",
+];
+/** Refusal kinds that lead to a learned login route, which is pinned with the kind. */
+export const ROUTED_REFUSALS: readonly AuthenticationRefusal[] = [
+  "login-redirect",
+  "login-envelope",
 ];
 
-/** One answer to a read sent without credentials or cookies. */
+/** A classified refusal: its kind and, for a redirect or login envelope, the login route. */
+export interface RefusalEvidence {
+  kind: AuthenticationRefusal;
+  route?: string;
+}
+
+/** One answer to a read sent without the session credentials. */
 export interface AnonymousAnswer {
   /** The URL that was requested. */
   url: string;
@@ -72,100 +93,349 @@ const refusalWords = (text: string): boolean =>
       .trim(),
   );
 
-/** Same-origin URL whose path is one of the learned login routes. */
-function loginRoute(
+/** The learned login route (origin plus path) a same-origin URL leads to, if any. */
+function matchedLoginRoute(
   target: string,
   base: string,
   loginRoutes: readonly string[],
   origin: string,
-): boolean {
+): string | undefined {
   try {
     const url = new URL(target, base);
-    return (
-      url.origin === origin &&
-      loginRoutes.some((route) => {
+    if (url.origin !== origin) return;
+    return loginRoutes.find((route) => {
+      try {
         const learned = new URL(route);
         return learned.origin === origin && learned.pathname === url.pathname;
-      })
-    );
+      } catch {
+        return false;
+      }
+    });
   } catch {
-    return false;
+    return;
   }
 }
 
 const isHtml = (contentType: string | undefined, body: string) =>
   /html/i.test(contentType ?? "") || /^\s*</.test(body);
+const isJson = (contentType: string | undefined, body: string) =>
+  /json/i.test(contentType ?? "") || /^\s*[[{]/.test(body);
 
-/** A login page: a password control, or a form posting to a learned login route. */
+/** Layout chrome: banners, menus, navigation, sidebars and footers, by element or role. */
+const CHROME_TAGS = new Set(["header", "nav", "footer", "aside", "menu"]);
+const CHROME_ROLES =
+  /(?:^|\s)(?:banner|navigation|contentinfo|complementary|menu|menubar|toolbar)(?:\s|$)/i;
+const NON_RENDERED = new Set(["head", "script", "style", "template", "noscript"]);
+const isElement = (node: AnyNode | null): node is Element =>
+  !!node && "name" in node && "attribs" in node;
+function ancestry(node: AnyNode, test: (el: Element) => boolean): boolean {
+  for (let at: AnyNode | null = node; at; at = at.parent)
+    if (isElement(at) && test(at)) return true;
+  return false;
+}
+const inChrome = (node: AnyNode) =>
+  ancestry(
+    node,
+    (el) =>
+      CHROME_TAGS.has(el.name.toLowerCase()) || CHROME_ROLES.test(attribute(el, "role") ?? ""),
+  );
+const nonRendered = (node: AnyNode) =>
+  ancestry(node, (el) => NON_RENDERED.has(el.name.toLowerCase()));
+const within = (outer: AnyNode, node: AnyNode) => ancestry(node, (el) => el === outer);
+
+/**
+ * The login controls of a document: forms holding a password control or posting to a learned
+ * login route, and password controls outside any form.
+ */
+function loginRegions(
+  doc: ReturnType<typeof parseHtml>,
+  url: string,
+  loginRoutes: readonly string[],
+  origin: string,
+): Element[] {
+  const forms = selectElements("form", doc).filter(
+    (form) =>
+      !nonRendered(form) &&
+      (selectElements("input", form).some((el) => isHtmlInputType(el, "password")) ||
+        (() => {
+          const action = attribute(form, "action");
+          return (
+            !!action?.trim() && matchedLoginRoute(action, url, loginRoutes, origin) !== undefined
+          );
+        })()),
+  );
+  const loose = selectElements("input", doc).filter(
+    (el) =>
+      isHtmlInputType(el, "password") &&
+      !nonRendered(el) &&
+      !forms.some((form) => within(form, el)) &&
+      !ancestry(el, (a) => a.name.toLowerCase() === "form"),
+  );
+  return [...forms, ...loose];
+}
+
+/** Item rows: repeated records, table data rows and marked-up items. */
+const ROW_SELECTOR =
+  "tr, li, article, [role=row], [role=listitem], [role=article], [itemscope], [itemtype]";
+
+/**
+ * A login document: its login controls are the page's content, not a quick-login box beside
+ * other content. Some login control sits outside layout chrome; when the page marks a main
+ * region, a login control is inside it; and outside the login controls and chrome there are no
+ * item rows (an article, a marked-up item, a table data row, a grid row) and no listing (three
+ * or more list items). A page with item rows or a main listing is never a login page.
+ */
+export function isLoginDocument(
+  body: string,
+  url: string,
+  loginRoutes: readonly string[] = [],
+  origin = "",
+): boolean {
+  if (!body.trim()) return false;
+  const doc = parseHtml(body);
+  const regions = loginRegions(doc, url, loginRoutes, origin);
+  const primary = regions.filter((region) => !inChrome(region));
+  if (!primary.length) return false;
+  const mains = selectElements("main, [role=main]", doc).filter((el) => !nonRendered(el));
+  if (mains.length && !primary.some((region) => mains.some((main) => within(main, region))))
+    return false;
+  const rows = selectElements(ROW_SELECTOR, doc).filter(
+    (el) =>
+      !nonRendered(el) &&
+      !inChrome(el) &&
+      !regions.some((region) => within(region, el) || within(el, region)),
+  );
+  const item = (el: Element) => {
+    const name = el.name.toLowerCase();
+    return (
+      name === "article" ||
+      el.attribs.itemscope !== undefined ||
+      el.attribs.itemtype !== undefined ||
+      /^(?:row|article)$/i.test(attribute(el, "role")?.trim() ?? "") ||
+      (name === "tr" && selectElements("td", el).length > 0)
+    );
+  };
+  if (rows.some(item)) return false;
+  return rows.filter((el) => !item(el)).length < 3;
+}
+
+/** A login page: a login document holding a password control or a learned-route login form. */
 function loginPage(answer: AnonymousAnswer, loginRoutes: readonly string[], origin: string) {
-  if (!answer.body || !isHtml(answer.contentType, answer.body)) return false;
-  const doc = parseHtml(answer.body);
   return (
-    selectElements("input", doc).some((el) => isHtmlInputType(el, "password")) ||
-    selectElements("form", doc).some((el) => {
-      const action = attribute(el, "action");
-      return !!action?.trim() && loginRoute(action, answer.url, loginRoutes, origin);
-    })
+    !!answer.body &&
+    isHtml(answer.contentType, answer.body) &&
+    isLoginDocument(answer.body, answer.url, loginRoutes, origin)
   );
 }
 
-/** Authentication wording in a refusal body: JSON strings, document text or plain text. */
-function refusalText(body: string, contentType: string | undefined): boolean {
-  if (!body.trim()) return false;
-  if (/json/i.test(contentType ?? "") || /^\s*[[{]/.test(body)) {
-    try {
-      const strings: string[] = [];
-      const walk = (value: unknown, depth: number): void => {
-        if (strings.length >= 200 || depth > 16) return;
-        if (typeof value === "string") strings.push(value);
-        else if (value && typeof value === "object")
-          for (const member of Object.values(value)) walk(member, depth + 1);
-      };
-      walk(JSON.parse(body), 0);
-      return strings.some(refusalWords);
-    } catch {
-      /* Not JSON after all: read it as text. */
-    }
-  }
-  if (isHtml(contentType, body)) {
-    const doc = parseHtml(body);
-    if (!elementChildren(doc)) return refusalWords(elementText(doc));
-    return (
-      selectElements("title, h1, h2, h3, h4, h5, h6, [role=heading]", doc).some((el) =>
-        refusalWords(elementText(el)),
-      ) || refusalWords(mainDocumentText(doc))
-    );
-  }
-  return refusalWords(body);
+/** Bounded message-like JSON strings (title, message, detail, error_description, ...). */
+function messageStrings(doc: unknown): string[] {
+  const strings: string[] = [];
+  const walk = (value: unknown, depth: number, message: boolean): void => {
+    if (strings.length >= 200 || depth > 16) return;
+    if (typeof value === "string") {
+      if (message) strings.push(value);
+    } else if (Array.isArray(value)) {
+      for (const member of value) walk(member, depth + 1, message);
+    } else if (value && typeof value === "object")
+      for (const [key, member] of Object.entries(value)) walk(member, depth + 1, isMessageKey(key));
+  };
+  walk(doc, 0, false);
+  return strings;
 }
 
 /**
- * Classify an answer to a read sent without credentials or cookies. It is an authentication
- * refusal only when it is a redirect to a learned login route, a 401/403 carrying
- * WWW-Authenticate or authentication wording (or a login page), or a 2xx login page (a
- * password control or a form posting to a learned login route). Timeouts, network errors,
- * plain 403/5xx answers, other redirects and anything else are not.
+ * Authentication wording in a refusal body, read narrowly: message-like JSON values, the
+ * document title, headings outside layout chrome, and the labels and buttons of the login form.
+ * Body text, layout chrome (top bars, menus) wherever it sits, plain text and other JSON strings
+ * are never read.
  */
+function refusalText(
+  answer: AnonymousAnswer,
+  loginRoutes: readonly string[],
+  origin: string,
+): boolean {
+  const { body, contentType } = answer;
+  if (!body.trim()) return false;
+  if (isJson(contentType, body)) {
+    try {
+      return messageStrings(JSON.parse(body)).some(refusalWords);
+    } catch {
+      /* Not JSON after all. */
+    }
+  }
+  if (!isHtml(contentType, body)) return false;
+  const doc = parseHtml(body);
+  const title = selectElements("title", doc).some((el) => refusalWords(elementText(el)));
+  const headings = selectElements("h1, h2, h3, h4, h5, h6, [role=heading]", doc).some(
+    (el) => !nonRendered(el) && !inChrome(el) && refusalWords(elementText(el)),
+  );
+  const form = loginRegions(doc, answer.url, loginRoutes, origin)
+    .filter((region) => region.name.toLowerCase() === "form" && !inChrome(region))
+    .some((region) =>
+      selectElements("label, legend, button, input", region).some((el) =>
+        el.name.toLowerCase() === "input"
+          ? (isHtmlInputType(el, "submit") || isHtmlInputType(el, "button")) &&
+            refusalWords(attribute(el, "value") ?? "")
+          : refusalWords(elementText(el)),
+      ),
+    );
+  return title || headings || form;
+}
+
+const FLAG_TRUE =
+  /^(?:ajaxexpired|expired|sessionexpired|sessiontimeout|sessiontimedout|authrequired|authenticationrequired|loginrequired|requireslogin|requiresauthentication|needslogin|unauthenticated|notauthenticated|reauthenticate|relogin)$/;
+const FLAG_FALSE = /^(?:authenticated|isauthenticated|loggedin|isloggedin|signedin|issignedin)$/;
+const REDIRECT_KEY =
+  /^(?:ajaxredirect|redirect|redirecturl|redirecturi|redirectto|loginurl|loginuri|loginredirect|location)$/;
+const keyName = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, "");
+const truthy = (v: unknown) =>
+  v === true || v === 1 || (typeof v === "string" && /^(?:1|true|yes)$/i.test(v.trim()));
+const falsy = (v: unknown) =>
+  v === false || v === 0 || (typeof v === "string" && /^(?:0|false|no)$/i.test(v.trim()));
+
+/** The redirect values of a JSON envelope carrying an explicit expiry/authentication flag. */
+function envelopeRedirects(answer: AnonymousAnswer): string[] | undefined {
+  if (!isJson(answer.contentType, answer.body)) return;
+  let doc: unknown;
+  try {
+    doc = JSON.parse(answer.body);
+  } catch {
+    return;
+  }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return;
+  const entries = Object.entries(doc).map(([key, value]) => [keyName(key), value] as const);
+  const flagged = entries.some(
+    ([key, value]) =>
+      (FLAG_TRUE.test(key) && truthy(value)) || (FLAG_FALSE.test(key) && falsy(value)),
+  );
+  if (!flagged) return;
+  const redirects = entries.filter(([key]) => REDIRECT_KEY.test(key)).map(([, value]) => value);
+  if (!redirects.length || redirects.some((value) => typeof value !== "string" || !value.trim()))
+    return;
+  return redirects as string[];
+}
+
+/**
+ * The login route of a login JSON envelope, or undefined. The root object must carry an
+ * explicit expiry or authentication flag (`ajaxExpired: 1`, `sessionExpired: true`,
+ * `authenticated: false`, ...) AND redirect values (`ajaxRedirect`, `redirect`, `loginUrl`,
+ * ...) that all resolve to one learned login route on the same origin.
+ */
+function loginEnvelope(
+  answer: AnonymousAnswer,
+  loginRoutes: readonly string[],
+  origin: string,
+): string | undefined {
+  const redirects = envelopeRedirects(answer);
+  if (!redirects) return;
+  const routes = new Set(
+    redirects.map((value) => matchedLoginRoute(value, answer.url, loginRoutes, origin)),
+  );
+  const [route] = routes;
+  return routes.size === 1 && route !== undefined ? route : undefined;
+}
+
+/**
+ * Where a refused answer sends the visitor, before any login route is known: the Location of
+ * a redirect, or the redirect value of a flagged login envelope (all its redirect values must
+ * resolve to one origin plus path). Only a same-origin URL (fragment removed) is returned, so
+ * the profiler can verify it as a login route by fetching it as a credentials-only control.
+ */
+export function refusalTarget(answer: AnonymousAnswer, origin: string): string | undefined {
+  const values = REDIRECTS.has(answer.status)
+    ? answer.location !== undefined
+      ? [answer.location]
+      : undefined
+    : (answer.status >= 200 && answer.status < 300) ||
+        answer.status === 401 ||
+        answer.status === 403
+      ? envelopeRedirects(answer)
+      : undefined;
+  if (!values?.length) return;
+  try {
+    const urls = values.map((value) => new URL(value, answer.url));
+    if (urls.some((url) => url.origin !== origin)) return;
+    if (new Set(urls.map((url) => url.pathname)).size !== 1) return;
+    const [first] = urls;
+    if (!first) return;
+    first.hash = "";
+    return first.href;
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Positive evidence that a redirect target is a login route: the profiler fetched `url`
+ * as a credentials-only control (read gate first) and the answer, or the answer of one
+ * same-origin hop `via` an already-learned login route, was a login document. `route` is the
+ * target's origin plus path.
+ */
+export interface VerifiedLoginRoute {
+  route: string;
+  url: string;
+  via?: string;
+}
+
+/**
+ * Classify an answer to a read sent without its session credentials. It is an authentication
+ * refusal only when it is
+ * - `login-redirect`: a redirect to a learned login route (the route is returned);
+ * - `login-envelope`: a 2xx/401/403 JSON envelope with an explicit expiry or authentication
+ *   flag and a redirect value resolving to a learned login route (the route is returned);
+ * - `authentication-status`: a 401/403 carrying WWW-Authenticate, narrow authentication
+ *   wording or a login page;
+ * - `login-page`: a 2xx login document (password control or learned-route login form, and no
+ *   item rows or main listing beside it).
+ * Timeouts, network errors, plain 403/5xx answers, other redirects and anything else are not.
+ */
+export function refusalEvidence(
+  answer: AnonymousAnswer,
+  loginRoutes: readonly string[],
+  origin: string,
+): RefusalEvidence | undefined {
+  if (!Number.isSafeInteger(answer.status)) return;
+  if (REDIRECTS.has(answer.status)) {
+    const route =
+      answer.location !== undefined
+        ? matchedLoginRoute(answer.location, answer.url, loginRoutes, origin)
+        : undefined;
+    return route ? { kind: "login-redirect", route } : undefined;
+  }
+  const status2xx = answer.status >= 200 && answer.status < 300;
+  const denied = answer.status === 401 || answer.status === 403;
+  if (status2xx || denied) {
+    const route = loginEnvelope(answer, loginRoutes, origin);
+    if (route) return { kind: "login-envelope", route };
+  }
+  if (denied)
+    return answer.challenge ||
+      refusalText(answer, loginRoutes, origin) ||
+      loginPage(answer, loginRoutes, origin)
+      ? { kind: "authentication-status" }
+      : undefined;
+  if (status2xx && loginPage(answer, loginRoutes, origin)) return { kind: "login-page" };
+  return;
+}
+
+/** The refusal kind of `refusalEvidence`, without the route. */
 export function authenticationRefusal(
   answer: AnonymousAnswer,
   loginRoutes: readonly string[],
   origin: string,
 ): AuthenticationRefusal | undefined {
-  if (!Number.isSafeInteger(answer.status)) return;
-  if (REDIRECTS.has(answer.status))
-    return answer.location !== undefined &&
-      loginRoute(answer.location, answer.url, loginRoutes, origin)
-      ? "login-redirect"
-      : undefined;
-  if (answer.status === 401 || answer.status === 403)
-    return answer.challenge ||
-      refusalText(answer.body, answer.contentType) ||
-      loginPage(answer, loginRoutes, origin)
-      ? "authentication-status"
-      : undefined;
-  if (answer.status >= 200 && answer.status < 300 && loginPage(answer, loginRoutes, origin))
-    return "login-page";
-  return;
+  return refusalEvidence(answer, loginRoutes, origin)?.kind;
+}
+
+/** True when a refusal reproduces the pinned kind and, for a routed kind, the pinned route. */
+export function sameRefusal(
+  pinned: { refusal: AuthenticationRefusal; route?: string },
+  evidence: RefusalEvidence | undefined,
+): boolean {
+  if (!evidence || evidence.kind !== pinned.refusal) return false;
+  if (!ROUTED_REFUSALS.includes(pinned.refusal)) return evidence.route === undefined;
+  return pinned.route !== undefined && evidence.route === pinned.route;
 }
 
 /** True when the response reproduces the learned liveness signature. */

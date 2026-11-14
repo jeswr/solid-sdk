@@ -74,6 +74,19 @@ export interface RecordedRequest {
   responseFlash?: string[];
   /** The response carried WWW-Authenticate or Proxy-Authenticate (profiler replays). */
   authenticationChallenge?: boolean;
+  /**
+   * A credentials-only control replay (`resourceType: "replay-anonymous"`): the browser
+   * context's cookies minus the session credentials, no session headers. Only these replays
+   * are liveness evidence; a plain cookieless replay never is.
+   */
+  credentialsOnlyControl?: boolean;
+  /**
+   * A credentials-only control fetch of a refusal's redirect target, made to verify it as a
+   * login route (round 20, decision 5). `loginRouteHopOf` marks the one same-origin hop
+   * followed when that target redirected to an already-learned login route.
+   */
+  loginRouteProbe?: boolean;
+  loginRouteHopOf?: string;
   /** True when the profiler's guard refused to send it (a non-GET outside demonstrations and login). */
   blocked?: boolean;
 }
