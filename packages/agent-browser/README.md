@@ -235,7 +235,7 @@ labelled `UNTRUSTED PAGE CONTENT` and `untrusted: true`. Defaults are 100 nodes 
 characters, with explicit truncation. Individual names and values are capped at 300 characters
 including a visible `[truncated]` marker; clipping either sets the snapshot's `truncated` flag.
 Refs expire after navigation or DOM removal. Actions are `goto`, `click`, `fill`, `select`,
-`press`, and `back`, with a 200 ms minimum interval;
+`press`, focused `type`, and `back`, with a 200 ms minimum interval;
 `clock` and bounds are injectable. `launch` allows host browser configuration and launch
 counting. `SAB_CHROMIUM_PATH` is respected by the default launcher.
 
@@ -338,22 +338,36 @@ Credential query and fragment values enter the shared context through the execut
 navigations, redirect hops, form actions, links and recorded requests. Before snapshot rendering,
 the driver reads live password-like `.value` properties, including `current-password`,
 `new-password`, `one-time-code` and every control covered by snapshot masking. Input and submit
-listeners also capture values before navigation can remove the document; fill, keypress,
-paste and script entry use the same registration path.
+listeners also capture values before navigation can remove the document. Script-set values
+and complete credential fills use the same registration path.
 
 `test/fallback-review-r6.test.ts` checks the `sid` name echo across both snapshot forms,
-driver/task traces, replay RDF and subsequent planner input, plus keypress passwords,
+driver/task traces, replay RDF and subsequent planner input, plus credential entry,
 script-set live values, one-time codes, credential fragments and URL intake boundaries.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-Driver-entered credential text and its resulting control value are registered before input
-dispatch, including fills, printable key presses and clipboard pastes into closed shadow trees.
-Protection includes accessibility password labels/states and credential autocomplete attributes.
+Protected controls accept complete `fill` values and only the exact `press` keys `Enter`,
+`Tab` and `Escape`. Printable keys, editing/selection keys, modified keys (including paste
+shortcuts) and `type` are refused before dispatch with a safe reason. The driver determines
+protection from fresh CDP focus inspection, descending through closed shadow roots; unknown
+focus, failed inspection and timeouts refuse keyboard input. Masked shadow hosts pass their
+protection to inner controls. Protection includes accessibility
+password labels/states, password-like DOM attributes, credential autocomplete (`username`,
+`current-password`, `new-password`, `one-time-code`, `webauthn`) and values the snapshot masks.
+Ordinary controls retain printable and editing keys; `type` rechecks focus before each character.
+Complete credential fills are registered as secrets before dispatch, including into closed
+shadow roots, and fill/type text is masked in planner history. Refused actions never enter
+history, and refusal reasons never quote supplied keys/text. Snapshots, traces and approvals
+use the shared secret redactor and registration floor described above.
+
 Live collection uses CDP's shadow-piercing DOM traversal to read values in closed shadow roots;
 the configured `timeoutMs` bounds collection. Collection failure or timeout withholds the snapshot
 with a safe reason. Cookie persistence on close runs independently of collection and renderer
 evaluation, preserves the loaded revision, and makes one update attempt for a changed jar.
 Concurrent and repeated closes await the same pending persistence and cleanup.
-`test/fallback-review-r7.test.ts` covers closed-shadow press/script echoes in both snapshot forms,
+`test/fallback-review-r7.test.ts` covers closed-shadow press refusal and script echoes in both snapshot forms,
 registration before dispatch even when input handlers remove controls, collection failures/timeouts,
 and exactly one cookie update after `Target crashed` or collection timeout.
+`test/fallback-review-r8.test.ts` covers the edited-password and per-keystroke-history
+reproductions, zero input dispatch on refusal, masked closed-shadow fills/history/approvals,
+allowed Enter/Tab/Escape, unknown focus and focus changes before or during keyboard actions.

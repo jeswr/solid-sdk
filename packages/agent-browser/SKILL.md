@@ -180,8 +180,15 @@ covers. Input/submit capture must retain values across navigation and work for f
 paste and script entry. Keep the shared registration floor and encoding-aware redactor.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-Register driver-entered credential text and the resulting value before dispatch, using AX
-protection/password labels and credential autocomplete as well as DOM attributes. Use CDP
+Protected controls accept only complete `fill` values and exact `press` keys Enter, Tab and
+Escape. Refuse printable/editing/modified keys, paste shortcuts, `select` and `type` before
+dispatch. Determine actual focus through CDP immediately before keyboard dispatch, descending
+closed shadow roots; unknown focus, inspection failure or timeout must refuse even Enter.
+Carry protected accessible shadow hosts' protection through to their inner controls.
+Use AX protection/password labels, credential autocomplete and DOM attributes, and protect
+any control whose value snapshot redaction masks. Recheck each character of ordinary `type`
+in case a page moves focus. Register complete credential fill text before dispatch and mask
+fill/type history text; never store refused action text/keys or quote them in errors. Use CDP
 shadow-piercing traversal for live values in closed shadow roots. Bound credential collection
 with `timeoutMs`; failures/timeouts withhold snapshots with a safe reason. Close-time cookie
 persistence must run even when credential collection or page evaluation fails, keep the original

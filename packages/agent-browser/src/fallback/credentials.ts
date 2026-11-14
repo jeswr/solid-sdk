@@ -13,10 +13,7 @@ type DOMNode = Awaited<ReturnType<typeof readDOM>>["root"];
 export interface LiveControl {
   backend: number;
   protected: boolean;
-  focused: boolean;
   value: string;
-  start: number | null;
-  end: number | null;
 }
 
 export function protectedAXNode(node: AXNode): boolean {
@@ -38,13 +35,13 @@ export async function collectLiveControls(cdp: CDPSession): Promise<{
   const { root } = await readDOM(cdp);
   const { nodes } = await cdp.send("Accessibility.getFullAXTree");
   const ax = new Map(nodes.map((node) => [node.backendDOMNodeId, node]));
-  const pending: DOMNode[] = [root];
+  const pending: { node: DOMNode; protected: boolean }[] = [{ node: root, protected: false }];
   const controls: LiveControl[] = [];
   const urls: string[] = [];
   for (let i = 0; i < pending.length; i++) {
-    const node = pending[i];
-    if (!node) continue;
-    pending.push(...(node.children ?? []), ...(node.shadowRoots ?? []));
+    const entry = pending[i];
+    if (!entry) continue;
+    const { node } = entry;
     // Frames are blocked by the driver; never collect another document's credentials.
     const attributes = node.attributes ?? [];
     const attrs = Object.fromEntries(
@@ -52,23 +49,29 @@ export async function collectLiveControls(cdp: CDPSession): Promise<{
     );
     for (const key of ["href", "action", "formaction"]) if (attrs[key]) urls.push(attrs[key]);
     const accessible = ax.get(node.backendNodeId);
+    const isControl =
+      /^(INPUT|TEXTAREA|SELECT)$/.test(node.nodeName) ||
+      /^(textbox|searchbox|combobox)$/.test(attrs.role ?? "") ||
+      (accessible !== undefined && protectedAXNode(accessible));
     const protectedControl =
-      isPasswordLikeControl(attrs) || (accessible !== undefined && protectedAXNode(accessible));
-    if (
-      !/^(INPUT|TEXTAREA|SELECT)$/.test(node.nodeName) &&
-      !/^(textbox|searchbox)$/.test(attrs.role ?? "") &&
-      !(accessible !== undefined && protectedAXNode(accessible))
-    )
-      continue;
+      entry.protected ||
+      (isControl &&
+        (isPasswordLikeControl(attrs) ||
+          (accessible !== undefined && protectedAXNode(accessible))));
+    pending.push(
+      ...[...(node.children ?? []), ...(node.shadowRoots ?? [])].map((node) => ({
+        node,
+        protected: protectedControl,
+      })),
+    );
+    if (!isControl) continue;
     const { object } = await cdp.send("DOM.resolveNode", { backendNodeId: node.backendNodeId });
     if (!object.objectId) throw new Error("Credential control could not be resolved.");
     try {
       const result = await cdp.send("Runtime.callFunctionOn", {
         objectId: object.objectId,
         functionDeclaration: `function() {
-          return { value: typeof this.value === 'string' ? this.value : this.textContent || '',
-            focused: this.getRootNode().activeElement === this,
-            start: this.selectionStart ?? null, end: this.selectionEnd ?? null };
+          return { value: typeof this.value === 'string' ? this.value : this.textContent || '' };
         }`,
         returnByValue: true,
       });
@@ -86,57 +89,81 @@ export async function collectLiveControls(cdp: CDPSession): Promise<{
   return { controls, urls, base: root.baseURL ?? root.documentURL ?? "about:blank" };
 }
 
-/** The printable spellings accepted by Playwright keyboard.press (US layout). */
-export function pressedText(key: string): {
-  text?: string;
-  paste?: boolean;
-  unsupported?: boolean;
-} {
-  const parts: string[] = [];
-  let token = "";
-  for (const character of key) {
-    if (character === "+" && token) {
-      parts.push(token);
-      token = "";
-    } else token += character;
+/** Resolve actual focus afresh, descending through CDP-only closed shadow roots. */
+export async function focusedElement(cdp: CDPSession): Promise<{
+  backend: number;
+  protected: boolean;
+  value: string;
+}> {
+  const objects = new Set<string>();
+  try {
+    const active = await cdp.send("Runtime.evaluate", { expression: "document.activeElement" });
+    if (active.exceptionDetails || !active.result.objectId)
+      throw new Error("Focused element is unknown.");
+    let objectId = active.result.objectId;
+    let protectedControl = false;
+    objects.add(objectId);
+    for (let depth = 0; depth < 100; depth++) {
+      const { node } = await cdp.send("DOM.describeNode", { objectId, depth: 1, pierce: true });
+      const { nodes } = await cdp.send("Accessibility.getPartialAXTree", {
+        backendNodeId: node.backendNodeId,
+        fetchRelatives: false,
+      });
+      const ax = nodes.find((item) => item.backendDOMNodeId === node.backendNodeId);
+      if (!ax) throw new Error("Focused accessibility state is unknown.");
+      const attributes = node.attributes ?? [];
+      const attrs = Object.fromEntries(
+        attributes.flatMap((name, i) => (i % 2 === 0 ? [[name, attributes[i + 1] ?? ""]] : [])),
+      );
+      // A masked accessible host may own an otherwise ordinary-looking inner input.
+      protectedControl ||=
+        protectedAXNode(ax) ||
+        ((/^(INPUT|TEXTAREA|SELECT)$/.test(node.nodeName) ||
+          /^(textbox|searchbox|combobox)$/.test(String(ax.role?.value ?? attrs.role ?? ""))) &&
+          isPasswordLikeControl(attrs));
+      let inner: string | undefined;
+      for (const root of node.shadowRoots ?? []) {
+        const { object } = await cdp.send("DOM.resolveNode", { backendNodeId: root.backendNodeId });
+        if (!object.objectId) throw new Error("Shadow focus is unknown.");
+        objects.add(object.objectId);
+        const active = await cdp.send("Runtime.callFunctionOn", {
+          objectId: object.objectId,
+          functionDeclaration: "function() { return this.activeElement; }",
+        });
+        if (active.exceptionDetails) throw new Error("Shadow focus is unknown.");
+        if (active.result.objectId) {
+          if (inner) throw new Error("Shadow focus is ambiguous.");
+          inner = active.result.objectId;
+          objects.add(inner);
+        } else if (active.result.subtype !== "null") throw new Error("Shadow focus is unknown.");
+      }
+      if (inner) {
+        objectId = inner;
+        continue;
+      }
+      protectedControl ||= isPasswordLikeControl(attrs);
+      const state = await cdp.send("Runtime.callFunctionOn", {
+        objectId,
+        functionDeclaration: `function() {
+          return { connected: this.isConnected,
+            value: typeof this.value === 'string' ? this.value : this.textContent || '' };
+        }`,
+        returnByValue: true,
+      });
+      if (state.exceptionDetails || state.result.value?.connected !== true)
+        throw new Error("Focused element is unavailable.");
+      return {
+        backend: node.backendNodeId,
+        value: state.result.value.value,
+        protected: protectedControl,
+      };
+    }
+    throw new Error("Shadow focus depth exceeded.");
+  } finally {
+    await Promise.all(
+      [...objects].map((objectId) =>
+        cdp.send("Runtime.releaseObject", { objectId }).catch(() => undefined),
+      ),
+    );
   }
-  parts.push(token);
-  const last = parts.pop() ?? "";
-  const modifiers = parts.map((part) =>
-    part.replace(/^(Shift|Control|Alt|Meta)(?:Left|Right)$/, "$1"),
-  );
-  if (modifiers.some((part) => !/^(Shift|Control|Alt|Meta|ControlOrMeta)$/.test(part)))
-    return { unsupported: true };
-  const shift = modifiers.includes("Shift");
-  const command = modifiers.some((part) => /^(Control|Meta|ControlOrMeta)$/.test(part));
-  if ((command && /^(v|KeyV)$/i.test(last)) || (shift && last === "Insert")) return { paste: true };
-  if (command || modifiers.includes("Alt")) return {};
-  if (last.length === 1) return { text: last };
-  if (last === "Enter" || last === "NumpadEnter") return { text: "\n" };
-  if (/^Numpad[0-9]$/.test(last)) return { text: shift ? last.slice(6) : undefined };
-  if (/^Key[A-Z]$/.test(last)) return { text: shift ? last.slice(3) : last.slice(3).toLowerCase() };
-  if (/^Digit[0-9]$/.test(last)) {
-    const digit = last.slice(5);
-    return { text: shift ? ")!@#$%^&*("[Number(digit)] : digit };
-  }
-  const punctuation: Record<string, string> = {
-    Space: "  ",
-    Backquote: "`~",
-    Minus: "-_",
-    Equal: "=+",
-    BracketLeft: "[{",
-    BracketRight: "]}",
-    Backslash: "\\|",
-    Semicolon: ";:",
-    Quote: "'\"",
-    Comma: ",<",
-    Period: ".>",
-    Slash: "/?",
-    NumpadDivide: "//",
-    NumpadMultiply: "**",
-    NumpadSubtract: "--",
-    NumpadAdd: "++",
-    NumpadDecimal: "..",
-  };
-  return { text: punctuation[last]?.[shift ? 1 : 0] };
 }

@@ -94,16 +94,19 @@ describe("fallback review r7 closed-shadow credentials and independent persisten
     timeoutMs: 1500,
   });
 
-  it("redacts the review's closed-shadow press echo in snapshot.nodes and snapshot.text", async () => {
+  it("refuses the review's closed-shadow password presses before dispatch", async () => {
     const driver = await BrowserDriver.create(options());
     const secret = "b7m9r2x4";
     try {
       await driver.goto("/");
       await control(internals(driver).page, { closed: true });
-      for (const key of secret) await driver.press(key);
-      expect(driver.credentialContext.secrets.has(secret)).toBe(true);
-      safeSnapshot(await driver.snapshot(), secret);
+      const dispatch = vi.spyOn(internals(driver).page.keyboard, "press");
+      for (const key of secret)
+        await expect(driver.press(key)).rejects.toMatchObject({ kind: "guard" });
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(JSON.stringify(await driver.snapshot())).not.toContain(secret);
     } finally {
+      vi.restoreAllMocks();
       await driver.close();
     }
   });
@@ -143,7 +146,7 @@ describe("fallback review r7 closed-shadow credentials and independent persisten
         "Shift+Digit4",
       ],
     },
-  ])("registers $secret before press dispatch even if the input handler removes it", async ({
+  ])("refuses $secret key entry even if the input handler would remove it", async ({
     secret,
     keys,
   }) => {
@@ -152,23 +155,18 @@ describe("fallback review r7 closed-shadow credentials and independent persisten
     try {
       await driver.goto("/");
       await control(page, { closed: true, clearAt: secret.length });
-      const press = page.keyboard.press.bind(page.keyboard);
-      let count = 0;
-      const dispatch = vi.spyOn(page.keyboard, "press").mockImplementation(async (key) => {
-        const value = secret.slice(0, ++count);
-        if (value.length >= 4) expect(driver.credentialContext.secrets.has(value)).toBe(true);
-        await press(key);
-      });
-      for (const key of keys) await driver.press(key);
-      expect(dispatch).toHaveBeenCalledTimes(secret.length);
+      const dispatch = vi.spyOn(page.keyboard, "press");
+      for (const key of keys)
+        await expect(driver.press(key)).rejects.toMatchObject({ kind: "guard" });
+      expect(dispatch).not.toHaveBeenCalled();
       dispatch.mockRestore();
-      safeSnapshot(await driver.snapshot(), secret);
+      expect(JSON.stringify(await driver.snapshot())).not.toContain(secret);
     } finally {
       await driver.close();
     }
   });
 
-  it("registers a closed-shadow paste before dispatch even when its input handler removes the value", async () => {
+  it("refuses a closed-shadow paste before dispatch even when its input handler would remove the value", async () => {
     const driver = await BrowserDriver.create(options());
     const secret = "PastedEntry_3817";
     const { page, context } = internals(driver);
@@ -177,15 +175,11 @@ describe("fallback review r7 closed-shadow credentials and independent persisten
       await control(page, { closed: true, clearAt: secret.length });
       await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
       await page.evaluate((text) => navigator.clipboard.writeText(text), secret);
-      const press = page.keyboard.press.bind(page.keyboard);
-      const dispatch = vi.spyOn(page.keyboard, "press").mockImplementation(async (key) => {
-        expect(driver.credentialContext.secrets.has(secret)).toBe(true);
-        await press(key);
-      });
-      await driver.press("Control+v");
-      expect(dispatch).toHaveBeenCalledTimes(1);
+      const dispatch = vi.spyOn(page.keyboard, "press");
+      await expect(driver.press("Control+v")).rejects.toMatchObject({ kind: "guard" });
+      expect(dispatch).not.toHaveBeenCalled();
       dispatch.mockRestore();
-      safeSnapshot(await driver.snapshot(), secret);
+      expect(JSON.stringify(await driver.snapshot())).not.toContain(secret);
     } finally {
       vi.restoreAllMocks();
       await driver.close();

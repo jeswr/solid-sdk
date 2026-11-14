@@ -7,6 +7,7 @@ export type BrowserAction =
   | { kind: "fill"; ref: string; text: string }
   | { kind: "select"; ref: string; value: string }
   | { kind: "press"; key: string }
+  | { kind: "type"; text: string }
   | { kind: "back" };
 
 export interface BrowserSnapshot {

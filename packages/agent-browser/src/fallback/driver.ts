@@ -50,8 +50,8 @@ import { type CredentialContext, taskCredentialContext } from "../session.js";
 import type { Approver, TraceStep } from "../types.js";
 import {
   collectLiveControls,
+  focusedElement,
   type LiveControl,
-  pressedText,
   protectedAXNode,
 } from "./credentials.js";
 import { browserWriteFingerprint } from "./fingerprint.js";
@@ -819,19 +819,23 @@ export class BrowserDriver {
     });
   }
 
-  /** Register both supplied text and the resulting value before any input event can clear it. */
-  private rememberEnteredText(
-    control: LiveControl | undefined,
-    text: string,
-    replace = false,
-  ): void {
-    if (!control?.protected) return;
-    registerSecret(this.secrets, text);
-    if (!replace) {
-      const start = control.start ?? control.value.length;
-      const end = control.end ?? start;
-      registerSecret(this.secrets, control.value.slice(0, start) + text + control.value.slice(end));
+  private async guardKeyboard(key?: string): Promise<void> {
+    let focused: Awaited<ReturnType<typeof focusedElement>>;
+    try {
+      focused = await this.collectCredentials(() => focusedElement(this.cdp));
+    } catch {
+      throw new BrowserDriverError(
+        "guard",
+        "Focused element protection could not be determined; keyboard input refused.",
+      );
     }
+    if (focused.protected) registerSecret(this.secrets, focused.value);
+    const protectedControl = focused.protected || this.redact(focused.value) !== focused.value;
+    if (protectedControl && (key === undefined || !["Enter", "Tab", "Escape"].includes(key)))
+      throw new BrowserDriverError(
+        "guard",
+        "Protected controls accept only fill with a complete value, Enter, Tab or Escape; keyboard input refused.",
+      );
   }
 
   private rememberLiveState(live: ReturnType<typeof readLiveCredentials>): void {
@@ -1031,21 +1035,15 @@ export class BrowserDriver {
       } else if (action.kind === "back") await this.page.goBack();
       else if (action.kind === "press") {
         await this.captureSubmitter();
-        const control = controls.find((control) => control.focused);
-        const entered = pressedText(action.key);
-        if (entered.unsupported && control?.protected)
-          throw new BrowserDriverError(
-            "guard",
-            "Protected controls require a single key with optional modifiers.",
-          );
-        if (entered.paste && control?.protected) {
-          // No paste is dispatched unless its text has been obtained and registered.
-          const text = await this.collectCredentials(() =>
-            this.page.evaluate(() => navigator.clipboard.readText()),
-          );
-          this.rememberEnteredText(control, text);
-        } else if (entered.text !== undefined) this.rememberEnteredText(control, entered.text);
+        await this.guardKeyboard(action.key);
         await this.page.keyboard.press(action.key);
+      } else if (action.kind === "type") {
+        await this.guardKeyboard();
+        for (const character of action.text) {
+          // A page may move focus in a key handler, so recheck each character.
+          await this.guardKeyboard();
+          await this.page.keyboard.type(character);
+        }
       } else {
         const objectId = await this.resolve(action.ref);
         try {
@@ -1064,11 +1062,14 @@ export class BrowserDriver {
             await element.click();
           } else if (action.kind === "fill") {
             const backend = this.refs.get(action.ref)?.backend;
-            this.rememberEnteredText(
-              controls.find((control) => control.backend === backend),
-              action.text,
-              true,
-            );
+            if (
+              controls.some(
+                (control) =>
+                  control.backend === backend &&
+                  (control.protected || this.redact(control.value) !== control.value),
+              )
+            )
+              registerSecret(this.secrets, action.text);
             const info = await this.cdp.send("Runtime.callFunctionOn", {
               objectId,
               functionDeclaration: `function() {
@@ -1096,10 +1097,30 @@ export class BrowserDriver {
                 returnByValue: true,
               });
               if (prepared.exceptionDetails || prepared.result.value !== true) throw new Error();
+              // Focus handlers can move focus or change protection while preparing a fill.
+              const focused = await this.collectCredentials(() => focusedElement(this.cdp));
+              if (focused.backend !== backend)
+                throw new BrowserDriverError("guard", "Fill target lost focus; input refused.");
+              if (focused.protected || this.redact(focused.value) !== focused.value)
+                registerSecret(this.secrets, action.text);
               if (action.text) await this.page.keyboard.insertText(action.text);
               else await this.page.keyboard.press("Delete");
             } else await element.fill(action.text);
-          } else await element.selectOption(action.value);
+          } else {
+            const backend = this.refs.get(action.ref)?.backend;
+            if (
+              controls.some(
+                (control) =>
+                  control.backend === backend &&
+                  (control.protected || this.redact(control.value) !== control.value),
+              )
+            )
+              throw new BrowserDriverError(
+                "guard",
+                "Protected controls require fill with a complete value; selection refused.",
+              );
+            await element.selectOption(action.value);
+          }
         } finally {
           await this.cdp.send("Runtime.releaseObject", { objectId }).catch(() => undefined);
         }
@@ -1145,6 +1166,9 @@ export class BrowserDriver {
   }
   press(key: string): Promise<void> {
     return this.act({ kind: "press", key });
+  }
+  type(text: string): Promise<void> {
+    return this.act({ kind: "type", text });
   }
   back(): Promise<void> {
     return this.act({ kind: "back" });

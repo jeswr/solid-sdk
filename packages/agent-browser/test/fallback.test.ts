@@ -461,12 +461,13 @@ ${"<p>Untrusted page words</p>".repeat(30)}</body></html>`);
       await d.close();
     }
   });
-  it("redacts a password control with an ordinary field name when entered by key presses", async () => {
+  it("refuses key entry into a password control with an ordinary field name", async () => {
     const d = await driver({ approver: () => "deny" });
     try {
       await d.goto("/");
       await d.click(await refFor(d, "Private code"));
-      for (const key of ["a", "b", "c", "d"]) await d.press(key);
+      for (const key of ["a", "b", "c", "d"])
+        await expect(d.press(key)).rejects.toMatchObject({ kind: "guard" });
       await expect(d.click(await refFor(d, "Save settings"))).rejects.toMatchObject({
         kind: "denied",
       });
