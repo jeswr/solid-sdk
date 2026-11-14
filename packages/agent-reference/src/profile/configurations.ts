@@ -179,7 +179,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Brief 31 section 2.8: a main path may not run a faulty gate (confinement C3). Not built: a signed component statement naming who builds and who operates the gate and the core (CORE-L-13), the record audit that checks each released action again against the mandate, a gate-operator party with its own agent, and the onlyUnder branch in which brief 20's labelled fault stand-in releases one action outside the mandate. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run.",
+      "Brief 31 section 2.8: deferred until a design is written. A main path may not run a faulty gate (confinement C3), and no existing fault stand-in releases an action outside the mandate: brief 20's injections cover settlement, document, evidence, authority, mandate-status and carriage faults only. Open questions: where a branch-only stand-in that bypasses the live outbound gate for one action sits, how it is labelled in standIns, and how it is kept off main paths; which ledger records the record audit treats as released actions, and whether it judges them against the mandate at release time; the claim kind and shape of the signed component statement naming who builds and who operates the gate and the core (CORE-L-13), and whether it needs vocabulary terms; and who signs the claim to the gate operator, its allegation, and what the operator's agent does on admission. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run.",
     ],
   },
   [alternativeWireId("usage-control-odrl-model-tighten")]: localDefinition(
@@ -247,7 +247,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Brief 31 section 2.4: the revised confinement rule admits the email exchange as an added segment. Not built: proof that the replier controls the payroll mailbox, namely a Paywell-signed statement naming its contact mailbox and a mailbox challenge in which Sam's agent sends a fresh nonce and accepts a reply only if it carries the nonce and arrives from the named address. The existing mailbox binding has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+      "Brief 31 section 2.4: built and measured, then withdrawn. Sam pins Paywell's mailbox (the send rule is unchanged), Paywell's admitted signed contact statement names the reply address, and a mailbox challenge reply is accepted only with the nonce from that address (source fails otherwise; while a challenge is active the inbound run records authority and terms as not applicable and fitness as passing for labelled content). Two things stop the cell. First, the email send records its context checks (disclosure and data-terms for each item in the task context) before mandate, so an email after the journey's earlier exchanges does not record the outbound checks in order (C2), and checks are not reordered to fit. Second, the failure path has no gate-recorded form: a model reading of the prose as income evidence is refused by the runtime (structured-form-required) before any gate check. No prose is substituted for structured payroll evidence.",
     ],
   },
   [alternativeWireId("identity-did")]: {

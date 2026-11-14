@@ -4792,3 +4792,66 @@ as well; for the regulator claim that is `identity` and `accountability`.
 - `export-schemas --check` passes, and `tsc --noEmit` passes.
 - biome is clean on the changed files, apart from warnings that are already present at
   HEAD.
+
+### Brief 31 §2.4 `identity-email-endpoint` (stays not run, measured) and §2.8 (deferred)
+
+**Decisions recorded (coordinator).**
+
+1. Both rules apply. The pin rule stays the send rule: Sam pins Paywell's mailbox through
+   `profileChange`, and `checkEmailPin` is not relaxed. Paywell's admitted signed
+   statement names the address a reply must come from.
+2. A missing nonce or a wrong sender fails `source`.
+3. While a challenge is active, the reply's inbound run records authority and terms as
+   not-applicable and fitness as passing for labelled content. Without a challenge it is
+   unchanged, so the `no-agent-on-the-other-side` traces stay identical.
+4. The mailbox stand-in substitutes the latest nonce it received into a placeholder in
+   its scripted reply.
+5. A measured difference on the failure branch is recorded as disagrees, with the reason.
+6. §2.8 is deferred until a design is written. Its blocked reason now names the missing
+   fault stand-in design and the open questions.
+
+**What was built and measured.**
+
+- `sendEmail(..., challenge)` and `receiveEmail(..., challenge)` implement the challenge.
+  The engine's `email-send` and `email-receive` steps gain `challenge: true`, with a nonce
+  per path and step, derived so that traces stay reproducible.
+- `ScriptedMailbox.reply` echoes the latest `Challenge:` nonce it received.
+- The world adds:
+  - a separate `paywell-mailbox` party (`runs: "mailbox"`). Paywell stays an issuer, so
+    its payslip still arrives through the unchanged `income-admission` step; the earlier
+    patch that turned Paywell itself into a mailbox would have left it without a signing
+    key;
+  - Paywell's signed `contact.mailbox` statement;
+  - Sam's pin, the source rule and the `urn:op:email` mandate rules.
+- The added segment ran before `income-admission`:
+  1. The statement is admitted.
+  2. The challenge email is sent; Sam approves the exact text.
+  3. The prose reply carrying the nonce passes `source` and the full inbound run.
+  4. The reply is read as `email.reading` content.
+  5. A second approved email asks for the structured payslip.
+- C1 and C3 were empty.
+
+**Why the cell stays not run.**
+
+1. **C2 order.** `checkEmailContext` records a disclosure and a data-terms verdict for
+   every item in the task's context before the email action's mandate check. In the
+   journey that context holds every earlier fact, so the send's outbound run records
+   disclosure and data-terms before mandate. That fails the ordered list. In
+   `no-agent-on-the-other-side` the context is empty, so the order never showed there.
+   Checks are not reordered to fit.
+2. **No gate-recorded failure path.** `mailbox-reply-as-evidence` has no form the gate
+   records. A reading of the prose as `income.gross.monthly-series` is refused by
+   `recordReading` with a `RejectError` (`structured-form-required`, "reading is outside
+   the declared type") before any gate check. The run throws instead of recording a
+   decision.
+
+There is also a C2 implementation gap. The approved send's held run asks the principal
+at several checks: limits-approval, plus the email-context disclosure and data-terms
+checks. C2 accepted only the first ask. The brief's wording ("an ask counts only when the
+same agent's same check later passes after a principal approval") covers every asked
+check. A generalisation was written but is not applied, because it changes the
+confinement rule's code.
+
+All §2.4 code and scenario changes were reverted and saved as a patch. The kept changes
+are the blocked wording for both cells, and their regenerated rows in place. Manifest
+and `labels` counts are unchanged (242 runs, 16 disagree, 24 blocked).
