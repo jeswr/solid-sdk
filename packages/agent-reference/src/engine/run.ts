@@ -69,8 +69,10 @@ import type {
   OutboundPlan,
 } from "../runtime/operations.js";
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
+import { HTTP_STAND_IN } from "../settlement/adapter.js";
+import { carry } from "../settlement/carried.js";
+import { selectedSettlement } from "../settlement/configurations.js";
 import { Ledger as PaymentLedger } from "../settlement/ledger.js";
-import { RdfOrderSuite } from "../settlement/rdf-order.js";
 import { PodRecordMirror } from "../standins/pod-mirror.js";
 import { FictionalSolidStorage } from "../standins/storage.js";
 import { FictionalWebIdDirectory } from "../standins/webid.js";
@@ -102,6 +104,7 @@ import {
   scenarioSchema,
 } from "./schema.js";
 import { withScriptedReplies } from "./scripted-replies.js";
+import { liveSettlement, PROCESSOR, settlementWorld } from "./settlement.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("a validated scenario reference is missing");
@@ -337,6 +340,8 @@ export async function runScenario(
     const pathProfile = domainProfileSchema.parse(
       patch(profile, "profileChange" in path && path.profileChange ? path.profileChange : {}),
     );
+    if (alternative?.change.settlement)
+      settlementWorld(world, pathProfile, alternative.change.settlement);
     validateReferences(pathProfile, world);
     const combinationProblems = alternative
       ? scenarioRegistry().check({ layers: { ...BASELINE.layers, ...alternative.change } })
@@ -1287,6 +1292,20 @@ async function runPath(
       return [provider.agent, ledger] as const;
     }),
   );
+  const settlement =
+    configuration.layers.settlement === "rdf-order"
+      ? selectedSettlement("rdf-order")
+      : await liveSettlement({
+          suite: configuration.layers.settlement,
+          fault: scenario.settlementFault,
+          cast,
+          runtimes,
+          ledger: required(paymentLedgers.get("payment-provider-agent")),
+          now: () => now().toISOString(),
+          recorder,
+          configuration: configuration.pilotConfiguration,
+        });
+  recorder.settlement(settlement);
   for (const agent of agents) {
     cast.trust.set(agent.id, {
       ...required(cast.trust.get(agent.id)),
@@ -1576,18 +1595,17 @@ async function runPath(
                   const account = required(
                     provider.accounts.find((a) => a.party === admitted.payer),
                   );
-                  const suite = new RdfOrderSuite();
-                  const settled = await suite.settle(
-                    await paymentObjects(admitted.facts, "Admitted payment order"),
-                    {
-                      party: cast.get(agent.id).identity.party ?? "",
-                      payerAccount: account.id,
-                      ledger: required(paymentLedgers.get(agent.id)),
-                      now: now().toISOString(),
-                    },
-                  );
+                  const suite = selectedSettlement(configuration.layers.settlement, settlement);
+                  const settled = await suite.settle(admitted.objects, {
+                    party: cast.get(agent.id).identity.party ?? "",
+                    payerAccount: account.id,
+                    ledger: required(paymentLedgers.get(agent.id)),
+                    now: now().toISOString(),
+                  });
                   const receipt = suite.lift(settled);
-                  const trace = await paymentTrace(receipt);
+                  const trace = suite.trace
+                    ? await suite.trace(settled)
+                    : await paymentTrace(receipt);
                   recorder.sink(agent.traceId ?? agent.id).emit({
                     part: "record",
                     kind: "record",
@@ -1597,7 +1615,7 @@ async function runPath(
                   return {
                     conclusion: "completed" as const,
                     observed: {
-                      payment: trace.facts,
+                      payment: suite.id === "rdf-order" ? trace.facts : carry(settled),
                       reference: receipt.ledgerReference ?? "",
                       status: "settled",
                     } as JsonObject,
@@ -1732,6 +1750,15 @@ async function runPath(
       advertisedConfigurations(agent.configurations, configuration),
       {
         gates: gate,
+        settlement,
+        ...(settlement.id !== "rdf-order"
+          ? {
+              settlementReceiptSource:
+                settlement.id === "ap2"
+                  ? PROCESSOR
+                  : cast.get("payment-provider-agent").identity.party,
+            }
+          : {}),
         ...(options.alternative && "transport" in options.alternative.change
           ? { bindings: carriage.advertisements(agent.id) }
           : {}),
@@ -1845,14 +1872,20 @@ async function runPath(
       case "payment-invoice": {
         const digest = template<string>(step.agreement);
         const agreement = required(runtime.heldPaymentAgreement(digest));
-        const suite = new RdfOrderSuite();
+        const suite = selectedSettlement(configuration.layers.settlement, settlement);
         const invoiceId = await runtime.mintIdentifier();
         let objects = await suite.request(
-          { agreement, invoice: invoiceId, account: step.account, dueDate: step.dueDate },
+          {
+            agreement,
+            invoice: invoiceId,
+            account: step.account,
+            dueDate: step.dueDate,
+            ...(suite.id !== "rdf-order" && step.amount ? { amount: step.amount } : {}),
+          },
           { party: cast.get(step.agent).identity.party ?? "" },
         );
         let facts = suite.lift(objects);
-        if (step.amount || step.payee) {
+        if (suite.id === "rdf-order" && (step.amount || step.payee)) {
           facts = PaymentFacts.invoiceFor({
             id: invoiceId,
             agreement: digest,
@@ -1864,7 +1897,7 @@ async function runPath(
           });
           objects = await paymentObjects(facts, "Invoice");
         }
-        const trace = await paymentTrace(facts);
+        const trace = suite.trace ? await suite.trace(objects) : await paymentTrace(facts);
         recorder.sink(parties.get(step.agent)?.traceId ?? step.agent).emit({
           part: "core",
           kind: "propose",
@@ -1872,7 +1905,7 @@ async function runPath(
           settlement: trace,
         });
         result = {
-          document: objects.objects[0]?.shown,
+          document: suite.id === "rdf-order" ? objects.objects[0]?.shown : carry(objects),
           agreement: digest,
           amount: facts.amount,
           currency: facts.currency,
@@ -2592,6 +2625,12 @@ async function runPath(
           evidence: { role: "credential" as const, format: "jws-compact", value: jws },
         };
         signed[step.id] = item;
+        if (settlement.id === "ap2" && step.id === "provider-receipt-statement")
+          await runtime.admitStatements([item], {
+            task,
+            taskId: task,
+            purpose: "urn:purpose:valuation",
+          });
         result = item;
         break;
       }
@@ -2802,6 +2841,10 @@ async function runPath(
       throw new Error("The principal record mirror is unavailable after a completed step");
     outputs[step.id] = result ?? null;
     if (step.segmentEnd) recorder.segmentEnd("payment");
+    if (scenario.stopAfter === step.id) {
+      recorder.segmentEnd("payment");
+      break;
+    }
   }
   if (recordMirror && !(await recordMirror.flush()))
     throw new Error("The final principal record could not be mirrored");
@@ -2862,7 +2905,13 @@ async function runPath(
           }
         : {}),
     },
-    standIns: [...profile.standIns, ...scenario.standIns],
+    standIns: [
+      ...profile.standIns,
+      ...scenario.standIns,
+      ...(settlement.id === "rdf-order"
+        ? []
+        : [{ what: "Protocol HTTP and payment execution", replacedBy: HTTP_STAND_IN }]),
+    ],
     ...(scenario.jointSession &&
     verifiers.jointProtocols.get(scenario.jointSession.method)?.kind === "real"
       ? {

@@ -1,13 +1,14 @@
 // AUTHORED-BY Codex GPT-6
+
 import type { ScenarioConfiguration } from "../engine/matrix.js";
 import { alternativeWireId } from "../profile/configurations.js";
 import { BASELINE } from "../suites/baseline.js";
 import type { Configuration } from "../suites/registry.js";
 import { type ProtocolSuiteId, SETTLEMENT_PROFILES } from "./profiles.js";
+import { RdfOrderSuite } from "./rdf-order.js";
+import type { SettlementSuite } from "./types.js";
 
-/** Reviewable declarations, deliberately not advertised as executable wire configurations.
- * Runtime installation requires changes to the other lane's outbound/ingress interfaces.
- */
+/** Executable single-layer alternatives; the engine installs their authenticated host profiles. */
 export const SETTLEMENT_CONFIGURATIONS = (
   Object.keys(SETTLEMENT_PROFILES) as ProtocolSuiteId[]
 ).map((suite) => {
@@ -21,8 +22,13 @@ export const SETTLEMENT_CONFIGURATIONS = (
   return {
     configuration,
     scenario,
-    runtime: "blocked" as const,
-    blockedBy:
-      "OutboundGate.paymentOrder, engine invoice/provider dispatch and native receipt ingress construct or assume rdf-order; no adapter injection seam is installed.",
+    runtime: "executable" as const,
   };
 });
+
+/** Host-installed adapters are selected explicitly; an unavailable choice never falls back. */
+export function selectedSettlement(id = "rdf-order", installed?: SettlementSuite): SettlementSuite {
+  if (installed?.id === id) return installed;
+  if (id === "rdf-order") return new RdfOrderSuite();
+  throw new TypeError(`No settlement adapter installed for ${id}`);
+}

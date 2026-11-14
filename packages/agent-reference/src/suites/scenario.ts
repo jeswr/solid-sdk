@@ -55,8 +55,8 @@ export function scenarioRegistry() {
       id,
       name,
       partOf: "commitments",
-      status: "not-run",
-      summary: "Protocol objects exist; runtime wiring belongs to Brief 25.",
+      status: "run",
+      summary: "Native protocol settlement runs under its mortgage matrix configuration.",
     });
   registry.register({
     layer: "reliance",

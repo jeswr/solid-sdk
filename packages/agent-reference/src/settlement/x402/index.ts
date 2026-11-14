@@ -72,7 +72,7 @@ export class X402Suite implements SettlementSuite {
 
     const amount = convertX402Amount(
       {
-        amount: requireValue(due.agreement.duty?.constraint?.amount),
+        amount: due.amount ?? requireValue(due.agreement.duty?.constraint?.amount),
         currency: this.profile.currency,
       },
       this.profile.decimals,
@@ -218,7 +218,30 @@ export class X402Suite implements SettlementSuite {
       this.profile.currency,
       this.profile.decimals,
     );
+    const call = { x402Version: 2, paymentPayload: payload, paymentRequirements: request.request };
+    await this.profile.admit(
+      this.profile.merchant.party,
+      "payment",
+      bundle(this.id, [
+        httpObject(
+          "/verify request",
+          { method: "POST", path: "/verify", headers: {}, body: call },
+          call,
+        ),
+      ]),
+    );
     const verify = facilitator.verify(payload, seconds(this.profile));
+    await this.profile.admit(
+      this.profile.provider.party,
+      "payment-receipt",
+      bundle(this.id, [
+        httpObject(
+          "/verify response",
+          { method: "POST", path: "/verify", status: 200, headers: {}, body: verify },
+          verify,
+        ),
+      ]),
+    );
     if (!verify.isValid)
       return invalid(verify.invalidReason, {
         method: "POST",
@@ -227,9 +250,30 @@ export class X402Suite implements SettlementSuite {
         headers: {},
         body: verify,
       });
+    await this.profile.admit(
+      this.profile.merchant.party,
+      "payment",
+      bundle(this.id, [
+        httpObject(
+          "/settle request",
+          { method: "POST", path: "/settle", headers: {}, body: call },
+          call,
+        ),
+      ]),
+    );
     const receipt = facilitator.settle(payload, seconds(this.profile));
+    await this.profile.admit(
+      this.profile.provider.party,
+      "payment-receipt",
+      bundle(this.id, [
+        httpObject(
+          "/settle response",
+          { method: "POST", path: "/settle", status: 200, headers: {}, body: receipt },
+          receipt,
+        ),
+      ]),
+    );
     if (!receipt.success) return invalid(receipt.errorReason);
-    const call = { x402Version: 2, paymentPayload: payload, paymentRequirements: request.request };
     const exchange = {
       method: "GET",
       path: "/valuation-booking",
@@ -283,6 +327,12 @@ export class X402Suite implements SettlementSuite {
       order: "payment-receipt.payment.id",
       status: "SettlementResponse.success",
     });
+  }
+  restore(objects: ProtocolObjects) {
+    return this.store.restore(objects);
+  }
+  objectsFor(facts: PaymentFacts) {
+    return this.store.find(facts);
   }
   lift(objects: ProtocolObjects): PaymentFacts {
     return this.store.lift(objects);

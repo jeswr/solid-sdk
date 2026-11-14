@@ -341,7 +341,7 @@ _:b1_b1_b0_n3-70 rdf:first <https://w3id.org/jeswr/awp#reason/assurance-insuffic
 _:b1_b1_b0_n3-71 rdf:first <https://w3id.org/jeswr/awp#reason/approval-required>;
     rdf:rest _:b1_b1_b0_n3-72.
 _:b1_b1_b0_n3-72 rdf:first <https://w3id.org/jeswr/awp#reason/approval-denied>;
-    rdf:rest _:b1_b1_b0_n3-73.
+    rdf:rest _:brief25bApprovalMismatch0.
 _:b1_b1_b0_n3-73 rdf:first <https://w3id.org/jeswr/awp#reason/missing-context>;
     rdf:rest _:b1_b1_b0_n3-74.
 _:b1_b1_b0_n3-74 rdf:first <https://w3id.org/jeswr/awp#reason/indeterminate-policy>;
@@ -520,7 +520,7 @@ _:b1_b1_b0_n3-151 rdf:first <https://w3id.org/jeswr/awp#reason/assurance-insuffi
 _:b1_b1_b0_n3-152 rdf:first <https://w3id.org/jeswr/awp#reason/approval-required>;
     rdf:rest _:b1_b1_b0_n3-153.
 _:b1_b1_b0_n3-153 rdf:first <https://w3id.org/jeswr/awp#reason/approval-denied>;
-    rdf:rest _:b1_b1_b0_n3-154.
+    rdf:rest _:brief25bApprovalMismatch1.
 _:b1_b1_b0_n3-154 rdf:first <https://w3id.org/jeswr/awp#reason/missing-context>;
     rdf:rest _:b1_b1_b0_n3-155.
 _:b1_b1_b0_n3-155 rdf:first <https://w3id.org/jeswr/awp#reason/indeterminate-policy>;
@@ -855,7 +855,7 @@ _:b1_b1_b0_n3-252 rdf:first <https://w3id.org/jeswr/awp#reason/assurance-insuffi
 _:b1_b1_b0_n3-253 rdf:first <https://w3id.org/jeswr/awp#reason/approval-required>;
     rdf:rest _:b1_b1_b0_n3-254.
 _:b1_b1_b0_n3-254 rdf:first <https://w3id.org/jeswr/awp#reason/approval-denied>;
-    rdf:rest _:b1_b1_b0_n3-255.
+    rdf:rest _:brief25bApprovalMismatch2.
 _:b1_b1_b0_n3-255 rdf:first <https://w3id.org/jeswr/awp#reason/missing-context>;
     rdf:rest _:b1_b1_b0_n3-256.
 _:b1_b1_b0_n3-256 rdf:first <https://w3id.org/jeswr/awp#reason/indeterminate-policy>;
@@ -1034,7 +1034,7 @@ _:b1_b1_b0_n3-332 rdf:first <https://w3id.org/jeswr/awp#reason/assurance-insuffi
 _:b1_b1_b0_n3-333 rdf:first <https://w3id.org/jeswr/awp#reason/approval-required>;
     rdf:rest _:b1_b1_b0_n3-334.
 _:b1_b1_b0_n3-334 rdf:first <https://w3id.org/jeswr/awp#reason/approval-denied>;
-    rdf:rest _:b1_b1_b0_n3-335.
+    rdf:rest _:brief25bApprovalMismatch3.
 _:b1_b1_b0_n3-335 rdf:first <https://w3id.org/jeswr/awp#reason/missing-context>;
     rdf:rest _:b1_b1_b0_n3-336.
 _:b1_b1_b0_n3-336 rdf:first <https://w3id.org/jeswr/awp#reason/indeterminate-policy>;
@@ -1432,7 +1432,7 @@ _:b1_b1_b0_n3-449 rdf:first <https://w3id.org/jeswr/awp#reason/assurance-insuffi
 _:b1_b1_b0_n3-450 rdf:first <https://w3id.org/jeswr/awp#reason/approval-required>;
     rdf:rest _:b1_b1_b0_n3-451.
 _:b1_b1_b0_n3-451 rdf:first <https://w3id.org/jeswr/awp#reason/approval-denied>;
-    rdf:rest _:b1_b1_b0_n3-452.
+    rdf:rest _:brief25bApprovalMismatch4.
 _:b1_b1_b0_n3-452 rdf:first <https://w3id.org/jeswr/awp#reason/missing-context>;
     rdf:rest _:b1_b1_b0_n3-453.
 _:b1_b1_b0_n3-453 rdf:first <https://w3id.org/jeswr/awp#reason/indeterminate-policy>;
@@ -2450,3 +2450,15 @@ awp:ItemListShape sh:property
     [ sh:path awp:attachmentDigest; sh:maxCount 1; sh:datatype xsd:string ],
     [ sh:path awp:byteLength; sh:maxCount 1; sh:datatype xsd:integer ],
     [ sh:path <https://schema.org/encodingFormat>; sh:maxCount 1; sh:datatype xsd:string ].
+
+# AUTHORED-BY Codex GPT-6
+_:brief25bApprovalMismatch0 rdf:first <https://w3id.org/jeswr/awp#reason/approval-mismatch>;
+    rdf:rest _:b1_b1_b0_n3-73.
+_:brief25bApprovalMismatch1 rdf:first <https://w3id.org/jeswr/awp#reason/approval-mismatch>;
+    rdf:rest _:b1_b1_b0_n3-154.
+_:brief25bApprovalMismatch2 rdf:first <https://w3id.org/jeswr/awp#reason/approval-mismatch>;
+    rdf:rest _:b1_b1_b0_n3-255.
+_:brief25bApprovalMismatch3 rdf:first <https://w3id.org/jeswr/awp#reason/approval-mismatch>;
+    rdf:rest _:b1_b1_b0_n3-335.
+_:brief25bApprovalMismatch4 rdf:first <https://w3id.org/jeswr/awp#reason/approval-mismatch>;
+    rdf:rest _:b1_b1_b0_n3-452.

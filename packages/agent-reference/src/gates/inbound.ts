@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+import { readCarried } from "../settlement/carried.js";
+// AUTHORED-BY Codex GPT-6
 
 import { digestBytes as credentialDigest } from "../core/canonical.js";
 import { mapCodeClaim } from "../mechanisms/code-mapping.js";
@@ -105,6 +107,7 @@ export interface InboundDeps {
   /** The agreed terms in force in a conversation, if an agreement was made. */
   readonly agreementTerms: (conversation: Iri) => JsonObject | undefined;
   /** The purpose this agent named on a request it sent (for data delivered in answer). */
+  readonly settlement?: import("../settlement/types.js").SettlementSuite;
   readonly receiptOrder?: (
     receipt: PaymentFacts,
   ) => { order: PaymentFacts; provider: string } | undefined;
@@ -2172,11 +2175,53 @@ export class Admission {
         return { ok: false, reason, detail: "The provider receipt failed ordinary admission." };
       }
     }
+    if (
+      this.deps.settlement &&
+      this.deps.settlement.id !== "rdf-order" &&
+      msg.kind === "invoke" &&
+      msg.body.operation.id === "urn:op:payment"
+    ) {
+      try {
+        const facts = this.deps.settlement.lift(readCarried(msg.body.input, this.deps.settlement));
+        if (facts.payer !== msg.from.onBehalfOf) throw new Error("payer-mismatch");
+      } catch {
+        this.refuse("evidence-invalid", "The carried native payment order failed admission.");
+        return {
+          ok: false,
+          reason: "evidence-invalid",
+          detail: "The carried native payment order failed admission.",
+        };
+      }
+    }
+    if (this.deps.settlement && this.deps.settlement.id !== "rdf-order")
+      for (const claim of this.admittedClaims.filter((c) => c.claimType === "invoice")) {
+        try {
+          this.deps.settlement.lift(readCarried(claim.payment, this.deps.settlement));
+        } catch {
+          this.refuse("evidence-invalid", "The carried protocol invoice failed admission.");
+          return {
+            ok: false,
+            reason: "evidence-invalid",
+            detail: "The carried protocol invoice failed admission.",
+          };
+        }
+      }
     for (const claim of this.admittedClaims.filter((c) => c.claimType === "payment-receipt")) {
       let receipt: PaymentFacts | undefined;
       try {
-        receipt = liftPaymentObjects(await readPaymentObjects(claim.payment));
+        receipt =
+          this.deps.settlement && this.deps.settlement.id !== "rdf-order"
+            ? this.deps.settlement.lift(readCarried(claim.payment, this.deps.settlement))
+            : liftPaymentObjects(await readPaymentObjects(claim.payment));
       } catch {
+        if (this.deps.settlement && this.deps.settlement.id !== "rdf-order") {
+          this.refuse("evidence-invalid", "The carried protocol receipt failed admission.");
+          return {
+            ok: false,
+            reason: "evidence-invalid",
+            detail: "The carried protocol receipt failed admission.",
+          };
+        }
         /* Fail closed below. */
       }
       const sent = receipt && this.deps.receiptOrder?.(receipt);
@@ -2194,7 +2239,16 @@ export class Admission {
         caption:
           result?.verdicts[0]?.fact ??
           "The provider receipt does not match a recorded payment order.",
-        ...(receipt ? { settlement: await paymentTrace(receipt) } : {}),
+        ...(receipt
+          ? {
+              settlement:
+                this.deps.settlement?.trace && this.deps.settlement.id !== "rdf-order"
+                  ? await this.deps.settlement.trace(
+                      readCarried(claim.payment, this.deps.settlement),
+                    )
+                  : await paymentTrace(receipt),
+            }
+          : {}),
         ...checkRefs(this.deps.gate, "receipt"),
       });
       if (!ok) {

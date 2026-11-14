@@ -62,7 +62,11 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
     4 +
       scenario.configurations.reduce(
         (count, entry) =>
-          count + 1 + ((entry.world.branches as unknown[] | undefined) ?? scenario.branches).length,
+          count +
+          1 +
+          (
+            (entry.world.branches as { onlyUnder?: string }[] | undefined) ?? scenario.branches
+          ).filter((branch) => !branch.onlyUnder || branch.onlyUnder === entry.id).length,
         0,
       ),
   );
@@ -76,9 +80,12 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
     const paths = results.filter((result) => result.configuration === entry.id);
     expect(paths.map((result) => result.path)).toEqual([
       "main",
-      ...((entry.world.branches as { id: string }[] | undefined) ?? scenario.branches).map(
-        (branch) => branch.id,
-      ),
+      ...((entry.world.branches as { id: string }[] | undefined) ?? scenario.branches)
+        .filter(
+          (branch) =>
+            !("onlyUnder" in branch) || !branch.onlyUnder || branch.onlyUnder === entry.id,
+        )
+        .map((branch) => branch.id),
     ]);
     if (configurationById(alternativeWireId(entry.id))?.status === "unresolved") {
       for (const path of paths) {

@@ -127,6 +127,12 @@ export const CONFIG_POD_MIRROR = alternativeWireId("accountability-pod-mirror");
 export const CONFIG_SOLID_INBOX = alternativeWireId("transport-solid-inbox");
 export const CONFIG_SOLID_REFERENCE = alternativeWireId("data-access-by-reference-solid");
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  ...Object.fromEntries(
+    ["x402", "mpp", "ap2", "acp"].map((suite) => {
+      const id = alternativeWireId(`settlement-${suite}`);
+      return [id, localDefinition(id, `Signed RDF messages with ${suite} settlement`)];
+    }),
+  ),
   [CONFIG_WEBID]: {
     ...localDefinition(
       CONFIG_WEBID,

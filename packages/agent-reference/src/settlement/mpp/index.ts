@@ -85,7 +85,7 @@ export class MppSuite implements SettlementSuite {
 
     const amount = convertMppAmount(
       {
-        amount: requireValue(due.agreement.duty?.constraint?.amount),
+        amount: due.amount ?? requireValue(due.agreement.duty?.constraint?.amount),
         currency: this.profile.currency,
       },
       this.profile.decimals,
@@ -277,6 +277,12 @@ export class MppSuite implements SettlementSuite {
       agreement: "payment-receipt.payment.agreement",
       order: "payment-receipt.payment.id",
     });
+  }
+  restore(objects: ProtocolObjects) {
+    return this.store.restore(objects);
+  }
+  objectsFor(facts: PaymentFacts) {
+    return this.store.find(facts);
   }
   lift(objects: ProtocolObjects): PaymentFacts {
     return this.store.lift(objects);

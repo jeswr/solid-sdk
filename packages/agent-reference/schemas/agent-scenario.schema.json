@@ -2,6 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "settlementFault": {
+      "type": "string",
+      "enum": [
+        "tampered-order"
+      ]
+    },
+    "stopAfter": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
     "paymentProviders": {
       "default": [],
       "type": "array",
@@ -1447,6 +1457,7 @@
             "context-not-clear",
             "approval-required",
             "approval-denied",
+            "approval-mismatch",
             "limit-exceeded",
             "budget-exceeded",
             "stopped-by-principal",
@@ -1561,6 +1572,7 @@
             "context-not-clear",
             "approval-required",
             "approval-denied",
+            "approval-mismatch",
             "limit-exceeded",
             "budget-exceeded",
             "stopped-by-principal",
@@ -7722,6 +7734,7 @@
                   "context-not-clear",
                   "approval-required",
                   "approval-denied",
+                  "approval-mismatch",
                   "limit-exceeded",
                   "budget-exceeded",
                   "stopped-by-principal",
@@ -7836,6 +7849,7 @@
                   "context-not-clear",
                   "approval-required",
                   "approval-denied",
+                  "approval-mismatch",
                   "limit-exceeded",
                   "budget-exceeded",
                   "stopped-by-principal",
@@ -8001,6 +8015,7 @@
                     "context-not-clear",
                     "approval-required",
                     "approval-denied",
+                    "approval-mismatch",
                     "limit-exceeded",
                     "budget-exceeded",
                     "stopped-by-principal",
@@ -8182,6 +8197,7 @@
               "context-not-clear",
               "approval-required",
               "approval-denied",
+              "approval-mismatch",
               "limit-exceeded",
               "budget-exceeded",
               "stopped-by-principal",

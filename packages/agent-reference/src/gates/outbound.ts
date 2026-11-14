@@ -5,7 +5,10 @@ import { IntentScopeNode } from "../model/intent.js";
 import { MessageNode } from "../model/message-nodes.js";
 import { PaymentAccountNode, PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
-import { RdfOrderSuite } from "../settlement/rdf-order.js";
+import { SettlementError } from "../settlement/adapter.js";
+import { carry } from "../settlement/carried.js";
+import { selectedSettlement } from "../settlement/configurations.js";
+import type { ProtocolObjects, SettlementSuite } from "../settlement/types.js";
 import { decodeJws } from "../wire/inspect.js";
 import { documentConfiguration, isMessagePacket, packetProofInfo } from "../wire/message-packet.js";
 import { paymentDocumentIn, paymentTrace } from "../wire/payment.js";
@@ -83,6 +86,7 @@ export interface ProposalOrigin {
   readonly text: string;
 }
 export interface OutboundDeps {
+  readonly settlement?: SettlementSuite;
   readonly recordRelease?: (intent: ActionIntent) => boolean;
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
   readonly now: () => string;
@@ -168,19 +172,43 @@ export class OutboundGate {
     const key = actionDigest(intent);
     const facts = this.checkedPayments.get(key);
     if (!facts || !this.pendingGo.has(key)) throw new TypeError("Payment was not checked");
-    const objects = await new RdfOrderSuite().order(
-      { facts, digest: paymentDigest(facts) },
-      { party: this.deps.identity.party ?? this.deps.identity.actor },
+    const suite = selectedSettlement(
+      this.deps.gate.configuration?.layers.settlement,
+      this.deps.settlement,
     );
-    const trace = await paymentTrace(facts);
-    this.paymentDocuments.set(key, objects.objects[0]?.shown);
+    let objects: ProtocolObjects;
+    try {
+      objects = await suite.order(
+        { facts, digest: paymentDigest(facts) },
+        { party: this.deps.identity.party ?? this.deps.identity.actor },
+      );
+    } catch (error) {
+      if (error instanceof SettlementError) {
+        this.emit({
+          part: "outbound-gate",
+          kind: "check",
+          check: "evidence",
+          verdict: "fail",
+          reason: error.reason,
+          caption: "The selected protocol verifier refuses the carried payment object.",
+        });
+        this.decide("stop", "The protocol payment object failed verification.", error.reason);
+      }
+      throw error;
+    }
+    const trace = suite.trace ? await suite.trace(objects) : await paymentTrace(facts);
+    const carried = suite.id === "rdf-order" ? objects.objects[0]?.shown : carry(objects);
+    this.paymentDocuments.set(key, carried);
     this.emit({
       part: "outbound-gate",
       kind: "propose",
-      caption: "The gate builds the checked payment order in RDF.",
+      caption:
+        suite.id === "rdf-order"
+          ? "The gate builds the checked payment order in RDF."
+          : "The gate builds the checked protocol payment order.",
       settlement: trace,
     });
-    return objects.objects[0]?.shown;
+    return carried;
   }
 
   constructor(private readonly deps: OutboundDeps) {}
@@ -698,7 +726,9 @@ export class OutboundGate {
         agreement: held?.agreement,
         proofsVerified: held?.proofsVerified ?? false,
         inEffect: held?.inEffect ?? false,
-        protocolScoped: (ctx.configuration?.layers.settlement ?? "rdf-order") === "rdf-order",
+        protocolScoped:
+          (ctx.configuration?.layers.settlement ?? "rdf-order") ===
+          (this.deps.settlement?.id ?? "rdf-order"),
         ordered: held?.ordered ?? (() => false),
         accountBindings: this.deps.memory
           .context(ctx.taskId ?? scope.conversation)

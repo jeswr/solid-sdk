@@ -98,19 +98,19 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#72f3df49f7d65b3a9c0754215407a8ce2764f9bc4a5bb806ef8b933699e04a71-n162",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#e774d0bec4e4a5970f161d1a3b57d99e5a79b730ea0c26ca5a662e8965ff931b-n217",
     "message": "http://www.w3.org/ns/shacl#datatype: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#22a19247fdb7b84d602584495c69aae5ca1d2a2680bb524fa32fae01cf7e6711-n446",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#bf27e6db86d67321e7a13b8cac09702d00c51c01eadc974b5e737b775528f669-n467",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#22a19247fdb7b84d602584495c69aae5ca1d2a2680bb524fa32fae01cf7e6711-n446",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#bf27e6db86d67321e7a13b8cac09702d00c51c01eadc974b5e737b775528f669-n467",
     "message": "http://www.w3.org/ns/shacl#node: no runtime projection"
   },
   {
@@ -176,7 +176,7 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#de468093421cd3a96d73a3bc980ec53838b3c1de0dbe87de4d5d4217f8cd2ca7-n306",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#f7454c521854270b269163ff6ae8a7bbec84d7798c62d9da3404696cd5a8c315-n396",
     "message": "http://www.w3.org/ns/shacl#node: no runtime projection"
   },
   {
@@ -560,7 +560,7 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#4c50ffe1dca46708441cea97999bd12e5d439a777c644fd6a0b016dbb2cec867-n263",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#4e5b9d0202a529a37f6814e642379150d278b0e14a9f25eee7f994aeee2558ea-n486",
     "message": "http://www.w3.org/ns/shacl#node: no runtime projection"
   },
   {
@@ -1172,31 +1172,31 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#04634397051069053dc72636a0e01e12349b77b4989a356c933c8a9038c81245-n277",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#e10173a30a1ba8f3316ee52db33d37c2dc9e19205b85af4ce77d8ebfa620b3b9-n66",
     "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ad84c4a1a38cd2404ebdb950558d4859dc1078a301bb8dc6a99e6e4994b012ec-n386",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#815fdf915599419f5f69ed526e87f462c1cd71c2dbe6ca7877885759ed10d9ab-n160",
     "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7c56119b0ccbd697af978220e7ebaa403b931afe43f8a0eedf23f731b6f86cf5-n160",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#dd381f35f17dc6ae7d47b7cf2cfb040b257544be13a80e99990316f2e96b6a3b-n248",
     "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#1424f4d670479eb174a1b2a2bf9719d11efe8e5db4bc1bcfa896d4f147c7f59f-n187",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ee6d9df386bd146e09c2660a8934d8ed19ea8f484be242c083766842fb35c7fb-n429",
     "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d9b1d6031cc7fa2a6f0d2ec53949b5704ce20d0361758f22a76b6f766a4ff3aa-n220",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0f2ca0220671164f45d422a9dfc9c6330666767d28530cd1bf1e46ab001c02e0-n436",
     "message": "http://www.w3.org/ns/shacl#hasValue: no runtime projection"
   },
   {
@@ -1208,25 +1208,25 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8fb0aa6f07198e96c3ce875b74b93e3c0d1523de28106bd4738fbdc2bc49ed34-n433",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#e29bb262867361df66ddc76700f6274d2bd3dd843ccceb3e7d7edff0d2bd828f-n505",
     "message": "http://www.w3.org/ns/shacl#node: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8fb0aa6f07198e96c3ce875b74b93e3c0d1523de28106bd4738fbdc2bc49ed34-n433",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#e29bb262867361df66ddc76700f6274d2bd3dd843ccceb3e7d7edff0d2bd828f-n505",
     "message": "http://www.w3.org/ns/shacl#class: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#71a87d881f4694531d73bf533e92e1f21edb1236aef6f32a90170772e0350fc9-n206",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#4a7986c628b070404dfe68d6952cbd589602c1b6734fb66c29314bed8a866083-n500",
     "message": "http://www.w3.org/ns/shacl#node: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#71a87d881f4694531d73bf533e92e1f21edb1236aef6f32a90170772e0350fc9-n206",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#4a7986c628b070404dfe68d6952cbd589602c1b6734fb66c29314bed8a866083-n500",
     "message": "http://www.w3.org/ns/shacl#class: no runtime projection"
   },
   {
@@ -1256,19 +1256,19 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a84407ec0e5ae3734af8ac1a2fe8ca56c3a753c3a29f2b4e4e5dd4239d759aa0-n244",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0455d25e9ab9b6f6a2eb109544e286d5be27215ab1a1206c008f9d2507bb353c-n471",
     "message": "http://www.w3.org/ns/shacl#datatype: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#147965519d49383855db1fe94c79804437be962ea7f0778dd54146496e7d701c-n17",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#184c467e80d2167876eb14e2e673b0b31da09671a791045c5ffaa371f46ef928-n325",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#147965519d49383855db1fe94c79804437be962ea7f0778dd54146496e7d701c-n17",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#184c467e80d2167876eb14e2e673b0b31da09671a791045c5ffaa371f46ef928-n325",
     "message": "http://www.w3.org/ns/shacl#node: no runtime projection"
   },
   {
@@ -1280,25 +1280,25 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c8b5553639b1ed28d71fe10843ac922758e9e7d114d3edfb927a0b9915de2315-n209",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#9fa8ea4352c350126e224c17839eaa99f5bde909466ab8b2403a581a344bd282-n460",
     "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c8b5553639b1ed28d71fe10843ac922758e9e7d114d3edfb927a0b9915de2315-n209",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#9fa8ea4352c350126e224c17839eaa99f5bde909466ab8b2403a581a344bd282-n460",
     "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#978650ba36c201419c982dbb93062cd57a40c879c2ee6a15a8f94b7c6cd23168-n266",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#479342f1fcf4a577ba6039590d9a2b1a83aa093ca6aacff9287aafe0ba1c1e59-n384",
     "message": "http://www.w3.org/ns/shacl#minInclusive: numeric bounds require a numeric projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#978650ba36c201419c982dbb93062cd57a40c879c2ee6a15a8f94b7c6cd23168-n266",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#479342f1fcf4a577ba6039590d9a2b1a83aa093ca6aacff9287aafe0ba1c1e59-n384",
     "message": "http://www.w3.org/ns/shacl#maxInclusive: numeric bounds require a numeric projection"
   },
   {

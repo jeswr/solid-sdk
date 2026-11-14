@@ -632,6 +632,8 @@ const configurationOptions = LAYER_IDS.flatMap((layer) =>
 );
 export const scenarioConfigurationSchema = z.union(configurationOptions);
 export const scenarioSchema = z.strictObject({
+  settlementFault: z.enum(["tampered-order"]).optional(),
+  stopAfter: slug.optional(),
   paymentProviders: z
     .array(
       z.strictObject({

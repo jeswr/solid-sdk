@@ -15,7 +15,7 @@ export const ODRL_CONTEXT = "https://w3id.org/jeswr/awp/context/odrl/v1";
 const pins = new Map([
   [
     ANSWERABLE_CONTEXT,
-    ["v1.jsonld", "cf3736755efe1878dc344b67f77a13722534dbeb79f6c039f702a473805a70e1"],
+    ["v1.jsonld", "7f7a8451f42b8ca86db7a6599b0520da88dab2bbc5d5c098cc30ce044d51c7ff"],
   ],
   [
     VC_CONTEXT,

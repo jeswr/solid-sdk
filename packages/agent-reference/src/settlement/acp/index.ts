@@ -84,6 +84,13 @@ export class AcpSuite implements SettlementSuite {
       [profile.currency.toLowerCase()]: profile.decimals,
     });
   }
+  private delegatePayment(body: Parameters<AcpPaymentProvider["delegate"]>[0]) {
+    try {
+      return this.provider.delegate(body, seconds(this.profile));
+    } catch (error) {
+      return acpFailure(error);
+    }
+  }
   private endpoint(path: string) {
     let store = this.endpoints.get(path);
     if (!store) {
@@ -120,9 +127,14 @@ export class AcpSuite implements SettlementSuite {
       this.profile,
       this.profile.bearerToken,
     );
+    await this.profile.admit(
+      this.profile.payer.party,
+      "payment-request",
+      bundle(this.id, [httpObject("Create checkout request", creation, body)]),
+    );
     const units = convertAcpAmount(
       {
-        amount: requireValue(due.agreement.duty?.constraint?.amount),
+        amount: due.amount ?? requireValue(due.agreement.duty?.constraint?.amount),
         currency: this.profile.currency,
       },
       this.profile.decimals,
@@ -212,6 +224,11 @@ export class AcpSuite implements SettlementSuite {
       this.profile,
       this.profile.bearerToken,
     );
+    await this.profile.admit(
+      this.profile.payer.party,
+      "payment",
+      bundle(this.id, [httpObject("Delegate payment request", delegation, body)]),
+    );
     const response = await this.endpoint(delegation.path).execute(
       header(delegation.headers, "Idempotency-Key"),
       body,
@@ -222,7 +239,7 @@ export class AcpSuite implements SettlementSuite {
             path: delegation.path,
             status: 201,
             headers: {},
-            body: this.provider.delegate(body, seconds(this.profile)),
+            body: this.delegatePayment(body),
           },
           this.profile.provider.signingKey.privateKey,
           seconds(this.profile),
@@ -230,6 +247,11 @@ export class AcpSuite implements SettlementSuite {
     );
     // The signed provider response is parsed in the protocol lift before its token is used.
     await verifyExchange(response, this.profile.provider.identity, this.profile);
+    await this.profile.admit(
+      this.profile.provider.party,
+      "payment",
+      bundle(this.id, [httpObject("Delegated payment", response, response.body)]),
+    );
     const token = await importToken(response);
     const completeBody = completeSchema.parse({
       payment_data: {
@@ -377,6 +399,12 @@ export class AcpSuite implements SettlementSuite {
       }
       return acpFailure(error, completeExchange);
     }
+  }
+  restore(objects: ProtocolObjects) {
+    return this.store.restore(objects);
+  }
+  objectsFor(facts: PaymentFacts) {
+    return this.store.find(facts);
   }
   lift(objects: ProtocolObjects): PaymentFacts {
     return this.store.lift(objects);
