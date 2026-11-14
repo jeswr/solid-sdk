@@ -268,6 +268,17 @@
     return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.localeCompare(b);
   });
   AX.scenarioHasReal = hasReal;
+  // Open on the real scenario with the most configurations, so the selectors show
+  // every alternative that has a real run.
+  AX.defaultScenario = AX.scenarioIds.filter(hasReal).reduce(function (best, id) {
+    function n(s) { var c = {}; AX.traces.forEach(function (t) { if (t.scenario.id === s) c[t.configuration.id] = 1; }); return Object.keys(c).length; }
+    return best === null || n(id) > n(best) ? id : best;
+  }, null) || AX.scenarioIds[0];
+  // Another scenario that has a real run with this layer set to this suite, if any.
+  AX.scenarioRunning = function (layerId, suiteId) {
+    var t = AX.traces.filter(function (x) { return !x.isFixture && x.layersFull[layerId] === suiteId; })[0];
+    return t ? t.scenario.id : null;
+  };
   AX.tracesFor = function (scenarioId) {
     return AX.traces.filter(function (t) { return t.scenario.id === scenarioId; });
   };

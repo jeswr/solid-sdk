@@ -156,7 +156,7 @@
   E.apply = async function (p) {
     var version = ++loadVersion;
     stop();
-    var scenario = p.scenario && AX.tracesFor(p.scenario).length ? p.scenario : AX.scenarioIds[0];
+    var scenario = p.scenario && AX.tracesFor(p.scenario).length ? p.scenario : AX.defaultScenario;
     if (!scenario) { root.innerHTML = '<p class="empty">No traces are loaded. Run node scripts/bundle-data.mjs.</p>'; return; }
     var index = (p.config && AX.traceByKey[scenario + '--' + p.config]) || AX.baselineTrace(scenario);
     var changed = !S.trace || index.key !== S.trace.key;
@@ -327,8 +327,10 @@
       var cur = t.layersFull[l.id];
       sel.innerHTML = l.suites.map(function (s) {
         var on = s.id === cur || suiteEnabled(l.id, s.id);
+        var elsewhere = on ? null : AX.scenarioRunning(l.id, s.id);
+        var note = on ? '' : elsewhere ? ' (runs in ' + AX.scenarioTitle(elsewhere) + ')' : ' (not run yet)';
         return '<option value="' + s.id + '"' + (s.id === cur ? ' selected' : '') + (on ? '' : ' disabled') + '>' +
-          esc(s.name + (on ? '' : ' (not run yet)')) + '</option>';
+          esc(s.name + note) + '</option>';
       }).join('');
       if (!l.suites.some(function (s) { return s.id === cur; })) {
         sel.innerHTML += '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>';
