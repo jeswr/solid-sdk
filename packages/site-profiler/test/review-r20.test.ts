@@ -205,7 +205,7 @@ function recordingReplayer(
         cookieNames: cookies,
         authenticationContext: signedIn ? "fictional-context" : `${sender}-context`,
         ...(sender === "control" ? { credentialsOnlyControl: true } : {}),
-        ...(sender === "control" && loginRouteProbe
+        ...(sender !== "cookieless" && loginRouteProbe
           ? {
               loginRouteProbe: true,
               ...(loginRouteProbe.hopOf !== undefined
@@ -260,6 +260,8 @@ async function execute(
 ) {
   const sessions = new InMemorySessions();
   sessions.set(origin, undefined, {
+    // The vault declares the session cookie: positive login evidence for the control.
+    credentialCookies: ["session"],
     cookies: jar.map((c) => ({
       domain: "shop.test",
       path: "/",
@@ -641,29 +643,38 @@ function rowsFixture(signedInRows: boolean) {
   );
   // The review's site answers the empty envelope to anyone; an honest one asks for the session.
   // `pages` answers controls for other paths (redirect targets the profiler verifies).
+  // `signedIn` answers the signed-in context for those paths (round 21, decision 2); by
+  // default the signed-in session is redirected away from a sign-in page.
   const replayer = (
     envelope?: unknown,
     pages: Record<string, Answer> = {},
     sent: { url: string; sender: Sender }[] = [],
+    signedIn: Record<string, Answer> = {},
   ) =>
     recordingReplayer(
       f.trace,
       (url, sender) =>
         sender !== "signed-in" && pages[url.pathname]
           ? (pages[url.pathname] as Answer)
-          : url.pathname === "/stores/main/listing"
-            ? sender === "signed-in"
-              ? { status: 200, contentType: "application/json", body: JSON.stringify(f.liveBody()) }
-              : envelope
-                ? { status: 200, contentType: "application/json", body: JSON.stringify(envelope) }
-                : { status: 302, body: "", location: "/login" }
-            : signedInRows && sender !== "signed-in"
-              ? { status: 302, body: "", location: "/login" }
-              : {
-                  status: 200,
-                  contentType: "application/json",
-                  body: JSON.stringify({ total: 0, items: [] }),
-                },
+          : sender === "signed-in" && (signedIn[url.pathname] || pages[url.pathname])
+            ? (signedIn[url.pathname] ?? { status: 302, body: "", location: "/dashboard" })
+            : url.pathname === "/stores/main/listing"
+              ? sender === "signed-in"
+                ? {
+                    status: 200,
+                    contentType: "application/json",
+                    body: JSON.stringify(f.liveBody()),
+                  }
+                : envelope
+                  ? { status: 200, contentType: "application/json", body: JSON.stringify(envelope) }
+                  : { status: 302, body: "", location: "/login" }
+              : signedInRows && sender !== "signed-in"
+                ? { status: 302, body: "", location: "/login" }
+                : {
+                    status: 200,
+                    contentType: "application/json",
+                    body: JSON.stringify({ total: 0, items: [] }),
+                  },
       [],
       sent,
     );
@@ -897,6 +908,8 @@ it("r20 E: a denied control is never sent and the deletion is Uncertain", async 
   const { f, verified, policy } = await honestListing();
   const sessions = new InMemorySessions();
   sessions.set(origin, undefined, {
+    // The vault declares the session cookie: positive login evidence for the control.
+    credentialCookies: ["session"],
     cookies: gatedJar.map((c) => ({
       domain: "shop.test",
       path: "/",
@@ -976,10 +989,11 @@ it("r20 the profiler's control probe goes through the read gate and is sent once
 });
 
 // ---------------------------------------------------------------- decision 5: verified routes
+// Its form posts to the learned login operation's target (round 21, decision 2).
 const loginDocument: Answer = {
   status: 200,
   contentType: "text/html; charset=utf-8",
-  body: '<html><body><header><a href="/">Example admin</a></header><form method="post" action=""><label>User <input name="user"></label><input type="password" name="pw"><button>Sign in</button></form></body></html>',
+  body: '<html><body><header><a href="/">Example admin</a></header><form method="post" action="/login_check"><label>User <input name="user"></label><input type="password" name="pw"><button>Sign in</button></form></body></html>',
 };
 const dashboard: Answer = {
   status: 200,
@@ -992,6 +1006,7 @@ async function verifiedRouteScenario(
   envelope: unknown,
   pages: Record<string, Answer>,
   gate?: Gate,
+  signedIn: Record<string, Answer> = {},
 ) {
   const { f, rows, replayer } = rowsFixture(true);
   f.trace.push(
@@ -1001,7 +1016,12 @@ async function verifiedRouteScenario(
     }),
   );
   const sent: { url: string; sender: Sender }[] = [];
-  const learned = await learn(f, [f.write, rows, f.live], replayer(envelope, pages, sent), gate);
+  const learned = await learn(
+    f,
+    [f.write, rows, f.live],
+    replayer(envelope, pages, sent, signedIn),
+    gate,
+  );
   const run = await execute(
     f,
     learned.verified,
@@ -1023,9 +1043,10 @@ it("r20 a login envelope redirecting to a verified login page is accepted and pi
     route: `${origin}/admin/`,
     verifiedRoutes: [{ route: `${origin}/admin/`, url: `${origin}/admin/` }],
   });
-  // The redirect target was fetched once, as a credentials-only control.
+  // The redirect target was fetched once as a credentials-only control and once signed in.
   expect(sent.filter((s) => s.url === `${origin}/admin/`)).toEqual([
     { url: `${origin}/admin/`, sender: "control" },
+    { url: `${origin}/admin/`, sender: "signed-in" },
   ]);
   expect(run.outcome).toBe("completed");
   expect(run.calls.slice(-2)).toEqual([
@@ -1116,16 +1137,37 @@ it("r20 verified login routes need every fetch of the target to be a login docum
     });
   const page = { status: 200, contentType: "text/html", bodySample: loginDocument.body };
   const learned = [`${origin}/login`];
-  expect(verifiedLoginRoutes([probe(1, `${origin}/admin/`, page)], origin, learned)).toEqual([
-    { route: `${origin}/admin/`, url: `${origin}/admin/` },
-  ]);
+  // Round 21: the signed-in context is redirected away from the target, and every login
+  // document posts to the learned login operation's target (the fixture's sign-in POST).
+  const signIn = f.trace.filter((r) => r.phase === "login");
+  const away = f.record(50, {
+    phase: "verify",
+    demonstration: undefined,
+    url: `${origin}/admin/`,
+    resourceType: "replay",
+    loginRouteProbe: true,
+    status: 302,
+    redirectedTo: `${origin}/dashboard`,
+    bodySample: "",
+  });
+  const evidence = (...probes: RecordedRequest[]) => [...signIn, away, ...probes];
+  expect(
+    verifiedLoginRoutes(evidence(probe(1, `${origin}/admin/`, page)), origin, learned),
+  ).toEqual([{ route: `${origin}/admin/`, url: `${origin}/admin/` }]);
+  // Without the signed-in fetch, or without the sign-in POST target, it is unverified.
+  expect(
+    verifiedLoginRoutes([...signIn, probe(1, `${origin}/admin/`, page)], origin, learned),
+  ).toEqual([]);
+  expect(verifiedLoginRoutes([away, probe(1, `${origin}/admin/`, page)], origin, learned)).toEqual(
+    [],
+  );
   // A second fetch that served something else withdraws it.
   expect(
     verifiedLoginRoutes(
-      [
+      evidence(
         probe(1, `${origin}/admin/`, page),
         probe(2, `${origin}/admin/`, { ...page, bodySample: dashboard.body }),
-      ],
+      ),
       origin,
       learned,
     ),
@@ -1133,10 +1175,10 @@ it("r20 verified login routes need every fetch of the target to be a login docum
   // A plain cookieless replay, or a control that was not a route probe, is no evidence.
   expect(
     verifiedLoginRoutes(
-      [
+      evidence(
         probe(1, `${origin}/admin/`, { ...page, credentialsOnlyControl: undefined }),
         probe(2, `${origin}/panel/`, { ...page, loginRouteProbe: undefined }),
-      ],
+      ),
       origin,
       learned,
     ),
@@ -1144,7 +1186,7 @@ it("r20 verified login routes need every fetch of the target to be a login docum
   // A truncated login page is no evidence.
   expect(
     verifiedLoginRoutes(
-      [probe(1, `${origin}/admin/`, { ...page, bodyTruncated: true })],
+      evidence(probe(1, `${origin}/admin/`, { ...page, bodyTruncated: true })),
       origin,
       learned,
     ),
@@ -1155,17 +1197,17 @@ it("r20 verified login routes need every fetch of the target to be a login docum
     redirectedTo: `${origin}/login`,
     bodySample: "",
   });
-  expect(verifiedLoginRoutes([hop], origin, learned)).toEqual([]);
+  expect(verifiedLoginRoutes(evidence(hop), origin, learned)).toEqual([]);
   expect(
     verifiedLoginRoutes(
-      [hop, probe(2, `${origin}/login`, { ...page, loginRouteHopOf: `${origin}/other/` })],
+      evidence(hop, probe(2, `${origin}/login`, { ...page, loginRouteHopOf: `${origin}/other/` })),
       origin,
       learned,
     ),
   ).toEqual([]);
   expect(
     verifiedLoginRoutes(
-      [hop, probe(2, `${origin}/login`, { ...page, loginRouteHopOf: `${origin}/admin/` })],
+      evidence(hop, probe(2, `${origin}/login`, { ...page, loginRouteHopOf: `${origin}/admin/` })),
       origin,
       learned,
     ),

@@ -726,11 +726,18 @@ only", "private", "sign up" and "register" (whole words; they only reject).
 
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 Round 20: the control is a **credentials-only control**. It differs from the credentialed
-liveness read only by its credentials: no session headers and none of the cookies the shared
-classification (`isSessionCredentialCookie` with the vault's declared credential cookies and
-the login routes' `sessionCookies`) marks as session credentials; every other cookie (consent,
-age gate, cookie check, bot cookies) is kept. A credential cookie kept by mistake makes the
-control render, so the deletion ends Uncertain (fails safe). The refusal is pinned: the learned
+liveness read only by its credentials: no session headers and none of the cookies with
+positive login evidence (round 21, `isLoginCredentialCookie`: the vault's declared credential
+cookies, cookies the login set at runtime, and the login routes' `sessionCookies`); every other
+cookie is kept. The redaction classifier (`isSessionCredentialCookie`: any `httpOnly` cookie,
+credential-like names, CSRF cookie sources) is never used for the control, so an HttpOnly or
+credential-named gate cookie (`age_ok` set HttpOnly, `remember_age`, `visitor_token`, an
+HttpOnly cookie check) is kept, and an expired session that still carries it cannot pass the
+gate off as a refusal. A credential without login evidence is kept too, which makes the
+control render, so the deletion ends Uncertain (fails safe). With nothing to drop (no session
+header and no login-evidence cookie for the URL) the control is not sent and the deletion is
+Uncertain. Residual: a gate cookie the login response itself sets or changes (for example an
+"I am over 18" box on the login form) is login evidence and is dropped. The refusal is pinned: the learned
 `anonymous.refusal` kind (`login-redirect`, `authentication-status`, `login-page` or
 `login-envelope`) and, for a redirect or login envelope, `anonymous.route` (one of
 `loginRoutes`) must be reproduced exactly (`refusalEvidence` plus `sameRefusal`); a legacy
@@ -750,9 +757,17 @@ Verified login routes (decision 5): `refusalTarget` gives a refusal's same-origi
 target (a Location, or a flagged envelope's redirect value). The profiler may add it to
 `loginRoutes` only after fetching that exact URL as a credentials-only control (read gate
 first) and seeing a login document, directly or after one same-origin hop to an already-learned
-login route. `anonymous.verifiedRoutes` records each such route with its evidence
-(`{ route, url, via? }`); validation requires the route in `loginRoutes`, the evidence URL on
-that origin and path, and a hop to another learned route. The runtime pin is unchanged: the
+login route. Round 21 (decision 2): every login document served there must post (each password
+form) to the learned login operation's target, or post to its own URL (empty, missing or
+self-referencing action) with exactly the learned login's credential field names (username,
+password and declared form-key slot) while the signed-in fetch of that URL redirects away (the
+Magento admin shape); the target is never the site root, and the
+signed-in context must not be served it as an ordinary page (the profiler's gated signed-in
+fetch redirects or answers a login document, and no signed-in GET of that route in the trace
+answered anything else). `anonymous.verifiedRoutes` records each such route with its evidence
+(`{ route, url, via? }`); validation requires the route in `loginRoutes` and not the site root,
+the evidence URL on that origin and path, and a hop to another learned route. The runtime pin is unchanged: the
 control must reproduce the exact pinned route.
 `test/review-r20.test.ts` and `site-profiler/test/review-r20.test.ts` cover the round-20
-review.
+review; round 21 is in the same executor file and in `site-profiler/test/review-r21.test.ts`
+(the real profiler replayer and its cookie classification).

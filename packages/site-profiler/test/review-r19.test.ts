@@ -262,6 +262,8 @@ async function execute(
 ) {
   const sessions = new InMemorySessions();
   sessions.set(origin, undefined, {
+    // The vault declares the session cookie: positive login evidence for the control.
+    credentialCookies: ["session"],
     cookies: [
       {
         name: "session",

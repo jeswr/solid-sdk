@@ -20,9 +20,11 @@ import {
   type VerifiedLoginRoute,
 } from "@jeswr/site-executor";
 import { type Operation, SCHEMA, selectionWitnesses } from "@jeswr/site-model";
+import { isCsrfFieldName, parseForms } from "./forms.js";
 import { attr, parseHtml, selectAll } from "./html.js";
+import { usernameField } from "./login.js";
 import { matchRequest } from "./templates.js";
-import type { RecordedRequest } from "./types.js";
+import type { FormInfo, RecordedRequest } from "./types.js";
 import { isDangerousLink, sab } from "./util.js";
 import type { Replayer } from "./verify.js";
 import { learnEffectVerification } from "./write-effect.js";
@@ -90,23 +92,53 @@ export function learnedLoginRoutes(
   trace: readonly RecordedRequest[],
   origin: string,
 ): string[] {
+  const routes = new Set(loginPostTargets(operations, trace, origin));
+  const signIn = trace.filter((r) => r.phase === "login" && !r.blocked);
+  for (const r of signIn) {
+    if (
+      r.method !== "GET" ||
+      r.status === undefined ||
+      r.status < 200 ||
+      r.status >= 300 ||
+      !/html/i.test(r.contentType ?? "") ||
+      !r.bodySample ||
+      r.bodyTruncated ||
+      !isLoginDocument(r.bodySample, r.url)
+    )
+      continue;
+    const page = routeOf(r.url, origin);
+    if (page) routes.add(page);
+  }
+  return [...routes].sort().slice(0, 16);
+}
+
+/** Origin plus path of a same-origin, non-dangerous URL. */
+function routeOf(href: string, origin: string, base?: string): string | undefined {
+  try {
+    const url = new URL(href, base);
+    return url.origin === origin && !isDangerousLink(url.href)
+      ? url.origin + url.pathname
+      : undefined;
+  } catch {
+    return;
+  }
+}
+
+/**
+ * The learned login operation's targets: the login operation's endpoint and the action target of
+ * a sign-in page's password form that the sign-in posted to (each a same-origin origin-plus-path).
+ */
+export function loginPostTargets(
+  operations: readonly Operation[],
+  trace: readonly RecordedRequest[],
+  origin: string,
+): string[] {
   const routes = new Set<string>();
-  const route = (href: string, base?: string) => {
-    try {
-      const url = new URL(href, base);
-      if (url.origin !== origin || isDangerousLink(url.href)) return;
-      return url.origin + url.pathname;
-    } catch {
-      return;
-    }
-  };
-  const add = (href: string, base?: string) => {
-    const found = route(href, base);
-    if (found) routes.add(found);
-  };
   for (const op of operations)
-    if (op.actionType === sab("LoginAction") && !op.request.urlTemplate.includes("{"))
-      add(op.request.urlTemplate);
+    if (op.actionType === sab("LoginAction") && !op.request.urlTemplate.includes("{")) {
+      const target = routeOf(op.request.urlTemplate, origin);
+      if (target) routes.add(target);
+    }
   const signIn = trace.filter((r) => r.phase === "login" && !r.blocked);
   const targets = new Set<string>();
   for (const r of signIn) {
@@ -121,24 +153,29 @@ export function learnedLoginRoutes(
       !isLoginDocument(r.bodySample, r.url)
     )
       continue;
-    add(r.url);
-    for (const form of selectAll(parseHtml(r.bodySample), "form")) {
-      if (!selectAll(form, "input").some((el) => isHtmlInputType(el, "password"))) continue;
-      const action = attr(form, "action")?.trim();
-      const target = route(action || r.url, r.url);
+    for (const target of passwordFormTargets(r.bodySample, r.url, origin))
       if (target) targets.add(target);
-    }
   }
   for (const r of signIn) {
-    const target = r.method === "POST" ? route(r.url) : undefined;
+    const target = r.method === "POST" ? routeOf(r.url, origin) : undefined;
     if (target && targets.has(target)) routes.add(target);
   }
-  return [...routes].sort().slice(0, 16);
+  return [...routes].sort();
+}
+
+/**
+ * The action target (origin plus path) of every password form in a document; a form without an
+ * action posts to the page itself. A form leaving the origin yields `undefined`.
+ */
+function passwordFormTargets(body: string, url: string, origin: string): (string | undefined)[] {
+  return selectAll(parseHtml(body), "form")
+    .filter((form) => selectAll(form, "input").some((el) => isHtmlInputType(el, "password")))
+    .map((form) => routeOf(attr(form, "action")?.trim() || url, origin, url));
 }
 
 /**
  * Credentials-only control replays of exactly this URL recorded in the trace: the signed-in
- * context's cookies minus the session credentials. A plain cookieless replay (verification's
+ * context's cookies minus those with positive login evidence. A plain cookieless replay (verification's
  * signed-out replay) is never evidence, because a gate on a non-credential cookie answers it
  * differently from an expired session that still holds that cookie.
  */
@@ -154,18 +191,6 @@ function controlReplays(trace: readonly RecordedRequest[], url: string): Recorde
   );
 }
 
-/** Origin plus path of a same-origin, non-dangerous URL. */
-function routeOf(href: string, origin: string, base?: string): string | undefined {
-  try {
-    const url = new URL(href, base);
-    return url.origin === origin && !isDangerousLink(url.href)
-      ? url.origin + url.pathname
-      : undefined;
-  } catch {
-    return;
-  }
-}
-
 /** A complete 2xx HTML answer that is a login document. */
 function loginDocumentAnswer(r: RecordedRequest, routes: readonly string[], origin: string) {
   return (
@@ -179,17 +204,161 @@ function loginDocumentAnswer(r: RecordedRequest, routes: readonly string[], orig
   );
 }
 
+/** A login document whose every password form posts to one of the learned login targets. */
+function postsToLoginTarget(r: RecordedRequest, targets: readonly string[], origin: string) {
+  const posted = passwordFormTargets(r.bodySample ?? "", r.url, origin);
+  return posted.length > 0 && posted.every((target) => !!target && targets.includes(target));
+}
+
 /**
- * Login routes verified from refusal redirect targets (decision 5): the profiler fetched the
- * exact target URL as a credentials-only control and every such fetch answered a login
- * document, or redirected once, on the same origin, to an already-learned login route whose
- * fetched answer (every one) was a login document. A target that served anything else, or was
- * never fetched, stays unverified.
+ * The credential field names of a password form: its username field, its password fields and
+ * the hidden fields that fill one of the declared form-key `slots`. Undefined without a username.
+ */
+function credentialFields(form: FormInfo, slots: ReadonlySet<string>): string | undefined {
+  const user = usernameField(form);
+  if (!user) return;
+  const names = new Set([
+    user,
+    ...form.fields.filter((f) => f.type === "password").map((f) => f.name),
+    ...form.fields.filter((f) => f.hidden && slots.has(f.name)).map((f) => f.name),
+  ]);
+  return JSON.stringify([...names].sort());
+}
+
+/**
+ * The learned login operation's credential field names (owner decision on round 21's decision
+ * 2): the username, password and declared form-key fields of each sign-in page's password form
+ * that posted to a learned login target. The form-key slots are the login operation's form CSRF
+ * targets, or, without a login operation, the sign-in form's hidden anti-forgery fields.
+ */
+function learnedCredentialFields(
+  operations: readonly Operation[],
+  trace: readonly RecordedRequest[],
+  origin: string,
+  targets: readonly string[],
+): { fields: Set<string>; slots: Set<string> } {
+  const logins = operations.filter((op) => op.actionType === sab("LoginAction"));
+  const declared = new Set(
+    logins.flatMap((op) =>
+      (op.csrf ?? []).flatMap((rule) => (rule.target.kind === "form" ? [rule.target.name] : [])),
+    ),
+  );
+  const forms = trace
+    .filter(
+      (r) =>
+        r.phase === "login" &&
+        !r.blocked &&
+        r.method === "GET" &&
+        r.status !== undefined &&
+        r.status >= 200 &&
+        r.status < 300 &&
+        /html/i.test(r.contentType ?? "") &&
+        !!r.bodySample &&
+        !r.bodyTruncated &&
+        isLoginDocument(r.bodySample, r.url),
+    )
+    .flatMap((r) => parseForms(r.bodySample ?? "", r.url))
+    .filter((form) => {
+      const target = form.hasPassword ? routeOf(form.action, origin) : undefined;
+      return !!target && targets.includes(target);
+    });
+  const slots = logins.length
+    ? declared
+    : new Set(
+        forms
+          .flatMap((f) => f.fields.filter((x) => x.hidden && isCsrfFieldName(x.name)))
+          .map((x) => x.name),
+      );
+  const fields = new Set<string>();
+  for (const form of forms) {
+    const names = credentialFields(form, slots);
+    if (names) fields.add(names);
+  }
+  // A declared slot the sign-in form lacked still belongs to the learned credential fields.
+  return {
+    fields: new Set(
+      [...fields].map((names) =>
+        JSON.stringify([...new Set([...JSON.parse(names), ...slots])].sort()),
+      ),
+    ),
+    slots,
+  };
+}
+
+/**
+ * Whether every password form of a login document served at the redirect target itself is the
+ * site's login form: it posts to a learned login target, or (owner decision) it posts to its own
+ * URL, its credential field names are exactly the learned login operation's, and every signed-in
+ * fetch of that URL redirected away (to another route).
+ */
+function siteLoginForms(
+  r: RecordedRequest,
+  targets: readonly string[],
+  learned: { fields: Set<string>; slots: Set<string> },
+  redirectsAway: boolean,
+  origin: string,
+): boolean {
+  const body = r.bodySample ?? "";
+  const forms = parseForms(body, r.url).filter((form) => form.hasPassword);
+  // A password form parseForms could not resolve is never a qualifying form.
+  if (!forms.length || forms.length !== passwordFormTargets(body, r.url, origin).length)
+    return false;
+  const page = routeOf(r.url, origin);
+  return forms.every((form) => {
+    const target = routeOf(form.action, origin);
+    if (!target) return false;
+    if (targets.includes(target)) return true;
+    const names = credentialFields(form, learned.slots);
+    return target === page && redirectsAway && !!names && learned.fields.has(names);
+  });
+}
+
+/**
+ * Whether the signed-in context is served the target route as an ordinary (non-login) page: a
+ * 2xx answer to a signed-in GET of that origin and path anywhere in the trace (after the sign-in
+ * POST, outside credentials-only controls and anonymous replays) that is not a complete login
+ * document. A redirect is no ordinary page.
+ */
+function servedSignedIn(
+  trace: readonly RecordedRequest[],
+  route: string,
+  learned: readonly string[],
+  origin: string,
+): boolean {
+  const signedInFrom = Math.min(
+    ...trace.filter((r) => r.phase === "login" && r.method === "POST").map((r) => r.seq),
+  );
+  return trace.some(
+    (r) =>
+      r.method === "GET" &&
+      !r.blocked &&
+      r.resourceType !== "replay-anonymous" &&
+      r.credentialsOnlyControl !== true &&
+      (r.phase !== "login" || r.seq > signedInFrom) &&
+      r.status !== undefined &&
+      r.status >= 200 &&
+      r.status < 300 &&
+      routeOf(r.url, origin) === route &&
+      !loginDocumentAnswer(r, learned, origin),
+  );
+}
+
+/**
+ * Login routes verified from refusal redirect targets (decisions 5 and round 21's decision 2):
+ * the profiler fetched the exact target URL as a credentials-only control and every such fetch
+ * answered a login document, or redirected once, on the same origin, to an already-learned login
+ * route whose fetched answer (every one) was a login document. Each login document served must
+ * post (every password form) to the learned login operation's target (`loginPostTargets`). The
+ * target is never the site root, and the signed-in context must not be served it as an ordinary
+ * page: the profiler's signed-in fetch of the target (at least one, every one) redirected or
+ * answered a login document, and no signed-in GET of that route in the trace answered anything
+ * else. A target that served anything else, or was never fetched, stays unverified.
  */
 export function verifiedLoginRoutes(
   trace: readonly RecordedRequest[],
   origin: string,
   learned: readonly string[],
+  operations: readonly Operation[] = [],
 ): VerifiedLoginRoute[] {
   const probes = trace.filter(
     (r) =>
@@ -199,6 +368,20 @@ export function verifiedLoginRoutes(
       r.method === "GET" &&
       !r.blocked,
   );
+  const signedInProbes = trace.filter(
+    (r) =>
+      r.resourceType === "replay" &&
+      r.credentialsOnlyControl !== true &&
+      r.loginRouteProbe === true &&
+      r.loginRouteHopOf === undefined &&
+      r.method === "GET" &&
+      !r.blocked,
+  );
+  const loginTargets = loginPostTargets(operations, trace, origin);
+  const credentials = learnedCredentialFields(operations, trace, origin, loginTargets);
+  // A hop's login document (at an already-learned route) must post to a learned login target.
+  const loginAnswer = (r: RecordedRequest) =>
+    loginDocumentAnswer(r, learned, origin) && postsToLoginTarget(r, loginTargets, origin);
   const targets = new Map<string, RecordedRequest[]>();
   for (const r of probes) {
     if (r.loginRouteHopOf !== undefined) continue;
@@ -208,10 +391,31 @@ export function verifiedLoginRoutes(
   const out: VerifiedLoginRoute[] = [];
   for (const [url, fetched] of targets) {
     const route = routeOf(url, origin);
-    if (!route || learned.includes(route)) continue;
+    if (!route || learned.includes(route) || new URL(route).pathname === "/") continue;
+    const signedIn = signedInProbes.filter((r) => exactUrl(r.url) === url);
+    if (
+      !signedIn.length ||
+      !signedIn.every(
+        (r) =>
+          r.status !== undefined &&
+          ((r.status >= 300 && r.status < 400) || loginDocumentAnswer(r, learned, origin)),
+      ) ||
+      servedSignedIn(trace, route, learned, origin)
+    )
+      continue;
+    const redirectsAway = signedIn.every((r) => {
+      if (r.status === undefined || r.status < 300 || r.status >= 400 || !r.redirectedTo)
+        return false;
+      const away = routeOf(r.redirectedTo, origin, r.url);
+      return !!away && away !== route;
+    });
     let via: string | undefined;
     const ok = fetched.every((r) => {
-      if (loginDocumentAnswer(r, learned, origin)) return true;
+      if (
+        loginDocumentAnswer(r, learned, origin) &&
+        siteLoginForms(r, loginTargets, credentials, redirectsAway, origin)
+      )
+        return true;
       if (r.status === undefined || r.status < 300 || r.status >= 400 || !r.redirectedTo)
         return false;
       const hop = exactUrl(r.redirectedTo);
@@ -219,8 +423,7 @@ export function verifiedLoginRoutes(
       if (!hop || !hopRoute || hopRoute === route || !learned.includes(hopRoute)) return false;
       if (via !== undefined && via !== hop) return false;
       const answers = probes.filter((q) => q.loginRouteHopOf === url && exactUrl(q.url) === hop);
-      if (!answers.length || !answers.every((q) => loginDocumentAnswer(q, learned, origin)))
-        return false;
+      if (!answers.length || !answers.every(loginAnswer)) return false;
       via = hop;
       return true;
     });
@@ -236,7 +439,7 @@ function livenessLoginRoutes(
   origin: string,
 ): { loginRoutes: string[]; verifiedRoutes: VerifiedLoginRoute[] } {
   const learned = learnedLoginRoutes(operations, trace, origin);
-  const verified = verifiedLoginRoutes(trace, origin, learned);
+  const verified = verifiedLoginRoutes(trace, origin, learned, operations);
   const loginRoutes = [...new Set([...learned, ...verified.map((v) => v.route)])]
     .sort()
     .slice(0, 16);
@@ -468,8 +671,10 @@ export function learnLivenessRead(
 
 /**
  * Replay the best liveness candidates of each verified deletion (not-found or collection
- * absence) once as a credentials-only control (the signed-in context's cookies minus the
- * session credentials, no session headers), so the trace holds the evidence learning needs.
+ * absence) once as a credentials-only control (the signed-in context's cookies minus those with
+ * positive login evidence, no session headers), so the trace holds the evidence learning needs.
+ * A refusal's redirect target that is not yet a login route (and not the site root) is fetched
+ * once as a control and, when it could still verify, once signed in (decision 5, round 21).
  * Only witnessed, read-gated GETs are sent: each URL is authorized through the gate before
  * anything is transmitted, and a URL already replayed as a control is not sent again.
  */
@@ -570,6 +775,8 @@ export async function probeLivenessReads(
           !target ||
           !route ||
           learned.includes(route) ||
+          // The site root is never a verified login route (round 21, decision 2).
+          new URL(route).pathname === "/" ||
           probed.has(`route ${target}`) ||
           trace.some((r) => r.loginRouteProbe && !r.loginRouteHopOf && exactUrl(r.url) === target)
         )
@@ -582,18 +789,39 @@ export async function probeLivenessReads(
         const answer = await control(target, verify, "text/html", {}, {});
         const hop = answer?.location && exactUrl(new URL(answer.location, target).href);
         const hopRoute = hop && routeOf(hop, origin);
-        if (
-          answer &&
+        const hops =
+          !!answer &&
           answer.status >= 300 &&
           answer.status < 400 &&
-          hop &&
-          hopRoute &&
+          !!hop &&
+          !!hopRoute &&
           hopRoute !== route &&
-          learned.includes(hopRoute) &&
-          !probed.has(`hop ${target} ${hop}`)
-        ) {
+          learned.includes(hopRoute);
+        if (hops && hop && !probed.has(`hop ${target} ${hop}`)) {
           probed.add(`hop ${target} ${hop}`);
           await control(hop, verify, "text/html", {}, { hopOf: target });
+        }
+        // Round 21, decision 2: how the signed-in context is served the target. A route the
+        // signed-in session gets as an ordinary page is no login route. Read gate first, no
+        // redirect followed; sent only when the control could still verify the target.
+        if (answer && ((answer.status >= 200 && answer.status < 300) || hops)) {
+          const signedIn = authorizer(
+            "Check how {host} serves a refusal's redirect target to the signed-in session",
+            "login-route-signed-in",
+          );
+          try {
+            await signedIn(target);
+          } catch {
+            continue;
+          }
+          await replayer
+            .get(target, {
+              signedIn: true,
+              headers: { accept: "text/html", "cache-control": "no-cache", pragma: "no-cache" },
+              authorize: signedIn,
+              loginRouteProbe: {},
+            })
+            .catch(() => undefined);
         }
       }
     }

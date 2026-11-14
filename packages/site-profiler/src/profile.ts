@@ -7,11 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import {
-  isSessionCredentialCookie,
-  registerCookieSecrets,
-  type SecretCookie,
-} from "@jeswr/site-executor";
+import { registerCookieSecrets, type SecretCookie } from "@jeswr/site-executor";
 import type { Extraction, LearnMethod, LoginRoute, Operation, SiteModel } from "@jeswr/site-model";
 import type { Browser } from "playwright";
 import { crawl, navigationLinks } from "./crawl.js";
@@ -530,11 +526,10 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
 
     // 9. Verify reads.
     await fetchVerificationEvidence(operations, context, recorder, options.verificationGate);
-    // Credentials-only controls drop exactly the cookies the shared classification marks as
-    // session credentials (login cookies and the learned model included); others are kept.
-    const verifier = playwrightReplayer(context, recorder, "verify", (cookie) =>
-      isSessionCredentialCookie(cookie, cookieContext()),
-    );
+    // Credentials-only controls drop only cookies with positive login evidence (set or changed
+    // by the login, or the learned login routes' session cookies); every other cookie is kept,
+    // and without login evidence no control is sent, so no liveness read is learned.
+    const verifier = playwrightReplayer(context, recorder, "verify", cookieContext);
     let verifiedOps = operations;
     if (options.verify !== false) {
       const v = await verifyOperations(operations, {

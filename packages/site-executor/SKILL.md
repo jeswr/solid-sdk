@@ -348,14 +348,19 @@ no cookies, no Set-Cookie applied, challenge reported, no redirect followed) and
 `authenticationRefusal` plus a signature mismatch. Missing learned `anonymous` evidence or CSRF
 rules on the liveness read mean Uncertain. Never widen `authenticationRefusal` with
 "forbidden", "denied", "permission", "token" or "private": there a match helps completion.
-Round 20: the control keeps every cookie except the session credentials
-(`isSessionCredentialCookie` with the run's declared credential cookies) and drops the session
-headers; never send it cookieless. Compare its answer with `sameRefusal(anonymous,
+Round 20/21: the control keeps every cookie except those with positive login evidence
+(`isLoginCredentialCookie`: declared credential cookies, login-set cookies, the login routes'
+`sessionCookies`) and drops the session headers; never send it cookieless, and never use the
+redaction classifier `isSessionCredentialCookie` for it (an HttpOnly or credential-named gate
+cookie must stay). Nothing to drop means no control and no proof (Uncertain). Compare its answer with `sameRefusal(anonymous,
 refusalEvidence(...))`: the pinned kind and, for `login-redirect`/`login-envelope`, the pinned
 route. Refusal wording comes only from the title, headings outside chrome, the login form's
 labels/buttons and message-like JSON values; login pages must pass `isLoginDocument`; a login
 envelope needs an explicit expiry/authentication flag AND a redirect to a learned login route.
 Collection absence also needs `sessionLive`. A redirect target becomes a login route only when the profiler verified it
 (`anonymous.verifiedRoutes`: fetched as a credentials-only control and answered a login
-document, at most one same-origin hop to a learned route); the pinned route still matches
-exactly.
+document, at most one same-origin hop to a learned route; round 21: its login form posts to the
+learned login operation's target (or self-posts with the learned credential field names while
+the signed-in fetch redirects away), it is never the site root, and the signed-in context is not
+served it as an ordinary page; validation rejects a root verified route); the pinned route still
+matches exactly.

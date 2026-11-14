@@ -526,6 +526,8 @@ async function replay(
     };
   const sessions = new InMemorySessions();
   sessions.set(origin, undefined, {
+    // The vault declares the session cookie: positive login evidence for the control.
+    credentialCookies: ["session"],
     cookies: [
       {
         name: "session",
@@ -840,6 +842,8 @@ async function replay(
   // Reauthentication must not erase the retained repeat fingerprint.
   if (mode === "session cleared")
     sessions.set(origin, undefined, {
+      // The vault declares the session cookie: positive login evidence for the control.
+      credentialCookies: ["session"],
       cookies: [
         {
           name: "session",

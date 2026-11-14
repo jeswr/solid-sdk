@@ -516,9 +516,11 @@ change evidence. Round-19 regressions are in `test/review-r19.test.ts` and
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 Round 20: liveness evidence comes only from **credentials-only control** replays
 (`credentialsOnlyControl: true` on a `replay-anonymous` entry): `playwrightReplayer` sends the
-browser context's cookies minus those the shared classification marks as session credentials
-(the profile passes `isSessionCredentialCookie` with the login cookies and learned model), and
-no session headers. Verification's plain cookieless replays are never liveness evidence, so a
+browser context's cookies minus those with positive login evidence (round 21: the profile
+passes its login evidence, and `isLoginCredentialCookie` drops only cookies the sign-in set or
+changed; the redaction classifier `isSessionCredentialCookie` is not used, so HttpOnly or
+credential-named gate cookies are kept), and no session headers. When no context cookie has
+login evidence the control is not sent, so no liveness read is learned (Uncertain). Verification's plain cookieless replays are never liveness evidence, so a
 site gating on a consent, age or cookie-check cookie cannot pass its gate off as an
 authentication refusal. Every control replay of the exact URL must give one refusal kind and,
 for a redirect or login envelope, one login route; both are pinned in the policy
@@ -537,4 +539,16 @@ every such fetch answered a complete 2xx login document (or every hop did); the 
 the route and its evidence in `anonymous.verifiedRoutes`. A target serving anything else,
 another origin or a target never fetched (for example because the gate denied it) stays
 rejected.
-Round-20 regressions are in `test/review-r20.test.ts`.
+Round 21 (decision 2): the site root is never probed or verified. A target that could still
+verify is also fetched once signed in (read gate first, no redirect followed, recorded as a
+`replay` with `loginRouteProbe`). `verifiedLoginRoutes` then also needs every login document
+served there to post (each password form) to the learned login operation's target
+(`loginPostTargets`: the login operation's endpoint and the sign-in form target the sign-in
+posted to). Owner decision: a form at the target itself also qualifies when it posts to its own
+URL (empty, missing or self-referencing action), its credential field names are exactly the
+learned login's (username field, password fields and the form-key slots: the login operation's
+form CSRF targets, or without one the sign-in form's hidden anti-forgery fields), and every
+signed-in fetch of that URL redirected to another route (never 200). A hop's login page must
+post to a learned target. The signed-in fetch to redirect or answer a login document, and no signed-in GET of
+that route in the trace (after the sign-in POST) to have answered an ordinary page.
+Round-20 regressions are in `test/review-r20.test.ts`; round 21 in `test/review-r21.test.ts`.

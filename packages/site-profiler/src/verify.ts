@@ -6,12 +6,12 @@
 // extraction finds nothing, and drops reads that fail both ways. Never replays a write.
 
 import {
+  type CookieSecretContext,
   guardUrl,
-  isSessionCredentialCookie,
+  isLoginCredentialCookie,
   jsonEnvelope,
   jsonFailure,
   jsonRootFailure,
-  type SecretCookie,
 } from "@jeswr/site-executor";
 import type { CsrfRule, Operation, RequestTemplate } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
@@ -44,11 +44,17 @@ export interface Replayer {
       authorize?: (url: string) => Promise<void>;
       /**
        * With `signedIn: false`: a credentials-only control. The request carries the signed-in
-       * context's cookies minus those classified as session credentials (and no session
-       * headers), so it differs from the signed-in read only by its credentials.
+       * context's cookies minus those with positive login evidence (`isLoginCredentialCookie`:
+       * cookies the login set or changed, and declared credentials), and no session headers,
+       * so it differs from the signed-in read only by its credentials. With no such cookie to
+       * drop it is not sent (the call rejects): without login evidence there is no control.
        */
       credentialsOnly?: boolean;
-      /** Marks a credentials-only control fetch that verifies a redirect target as a login route. */
+      /**
+       * Marks a fetch that verifies a redirect target as a login route: the credentials-only
+       * control (and its one hop), or the signed-in fetch showing how the signed-in context
+       * is served that target.
+       */
       loginRouteProbe?: { hopOf?: string };
     },
   ): Promise<ReplayResponse>;
@@ -219,15 +225,14 @@ export async function findProbeUrl(
 
 /**
  * A Replayer over a Playwright context (signed in) and plain fetch (signed out), recording into
- * the trace. `credentialCookie` is the shared session-credential cookie classification used by
- * credentials-only controls; without it the context-free classification applies.
+ * the trace. `loginEvidence` gives the positive login evidence a credentials-only control drops
+ * (the profile's login cookie names and learned model); without it no control can be sent.
  */
 export function playwrightReplayer(
   context: import("playwright").BrowserContext,
   recorder: Recorder,
   phase: "probe" | "verify",
-  credentialCookie: (cookie: SecretCookie) => boolean = (cookie) =>
-    isSessionCredentialCookie(cookie),
+  loginEvidence: () => CookieSecretContext = () => ({}),
 ): Replayer {
   return {
     async get(
@@ -341,14 +346,18 @@ export function playwrightReplayer(
           if (headers["content-type"]) res.contentType = headers["content-type"];
           if (headers.location) res.location = headers.location;
         } else {
-          // A credentials-only control keeps every cookie the shared classification does not
-          // mark as a session credential; a plain anonymous replay sends none.
-          const kept = credentialsOnly
-            ? (await context.cookies(url)).filter((cookie) => {
-                recorder.rememberCookies([cookie]);
-                return !credentialCookie(cookie);
-              })
-            : [];
+          // A credentials-only control drops only the cookies with positive login evidence and
+          // keeps every other one (never the redaction heuristic: an HttpOnly or
+          // credential-named gate cookie stays); a plain anonymous replay sends none.
+          let kept: Awaited<ReturnType<typeof context.cookies>> = [];
+          if (credentialsOnly) {
+            const all = await context.cookies(url);
+            recorder.rememberCookies(all);
+            const evidence = loginEvidence();
+            kept = all.filter((cookie) => !isLoginCredentialCookie(cookie, evidence));
+            if (kept.length === all.length)
+              throw new Error("No login evidence for a credentials-only control");
+          }
           keptCookieNames = kept.map((cookie) => cookie.name);
           authenticationContext = recorder.authenticationContext(requestHeaders ?? {}, kept);
           const sent = new Headers(requestHeaders);
@@ -389,10 +398,10 @@ export function playwrightReplayer(
         if (!signedIn && credentialsOnly) {
           entry.credentialsOnlyControl = true;
           entry.cookieNames = keptCookieNames;
-          if (loginRouteProbe) {
-            entry.loginRouteProbe = true;
-            if (loginRouteProbe.hopOf !== undefined) entry.loginRouteHopOf = loginRouteProbe.hopOf;
-          }
+        }
+        if ((signedIn || credentialsOnly) && loginRouteProbe) {
+          entry.loginRouteProbe = true;
+          if (loginRouteProbe.hopOf !== undefined) entry.loginRouteHopOf = loginRouteProbe.hopOf;
         }
         if (res.authenticationFailure) {
           entry.responsePageFailure = true;

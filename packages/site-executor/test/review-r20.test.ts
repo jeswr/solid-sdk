@@ -1,7 +1,9 @@
 // AUTHORED-BY Claude Opus 5.5
 // Round-20 regressions: the credentials-only liveness control, the pinned refusal kind and
 // route, narrow refusal text and login documents, the login JSON envelope, and collection
-// absence behind the liveness proof. Every site, account and item here is fictional.
+// absence behind the liveness proof; round 21: the control drops only cookies with positive
+// login evidence, and no verified login route is the site root. Every site, account and item
+// here is fictional.
 import { type Extraction, type Operation, SCHEMA } from "@jeswr/site-model";
 import { expect, it } from "vitest";
 import { createExecutor } from "../src/executor.js";
@@ -433,13 +435,15 @@ async function deleteItem(
       version: "1",
       operations: [write, item, rowsRead, live],
       flows: [],
-      ...(options.sessionCookies
+      // The learned login route names the session cookie: positive login evidence for the
+      // credentials-only control (round 21). `sessionCookies: []` leaves no login evidence.
+      ...((options.sessionCookies ?? ["session"]).length
         ? {
             login: [
               {
                 method: "password" as const,
                 operation: write.id,
-                sessionCookies: options.sessionCookies,
+                sessionCookies: options.sessionCookies ?? ["session"],
               },
             ],
           }
@@ -498,22 +502,29 @@ it("sends the control with every non-credential cookie and without the session c
       { name: "session", value: "fixture-secret-session" },
       { name: "age_ok", value: "1" },
       { name: "theme", value: "dark" },
-      // Classified as credentials: httpOnly, a credential-like name, a vault-declared
-      // credential cookie and a learned login session cookie.
-      { name: "opaque", value: "fixture-secret-opaque", httpOnly: true },
-      { name: "remember_me", value: "fixture-secret-remember" },
+      // Round 21: the redaction heuristic would class these as credentials (httpOnly, a
+      // credential-like name), but without login evidence the control keeps them.
+      { name: "opaque", value: "gate-opaque", httpOnly: true },
+      { name: "remember_me", value: "gate-remember" },
+      // Positive login evidence: a vault-declared credential cookie and the learned login
+      // route's session cookies.
       { name: "vault_marker", value: "fixture-secret-vault" },
       { name: "keeper", value: "fixture-secret-login" },
     ],
     headers: { authorization: "Bearer fixture-secret-bearer", "x-api-key": "fixture-secret-key" },
     credentialCookies: ["vault_marker"],
-    sessionCookies: ["keeper"],
+    sessionCookies: ["session", "keeper"],
   });
   expect(run.outcome).toBe("completed");
   const [signed, control] = run.listed.map(required);
   expect(signed?.cookie).toContain("session=fixture-secret-session");
   expect(signed?.headers.get("authorization")).toBe("Bearer fixture-secret-bearer");
-  expect(control?.cookie.split("; ").sort()).toEqual(["age_ok=1", "theme=dark"]);
+  expect(control?.cookie.split("; ").sort()).toEqual([
+    "age_ok=1",
+    "opaque=gate-opaque",
+    "remember_me=gate-remember",
+    "theme=dark",
+  ]);
   expect(control?.headers.has("authorization")).toBe(false);
   expect(control?.headers.has("x-api-key")).toBe(false);
   expect(JSON.stringify([...(control?.headers ?? [])])).not.toMatch(/fixture-secret/);
@@ -681,4 +692,112 @@ it("never lets the control's answer change the session", async () => {
     "session=fixture-secret-session",
     "age_ok=1",
   ]);
+});
+
+// ---------------------------------------------------------------- round 21, decision 1
+// The control drops only cookies with positive login evidence (vault-declared, learned login
+// routes' session cookies) and the session headers; the redaction heuristic plays no part.
+const gateCookieSite = (gate: string) => (wire: Wire) =>
+  // The review's hostile shape: the listing renders for anyone holding the gate cookie.
+  new RegExp(`(?:^|; )${gate}=1(?:;|$)`).test(wire.cookie) ? Response.json(liveRows) : toLogin();
+
+it.each<[string, Cookie]>([
+  ["an HttpOnly age gate cookie", { name: "age_ok", value: "1", httpOnly: true }],
+  ["a credential-named age cookie", { name: "remember_age", value: "1" }],
+  ["a credential-named visitor cookie", { name: "visitor_token", value: "1" }],
+  ["an HttpOnly cookie-check cookie", { name: "cc", value: "1", httpOnly: true }],
+])("keeps %s in the control, so an expired session is Uncertain", async (_name, gate) => {
+  const run = await deleteItem(gateCookieSite(gate.name), {
+    cookies: [{ name: "session", value: "fixture-secret-session", httpOnly: true }, gate],
+  });
+  expect(run.outcome).toBe("uncertain");
+  expect(run.committed).toBe(1);
+  expect(run.listed.map((w) => w.cookie)).toEqual([
+    `session=fixture-secret-session; ${gate.name}=1`,
+    `${gate.name}=1`,
+  ]);
+});
+
+it("sends no control without login evidence: no declared cookie, login cookie or session header", async () => {
+  const run = await deleteItem(sessionGated, {
+    cookies: [{ name: "session", value: "fixture-secret-session", httpOnly: true }],
+    sessionCookies: [],
+  });
+  expect(run.outcome).toBe("uncertain");
+  expect(run.committed).toBe(1);
+  // The credentialed liveness read ran; the control, which would drop nothing, was never sent.
+  expect(run.listed.map((w) => w.cookie)).toEqual(["session=fixture-secret-session"]);
+});
+
+it.each<[string, Parameters<typeof deleteItem>[1]]>([
+  [
+    "a vault-declared credential cookie",
+    {
+      cookies: [{ name: "sid_x", value: "fixture-secret-session" }],
+      credentialCookies: ["sid_x"],
+      sessionCookies: [],
+    },
+  ],
+  [
+    "a learned login route's session cookie",
+    { cookies: [{ name: "sid_x", value: "fixture-secret-session" }], sessionCookies: ["sid_x"] },
+  ],
+])("drops %s as login evidence", async (_name, options) => {
+  const site = (wire: Wire) =>
+    /(?:^|; )sid_x=fixture-secret-session/.test(wire.cookie) ? Response.json(liveRows) : toLogin();
+  const run = await deleteItem(site, options);
+  expect(run.outcome).toBe("completed");
+  expect(run.listed.map((w) => w.cookie)).toEqual(["sid_x=fixture-secret-session", ""]);
+});
+
+it("treats session headers alone as the credentials the control drops", async () => {
+  const site = (wire: Wire) =>
+    wire.headers.get("authorization") === "Bearer fixture-secret-bearer"
+      ? Response.json(liveRows)
+      : toLogin();
+  const run = await deleteItem(site, {
+    cookies: [{ name: "theme", value: "dark" }],
+    headers: { authorization: "Bearer fixture-secret-bearer" },
+    sessionCookies: [],
+  });
+  expect(run.outcome).toBe("completed");
+  const [, control] = run.listed.map(required);
+  expect(control?.cookie).toBe("theme=dark");
+  expect(control?.headers.has("authorization")).toBe(false);
+});
+
+// ---------------------------------------------------------------- round 21, decision 2
+it("rejects a verified login route at the site root", () => {
+  const signature = { status: 200, contentType: "application/json", structure: "a".repeat(64) };
+  const policy = (verifiedRoutes: unknown) =>
+    ({
+      createdLocationPattern: "/",
+      completionOnly: true,
+      verification: {
+        operation: "urn:read",
+        bind: {},
+        identityInput: "id",
+        identityPattern: `${origin}/products/{id}`,
+        changes: [],
+        liveness: {
+          operation: "urn:list",
+          bind: {},
+          signature,
+          anonymous: {
+            refusal: "login-redirect",
+            loginRoutes: [...routes, `${origin}/`],
+            route: `${origin}/`,
+            verifiedRoutes,
+          },
+        },
+      },
+    }) as never;
+  expect(() =>
+    validateWriteResponsePolicy(
+      policy([{ route: `${origin}/`, url: `${origin}/?cookie_check=1` }]),
+      origin,
+    ),
+  ).toThrow("invalid liveness read");
+  // The same declaration without a verified root route stays valid (a learned root route).
+  expect(() => validateWriteResponsePolicy(policy(undefined), origin)).not.toThrow();
 });

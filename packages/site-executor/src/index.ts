@@ -14,6 +14,7 @@ export {
 } from "./compile.js";
 export {
   type CookieSecretContext,
+  isLoginCredentialCookie,
   isSessionCredentialCookie,
   registerCookieSecrets,
   type SecretCookie,

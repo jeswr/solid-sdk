@@ -41,6 +41,7 @@ import {
 } from "./compile.js";
 import {
   type CookieSecretContext,
+  isLoginCredentialCookie,
   isSessionCredentialCookie,
   registerCookieSecrets,
 } from "./cookie-secrets.js";
@@ -304,8 +305,9 @@ type VerificationRead = {
   preparation?: boolean;
   /**
    * The credentials-only liveness control: the same request without the session credentials.
-   * No session headers and none of the cookies the shared classification marks as session
-   * credentials are sent; every other cookie is kept. Nothing the response sets reaches the
+   * No session headers and none of the cookies with positive login evidence
+   * (`isLoginCredentialCookie`: vault-declared, login-set or the login routes' session
+   * cookies) are sent; every other cookie is kept. Nothing the response sets reaches the
    * session, and an authentication challenge is reported rather than thrown, because a
    * refusal is the expected answer.
    */
@@ -620,10 +622,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         h.set("pragma", "no-cache");
       }
       const applicable = cookiesFor(ctx.jar, url, now());
-      // The control differs from the credentialed read only by its credentials: a cookie
-      // misclassified as a non-credential makes the control render, which fails safe.
+      // The control differs from the credentialed read only by its credentials, and drops only
+      // cookies with positive login evidence: an unclassified credential is kept, so the control
+      // renders, which fails safe; a gate cookie the redaction heuristic would class as a
+      // credential is kept too, so an expired session that still carries it cannot pass.
       const cookies = anonymous
-        ? applicable.filter((cookie) => !isSessionCredentialCookie(cookie, cookieContext(ctx)))
+        ? applicable.filter((cookie) => !isLoginCredentialCookie(cookie, cookieContext(ctx)))
         : applicable;
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       // Fetch's Headers object is authoritative for trimming and header names.
@@ -1092,8 +1096,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
   /**
    * Run the learned liveness read through the read gate, with the verification cache bypass
    * and freshness rules, and require its learned success signature. Then send the same read
-   * once as a credentials-only control (no session headers and no session credential cookies,
-   * every other cookie kept; read gate first, same cache bypass, no redirect followed): it must
+   * once as a credentials-only control (no session headers and no cookie with positive login
+   * evidence, every other cookie kept; nothing to drop means no proof; read gate first, same cache bypass, no redirect followed): it must
    * be refused with the pinned refusal kind and route and not reproduce the signature, so the
    * proof depends on the credentials alone. A missing, unusable, denied, redirected, stale or
    * different response, or an anonymous answer that is not a refusal, proves nothing.
@@ -1206,6 +1210,17 @@ export function createExecutor(options: ExecutorOptions): Executor {
     // The credentials-only control: the same read without the session credentials must be
     // refused with the pinned kind (and, for a redirect or login envelope, the pinned route).
     const control = { authorize: authorizer(true), anonymous: true };
+    // Without positive login evidence the control would drop nothing and be the credentialed
+    // read again: no credentials-only control, so no liveness proof (Uncertain).
+    if (
+      !Object.keys(ctx.headers).some(
+        (name) => !["cookie", "host", "content-length"].includes(name.toLowerCase()),
+      ) &&
+      !cookiesFor(ctx.jar, compiled.url, now()).some((cookie) =>
+        isLoginCredentialCookie(cookie, cookieContext(ctx)),
+      )
+    )
+      return false;
     if (!(await control.authorize(compiled.url))) return false;
     const anon = await send(
       ctx,

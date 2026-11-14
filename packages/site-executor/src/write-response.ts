@@ -188,8 +188,8 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
         if (`${url.origin}${url.pathname}` !== route)
           throw new BindingError("invalid liveness read");
       }
-      // Verified routes: each is a learned route whose evidence URL has that origin and path;
-      // a hop leads to another learned route.
+      // Verified routes: each is a learned route, never the site root, whose evidence URL has
+      // that origin and path; a hop leads to another learned route.
       const verified = anonymous.verifiedRoutes;
       if (verified !== undefined) {
         if (!Array.isArray(verified) || verified.length > 16)
@@ -205,7 +205,8 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
             )
               throw new BindingError("invalid liveness read");
             const url = guardUrl(entry.url, origin);
-            if (`${url.origin}${url.pathname}` !== entry.route)
+            // A verified redirect target is never the site root (round 21, decision 2).
+            if (`${url.origin}${url.pathname}` !== entry.route || url.pathname === "/")
               throw new BindingError("invalid liveness read");
             if (entry.via !== undefined) {
               if (typeof entry.via !== "string") throw new BindingError("invalid liveness read");
