@@ -241,7 +241,9 @@ export class ProductIndexHandler implements OperationHandler {
   readonly description = searchDescription(["responder"]);
   readonly requiresRepresentation = false;
 
-  constructor(private readonly records: readonly { jws: string; record: JsonObject }[]) {}
+  constructor(
+    private readonly records: readonly { jws: string; format?: string; record: JsonObject }[],
+  ) {}
 
   onInvoke(ctx: HandlerContext, body: { input: JsonObject }): HandlerReply {
     const q = body.input;
@@ -269,7 +271,11 @@ export class ProductIndexHandler implements OperationHandler {
           retrievedFrom: String(r.record.issuer),
         })),
       },
-      evidence: hits.map((r) => ({ role: "credential", format: "jws-compact", value: r.jws })),
+      evidence: hits.map((r) => ({
+        role: "credential",
+        format: r.format ?? "jws-compact",
+        value: r.jws,
+      })),
     };
   }
 }

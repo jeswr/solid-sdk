@@ -465,6 +465,7 @@ const step = z.discriminatedUnion("type", [
   z.strictObject({
     ...base,
     type: z.literal("start"),
+    models: z.array(ref).optional(),
     peer: slug,
     kind: z.enum(["propose", "invoke"]),
     operation: iri,
@@ -650,6 +651,52 @@ export const scenarioSchema = z.strictObject({
   relianceCorroboration: relianceCorroborationSchema.optional(),
   registryMeaning: registryMeaningSchema.optional(),
   settlementFault: z.enum(["tampered-order"]).optional(),
+  documentFaults: z
+    .array(z.strictObject({ step: slug, kind: z.enum(["graph-reordered", "triple-changed"]) }))
+    .default([]),
+  trustedIndex: z
+    .strictObject({
+      index: slug,
+      reader: slug,
+      records: strings,
+      register: iri,
+      fork: z.boolean().optional(),
+    })
+    .optional(),
+  federation: z
+    .strictObject({
+      anchor: slug,
+      superior: slug,
+      subject: slug,
+      reader: slug,
+      index: slug,
+      purpose: iri,
+      claimTypes: strings,
+      expired: z.boolean().optional(),
+      businessOnly: z.boolean().optional(),
+    })
+    .optional(),
+  reputation: z
+    .strictObject({
+      service: slug,
+      reader: slug,
+      index: slug,
+      minimum: z.number().min(0).max(1),
+      ratings: z.array(
+        z.strictObject({ party: slug, agent: slug, score: z.number().min(0).max(1) }),
+      ),
+    })
+    .optional(),
+  evidenceFaults: z
+    .array(z.strictObject({ step: slug, kind: z.literal("selective-salt") }))
+    .default([]),
+  originHosted: z
+    .strictObject({
+      register: slug,
+      records: z.array(z.strictObject({ statement: slug, address: iri })),
+      pointerFault: z.boolean().optional(),
+    })
+    .optional(),
   stopAfter: slug.optional(),
   authorityFault: z.enum(["token-as-the-person", "registered-for-something-else"]).optional(),
   identityNames: z.record(iri, iri).default({}),

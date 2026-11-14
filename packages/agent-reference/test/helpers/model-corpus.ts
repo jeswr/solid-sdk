@@ -8,6 +8,7 @@ import type { ActionIntent, Agreement, AnyMessage } from "../../src/core/types.j
 import { loadCase } from "../../src/engine/load.js";
 import { matrixWorld } from "../../src/engine/matrix.js";
 import { patch, runScenario } from "../../src/engine/run.js";
+import type { Scenario } from "../../src/engine/schema.js";
 import { copyData } from "../../src/model/copy.js";
 import { AgentRuntime } from "../../src/runtime/agent.js";
 import { MemoryLedger } from "../../src/store/ledger.js";
@@ -156,6 +157,26 @@ function representatives<T>(
     });
 }
 
+/** Materialize keyed world branch patches before selecting; otherwise omitted originals
+ * become incomplete upserts instead of complete scenario branches. */
+export function sampledScenario(
+  scenario: Scenario,
+  configuration: string | undefined,
+  selected: ReadonlySet<string>,
+): Scenario {
+  const entry = scenario.configurations.find((candidate) => candidate.id === configuration);
+  const branches = (entry ? matrixWorld(scenario, entry).branches : scenario.branches).filter(
+    (branch) => selected.has(branch.id),
+  );
+  return {
+    ...scenario,
+    branches: scenario.branches.filter((branch) => selected.has(branch.id)),
+    configurations: scenario.configurations.map((candidate) =>
+      candidate === entry ? { ...candidate, world: { ...candidate.world, branches } } : candidate,
+    ),
+  };
+}
+
 export async function captureModelCorpus(): Promise<Corpus> {
   const root = new URL("../../", import.meta.url).pathname;
   const plan = samplePlan(root);
@@ -214,12 +235,7 @@ export async function captureModelCorpus(): Promise<Corpus> {
       ]) {
         const selected = plan.groups.get(current + "\0" + (configuration ?? ""));
         if (!full && !selected) continue;
-        const input = full
-          ? scenario
-          : {
-              ...scenario,
-              branches: scenario.branches.filter((branch) => selected?.has(branch.id)),
-            };
+        const input = full ? scenario : sampledScenario(scenario, configuration, selected!);
         const results = await runScenario(profile, input, { configuration });
         paths += results.filter((result) => result.trace).length;
         for (const result of results)

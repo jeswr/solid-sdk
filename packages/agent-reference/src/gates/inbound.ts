@@ -19,6 +19,7 @@ import { interpretEmployment } from "../suites/meaning-registry.js";
 import { certifiedQuality } from "../suites/reliance-certificate.js";
 import { confidenceFitness } from "../suites/reliance-confidence.js";
 import { corroborateIncome } from "../suites/reliance-corroboration.js";
+import { checkIndexReceipt } from "../suites/trust-index.js";
 import {
   declaredJwsKid,
   documentConfiguration,
@@ -526,7 +527,7 @@ export class InboundGate {
         this.deps.record(verified.verification);
         if (!verified.payload || verified.verification.outcome !== "valid")
           return fail(
-            "evidence-invalid",
+            this.deps.gate.selectiveAnnual ? "bad-signature" : "evidence-invalid",
             "selective disclosure does not match its signed commitment",
           );
       }
@@ -917,16 +918,17 @@ export class InboundGate {
 
   /** Plain name for a claim. */
   labelOf(c: Claim): string {
-    const label =
-      this.deps.gate.claimLabel?.(c as unknown as Record<string, unknown>) ??
-      `${this.name(c.issuer)}'s ${
-        c.claimType === "mortgage.product"
-          ? "signed product terms"
-          : c.claimType
-              .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-              .replace(/[._-]/g, " ")
-              .toLowerCase() + " statement"
-      }`;
+    const label = this.deps.gate.originHosted?.nonTransferable(String(c.id))
+      ? `${this.name(c.issuer)}'s unsigned product record`
+      : (this.deps.gate.claimLabel?.(c as unknown as Record<string, unknown>) ??
+        `${this.name(c.issuer)}'s ${
+          c.claimType === "mortgage.product"
+            ? "signed product terms"
+            : c.claimType
+                .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+                .replace(/[._-]/g, " ")
+                .toLowerCase() + " statement"
+        }`);
     const mapping = (c as JsonObject).derivation as JsonObject | undefined;
     return mapping?.type === "code-mapping" && mapping.approximate === true
       ? `${label} (approximate mapping; reduced standing)`
@@ -946,6 +948,43 @@ export class InboundGate {
     rule?: { id: string; text: string };
   }> {
     const at = this.deps.now();
+    if (item.format === "origin-hosted") {
+      const node = await this.deps.gate.originHosted?.verify(
+        item,
+        this.deps.trust,
+        at,
+        this.deps.identity.actor,
+        (entry) => this.deps.record(entry),
+      );
+      if (!node) return { verdict: "fail", reason: "evidence-invalid" };
+      const claim = node.live as Claim,
+        issuer = node.string("issuer")!,
+        kind = node.string("claimType")!,
+        about = node.string("subject") ?? subject;
+      const input = {
+        evaluator: this.deps.identity.actor,
+        source: issuer,
+        claimType: kind,
+        ...(about ? { subject: about } : {}),
+        at,
+      };
+      const resolution = this.deps.gate.resolver?.resolveSource(input),
+        outcome = resolution?.outcome ?? this.deps.trust.assessSource(input).outcome;
+      const permitted = this.deps.gate.claimSources?.[kind];
+      const ok = outcome === "accepted" && (!permitted || permitted.includes(issuer));
+      return {
+        verdict: ok ? "pass" : outcome === "unresolved" ? "indeterminate" : "fail",
+        reason: ok
+          ? "source-accepted"
+          : outcome === "unresolved"
+            ? "lookup-failed"
+            : outcome === "no-route"
+              ? "source-unknown"
+              : "source-not-authoritative",
+        claim,
+        ...(resolution ? { resolution } : {}),
+      };
+    }
     const verify = (role: "issuer" | "party" | "actor") =>
       verifyStatement(item.value, {
         trust: this.deps.trust,
@@ -1239,6 +1278,7 @@ export class InboundGate {
       task: string;
       taskId?: string;
       carriedBy?: string;
+      messageEvidence?: readonly EvidenceItem[];
     },
     phase: "source" | "terms" | "fitness",
     cache: Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>,
@@ -1248,6 +1288,27 @@ export class InboundGate {
     if (!r) {
       r = await this.assessClaim(item, subject);
       cache.set(item.value, r);
+    }
+    if (
+      phase === "source" &&
+      r.verdict === "pass" &&
+      r.claim?.claimType === "mortgage.product" &&
+      this.deps.gate.trustedIndex &&
+      need.carriedBy === this.deps.gate.trustedIndex.source
+    ) {
+      const ok = await checkIndexReceipt(
+        item,
+        need.messageEvidence ?? [],
+        this.deps.gate.trustedIndex,
+        this.deps.trust,
+        this.deps.now(),
+        this.deps.identity.actor,
+        (entry) => this.deps.record(entry),
+      );
+      if (!ok) {
+        r = { ...r, verdict: "fail", reason: "evidence-invalid" };
+        cache.set(item.value, r);
+      }
     }
     let c = r.claim;
     let label = c ? this.labelOf(c) : "A relayed statement";
@@ -1479,6 +1540,17 @@ export class InboundGate {
           ...(r.resolution ? { resolution: resolutionView(r.resolution) } : {}),
         },
       );
+      if (c && r.reason === "source-unknown" && this.deps.gate.resolver?.pinnedOnly)
+        this.deps.gate.sink?.emit({
+          part: "principal",
+          kind: "ask-principal",
+          reason: "source-unknown",
+          caption: "The source is outside the principal’s own list; its statement is withheld.",
+          chat: {
+            who: "agent",
+            text: `May I add ${this.name(c.issuer)} to your list for this kind of statement? The statement stays outside memory until you decide.`,
+          },
+        });
       if (c && r.verdict !== "pass")
         this.failedClaim(c, r.reason ?? "source-not-authoritative", need.taskId ?? need.task);
       return r.verdict === "pass";
@@ -1918,7 +1990,9 @@ export class InboundGate {
       this.verdictEvent(
         "integrity",
         "pass",
-        `${label} is intact and signed with ${this.name(r.claim?.issuer)}'s pinned key.`,
+        ev.format === "origin-hosted"
+          ? `${label} was fetched directly from the source’s registered address; it is unsigned and cannot be forwarded as evidence.`
+          : `${label} is intact and signed with ${this.name(r.claim?.issuer)}'s pinned key.`,
       );
       const sourceOk = await this.claimChecks(ev, opts.subject, opts, "source", cache);
       if (!sourceOk && r.claim)
@@ -1977,6 +2051,7 @@ export class Admission {
   private readonly done = new Set<InboundCheck>();
   private readonly sources = new Map<string, Verdict>();
   private readonly claimCache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
+  private sourceFailure?: { reason: ReasonCode; detail: string };
   private claimsAdmitted = true;
   private admittedClaims: Claim[] = [];
   /** Set when the authority check asks the sender for a stronger approval. */
@@ -2036,7 +2111,9 @@ export class Admission {
   }
 
   private claims(msg: AnyMessage): EvidenceItem[] {
-    return (msg.evidence ?? []).filter((e) => isClaimEvidence(e));
+    return (msg.evidence ?? []).filter(
+      (e) => isClaimEvidence(e) || (e.format === "origin-hosted" && !!this.deps.gate.originHosted),
+    );
   }
 
   private need(conv: ConversationState, msg?: AnyMessage) {
@@ -2159,6 +2236,41 @@ export class Admission {
   async source(msg: AnyMessage): Promise<void> {
     if (this.done.has("source")) return;
     this.done.add("source");
+    if (this.deps.gate.reputation)
+      await this.deps.gate.reputation.present(msg.evidence ?? [], this.deps.now(), (entry) =>
+        this.deps.record(entry),
+      );
+    const federation = this.deps.gate.federation;
+    if (
+      federation &&
+      ((msg.evidence ?? []).some((e) => e.format === "openid-entity-statement+jwt") ||
+        msg.from.onBehalfOf === federation.policy.subject)
+    ) {
+      const result = await federation.present(msg.evidence ?? [], this.deps.now());
+      const evaluation = {
+        type: "federation-chain-check",
+        outcome: result.ok ? "accepted" : "refused",
+        path: result.path,
+        reason: result.reason,
+      };
+      this.deps.record(evaluation);
+      if (msg.from.onBehalfOf === federation.policy.subject) {
+        this.gate.verdictEvent(
+          "source",
+          result.ok ? "pass" : result.reason === "lookup-failed" ? "indeterminate" : "fail",
+          result.ok
+            ? "The lender presents a current chain to the principal’s federation anchor, covering this mortgage."
+            : "The lender’s presented federation chain does not establish its authority for this mortgage.",
+          { reason: result.ok ? "source-accepted" : result.reason },
+        );
+        if (!result.ok)
+          this.sourceFailure = {
+            reason: result.reason!,
+            detail:
+              "The presented federation chain is missing, expired or outside its metadata policy.",
+          };
+      }
+    }
     const claims = this.claims(msg);
     if (claims.length === 0) {
       this.gate.verdictEvent(
@@ -2176,6 +2288,8 @@ export class Admission {
         {
           task: "",
           taskId: msg.conversation,
+          carriedBy: msg.from.onBehalfOf,
+          messageEvidence: msg.evidence,
           purpose:
             typeof this.deps.agreementTerms(msg.conversation)?.purpose === "string"
               ? String(this.deps.agreementTerms(msg.conversation)?.purpose)
@@ -2359,6 +2473,10 @@ export class Admission {
   ): Promise<{ ok: true } | { ok: false; reason: ReasonCode; detail: string; askMore?: boolean }> {
     if (this.decided) return { ok: true };
     await this.source(msg);
+    if (this.sourceFailure) {
+      this.refuse(this.sourceFailure.reason, this.sourceFailure.detail);
+      return { ok: false, ...this.sourceFailure };
+    }
     if (!this.done.has("authority")) {
       this.done.add("authority");
       const earlier = this.authorityByConversation.get(conv.id);

@@ -284,3 +284,15 @@ journey ending. The DID resolver is a closed fictional-host subset, without rota
 historical resolution. The grant and registration formats are explicit local profiles of
 the supplied sketches. Neither blocked cell publishes a trace. No live OAuth, mailbox,
 DID host, registry or status service is claimed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 26d runs the mortgage under Data Integrity, scoped own-list trust, selective payroll
+projection, origin-hosted products, a transparent product index, presented OpenID Federation
+chains and a principal’s minimum reputation score. Each uses the existing configuration
+matrix and configuration-only failure branches. Transparency receipts use RFC 9162 hashing
+with explicitly declared JSON/JWS stand-ins for SCITT COSE. Selective payroll reveals annual
+gross income and employer while withholding monthly inputs and the private insurance number;
+it remains linkable and uses the existing local disclosure mechanism. Origin observations
+are unsigned, fetched only at register-bound addresses and cannot be forwarded as evidence.
+The two recorded branch disagreements and the supported protocol subsets are explained in
+[ENGINE-REPORT.md](ENGINE-REPORT.md#brief-26d).

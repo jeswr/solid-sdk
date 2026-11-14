@@ -235,5 +235,38 @@ export function scenarioRegistry() {
     summary:
       "Safely fetched Controlled Identifier profiles supply the public keys; independently signed register thumbprints bind the names, methods and key lifetimes.",
   });
+  registry.register({
+    layer: "authenticity",
+    id: "origin-hosted",
+    name: "Fetched from a register-bound source address",
+    mechanism: "origin fetch with signed register address binding",
+    algs: ["EdDSA"],
+    summary:
+      "Each verifier fetches an unsigned product only at its independently signed register address; the local origin observation cannot be forwarded as evidence.",
+  });
+  registry.register({
+    layer: "trust",
+    id: "trusted-index",
+    name: "Source-signed records in an append-only index",
+    anchors: "register-chain",
+    summary:
+      "The source signature and source acceptance stay separate from signed log heads, per-record inclusion proofs and checkpoint consistency. JSON replaces SCITT COSE explicitly.",
+  });
+  registry.register({
+    layer: "trust",
+    id: "federation",
+    name: "Presented OpenID Federation entity statements",
+    anchors: "federation",
+    summary:
+      "Presented signed entity-statement JWTs chain to the principal’s independently held anchor; expiry, JWKS bindings and narrowing metadata policies are checked without querying a register.",
+  });
+  registry.register({
+    layer: "trust",
+    id: "reputation",
+    name: "A principal’s minimum reputation score",
+    anchors: "register-chain",
+    summary:
+      "An accepted rating service’s signed score tightens the principal’s rule; a high score never replaces source acceptance through the register.",
+  });
   return registry;
 }

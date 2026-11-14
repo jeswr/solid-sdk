@@ -1060,6 +1060,33 @@ export class OutboundGate {
       };
     }
 
+    if (
+      ctx.originHosted &&
+      scope.action === "distribute" &&
+      Array.isArray(intent.parameters.evidence) &&
+      intent.parameters.evidence.some(
+        (id) => typeof id === "string" && ctx.originHosted?.nonTransferable(id),
+      )
+    ) {
+      this.verdict(
+        verdicts,
+        subject,
+        "evidence",
+        "fail",
+        "A source-hosted unsigned record cannot be forwarded as transferable evidence.",
+        { reason: "evidence-invalid" },
+      );
+      this.decide(
+        "stop",
+        "The unsigned origin observation stays in the verifier’s own record.",
+        "evidence-invalid",
+      );
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "evidence-invalid" },
+      };
+    }
     // 2. Recipient.
     if (
       !this.recipient(
@@ -1515,6 +1542,23 @@ export class OutboundGate {
           ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
           : undefined;
       const items = p.evidence.map((id) => this.deps.memory.facts.get(String(id)));
+      if (
+        this.deps.gate.selectiveAnnual &&
+        items.some(
+          (item) =>
+            item && !this.deps.gate.purposes?.[scope.purpose ?? ""]?.includes(item.claimType),
+        )
+      ) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "fail",
+          "The requested private claim is outside the principal’s permitted disclosure scope; it is withheld.",
+          { reason: "excessive-scope" },
+        );
+        return "excessive-scope";
+      }
       if (!requested) {
         this.verdict(
           verdicts,
@@ -2078,9 +2122,15 @@ export class OutboundGate {
       return finish("stop", "not-authorised");
     }
     for (const evidence of message.evidence ?? []) {
-      if (!isClaimEvidence(evidence)) continue;
+      if (!isClaimEvidence(evidence) && evidence.format !== "origin-hosted") continue;
       try {
-        const claim = unverifiedEvidenceClaim(evidence);
+        const originClaim =
+          evidence.format === "origin-hosted"
+            ? this.deps.gate.originHosted?.claim(evidence.value)
+            : undefined;
+        const claim = originClaim
+          ? (originClaim.live as JsonObject)
+          : unverifiedEvidenceClaim(evidence);
         const narrower = this.narrowerAnswer(claim, purpose, intent.recipient);
         if (narrower) {
           this.verdict(
@@ -2414,7 +2464,9 @@ export class OutboundGate {
         .filter((e) => e.role === "credential")
         .map((e) => {
           try {
-            return String(unverifiedEvidenceClaim(e).id);
+            return e.format === "origin-hosted"
+              ? (this.deps.gate.originHosted?.claim(e.value)?.string("id") ?? "unknown")
+              : String(unverifiedEvidenceClaim(e).id);
           } catch {
             return "unknown";
           }

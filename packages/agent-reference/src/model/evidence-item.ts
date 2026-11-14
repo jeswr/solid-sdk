@@ -76,10 +76,15 @@ export class EmbeddedCredentialNode extends RdfNode {
     return proofs[0].object.value;
   }
   static fromJws(jws: string, id: string, dataset: Store): EmbeddedCredentialNode {
-    const { payload } = inspectEvidenceJws(jws);
+    const { header, payload } = inspectEvidenceJws(jws);
     const node = new EmbeddedCredentialNode(id, dataset);
     node.types.add(VC + "VerifiableCredential");
-    const issuer = payload.issuer ?? payload.party ?? payload.iss;
+    // A JWT names its issuer in iss only for the two JWT profiles that use it
+    // (federation entity statements, 26d; authorization-server grants, 26c).
+    const issuer =
+      payload.issuer ??
+      payload.party ??
+      (header.typ === "entity-statement+jwt" || header.typ === "at+jwt" ? payload.iss : undefined);
     if (typeof issuer !== "string" || !isSafeAbsoluteIri(issuer))
       throw new TypeError("JWS statement does not identify its issuer");
     node.setIri(VC + "issuer", issuer);

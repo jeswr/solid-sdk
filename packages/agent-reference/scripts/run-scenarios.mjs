@@ -20,6 +20,12 @@ import { jointPaths, recordedJoint, traceHash } from "./recorded-joint.mjs";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const record = process.argv.includes("--record-outlines");
 const selected = process.argv.find((arg) => arg.startsWith("--scenario="))?.slice(11);
+const requestedConfiguration = process.argv
+  .find((arg) => arg.startsWith("--configuration="))
+  ?.slice(16);
+const selectedConfiguration = requestedConfiguration === "all" ? undefined : requestedConfiguration;
+if (selectedConfiguration && !selected)
+  throw new Error("A configuration selection requires --scenario");
 const status = { "x-authored-by": "Codex GPT-6", schema: "agent-scenario-runs/0.1", paths: [] };
 const previous = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")).paths.map(
   (row) => ({ ...row, settlement: row.settlement ?? "rdf-order" }),
@@ -43,7 +49,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
   for (const path of await runScenario(profile, scenario, {
     commit,
-    configuration: "all",
+    configuration: selectedConfiguration ?? "all",
     compare: !record,
     registry,
     proofCache: new ProofCache(join(root, "proofs")),
@@ -131,7 +137,14 @@ for (const file of readdirSync(join(root, "scenarios"))
     writeFileSync(join(root, "scenarios", file), `${JSON.stringify(original, null, 2)}\n`);
   }
 }
-if (selected) status.paths.push(...previous.filter((p) => p.scenario !== selected));
+if (selected)
+  status.paths.push(
+    ...previous.filter(
+      (p) =>
+        p.scenario !== selected ||
+        (selectedConfiguration && p.configuration !== selectedConfiguration),
+    ),
+  );
 writeFileSync(join(root, "scenario-runs.json"), `${JSON.stringify(status, null, 2)}\n`);
 const indexPath = join(root, "traces", "index.json");
 const existing = JSON.parse(readFileSync(indexPath, "utf8"));

@@ -213,6 +213,12 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly originHosted?: import("../suites/authenticity-origin.js").OriginHostedVerifier;
+  readonly selectiveAnnual?: boolean;
+  readonly reputation?: import("../suites/trust-reputation.js").ReputationResolver;
+  readonly supplementaryEvidence?: readonly import("../core/types.js").EvidenceItem[];
+  readonly federation?: import("../suites/trust-federation.js").PresentedFederationResolver;
+  readonly trustedIndex?: import("../suites/trust-index.js").IndexPolicy;
   readonly negotiatedMeaning?: {
     readonly operation: string;
     readonly term: string;

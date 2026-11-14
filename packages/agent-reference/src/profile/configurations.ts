@@ -128,6 +128,30 @@ export const CONFIG_POD_MIRROR = alternativeWireId("accountability-pod-mirror");
 export const CONFIG_SOLID_INBOX = alternativeWireId("transport-solid-inbox");
 export const CONFIG_SOLID_REFERENCE = alternativeWireId("data-access-by-reference-solid");
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [alternativeWireId("trust-reputation")]: localDefinition(
+    alternativeWireId("trust-reputation"),
+    "Signed agent ratings and the unchanged register requirement",
+  ),
+  [alternativeWireId("trust-federation")]: localDefinition(
+    alternativeWireId("trust-federation"),
+    "Presented OpenID Federation 1.0 trust chain",
+  ),
+  [alternativeWireId("trust-trusted-index")]: localDefinition(
+    alternativeWireId("trust-trusted-index"),
+    "Source signatures and signed Merkle inclusion and consistency receipts",
+  ),
+  [alternativeWireId("authenticity-origin-hosted")]: localDefinition(
+    alternativeWireId("authenticity-origin-hosted"),
+    "Unsigned products fetched from independently registered source addresses",
+  ),
+  [alternativeWireId("authenticity-selective-disclosure")]: localDefinition(
+    alternativeWireId("authenticity-selective-disclosure"),
+    "Issuer-signed payroll projection: annual gross income and employer only",
+  ),
+  [alternativeWireId("trust-pinned-list")]: localDefinition(
+    alternativeWireId("trust-pinned-list"),
+    "Only the principal’s scoped own list; no register fallback",
+  ),
   [alternativeWireId("meaning-negotiated")]: localDefinition(
     alternativeWireId("meaning-negotiated"),
     "Exact-exchange principal approval of a recorded term proposal",

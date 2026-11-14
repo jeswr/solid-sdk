@@ -6473,6 +6473,10 @@ export class AgentRuntime {
       };
       classify(document, "input");
     }
+    const supplementaryEvidence = [
+      ...(opts.evidence ?? []),
+      ...(this.options.gates?.supplementaryEvidence ?? []),
+    ];
     const free = freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known);
     let message =
       opts.resume ??
@@ -6499,7 +6503,7 @@ export class AgentRuntime {
         ...(free.length > 0 && this.identity.party
           ? { authorship: { method: "model-output", onBehalfOf: this.identity.party } }
           : {}),
-        ...(opts.evidence && opts.evidence.length > 0 ? { evidence: copyData(opts.evidence) } : {}),
+        ...(supplementaryEvidence.length > 0 ? { evidence: copyData(supplementaryEvidence) } : {}),
       } as unknown as AnyMessage);
     if (
       !opts.resume &&
@@ -7202,15 +7206,30 @@ export class AgentRuntime {
         this.setDomain(`${opKey}:${key}`, value, owner === null ? undefined : (owner ?? conv.id)),
       record: (r) => this.record({ ...r, producer: "core" }),
       verify: async (jws, o) => {
-        const check = await verifyStatement(jws, {
-          trust: this.trust,
-          typ: o.typ,
-          role: o.role,
-          schema: o.schema,
-          limits: this.limits,
-          verifier: this.identity.actor,
-          at: this.now(),
-        });
+        const selective =
+          this.options.gates?.selectiveAnnual &&
+          o.typ === TYP.statement &&
+          o.role === "issuer" &&
+          jws.startsWith("{")
+            ? await verifySelectivePresentation(
+                { role: "credential", format: "selective-disclosure+jws", value: jws },
+                this.trust,
+                this.now(),
+                this.identity.actor,
+              )
+            : undefined;
+        const projected = selective?.payload ? o.schema.safeParse(selective.payload) : undefined;
+        const check = selective
+          ? { ...selective, payload: projected?.success ? projected.data : undefined }
+          : await verifyStatement(jws, {
+              trust: this.trust,
+              typ: o.typ,
+              role: o.role,
+              schema: o.schema,
+              limits: this.limits,
+              verifier: this.identity.actor,
+              at: this.now(),
+            });
         this.record(check.verification);
         this.gateMemory.rememberIdentifiers(conv.id, check.verification);
         if (check.payload) this.gateMemory.rememberIdentifiers(conv.id, check.payload);
