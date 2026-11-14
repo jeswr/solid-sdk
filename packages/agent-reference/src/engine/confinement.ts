@@ -196,32 +196,40 @@ export function addedSegmentDifferences(
       const general = wanted.filter((check) => !PAYMENT_OUTBOUND.includes(check));
       const payment = wanted.filter((check) => PAYMENT_OUTBOUND.includes(check));
       const asked = run.decision.outcome === "ask-principal";
-      const askedAt = run.checks.find((event) => event.verdict === "ask-principal");
+      // Every check that asks the principal (brief 31 §1: "an ask counts only when the same
+      // agent's same check later passes after a principal approval in that segment").
+      const askedChecks = run.checks.filter((event) => event.verdict === "ask-principal");
       if (asked) {
-        // The ask is admitted only when this agent's same check later passes after a reply.
         const replied = events.findIndex(
           (event, i) =>
             i > events.indexOf(run.decision) &&
             event.agent === run.agent &&
             event.kind === "principal-reply",
         );
-        const later = runs
+        const laterRuns = runs
           .slice(at + 1)
-          .find(
+          .filter(
             (next) =>
               next.agent === run.agent &&
               next.gate === run.gate &&
-              events.indexOf(next.decision) > replied &&
-              next.checks.some(
-                (event) => event.check === askedAt?.check && event.verdict === "pass",
-              ),
+              events.indexOf(next.decision) > replied,
           );
-        if (replied < 0 || !later || !askedAt)
+        if (!askedChecks.length)
           differences.push(
-            `${where}: asks the principal at ${askedAt?.check ?? "an unnamed check"} without a later approved pass`,
+            `${where}: asks the principal at an unnamed check without a later approved pass`,
           );
+        for (const check of new Set(askedChecks.map((event) => event.check)))
+          if (
+            replied < 0 ||
+            !laterRuns.some((next) =>
+              next.checks.some((event) => event.check === check && event.verdict === "pass"),
+            )
+          )
+            differences.push(
+              `${where}: asks the principal at ${check} without a later approved pass`,
+            );
         const others = run.checks.filter(
-          (event) => event !== askedAt && !PASSING.has(event.verdict ?? ""),
+          (event) => event.verdict !== "ask-principal" && !PASSING.has(event.verdict ?? ""),
         );
         for (const event of others)
           differences.push(`${where}: ${event.check} ends ${event.verdict} (${event.reason})`);

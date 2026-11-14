@@ -8253,8 +8253,298 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "identity-email-endpoint",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.4: built and measured, then withdrawn. Sam pins Paywell's mailbox (the send rule is unchanged), Paywell's admitted signed contact statement names the reply address, and a mailbox challenge reply is accepted only with the nonce from that address (source fails otherwise; while a challenge is active the inbound run records authority and terms as not applicable and fitness as passing for labelled content). Two things stop the cell. First, the email send records its context checks (disclosure and data-terms for each item in the task context) before mandate, so an email after the journey's earlier exchanges does not record the outbound checks in order (C2), and checks are not reordered to fit. Second, the failure path has no gate-recorded form: a model reading of the prose as income evidence is refused by the runtime (structured-form-required) before any gate check. No prose is substituted for structured payroll evidence."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 229,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 255,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 262,
+          "agent": "sams-agent",
+          "outcome": "admit",
+          "reason": "fit-for-use"
+        },
+        {
+          "seq": 291,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 321,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 327,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 335,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 343,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 353,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 367,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 375,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 385,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 394,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 402,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 411,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 419,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 428,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 436,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 444,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 452,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 462,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 472,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 480,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 489,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 497,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 504,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 511,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 521,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 529,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 536,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 545,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 553,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 560,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 568,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 578,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 586,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 595,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 627,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 635,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 643,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 651,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 660,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 670,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 679,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 687,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 695,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--identity-email-endpoint.json"
     },
     {
       "scenario": "mortgage-main",
@@ -8262,9 +8552,20 @@
       "path": "mailbox-reply-as-evidence",
       "settlement": "rdf-order",
       "configuration": "identity-email-endpoint",
-      "what": "The core proposes relying on the payroll mailbox prose as income evidence.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.4: built and measured, then withdrawn. Sam pins Paywell's mailbox (the send rule is unchanged), Paywell's admitted signed contact statement names the reply address, and a mailbox challenge reply is accepted only with the nonce from that address (source fails otherwise; while a challenge is active the inbound run records authority and terms as not applicable and fitness as passing for labelled content). Two things stop the cell. First, the email send records its context checks (disclosure and data-terms for each item in the task context) before mandate, so an email after the journey's earlier exchanges does not record the outbound checks in order (C2), and checks are not reordered to fit. Second, the failure path has no gate-recorded form: a model reading of the prose as income evidence is refused by the runtime (structured-form-required) before any gate check. No prose is substituted for structured payroll evidence."
+      "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. Prose from a mailbox is not signed evidence, so the evidence check stops it as evidence-invalid; the registered reason was structured-form-required.",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "stop",
+        "reason": "evidence-invalid",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "structured-form-required"
+      },
+      "consequences": [],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--mailbox-reply-as-evidence--identity-email-endpoint.json"
     },
     {
       "scenario": "mortgage-main",

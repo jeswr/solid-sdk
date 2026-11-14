@@ -4855,3 +4855,74 @@ confinement rule's code.
 All §2.4 code and scenario changes were reverted and saved as a patch. The kept changes
 are the blocked wording for both cells, and their regenerated rows in place. Manifest
 and `labels` counts are unchanged (242 runs, 16 disagree, 24 blocked).
+
+### Brief 31 §2.4 `identity-email-endpoint`, completed (blocked to runs)
+
+**Decisions recorded (coordinator, after 15f12e498).**
+
+1. **Check order.** The email-context disclosure and data-terms verdicts now run inside
+   the release, in the ordered position of disclosure and data terms (after mandate and
+   recipient). An email send now records the same order as every other outbound run.
+   - `runEffect` hands the exact text and its approval state to the gate
+     (`holdEmailContext`).
+   - The gate's release runs `checkEmailContext` before its own disclosure check. A
+     failing context verdict stops the release (`prohibited`).
+   - The agent records the context verdicts after the release
+     (`takeEmailContextVerdicts`).
+   - `no-agent-on-the-other-side` has an empty context, and the oracle stayed identical
+     (164 paths).
+   - One side effect: a prohibited email is now refused by the release, after the
+     effect is planned, not before planning.
+2. **Failure branch.** `mailbox-reply-as-evidence` is modelled as the core proposing to
+   forward the mailbox reply to the lender as unsigned content beside an income request
+   (a `start` step with a `content` part). The outbound evidence check measures it as
+   evidence / evidence-invalid / stop: prose from a mailbox is not signed evidence. The
+   registered reason was structured-form-required, so the row is "disagrees".
+   - The forwarded bytes are the reply prose without the nonce, written into the branch,
+     because the received prose is not addressable as a step output.
+3. **C2 generalisation applied.** In `addedSegmentDifferences`, every check that asks
+   the principal counts once the same agent's same check later passes after a principal
+   reply in that segment, matching the brief's wording. Before, only the first asked
+   check was credited. Any other non-passing check in a held run is still reported.
+
+**Run.** C1, C2 and C3 are empty. The added segment before `income-admission`:
+
+1. Paywell's signed `contact.mailbox` statement is admitted.
+2. The challenge email goes out to the pinned mailbox; Sam approves the exact text.
+3. The reply carries the nonce from the named address. It passes `source`, records the
+   full inbound run, and is admitted as labelled content.
+4. The reply is read as `email.reading` content.
+5. A second approved email asks for the structured payslip.
+
+The signed payslip then arrives through the unchanged `income-admission` step. A reply
+without the nonce fails `source` (`source-unknown`); this is tested.
+
+**Counts.**
+
+| | Before | After |
+|---|---|---|
+| Manifest | 242 runs, 16 disagree, 24 blocked | 243 runs, 17 disagree, 22 blocked |
+| `labels.test.ts` alternatives | runs 90, disagrees 4, blocked 15 | runs 91, disagrees 5, blocked 13 |
+
+The manifest has 282 paths before and after. Only the email-endpoint rows, traces and
+outlines were regenerated; the rows sit in place, and `traces/index.json` gained two
+appended entries.
+
+`test/configuration-matrix.test.ts` forbids raw IRIs in trace captions and chat text.
+Exact text under principal review is exempt, and keeps its bytes:
+
+- the drafted email, which includes the footer's structured-reply URL;
+- the exact action parameters that an approval binds to, after " Parameters: ".
+
+Without this exemption, exact-text approval would have to show different bytes from the
+ones that are sent. The labels test already requires exact original content to be kept
+in principal review.
+
+**Validation (§2.4).**
+
+- `test/confinement.test.ts`: 8/8 pass.
+- `test/configuration-matrix.test.ts`: passes after the exemption.
+- Focused: `email-endpoint-alternative` (2 tests), `labels` and `forum` pass.
+- Oracle: 164 paths, equal. RDF guard: 0 failures, 213 allowances.
+- `export-schemas --check` passes, and `tsc --noEmit` passes.
+- biome is clean on the changed files.

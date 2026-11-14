@@ -103,7 +103,13 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
     for (const event of paths[0]?.trace?.events ?? []) {
       expect(event.caption).not.toMatch(/https?:\/\/|urn:/);
       expect(event.rule?.text ?? "").not.toMatch(/https?:\/\/|urn:/);
-      expect(event.chat?.text ?? "").not.toMatch(/https?:\/\/|urn:/);
+      // Exact text under principal review keeps its bytes (brief 31 §2.4): the drafted email
+      // and the exact action parameters an approval binds to are shown as they are.
+      const reviewed =
+        event.part === "core" &&
+        event.caption === "Agent-written plain text for exact principal review.";
+      const chat = reviewed ? "" : (event.chat?.text ?? "").split(" Parameters: ")[0];
+      expect(chat).not.toMatch(/https?:\/\/|urn:/);
     }
     expect(Object.keys(header?.layers ?? {})).toEqual(Object.keys(BASELINE.layers));
     expect(

@@ -376,6 +376,8 @@ const step = z.discriminatedUnion("type", [
     mailbox: slug,
     text: z.string(),
     purpose: iri,
+    // Brief 31 §2.4: append a fresh challenge nonce the reply must carry back.
+    challenge: z.boolean().optional(),
   }),
   z.strictObject({
     ...base,
@@ -384,6 +386,8 @@ const step = z.discriminatedUnion("type", [
     index: z.number().int().nonnegative().default(0),
     purpose: iri,
     from: emailAddress.optional(),
+    // Accept the reply only if it answers this mailbox's latest challenge.
+    challenge: z.boolean().optional(),
   }),
   z.strictObject({ ...base, type: z.literal("email-inbox"), mailbox: slug }),
   z.strictObject({

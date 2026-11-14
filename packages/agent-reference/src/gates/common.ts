@@ -458,6 +458,8 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
     return ctx.configuration?.id === "identity-anonymous";
   if (id === alternativeWireId("accountability-regulator-claim"))
     return ctx.configuration?.id === "accountability-regulator-claim";
+  if (id === alternativeWireId("identity-email-endpoint"))
+    return ctx.configuration?.id === "identity-email-endpoint";
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

@@ -1605,7 +1605,16 @@ export class AgentRuntime {
     return !!pin && pin.purposes.includes(purpose);
   }
   /** Plain prose is sent only as an approved effect to a principal-pinned mailbox. */
-  sendEmail(input: { taskId: Iri; adapter: string; to: string; text: string; purpose: Iri }) {
+  sendEmail(input: {
+    taskId: Iri;
+    adapter: string;
+    to: string;
+    text: string;
+    purpose: Iri;
+    challenge?: string;
+  }) {
+    // Brief 31 §2.4: a challenge nonce the reply must carry back from this mailbox.
+    if (input.challenge) this.emailChallenges.set(input.challenge, input.to);
     const params = {
       id: input.taskId,
       from: this.options.gates?.email?.from ?? "",
@@ -1633,8 +1642,23 @@ export class AgentRuntime {
       },
     });
   }
+  /** Nonces this agent sent in challenge emails, by nonce, with the mailbox sent to. */
+  private readonly emailChallenges = new Map<string, string>();
+
+  /**
+   * Brief 31 §2.4: a challenged reply proves control of the mailbox only when it carries a
+   * nonce this agent sent to that mailbox and comes from the address an admitted signed
+   * contact statement names. It proves nothing about the content.
+   */
+  private challengeAnswered(from: string, text: string, nonce: string): boolean {
+    const named = [...this.gateMemory.facts.values()].some(
+      (fact) => fact.claimType === "contact.mailbox" && fact.statement?.mailbox === from,
+    );
+    return named && this.emailChallenges.get(nonce) === from && text.includes(nonce);
+  }
+
   /** Address-only prose never enters facts or instruction channels, whatever it says. */
-  receiveEmail(input: { from: string; text: string; purpose: Iri }) {
+  receiveEmail(input: { from: string; text: string; purpose: Iri; challenge?: string }) {
     return this.exclusive(async () => {
       const sink = this.options.gates?.sink;
       const fail = (reason: ReasonCode) => {
@@ -1659,6 +1683,25 @@ export class AgentRuntime {
         return fail("source-unknown");
       if (typeof input.text !== "string" || !input.text || Buffer.byteLength(input.text) > 32768)
         return fail("bounds-exceeded");
+      if (input.challenge && !this.challengeAnswered(input.from, input.text, input.challenge)) {
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "check",
+          check: "source",
+          verdict: "fail",
+          reason: "source-unknown",
+          caption:
+            "The reply does not carry the challenge sent to the mailbox the signed contact statement names.",
+        });
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "decision",
+          outcome: "refuse",
+          reason: "source-unknown",
+          caption: "The email is refused before core context.",
+        });
+        return { ok: false as const, reason: "source-unknown" as ReasonCode };
+      }
       const digest = digestContent(input.text),
         id = this.newId(),
         task = this.options.gates.taskId ?? "*";
@@ -1677,8 +1720,37 @@ export class AgentRuntime {
         check: "source",
         verdict: "pass",
         reason: "source-accepted",
-        caption: "Only the pinned email address is recognized; no factual claims are admitted.",
+        caption: input.challenge
+          ? "The reply carries the challenge and comes from the mailbox the signed contact statement names: control of the mailbox, nothing about the content."
+          : "Only the pinned email address is recognized; no factual claims are admitted.",
       });
+      if (input.challenge) {
+        // While a challenge is active the inbound run records every check (brief 31 §2.4).
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "check",
+          check: "authority",
+          verdict: "not-applicable",
+          reason: "no-action",
+          caption: "Prose asks for nothing the agent would act on.",
+        });
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "check",
+          check: "terms",
+          verdict: "not-applicable",
+          reason: "no-data",
+          caption: "No data with terms is admitted from prose.",
+        });
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "check",
+          check: "fitness",
+          verdict: "pass",
+          reason: "fit-for-use",
+          caption: "Fit only as labelled unverified content.",
+        });
+      }
       const part = { id, mediaType: "text/plain", bytes: input.text, digest };
       this.gateMemory.enter(task, {
         id,
@@ -5097,6 +5169,7 @@ export class AgentRuntime {
         return [];
       }
     }
+    let emailContext: { text: string; approved: boolean } | undefined;
     if (boundary?.plainTextEmail) {
       const email = emailEnvelopeSchema.safeParse(plan.params);
       if (
@@ -5118,13 +5191,9 @@ export class AgentRuntime {
         approval?.decision === "approve" &&
         Date.parse(approval.validUntil) > Date.parse(this.now()) &&
         !this.state.usedApprovals[approval.id];
-      const contextVerdicts = this.outbound.checkEmailContext(
-        plan.intent,
-        email.data.text,
-        approved,
-      );
-      for (const verdict of contextVerdicts) this.record(verdict);
-      if (contextVerdicts.some((verdict) => verdict.verdict === "fail")) return [];
+      // The context checks run inside the release, in the ordered position of disclosure
+      // and data terms (brief 31 §2.4), so an email records the same order as any release.
+      emailContext = { text: email.data.text, approved };
     }
     if (this.effectAdapters.get(plan.adapter)?.releasesRecord) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
@@ -5149,7 +5218,10 @@ export class AgentRuntime {
     this.recordReleaseDigest = this.effectAdapters.get(plan.adapter)?.releasesRecord
       ? actionDigest(plan.intent)
       : undefined;
+    this.outbound.holdEmailContext(emailContext);
     const decision = this.authorise(plan.intent);
+    this.outbound.holdEmailContext(undefined);
+    for (const verdict of this.outbound.takeEmailContextVerdicts()) this.record(verdict);
     this.recordReleaseDigest = undefined;
     if (decision.outcome === "ask-more") return [];
     if (decision.outcome === "approval-required") {

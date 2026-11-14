@@ -8168,6 +8168,9 @@
               "purpose": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "challenge": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -8231,6 +8234,9 @@
               "from": {
                 "type": "string",
                 "pattern": "^mailto:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+              },
+              "challenge": {
+                "type": "boolean"
               }
             },
             "required": [

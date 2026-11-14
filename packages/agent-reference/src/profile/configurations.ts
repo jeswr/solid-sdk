@@ -240,16 +240,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("identity-anonymous"),
     "Anonymous lender lookup in the sector register, answered by signed register entries",
   ),
-  [alternativeWireId("identity-email-endpoint")]: {
-    ...localDefinition(
-      alternativeWireId("identity-email-endpoint"),
-      "Payroll mailbox identity — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.4: built and measured, then withdrawn. Sam pins Paywell's mailbox (the send rule is unchanged), Paywell's admitted signed contact statement names the reply address, and a mailbox challenge reply is accepted only with the nonce from that address (source fails otherwise; while a challenge is active the inbound run records authority and terms as not applicable and fitness as passing for labelled content). Two things stop the cell. First, the email send records its context checks (disclosure and data-terms for each item in the task context) before mandate, so an email after the journey's earlier exchanges does not record the outbound checks in order (C2), and checks are not reordered to fit. Second, the failure path has no gate-recorded form: a model reading of the prose as income evidence is refused by the runtime (structured-form-required) before any gate check. No prose is substituted for structured payroll evidence.",
-    ],
-  },
+  [alternativeWireId("identity-email-endpoint")]: localDefinition(
+    alternativeWireId("identity-email-endpoint"),
+    "Payroll mailbox proven by a signed contact statement and a challenge reply",
+  ),
   [alternativeWireId("identity-did")]: {
     ...localDefinition(alternativeWireId("identity-did"), "DID web identities resolved in process"),
     acceptedDidMethods: ["web"],

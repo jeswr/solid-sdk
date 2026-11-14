@@ -1115,6 +1115,20 @@ export class OutboundGate {
     }
 
     // 3. Disclosure, then 4. data terms: either can stop the release.
+    // An email's context checks come first in that position (brief 31 §2.4).
+    const email = this.emailContext;
+    this.emailContext = undefined;
+    if (email) {
+      const context = this.checkEmailContext(intent, email.text, email.approved);
+      verdicts.push(...context);
+      this.emailContextVerdicts = context;
+      if (context.some((verdict) => verdict.verdict === "fail"))
+        return {
+          outcome: "stop",
+          verdicts,
+          decision: { ...decision, outcome: "deny", reason: "prohibited" },
+        };
+    }
     // Without a configuration (the pilot's own callers) the gate adds no checks of its own.
     const blocked = ctx.configuration
       ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
@@ -2772,6 +2786,18 @@ export class OutboundGate {
   }
 
   /** UNS-9/9a at an unsigned email boundary; the profile always requires exact-send approval. */
+  private emailContext?: { text: string; approved: boolean };
+  private emailContextVerdicts: readonly CheckVerdict[] = [];
+  /** The context verdicts the last email release recorded, for the agent's record. */
+  takeEmailContextVerdicts(): readonly CheckVerdict[] {
+    const verdicts = this.emailContextVerdicts;
+    this.emailContextVerdicts = [];
+    return verdicts;
+  }
+  /** The exact email text whose context the next release checks, with its approval state. */
+  holdEmailContext(context: { text: string; approved: boolean } | undefined): void {
+    this.emailContext = context;
+  }
   checkEmailContext(intent: ActionIntent, text: string, approved = false): readonly CheckVerdict[] {
     const scope = IntentScopeNode.fromIntent(intent);
     const verdicts: CheckVerdict[] = [],

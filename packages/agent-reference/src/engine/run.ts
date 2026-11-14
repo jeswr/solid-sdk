@@ -1195,6 +1195,7 @@ async function runPath(
       new ScriptedMailbox(m.address, new MemoryStateStore(), m.replies),
     ]),
   );
+  const emailChallenges = new Map<string, string>();
   const datasets = new Map<string, LocalDatasetHolder>();
   for (const d of scenario.datasets) {
     const identity = required(parties.get(d.holder)).identity;
@@ -2676,21 +2677,34 @@ async function runPath(
       case "facts":
         result = runtime.admittedStatements();
         break;
-      case "email-send":
+      case "email-send": {
+        // A fresh nonce per path and step; derived so that traces stay reproducible.
+        const nonce = step.challenge
+          ? digestOf({ scenario: scenario.id, path, step: step.id })
+              .replace(/^sha-256:/, "")
+              .slice(0, 16)
+          : undefined;
+        if (nonce) emailChallenges.set(step.mailbox, nonce);
         result = await runtime.sendEmail({
           taskId: `urn:scenario:${scenario.id}:${step.id}`,
           adapter: "urn:scenario:email",
           to: required(mailboxes.get(step.mailbox)).address,
-          text: step.text,
+          text: nonce ? `${step.text}\n\nChallenge: ${nonce}` : step.text,
           purpose: step.purpose,
+          ...(nonce ? { challenge: nonce } : {}),
         });
         break;
+      }
       case "email-receive": {
         const reply = required(mailboxes.get(step.mailbox)).reply(step.index);
+        const challenge = step.challenge ? emailChallenges.get(step.mailbox) : undefined;
+        if (step.challenge && !challenge)
+          throw new Error(`step ${step.id}: no challenge was sent to ${step.mailbox}`);
         result = await runtime.receiveEmail({
           ...reply,
           ...(step.from ? { from: step.from } : {}),
           purpose: step.purpose,
+          ...(challenge ? { challenge } : {}),
         });
         break;
       }

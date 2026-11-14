@@ -51,7 +51,12 @@ export class ScriptedMailbox {
   reply(index = 0) {
     const text = this.replies[index];
     if (text === undefined) throw new Error("no scripted reply");
-    return { from: this.address, text };
+    // Brief 31 §2.4: the stand-in answers a challenge by echoing the latest nonce it received.
+    const nonce = this.inbox()
+      .map((envelope) => /Challenge: ([A-Za-z0-9-]+)/.exec(envelope.text)?.[1])
+      .filter((found): found is string => !!found)
+      .at(-1);
+    return { from: this.address, text: nonce ? text.replaceAll("{nonce}", nonce) : text };
   }
 }
 
