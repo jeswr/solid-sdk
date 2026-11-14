@@ -252,6 +252,14 @@ the profiler's source/repetition evidence. Models validate, round-trip through s
 and pass a dry executor construction before admission.
 Writes currently support flat JSON string/number/boolean fields and URL-encoded forms; unsupported bodies fail closed.
 
+Both learning paths share a recursive credential scan before GET replay or approved-write
+admission. It checks names and values, including headers, query/form fields, JSON keys and
+values at any depth, path segments, fragments and the method, using the executor's registered
+credential forms. A match rejects the whole candidate with a safe reason. Rejection survives
+header filtering and example removal; candidate redaction also scrubs object keys.
+`test/fallback-review-r10.test.ts` includes the meta-token header-name reproductions for GET
+and approved POST, JSON-key and form-name variants, and encoding and ordinary-request checks.
+
 `test/fallback.test.ts` exercises real Chromium/loopback order learning, address approval and
 zero-launch executor replay, plus browser guards, pacing, snapshots, refs and revision rejection.
 `test/fallback-learning.test.ts` covers executor verification, token slots, write admission and
@@ -349,19 +357,26 @@ script-set live values, one-time codes, credential fragments and URL intake boun
 Protected controls accept complete `fill` values and only the exact `press` keys `Enter`,
 `Tab` and `Escape`. Printable keys, editing/selection keys, modified keys (including paste
 shortcuts) and `type` are refused before dispatch with a safe reason. The driver determines
-protection from fresh CDP focus inspection, descending through closed shadow roots; unknown
-focus, failed inspection and timeouts refuse keyboard input. Masked shadow hosts pass their
+protection from fresh CDP focus inspection in a driver-created isolated world, descending
+through closed shadow roots with native accessors and checking the focused node against
+Chromium's accessibility tree. Page-replaced `document.activeElement`, shadow focus and value
+getters cannot spoof this inspection. Missing, conflicting or ambiguous trusted focus,
+failed inspection and timeouts refuse keyboard input, including Enter on a document with
+no focused control. Masked shadow hosts pass their
 protection to inner controls. Protection includes accessibility
 password labels/states, password-like DOM attributes, credential autocomplete (`username`,
 `current-password`, `new-password`, `one-time-code`, `webauthn`) and values the snapshot masks.
 Ordinary controls retain printable and editing keys; `type` rechecks focus before each character.
 Complete credential fills are registered as secrets before dispatch, including into closed
-shadow roots, and fill/type text is masked in planner history. Refused actions never enter
-history, and refusal reasons never quote supplied keys/text. Snapshots, traces and approvals
-use the shared secret redactor and registration floor described above.
+shadow roots. Independently of focus inspection, fill/type text is masked in planner history
+and printable/modified key presses record only `[redacted key]`, including physical-key aliases
+such as `KeyB` and `Digit7`; exact named navigation/editing keys retain their names.
+Refused actions never enter history, and refusal reasons never quote supplied keys/text.
+Snapshots, traces and approvals use the shared secret redactor and registration floor described above.
 
-Live collection uses CDP's shadow-piercing DOM traversal to read values in closed shadow roots;
-the configured `timeoutMs` bounds collection. Collection failure or timeout withholds the snapshot
+Live collection uses CDP's shadow-piercing DOM traversal and isolated native value accessors
+to read values in closed shadow roots; the configured `timeoutMs` bounds collection.
+Collection failure or timeout withholds the snapshot
 with a safe reason. Cookie persistence on close runs independently of collection and renderer
 evaluation, preserves the loaded revision, and makes one update attempt for a changed jar.
 Concurrent and repeated closes await the same pending persistence and cleanup.
@@ -371,3 +386,7 @@ and exactly one cookie update after `Target crashed` or collection timeout.
 `test/fallback-review-r8.test.ts` covers the edited-password and per-keystroke-history
 reproductions, zero input dispatch on refusal, masked closed-shadow fills/history/approvals,
 allowed Enter/Tab/Escape, unknown focus and focus changes before or during keyboard actions.
+`test/fallback-review-r9.test.ts` covers both spoofed-focus review reproductions with zero
+dispatch and no plaintext in either planner, snapshots or traces, legitimate ordinary typing
+despite hostile getters, native live-value collection, conflicting/unavailable AX focus and
+history masking independent of the dispatch guard.

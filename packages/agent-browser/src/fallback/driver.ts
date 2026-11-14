@@ -50,6 +50,7 @@ import { type CredentialContext, taskCredentialContext } from "../session.js";
 import type { Approver, TraceStep } from "../types.js";
 import {
   collectLiveControls,
+  credentialWorld,
   focusedElement,
   type LiveControl,
   protectedAXNode,
@@ -868,7 +869,10 @@ export class BrowserDriver {
     if (!node || node.epoch !== this.epoch)
       throw new BrowserDriverError("ref", "Unknown or stale reference.");
     try {
-      const { object } = await this.cdp.send("DOM.resolveNode", { backendNodeId: node.backend });
+      const { object } = await this.cdp.send("DOM.resolveNode", {
+        backendNodeId: node.backend,
+        executionContextId: await credentialWorld(this.cdp),
+      });
       if (!object.objectId) throw new Error();
       const checked = await this.cdp.send("Runtime.callFunctionOn", {
         objectId: object.objectId,
@@ -959,6 +963,7 @@ export class BrowserDriver {
 
   private async captureSubmitter(ref?: string): Promise<void> {
     const result = await this.cdp.send("Runtime.evaluate", {
+      contextId: await credentialWorld(this.cdp),
       expression: `(() => {
         const el = ${ref ? `document.querySelector('[data-sab-fallback-ref="${ref}"]')` : "document.activeElement"};
         if (!el) return undefined;

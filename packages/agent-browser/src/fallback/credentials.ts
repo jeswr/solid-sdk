@@ -10,6 +10,16 @@ interface AXNode {
 const readDOM = (cdp: CDPSession) => cdp.send("DOM.getDocument", { depth: -1, pierce: true });
 type DOMNode = Awaited<ReturnType<typeof readDOM>>["root"];
 
+/** Page scripts cannot replace native accessors or DOM wrappers in this driver-owned world. */
+export async function credentialWorld(cdp: CDPSession): Promise<number> {
+  const { frameTree } = await cdp.send("Page.getFrameTree");
+  const { executionContextId } = await cdp.send("Page.createIsolatedWorld", {
+    frameId: frameTree.frame.id,
+    worldName: "sab-credential-inspection",
+  });
+  return executionContextId;
+}
+
 export interface LiveControl {
   backend: number;
   protected: boolean;
@@ -33,6 +43,7 @@ export async function collectLiveControls(cdp: CDPSession): Promise<{
   urls: string[];
 }> {
   const { root } = await readDOM(cdp);
+  const executionContextId = await credentialWorld(cdp);
   const { nodes } = await cdp.send("Accessibility.getFullAXTree");
   const ax = new Map(nodes.map((node) => [node.backendDOMNodeId, node]));
   const pending: { node: DOMNode; protected: boolean }[] = [{ node: root, protected: false }];
@@ -65,7 +76,10 @@ export async function collectLiveControls(cdp: CDPSession): Promise<{
       })),
     );
     if (!isControl) continue;
-    const { object } = await cdp.send("DOM.resolveNode", { backendNodeId: node.backendNodeId });
+    const { object } = await cdp.send("DOM.resolveNode", {
+      backendNodeId: node.backendNodeId,
+      executionContextId,
+    });
     if (!object.objectId) throw new Error("Credential control could not be resolved.");
     try {
       const result = await cdp.send("Runtime.callFunctionOn", {
@@ -89,7 +103,7 @@ export async function collectLiveControls(cdp: CDPSession): Promise<{
   return { controls, urls, base: root.baseURL ?? root.documentURL ?? "about:blank" };
 }
 
-/** Resolve actual focus afresh, descending through CDP-only closed shadow roots. */
+/** Cross-check isolated native focus against Chromium AX focus, piercing closed shadows. */
 export async function focusedElement(cdp: CDPSession): Promise<{
   backend: number;
   protected: boolean;
@@ -97,7 +111,11 @@ export async function focusedElement(cdp: CDPSession): Promise<{
 }> {
   const objects = new Set<string>();
   try {
-    const active = await cdp.send("Runtime.evaluate", { expression: "document.activeElement" });
+    const executionContextId = await credentialWorld(cdp);
+    const active = await cdp.send("Runtime.evaluate", {
+      contextId: executionContextId,
+      expression: "document.activeElement",
+    });
     if (active.exceptionDetails || !active.result.objectId)
       throw new Error("Focused element is unknown.");
     let objectId = active.result.objectId;
@@ -123,7 +141,10 @@ export async function focusedElement(cdp: CDPSession): Promise<{
           isPasswordLikeControl(attrs));
       let inner: string | undefined;
       for (const root of node.shadowRoots ?? []) {
-        const { object } = await cdp.send("DOM.resolveNode", { backendNodeId: root.backendNodeId });
+        const { object } = await cdp.send("DOM.resolveNode", {
+          backendNodeId: root.backendNodeId,
+          executionContextId,
+        });
         if (!object.objectId) throw new Error("Shadow focus is unknown.");
         objects.add(object.objectId);
         const active = await cdp.send("Runtime.callFunctionOn", {
@@ -152,6 +173,21 @@ export async function focusedElement(cdp: CDPSession): Promise<{
       });
       if (state.exceptionDetails || state.result.value?.connected !== true)
         throw new Error("Focused element is unavailable.");
+      const { nodes: tree } = await cdp.send("Accessibility.getFullAXTree");
+      // RootWebArea also reports focused when any descendant owns keyboard focus.
+      const focused = tree.filter(
+        (item) =>
+          item.role?.value !== "RootWebArea" &&
+          item.properties?.some((p) => p.name === "focused" && p.value.value === true),
+      );
+      if (
+        focused.length !== 1 ||
+        focused[0]?.ignored ||
+        focused[0]?.backendDOMNodeId !== node.backendNodeId ||
+        !ax.properties?.some((p) => p.name === "focused" && p.value.value === true)
+      )
+        throw new Error("Trusted focus sources disagree or cannot determine focus.");
+      protectedControl ||= protectedAXNode(focused[0]);
       return {
         backend: node.backendNodeId,
         value: state.result.value.value,

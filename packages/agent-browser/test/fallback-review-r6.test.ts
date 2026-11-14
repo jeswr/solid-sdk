@@ -325,6 +325,8 @@ describe("fallback review r6 credential intake", () => {
     try {
       await driver.goto("/controls");
       await pageOf(driver).evaluate((secret) => {
+        // Enter needs a control with verified focus, even when a document handler submits.
+        document.querySelector<HTMLInputElement>("[name=entry]")?.focus();
         document.addEventListener("keydown", (event) => {
           if (event.key !== "Enter") return;
           event.preventDefault();

@@ -182,14 +182,27 @@ paste and script entry. Keep the shared registration floor and encoding-aware re
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Protected controls accept only complete `fill` values and exact `press` keys Enter, Tab and
 Escape. Refuse printable/editing/modified keys, paste shortcuts, `select` and `type` before
-dispatch. Determine actual focus through CDP immediately before keyboard dispatch, descending
-closed shadow roots; unknown focus, inspection failure or timeout must refuse even Enter.
+dispatch. Determine actual focus through CDP immediately before keyboard dispatch, using native
+accessors in a driver-created isolated world and descending closed shadow roots. Cross-check
+against the focused Chromium AX node; missing, conflicting or ambiguous trusted focus,
+inspection failure or timeout must refuse even Enter. Never rely on the page's main-world
+focus/value getters for protection: scripts can spoof document/shadow-root accessors and control values.
 Carry protected accessible shadow hosts' protection through to their inner controls.
 Use AX protection/password labels, credential autocomplete and DOM attributes, and protect
 any control whose value snapshot redaction masks. Recheck each character of ordinary `type`
 in case a page moves focus. Register complete credential fill text before dispatch and mask
-fill/type history text; never store refused action text/keys or quote them in errors. Use CDP
-shadow-piercing traversal for live values in closed shadow roots. Bound credential collection
-with `timeoutMs`; failures/timeouts withhold snapshots with a safe reason. Close-time cookie
+fill/type history text. Independently of focus protection, mask printable/modified press
+spellings (including KeyB/Digit7/Space aliases) as `[redacted key]`; retain only exact named
+navigation/editing keys. Never store refused action text/keys or quote them in errors. Use CDP
+shadow-piercing traversal and isolated native accessors for live values in closed shadow roots.
+Bound credential collection with `timeoutMs`; failures/timeouts withhold snapshots with a safe reason. Close-time cookie
 persistence must run even when credential collection or page evaluation fails, keep the original
 revision and one-update contract, and share pending persistence across concurrent/repeated closes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Learning uses one recursive credential scan for GET replay and approved-write admission.
+Check every request string position, including object/JSON keys, header/query/form names and
+values, paths, fragments and methods, against all forms covered by the executor's shared
+registration/redactor. Reject the entire candidate with a reason that quotes no request text;
+preserve that rejection before filtering headers or removing examples. Redact object keys
+as well as values before returning candidate evidence. Verified CSRF slots retain no constants.

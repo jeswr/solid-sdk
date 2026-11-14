@@ -207,7 +207,7 @@ describe("fallback review r2 credential and display boundaries", () => {
     expect(result.proposed).toEqual([]);
     expect(result.rejected).toContainEqual(
       expect.objectContaining({
-        reason: "Unresolved session material in a transmitted parameter.",
+        reason: "Unresolved session material in learning candidate.",
       }),
     );
     expect(JSON.stringify([candidates, result])).not.toContain(token);
