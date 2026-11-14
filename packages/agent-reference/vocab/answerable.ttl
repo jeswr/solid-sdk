@@ -1684,4 +1684,5 @@ awp:attachmentDatatype a rdf:Property; rdfs:label "Attached literal datatype"; r
 
 # AUTHORED-BY Codex GPT-6
 <https://w3id.org/jeswr/awp#reason/approval-mismatch> a awp:ReasonCode;
-    rdfs:label "The released message differs from the approved intent or terms".
+    rdfs:label "Approval mismatch";
+    rdfs:comment "The message about to be signed differs from the approved intent or terms.".
