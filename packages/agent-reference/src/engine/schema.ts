@@ -314,8 +314,9 @@ const base = {
   id: slug,
   agent: slug,
   atStep: z.number().int().positive().optional(),
-  segment: z.literal("payment").optional(),
-  segmentEnd: z.literal("payment").optional(),
+  // Brief 31: a configuration may add steps only inside a declared "added" segment.
+  segment: z.enum(["payment", "added"]).optional(),
+  segmentEnd: z.enum(["payment", "added"]).optional(),
 };
 const step = z.discriminatedUnion("type", [
   z.strictObject({
@@ -630,6 +631,18 @@ const step = z.discriminatedUnion("type", [
   }),
 ]);
 const blocked = z.array(z.strictObject({ path: z.string(), reason: z.string() }));
+const replacedItem = z.string().regex(/^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$/);
+const addedSegment = z.strictObject({
+  segment: slug,
+  // A segment that only records (no message) declares no closing message.
+  closes: z
+    .strictObject({
+      agent: slug,
+      kind: z.string().min(1),
+      outcome: z.string().min(1),
+    })
+    .optional(),
+});
 const registry = scenarioRegistry();
 const configurationOptions = LAYER_IDS.flatMap((layer) =>
   registry
@@ -640,6 +653,12 @@ const configurationOptions = LAYER_IDS.flatMap((layer) =>
         id: z.literal(`${layer}-${suite.id}`),
         change: z.strictObject({ [layer]: z.literal(suite.id) }),
         world: object.default({}),
+        // Brief 31 §1 (C3): baseline items this layer replaces, as "<kind>:<id>".
+        replaces: z.array(replacedItem).optional(),
+        // Brief 31 §1 (C5): each added segment, named by its first step, and how it ends.
+        added: z.array(addedSegment).optional(),
+        // Brief 31 §1: the one admitted combination, a prerequisite configuration.
+        requires: slug.optional(),
       }),
     ),
 );

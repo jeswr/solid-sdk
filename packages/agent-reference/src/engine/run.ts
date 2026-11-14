@@ -120,6 +120,7 @@ import { validateReferences } from "./load.js";
 import {
   advertisedConfigurations,
   matrixConfiguration,
+  matrixPrerequisite,
   matrixSink,
   matrixWorld,
   preferredConfiguration,
@@ -376,7 +377,13 @@ export async function runScenario(
     }
     validateReferences(pathProfile, world);
     const combinationProblems = alternative
-      ? scenarioRegistry().check({ layers: { ...BASELINE.layers, ...alternative.change } })
+      ? scenarioRegistry().check({
+          layers: {
+            ...BASELINE.layers,
+            ...matrixPrerequisite(scenario, alternative)?.change,
+            ...alternative.change,
+          },
+        })
       : [];
     const blocker =
       path.blocked ??
@@ -589,7 +596,11 @@ async function runPath(
                             ? CONFIG_PINNED_LIST
                             : undefined;
   const configuration = options.alternative
-    ? matrixConfiguration(options.alternative, registry)
+    ? matrixConfiguration(
+        options.alternative,
+        registry,
+        matrixPrerequisite(scenario, options.alternative),
+      )
     : local
       ? {
           id: `${scenario.id}-local`,
@@ -2533,7 +2544,12 @@ async function runPath(
       });
     }
     recorder.step(step.atStep ?? index + 1);
-    if (step.segment) recorder.segment("payment");
+    if (step.segment === "added") {
+      // Brief 31: only a configuration's own patch opens an added segment.
+      if (!options.alternative)
+        throw new Error(`step ${step.id}: an added segment needs a configuration`);
+      recorder.segment("added", options.alternative.id);
+    } else if (step.segment) recorder.segment("payment");
     const runtime = runtimes.get(step.agent);
     if (!runtime) throw new Error(`step ${step.id}: ${step.agent} does not run an agent`);
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
@@ -3592,7 +3608,7 @@ async function runPath(
     if (recordMirror && !(await recordMirror.flush()))
       throw new Error("The principal record mirror is unavailable after a completed step");
     outputs[step.id] = result ?? null;
-    if (step.segmentEnd) recorder.segmentEnd("payment");
+    if (step.segmentEnd) recorder.segmentEnd(step.segmentEnd);
     if (scenario.stopAfter === step.id) {
       recorder.segmentEnd("payment");
       break;

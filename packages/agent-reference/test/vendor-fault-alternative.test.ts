@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { expect, it } from "vitest";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
@@ -12,6 +13,6 @@ it("does not turn a correctly refused action into evidence of a vendor fault", a
   for (const path of paths) {
     expect(path.trace).toBeUndefined();
     expect(path.blocked).toContain("CORE-L-13");
-    expect(path.blocked).toContain("confinement");
+    expect(path.blocked).toContain("confinement C3");
   }
 });

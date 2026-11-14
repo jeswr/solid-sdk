@@ -129,8 +129,10 @@ export interface TraceEvent {
   readonly rule?: { readonly id: string; readonly text: string };
   readonly packet?: PacketView;
   readonly settlement?: import("../settlement/types.js").SettlementTrace;
-  readonly segment?: "payment";
-  readonly segmentEnd?: "payment";
+  readonly segment?: "payment" | "added";
+  readonly segmentEnd?: "payment" | "added";
+  /** Brief 31: the configuration whose added segment recorded this event. */
+  readonly addedBy?: string;
   readonly refs?: readonly TraceRef[];
   readonly chat?: { readonly who: "principal" | "agent"; readonly text: string };
   /** How a trust question was answered: the sources consulted, in order. */

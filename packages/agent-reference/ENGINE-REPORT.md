@@ -4236,3 +4236,133 @@ The 164-path oracle is byte-for-byte unchanged, and a fresh oracle snapshot deep
 
 No full workspace gate, coverage run, personal-agent run or evaluation run was invoked.
 No commit, network request or dependency addition was made.
+
+## Brief 31
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+Offline implementation on `claude/project-thread-ee3kq8-confine`, without commits, Node 24
+first on PATH. Brief 31 was read completely. Priority item 1 (the revised confinement rule)
+is done. Items 2 to 4 (`usage-control-human-approval`, the lender register exchange with
+`identity-anonymous`, `accountability-regulator-claim`) were not started in code: the
+findings below say what each needs. The blocked reasons of the cells not built now use the
+wording of brief 31 section 2. No suite moved from blocked to runs.
+
+**Schema, trace and recorder.** A script step's `segment`/`segmentEnd` may now be `"added"`
+as well as `"payment"`. A configuration entry gains `replaces` (`"<kind>:<id>"`, kinds
+`party`, `statement`, `step`, `mandate`), `added` (`[{ segment: <first step id>, closes?:
+{ agent, kind, outcome } }]`) and `requires` (one configuration id). The recorder stamps
+`addedBy: "<configuration id>"` on every event recorded while an added segment is open and
+marks the first and last such event with `segment`/`segmentEnd: "added"`; a segment that
+records nothing marks no baseline event. Only a configuration run can open an added segment
+(the engine throws otherwise); added segments cannot nest. The scenario JSON Schema is
+regenerated (`--check` passes).
+
+**Confinement (`src/engine/confinement.ts`).**
+- C1/C4: `confinementDifferences` drops every `addedBy` event before building the rows and
+  before computing the final outcome; otherwise unchanged (the settlement payment-segment
+  exclusion stays).
+- C2/C5: `addedSegmentDifferences(trace, entry, parties)` splits the trace into its added
+  segments (matched in order to `entry.added`) and checks every gate run inside each: the
+  checks recorded before each decision must include, in order, `INBOUND_CHECKS` for the
+  inbound gate, and the general part of `OUTBOUND_CHECKS` (mandate to evidence) for the
+  outbound gate, plus P1 to P8 when the run is a payment release. The lists come from the
+  gate's own constants in `src/trace/types.ts`. Every recorded verdict must be `pass` or
+  `not-applicable` and the decision `admit`/`go`. A run that asks the principal is accepted
+  only when a principal reply for the same agent follows in the same segment and a later run
+  of the same agent's gate passes the check that asked. The last inbound message of each
+  segment must match `closes` (agent mapped through the party's `traceId`; outcome is the
+  body's `outcome`/`reason`, else the receiving gate's decision); a `refuse` never matches.
+  A segment that declares no `closes` must carry no message (a record-only segment).
+- C3: `patchDifferences(scenario, entry)` compares the parsed worlds (so schema defaults
+  never read as edits): every baseline party (its advertised `configurations` excepted, as
+  that is the configuration's own wire choice), statement with its terms, mandate rule
+  (keyed `mandate:<agent>#<list>/<rule id or index>`, plus `#limits`) and script step must be
+  canonically equal unless listed in `replaces`; a listed item that does not change is also
+  reported; baseline step order must be kept; a transport configuration may replace nothing;
+  and no fault or test hook (`settlementFault`, `documentFaults`, `evidenceFaults`,
+  `agreementCredentialFault`, `authorityFault`, `mandateStatusFault`, `inject`, `stopAfter`,
+  `solid.fault`, `carriage.fault`, `trustedIndex.fork`, `federation.expired`/`businessOnly`,
+  `originHosted.pointerFault`) may differ from the reference. With `requires`, the reference
+  is the prerequisite's world.
+
+**Matrix (`src/engine/matrix.ts`).** `matrixWorld` applies the prerequisite's patch first
+when `requires` is set (one level only, on a different layer; the dependent is advertised
+where the baseline or the prerequisite was), then refuses a patch that adds a step outside
+an added segment, puts a baseline step inside one, leaves one open, or adds any segment
+under a `transport-` configuration. `matrixConfiguration` and the suite-constraint check
+take the prerequisite's layer into the configured layers.
+
+**Existing configurations under the new rule.** `meaning-negotiated` added its
+`term-deliberation` step outside any segment; that step is now a declared record-only added
+segment (`added: [{ segment: "term-deliberation" }]`, also marked in its branch's literal
+script). Seven executable configurations list what they replace, each an item of their own
+layer: `meaning-registry-lookup` and `meaning-negotiated` (`statement:income`),
+`reliance-corroboration` (`statement:income`, `statement:deposit`),
+`reliance-stated-confidence` (`statement:deposit`), `reliance-quality-certificate` (both
+product statements), `identity-email-endpoint` (`party:paywell`, the mailbox binding) and
+`authenticity-selective-disclosure` (`statement:income`, `step:apply`, `step:assessed`).
+Whether a replaced item belongs to the changed layer is recorded here for review; the test
+cannot decide layer membership mechanically.
+
+**Tests (`test/confinement.test.ts`).** Every executable configuration in every scenario is
+run through all three functions, against the prerequisite's main run when `requires` is set
+(none does yet). Separate tests: the old `confinement-wrong.json` transport patch is now
+refused both outside a segment and when marked as an added segment (and `runScenario`
+rejects it); `requires` applies the prerequisite first and refuses a chain. Four new wrong
+fixtures beside `confinement-wrong.json`, each detected:
+- `added-exchange-check-missing.json`: an added register re-lookup after the paid segment.
+  As a control the untouched run passes C1 to C5; with its first outbound `recipient` check
+  removed from the trace (as a gate that skipped it would record) C2 reports it missing.
+- `added-exchange-check-fails.json`: an added balance-statement request sent to the valuer
+  register; Sam's mandate fails it and nothing closes the segment.
+- `patch-edits-mandate-rule.json`: narrows Sam's baseline `urn:rule:use:payment-request`;
+  C3 reports the unlisted change.
+- `added-exchange-changes-later-verdict.json`: the same ordinary lookup inserted before the
+  bank request, with twenty days passing inside the segment. C2 passes the added exchange;
+  C1 reports the later baseline face-check admission turning from `fitness pass` to
+  `fitness fail (stale-data)` and the changed final outcome (both runs stop after the
+  step-up approval). It is attached to `usage-control-odrl-model-tighten`, whose fed checks
+  do not include fitness.
+
+**Manifest and traces.** `scripts/run-scenarios.mjs` writes `addedExchanges` (the number of
+`message-out` events with `addedBy`) on every configuration row with a trace; it is 0 on
+all 87 such rows. Only the two `meaning-negotiated` traces change (the segment marks and
+`addedBy` on the platform's record event, plus the commit field). The rows were regenerated
+per configuration with `--scenario=mortgage-main --configuration=<id>` for
+`meaning-negotiated` and the nine re-worded blocked cells; the merged manifest keeps the
+original row and index order. Counts are unchanged: **281 paths, 237 runs, 14 disagree,
+30 blocked** before and after; `test/labels.test.ts` counts need no change.
+
+**Not built, and why.**
+- `usage-control-human-approval` (section 2.1). The rule now admits the exchange, but the
+  engine has no path that turns an undecided data-terms use into a question for the
+  principal: `OutboundGate.dataTerms` stops on `indeterminate`, and an item without
+  terms is refused for distribution under the default terms (`purpose-not-permitted`). The reply release in `checkMessage` can
+  already park a message for a digest-bound approval (`release-message`), which is the
+  path to reuse. Further findings: the `mortgage-payment` profile must declare the new
+  operation and list the property-access claim type under `urn:purpose:valuation` (else
+  the reply's disclosure check is `excessive-scope`), with a claim rule for its method;
+  both are changes to the shared baseline profile. The `supplier-terms-hold` branch will
+  measure `disclosure`/`excessive-scope` rather than `data-terms`/`prohibited` unless the
+  valuation purpose lists `deposit.balance`, and Harbour's terms reach `not-authorised`
+  (registered-recipient requirement) before any prohibition; the brief's expected reason
+  would need re-registering. `approval-reused` needs a second recipient able to receive:
+  `other-valuer` has no agent.
+- `identity-anonymous` (2.2) and `accountability-regulator-claim` (2.3): need the separately
+  keyed lender-register agent and the resolver reading its admitted answer; not started.
+- 2.4 to 2.9 are in the brief's Later list; 2.10 and the mortgage selective-disclosure cell
+  are left for the maintainer (`needs:jesse`), with their texts unchanged.
+- C6 (a failure branch compared with its configuration's main path) has no new function:
+  branches are still judged by the existing `firstBranchDivergence`. The explorer label
+  "added by this suite" belongs to the explorer, which is not in this repository; traces
+  carry `addedBy` for it.
+
+**Validation.** `test/confinement.test.ts` 7/7 pass (9 min 47 s). Focused: the six
+blocked-cell regressions, `solid-reference-status`, `configuration-matrix`,
+`meaning-negotiated` 17/17 pass; `labels`, `traces`, `oracle-snapshot`, `oracle`,
+`meaning-reliance-alternatives`, `recorded-joint` 32/32 pass. `tsc --noEmit` passes; biome clean on changed files;
+`export-schemas --check` passes. Oracle: 164 paths, parsed JSON equal to
+`test/oracle/pre-rdf.json`. RDF guard: 0 failures, 213 allowances, unchanged.
+No vocabulary term was added, so codegen was not run. No commit, network request or
+dependency addition was made; the full suite and `generate-traces.mjs` were not run.

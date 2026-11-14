@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { expect, it } from "vitest";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
@@ -14,6 +15,6 @@ it("keeps the mailbox cell explicitly not run until control proof and confinemen
   for (const p of paths) {
     expect(p.trace).toBeUndefined();
     expect(p.blocked).toContain("mailbox challenge");
-    expect(p.blocked).toContain("confinement");
+    expect(p.blocked).toContain("Brief 31 section 2.4");
   }
 });

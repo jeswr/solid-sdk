@@ -657,6 +657,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -695,6 +745,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -733,6 +833,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -771,6 +921,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -809,6 +1009,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -847,6 +1097,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -885,6 +1185,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -923,6 +1273,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -961,6 +1361,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -999,6 +1449,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1037,6 +1537,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1075,6 +1625,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1113,6 +1713,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1151,6 +1801,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1189,6 +1889,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1227,6 +1977,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1265,6 +2065,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1303,6 +2153,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1341,6 +2241,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1379,6 +2329,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1417,6 +2417,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1455,6 +2505,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1493,6 +2593,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1531,6 +2681,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1569,6 +2769,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1607,6 +2857,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1645,6 +2945,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1683,6 +3033,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1721,6 +3121,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1759,6 +3209,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1797,6 +3297,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1835,6 +3385,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1873,6 +3473,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1911,6 +3561,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1949,6 +3649,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -1987,6 +3737,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -2025,6 +3825,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -2063,6 +3913,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -2101,6 +4001,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -2139,6 +4089,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -2177,6 +4177,56 @@
                 "additionalProperties": {
                   "$ref": "#/$defs/__schema0"
                 }
+              },
+              "replaces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
+                }
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "segment": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]*$"
+                    },
+                    "closes": {
+                      "type": "object",
+                      "properties": {
+                        "agent": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9-]*$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "agent",
+                        "kind",
+                        "outcome"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "segment"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "requires": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -5203,11 +7253,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5257,11 +7313,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5322,11 +7384,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5400,11 +7468,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5452,11 +7526,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5521,11 +7601,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5584,11 +7670,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5625,11 +7717,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5661,11 +7759,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5711,11 +7815,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5768,11 +7878,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -5809,11 +7925,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6482,11 +8604,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6531,11 +8659,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6596,11 +8730,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6691,11 +8831,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6741,7 +8887,10 @@
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6803,7 +8952,10 @@
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6841,11 +8993,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6877,11 +9035,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6918,11 +9082,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -6969,11 +9139,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7013,11 +9189,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7053,11 +9235,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7109,11 +9297,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7283,11 +9477,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7349,11 +9549,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7405,11 +9611,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7481,11 +9693,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7558,11 +9776,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7611,11 +9835,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7672,11 +9902,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7722,11 +9958,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7763,11 +10005,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7807,11 +10055,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7860,11 +10114,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7900,11 +10160,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -7956,11 +10222,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8009,11 +10281,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8045,11 +10323,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8081,11 +10365,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8117,11 +10407,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8153,11 +10449,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8189,11 +10491,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8225,11 +10533,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8265,11 +10579,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8305,11 +10625,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8373,11 +10699,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8440,11 +10772,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8491,11 +10829,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8559,11 +10903,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8610,11 +10960,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8678,11 +11034,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",
@@ -8714,11 +11076,17 @@
               },
               "segment": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "segmentEnd": {
                 "type": "string",
-                "const": "payment"
+                "enum": [
+                  "payment",
+                  "added"
+                ]
               },
               "type": {
                 "type": "string",

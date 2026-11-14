@@ -193,7 +193,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "f83fd96762a85dcc5a279ad6e042d47ac464ba5f",
     "core": "scripted"
   },
   "standIns": [
@@ -8632,6 +8632,7 @@
       "seq": 206,
       "step": 10,
       "agent": "deliberation-platform",
+      "segment": "added",
       "part": "record",
       "kind": "store",
       "caption": "The fictional deliberation platform records the agents’ agreement; no person has approved the definition.",
@@ -8649,7 +8650,9 @@
           "principalApprovals": 0
         },
         "provenance": "The fictional platform verified the proposal and every attached signature before recording it."
-      }
+      },
+      "addedBy": "meaning-negotiated",
+      "segmentEnd": "added"
     },
     {
       "seq": 207,

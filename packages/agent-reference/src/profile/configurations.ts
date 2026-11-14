@@ -169,7 +169,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published.",
+      "Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
     ],
   },
   [alternativeWireId("accountability-vendor-fault")]: {
@@ -179,7 +179,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run.",
+      "Brief 31 section 2.8: a main path may not run a faulty gate (confinement C3). Not built: a signed component statement naming who builds and who operates the gate and the core (CORE-L-13), the record audit that checks each released action again against the mandate, a gate-operator party with its own agent, and the onlyUnder branch in which brief 20's labelled fault stand-in releases one action outside the mandate. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run.",
     ],
   },
   [alternativeWireId("usage-control-odrl-model-tighten")]: localDefinition(
@@ -193,7 +193,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery.",
+      "Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, so the cell is unblocked once the lender-register exchange exists. Not built: that signed register exchange naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7). No hard-coded forum is relabelled as register discovery.",
     ],
   },
   [alternativeWireId("commitments-agreement-credential")]: localDefinition(
@@ -207,7 +207,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed.",
+      "Brief 31 section 2.1: the revised confinement rule admits the valuer's request as an added exchange. Harbour's signed terms require a regulated lender and Sam's approval cannot waive that supplier restriction (UC-9), so the valuer must instead ask for the property access details, a statement Sam issues himself, whose undecided data-terms use goes to Sam bound to digest, recipient, purpose and expiry. Not built: that statement and its operation, and the human-approval data-terms path that asks Sam about an undecided use of his own data. The existing digest-bound approval and release checks are retained; no second approval path is installed.",
     ],
   },
   [alternativeWireId("meaning-negotiated")]: localDefinition(
@@ -237,7 +237,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
+      "Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane.",
     ],
   },
   [alternativeWireId("authority-agent-registry")]: localDefinition(
@@ -255,7 +255,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6.",
+      "Brief 31 section 2.2: not a confinement problem. The cell needs the lender-register exchange: a separately keyed lender-register agent that answers an unsigned public-read lookup with a signed statement, admitted through the five inbound checks, from which the trust resolver takes the lender's entry. Today that lookup is a synchronous TrustResolver over local unsigned register tables, not a signed register exchange; merely relabelling the current public-read configuration would not meet design 26 section 6. The product query is already anonymous and stays a baseline exchange.",
     ],
   },
   [alternativeWireId("identity-email-endpoint")]: {
@@ -265,7 +265,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+      "Brief 31 section 2.4: the revised confinement rule admits the email exchange as an added segment. Not built: proof that the replier controls the payroll mailbox, namely a Paywell-signed statement naming its contact mailbox and a mailbox challenge in which Sam's agent sends a fresh nonce and accepts a reply only if it carries the nonce and arrives from the named address. The existing mailbox binding has no challenge-control proof. No prose is substituted for structured payroll evidence.",
     ],
   },
   [alternativeWireId("identity-did")]: {
@@ -296,7 +296,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ...localDefinition(CONFIG_SOLID_ACCESS, "Solid access control — not run"),
     status: "unresolved",
     unresolved: [
-      "Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented.",
+      "Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy.",
     ],
   },
   [CONFIG_POD_MIRROR]: localDefinition(
@@ -311,7 +311,7 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ...localDefinition(CONFIG_SOLID_REFERENCE, "Solid reference access — not run"),
     status: "unresolved",
     unresolved: [
-      "Atomic WAC grant-and-pointer release is not implemented; the existing ResourceReader admits statements, not a signed reference-read message through all five inbound checks.",
+      "Brief 31 section 2.6: the revised confinement rule admits the lender's read as an added exchange. Not built: the protected-reference transaction, namely one outbound action that applies the Web Access Control grant and releases the pointer together or not at all, and the reference read as a signed request and signed response admitted through all five inbound checks; the existing ResourceReader admits statements, not a signed reference-read message.",
     ],
   },
   [CONFIG_AUTHENTICITY_DI]: {

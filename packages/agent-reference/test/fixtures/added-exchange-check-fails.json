@@ -1,0 +1,47 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "configuration": {
+    "id": "authenticity-data-integrity",
+    "change": {
+      "authenticity": "data-integrity"
+    },
+    "world": {
+      "script": {
+        "relookup": {
+          "id": "relookup",
+          "agent": "sam-agent",
+          "type": "start",
+          "peer": "valuer-register-agent",
+          "kind": "invoke",
+          "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+          "contents": {
+            "service": "Home valuation"
+          },
+          "intent": {
+            "action": "use",
+            "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+            "target": "https://w3id.org/jeswr/awp#op/balance-statement",
+            "recipient": "urn:fictional:valuation-register",
+            "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+            "parameters": {}
+          },
+          "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+          "segment": "added",
+          "atStep": 40,
+          "segmentEnd": "added"
+        }
+      }
+    },
+    "added": [
+      {
+        "segment": "relookup",
+        "closes": {
+          "agent": "sam-agent",
+          "kind": "deliver",
+          "outcome": "admit"
+        }
+      }
+    ]
+  },
+  "note": "An added request for a balance statement sent to the valuer register: Sam's mandate permits that operation only towards Sam's bank, so the mandate check fails and nothing closes the segment."
+}

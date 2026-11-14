@@ -1979,6 +1979,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-core--authenticity-data-integrity.json"
     },
     {
@@ -2650,6 +2651,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--transport-email.json"
     },
     {
@@ -2670,6 +2672,7 @@
         "reason": "human-parity-mismatch"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--email-readable-copy-differs--transport-email.json"
     },
     {
@@ -2935,6 +2938,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--transport-a2a.json"
     },
     {
@@ -2956,6 +2960,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--a2a-text-part-instruction--transport-a2a.json"
     },
     {
@@ -2977,6 +2982,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--a2a-task-state-lies--transport-a2a.json"
     },
     {
@@ -3242,6 +3248,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--transport-mcp.json"
     },
     {
@@ -3263,6 +3270,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--mcp-tool-description-poisoned--transport-mcp.json"
     },
     {
@@ -3283,6 +3291,7 @@
         "reason": "not-authorised"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--mcp-token-passed-on--transport-mcp.json"
     },
     {
@@ -3577,6 +3586,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--transport-solid-inbox.json"
     },
     {
@@ -3597,6 +3607,7 @@
         "reason": "bad-signature"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--inbox-item-changed-at-rest--transport-solid-inbox.json"
     },
     {
@@ -3862,6 +3873,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--accountability-pod-mirror.json"
     },
     {
@@ -4075,6 +4087,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--mirror-unreachable--accountability-pod-mirror.json"
     },
     {
@@ -4084,7 +4097,7 @@
       "settlement": "rdf-order",
       "configuration": "usage-control-solid-access-control",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy."
     },
     {
       "scenario": "mortgage-main",
@@ -4094,7 +4107,7 @@
       "configuration": "usage-control-solid-access-control",
       "what": "The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy."
     },
     {
       "scenario": "mortgage-main",
@@ -4359,6 +4372,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--identity-webid.json"
     },
     {
@@ -4379,6 +4393,7 @@
         "reason": "sender-key-mismatch"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--profile-key-swapped--identity-webid.json"
     },
     {
@@ -4644,6 +4659,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--authenticity-data-integrity.json"
     },
     {
@@ -4664,6 +4680,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--authenticity-data-integrity.json"
     },
     {
@@ -4684,6 +4701,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--authenticity-data-integrity.json"
     },
     {
@@ -4704,6 +4722,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--authenticity-data-integrity.json"
     },
     {
@@ -4724,6 +4743,7 @@
         "reason": "bad-signature"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--graph-reordered--authenticity-data-integrity.json"
     },
     {
@@ -4733,7 +4753,7 @@
       "settlement": "rdf-order",
       "configuration": "meaning-plain-language-upgrade",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane."
     },
     {
       "scenario": "mortgage-main",
@@ -4743,7 +4763,7 @@
       "configuration": "meaning-plain-language-upgrade",
       "what": "Prose income is offered where structured evidence is required.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane."
     },
     {
       "scenario": "mortgage-main",
@@ -5008,6 +5028,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--meaning-registry-lookup.json"
     },
     {
@@ -5028,6 +5049,7 @@
         "reason": "unsupported-term"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--mapping-from-nobody--meaning-registry-lookup.json"
     },
     {
@@ -5293,6 +5315,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--reliance-corroboration.json"
     },
     {
@@ -5320,6 +5343,7 @@
           "reason": "context-not-clear"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--one-source-twice--reliance-corroboration.json"
     },
     {
@@ -5585,6 +5609,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--reliance-stated-confidence.json"
     },
     {
@@ -5605,6 +5630,7 @@
         "reason": "confidence-too-low"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--model-is-sure--reliance-stated-confidence.json"
     },
     {
@@ -5870,6 +5896,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--reliance-quality-certificate.json"
     },
     {
@@ -5891,6 +5918,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--certificate-does-not-cover--reliance-quality-certificate.json"
     },
     {
@@ -6156,6 +6184,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--meaning-negotiated.json"
     },
     {
@@ -6176,6 +6205,7 @@
         "reason": "approval-required"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--agents-agree-between-themselves--meaning-negotiated.json"
     },
     {
@@ -6496,6 +6526,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--settlement-x402.json"
     },
     {
@@ -6516,6 +6547,7 @@
         "reason": "evidence-invalid"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--x402-object-tampered--settlement-x402.json"
     },
     {
@@ -6536,6 +6568,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--x402-fee-amount-differs--settlement-x402.json"
     },
     {
@@ -6836,6 +6869,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--settlement-mpp.json"
     },
     {
@@ -6856,6 +6890,7 @@
         "reason": "evidence-invalid"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--mpp-object-tampered--settlement-mpp.json"
     },
     {
@@ -6876,6 +6911,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--mpp-fee-amount-differs--settlement-mpp.json"
     },
     {
@@ -7236,6 +7272,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--settlement-ap2.json"
     },
     {
@@ -7256,6 +7293,7 @@
         "reason": "evidence-invalid"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--ap2-object-tampered--settlement-ap2.json"
     },
     {
@@ -7276,6 +7314,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--ap2-fee-amount-differs--settlement-ap2.json"
     },
     {
@@ -7576,6 +7615,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--settlement-acp.json"
     },
     {
@@ -7596,6 +7636,7 @@
         "reason": "evidence-invalid"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--acp-object-tampered--settlement-acp.json"
     },
     {
@@ -7616,6 +7657,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--acp-fee-amount-differs--settlement-acp.json"
     },
     {
@@ -7881,6 +7923,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--authority-mandate-credential.json"
     },
     {
@@ -7914,6 +7957,7 @@
           "reason": "context-not-clear"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--mandate-suspended--authority-mandate-credential.json"
     },
     {
@@ -8179,6 +8223,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--identity-did.json"
     },
     {
@@ -8199,6 +8244,7 @@
         "reason": "unsupported-configuration"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--did-method-not-listed--identity-did.json"
     },
     {
@@ -8208,7 +8254,7 @@
       "settlement": "rdf-order",
       "configuration": "identity-email-endpoint",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.4: the revised confinement rule admits the email exchange as an added segment. Not built: proof that the replier controls the payroll mailbox, namely a Paywell-signed statement naming its contact mailbox and a mailbox challenge in which Sam's agent sends a fresh nonce and accepts a reply only if it carries the nonce and arrives from the named address. The existing mailbox binding has no challenge-control proof. No prose is substituted for structured payroll evidence."
     },
     {
       "scenario": "mortgage-main",
@@ -8218,7 +8264,7 @@
       "configuration": "identity-email-endpoint",
       "what": "The core proposes relying on the payroll mailbox prose as income evidence.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.4: the revised confinement rule admits the email exchange as an added segment. Not built: proof that the replier controls the payroll mailbox, namely a Paywell-signed statement naming its contact mailbox and a mailbox challenge in which Sam's agent sends a fresh nonce and accepts a reply only if it carries the nonce and arrives from the named address. The existing mailbox binding has no challenge-control proof. No prose is substituted for structured payroll evidence."
     },
     {
       "scenario": "mortgage-main",
@@ -8227,7 +8273,7 @@
       "settlement": "rdf-order",
       "configuration": "identity-anonymous",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.2: not a confinement problem. The cell needs the lender-register exchange: a separately keyed lender-register agent that answers an unsigned public-read lookup with a signed statement, admitted through the five inbound checks, from which the trust resolver takes the lender's entry. Today that lookup is a synchronous TrustResolver over local unsigned register tables, not a signed register exchange; merely relabelling the current public-read configuration would not meet design 26 section 6. The product query is already anonymous and stays a baseline exchange."
     },
     {
       "scenario": "mortgage-main",
@@ -8237,7 +8283,7 @@
       "configuration": "identity-anonymous",
       "what": "An unnamed requester asks the index for an operation restricted to named parties.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.2: not a confinement problem. The cell needs the lender-register exchange: a separately keyed lender-register agent that answers an unsigned public-read lookup with a signed statement, admitted through the five inbound checks, from which the trust resolver takes the lender's entry. Today that lookup is a synchronous TrustResolver over local unsigned register tables, not a signed register exchange; merely relabelling the current public-read configuration would not meet design 26 section 6. The product query is already anonymous and stays a baseline exchange."
     },
     {
       "scenario": "mortgage-main",
@@ -8502,6 +8548,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--authority-authorization-server.json"
     },
     {
@@ -8528,6 +8575,7 @@
           "outcome": "go"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--token-as-the-person--authority-authorization-server.json"
     },
     {
@@ -8793,6 +8841,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--authority-agent-registry.json"
     },
     {
@@ -8819,6 +8868,7 @@
           "outcome": "go"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--registered-for-something-else--authority-agent-registry.json"
     },
     {
@@ -9084,6 +9134,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--trust-pinned-list.json"
     },
     {
@@ -9104,6 +9155,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--trust-pinned-list.json"
     },
     {
@@ -9124,6 +9176,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--trust-pinned-list.json"
     },
     {
@@ -9144,6 +9197,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--trust-pinned-list.json"
     },
     {
@@ -9165,6 +9219,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--stranger--trust-pinned-list.json"
     },
     {
@@ -9430,6 +9485,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--authenticity-selective-disclosure.json"
     },
     {
@@ -9450,6 +9506,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--authenticity-selective-disclosure.json"
     },
     {
@@ -9470,6 +9527,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--authenticity-selective-disclosure.json"
     },
     {
@@ -9490,6 +9548,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--authenticity-selective-disclosure.json"
     },
     {
@@ -9714,6 +9773,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--withheld-claim-asked-for--authenticity-selective-disclosure.json"
     },
     {
@@ -9734,6 +9794,7 @@
         "reason": "bad-signature"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--disclosure-not-in-signed-set--authenticity-selective-disclosure.json"
     },
     {
@@ -9999,6 +10060,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--authenticity-origin-hosted.json"
     },
     {
@@ -10019,6 +10081,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--authenticity-origin-hosted.json"
     },
     {
@@ -10039,6 +10102,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--authenticity-origin-hosted.json"
     },
     {
@@ -10059,6 +10123,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--authenticity-origin-hosted.json"
     },
     {
@@ -10080,6 +10145,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--address-from-the-message--authenticity-origin-hosted.json"
     },
     {
@@ -10100,6 +10166,7 @@
         "reason": "evidence-invalid"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--origin-record-forwarded--authenticity-origin-hosted.json"
     },
     {
@@ -10365,6 +10432,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--trust-trusted-index.json"
     },
     {
@@ -10385,6 +10453,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--trust-trusted-index.json"
     },
     {
@@ -10405,6 +10474,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--trust-trusted-index.json"
     },
     {
@@ -10425,6 +10495,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--trust-trusted-index.json"
     },
     {
@@ -10446,6 +10517,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--index-shows-two-histories--trust-trusted-index.json"
     },
     {
@@ -10711,6 +10783,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--trust-federation.json"
     },
     {
@@ -10731,6 +10804,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--trust-federation.json"
     },
     {
@@ -10751,6 +10825,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--trust-federation.json"
     },
     {
@@ -10771,6 +10846,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--trust-federation.json"
     },
     {
@@ -10792,6 +10868,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--chain-with-a-gap--trust-federation.json"
     },
     {
@@ -10813,6 +10890,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--federation-business-only--trust-federation.json"
     },
     {
@@ -11078,6 +11156,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--trust-reputation.json"
     },
     {
@@ -11098,6 +11177,7 @@
         "reason": "amount-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-amount-differs--trust-reputation.json"
     },
     {
@@ -11118,6 +11198,7 @@
         "reason": "payee-differs"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-payee-differs--trust-reputation.json"
     },
     {
@@ -11138,6 +11219,7 @@
         "reason": "no-agreement"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--fee-no-offer--trust-reputation.json"
     },
     {
@@ -11159,6 +11241,7 @@
       },
       "consequences": [],
       "note": "branch does not diverge from the main path",
+      "addedExchanges": 0,
       "trace": "mortgage-main--high-score-not-registered--trust-reputation.json"
     },
     {
@@ -11168,7 +11251,7 @@
       "settlement": "rdf-order",
       "configuration": "usage-control-human-approval",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.1: the revised confinement rule admits the valuer's request as an added exchange. Harbour's signed terms require a regulated lender and Sam's approval cannot waive that supplier restriction (UC-9), so the valuer must instead ask for the property access details, a statement Sam issues himself, whose undecided data-terms use goes to Sam bound to digest, recipient, purpose and expiry. Not built: that statement and its operation, and the human-approval data-terms path that asks Sam about an undecided use of his own data. The existing digest-bound approval and release checks are retained; no second approval path is installed."
     },
     {
       "scenario": "mortgage-main",
@@ -11178,7 +11261,7 @@
       "configuration": "usage-control-human-approval",
       "what": "An approval of disclosure to the valuer is presented for a different recipient.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.1: the revised confinement rule admits the valuer's request as an added exchange. Harbour's signed terms require a regulated lender and Sam's approval cannot waive that supplier restriction (UC-9), so the valuer must instead ask for the property access details, a statement Sam issues himself, whose undecided data-terms use goes to Sam bound to digest, recipient, purpose and expiry. Not built: that statement and its operation, and the human-approval data-terms path that asks Sam about an undecided use of his own data. The existing digest-bound approval and release checks are retained; no second approval path is installed."
     },
     {
       "scenario": "mortgage-main",
@@ -11443,6 +11526,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--commitments-agreement-credential.json"
     },
     {
@@ -11469,6 +11553,7 @@
           "outcome": "go"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--one-proof-missing--commitments-agreement-credential.json"
     },
     {
@@ -11478,7 +11563,7 @@
       "settlement": "rdf-order",
       "configuration": "accountability-regulator-claim",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, so the cell is unblocked once the lender-register exchange exists. Not built: that signed register exchange naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7). No hard-coded forum is relabelled as register discovery."
     },
     {
       "scenario": "mortgage-main",
@@ -11488,7 +11573,7 @@
       "configuration": "accountability-regulator-claim",
       "what": "The lender withholds a record entry; the claimant receipt commitment exposes the gap.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, so the cell is unblocked once the lender-register exchange exists. Not built: that signed register exchange naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7). No hard-coded forum is relabelled as register discovery."
     },
     {
       "scenario": "mortgage-main",
@@ -11753,6 +11838,7 @@
           "outcome": "admit"
         }
       ],
+      "addedExchanges": 0,
       "trace": "mortgage-main--usage-control-odrl-model-tighten.json"
     },
     {
@@ -11773,6 +11859,7 @@
         "reason": "prohibited"
       },
       "consequences": [],
+      "addedExchanges": 0,
       "trace": "mortgage-main--model-says-yes-to-a-no--usage-control-odrl-model-tighten.json"
     },
     {
@@ -11782,7 +11869,7 @@
       "settlement": "rdf-order",
       "configuration": "accountability-vendor-fault",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.8: a main path may not run a faulty gate (confinement C3). Not built: a signed component statement naming who builds and who operates the gate and the core (CORE-L-13), the record audit that checks each released action again against the mandate, a gate-operator party with its own agent, and the onlyUnder branch in which brief 20's labelled fault stand-in releases one action outside the mandate. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run."
     },
     {
       "scenario": "mortgage-main",
@@ -11792,7 +11879,7 @@
       "configuration": "accountability-vendor-fault",
       "what": "The action was inside the mandate; no supported claim against the gate vendor is produced.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.8: a main path may not run a faulty gate (confinement C3). Not built: a signed component statement naming who builds and who operates the gate and the core (CORE-L-13), the record audit that checks each released action again against the mandate, a gate-operator party with its own agent, and the onlyUnder branch in which brief 20's labelled fault stand-in releases one action outside the mandate. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run."
     },
     {
       "scenario": "mortgage-main",
@@ -11801,7 +11888,7 @@
       "settlement": "rdf-order",
       "configuration": "accountability-reputation-post",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published."
     },
     {
       "scenario": "mortgage-main",
@@ -11811,7 +11898,7 @@
       "configuration": "accountability-reputation-post",
       "what": "A proposed public post names an individual employee and is prohibited.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published."
     },
     {
       "scenario": "mortgage-main",

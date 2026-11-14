@@ -22833,7 +22833,10 @@
             "outline": []
           }
         ]
-      }
+      },
+      "replaces": [
+        "statement:income"
+      ]
     },
     {
       "id": "reliance-corroboration",
@@ -23322,7 +23325,11 @@
             "outline": []
           }
         ]
-      }
+      },
+      "replaces": [
+        "statement:income",
+        "statement:deposit"
+      ]
     },
     {
       "id": "reliance-stated-confidence",
@@ -23713,7 +23720,10 @@
             "outline": []
           }
         ]
-      }
+      },
+      "replaces": [
+        "statement:deposit"
+      ]
     },
     {
       "id": "reliance-quality-certificate",
@@ -23996,7 +24006,11 @@
             "outline": []
           }
         ]
-      }
+      },
+      "replaces": [
+        "statement:north-product",
+        "statement:harbour-product"
+      ]
     },
     {
       "id": "meaning-negotiated",
@@ -24443,7 +24457,9 @@
               "$ref": "steps.apply.conversation"
             },
             "decision": "approve",
-            "validUntil": "2026-11-13T10:00:00Z"
+            "validUntil": "2026-11-13T10:00:00Z",
+            "segment": "added",
+            "segmentEnd": "added"
           },
           {
             "id": "terms-arrive",
@@ -25481,7 +25497,9 @@
                     "$ref": "steps.apply.conversation"
                   },
                   "decision": "agents-only",
-                  "validUntil": "2026-11-13T10:00:00Z"
+                  "validUntil": "2026-11-13T10:00:00Z",
+                  "segment": "added",
+                  "segmentEnd": "added"
                 },
                 {
                   "id": "terms-arrive",
@@ -25500,7 +25518,15 @@
             "outline": []
           }
         ]
-      }
+      },
+      "replaces": [
+        "statement:income"
+      ],
+      "added": [
+        {
+          "segment": "term-deliberation"
+        }
+      ]
     },
     {
       "id": "settlement-x402",
@@ -25842,7 +25868,10 @@
             "replacedBy": "The proposed payroll party has a prose mailbox only. A real challenge-control exchange and approved exact-text send are required; the existing binding does not establish mailbox control."
           }
         ]
-      }
+      },
+      "replaces": [
+        "party:paywell"
+      ]
     },
     {
       "id": "identity-anonymous",
@@ -27251,7 +27280,12 @@
             }
           }
         }
-      }
+      },
+      "replaces": [
+        "statement:income",
+        "step:apply",
+        "step:assessed"
+      ]
     },
     {
       "id": "authenticity-origin-hosted",

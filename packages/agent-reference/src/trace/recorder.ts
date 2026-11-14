@@ -47,11 +47,29 @@ export class TraceRecorder {
     if (this.settlementErrors.length) throw this.settlementErrors[0];
   }
   private current = 0;
-  private nextSegment: "payment" | undefined;
-  segment(value: "payment"): void {
+  private nextSegment: "payment" | "added" | undefined;
+  /** Brief 31: while an added segment is open, every event carries the adding configuration. */
+  private addedBy: { readonly by: string; readonly from: number } | undefined;
+  segment(value: "payment"): void;
+  segment(value: "added", by: string): void;
+  segment(value: "payment" | "added", by?: string): void {
+    if (value === "added") {
+      if (!by) throw new Error("An added segment needs the configuration that adds it");
+      if (this.addedBy) throw new Error("Added segments cannot nest");
+      this.addedBy = { by, from: this.list.length };
+    }
     this.nextSegment = value;
   }
-  segmentEnd(value: "payment"): void {
+  segmentEnd(value: "payment" | "added"): void {
+    if (value === "added") {
+      const open = this.addedBy;
+      this.addedBy = undefined;
+      // A segment that recorded nothing marks no baseline event as its end.
+      if (!open || this.list.length === open.from) {
+        if (this.nextSegment === "added") this.nextSegment = undefined;
+        return;
+      }
+    }
     const last = this.list.at(-1);
     if (last) this.list[this.list.length - 1] = { ...last, segmentEnd: value };
   }
@@ -94,6 +112,7 @@ export class TraceRecorder {
           agent,
           ...(this.nextSegment ? { segment: this.nextSegment } : {}),
           ...displayed,
+          ...(this.addedBy ? { addedBy: this.addedBy.by } : {}),
         });
         this.nextSegment = undefined;
         if ((settlementFacts || settlementDocument) && !event.settlement) {

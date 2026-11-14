@@ -1,0 +1,81 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "note": "An added register lookup placed before the bank request; the segment also lets twenty days pass, so a later baseline check is judged differently. stopAfter ends the run before the bank's release.",
+  "insertBefore": "bank-request",
+  "steps": [
+    {
+      "id": "relookup",
+      "agent": "sam-agent",
+      "type": "start",
+      "peer": "valuer-register-agent",
+      "kind": "invoke",
+      "operation": "urn:op:valuer-lookup",
+      "contents": {
+        "service": "Home valuation"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:valuer-lookup",
+        "target": "urn:op:valuer-lookup",
+        "recipient": "urn:fictional:valuation-register",
+        "purpose": "urn:purpose:valuation",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:valuation",
+      "segment": "added",
+      "atStep": 5
+    },
+    {
+      "id": "relookup-arrives",
+      "agent": "valuer-register-agent",
+      "type": "receive",
+      "from": "sam-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "valuer": "urn:fictional:bracken-lantern-valuations"
+        },
+        "evidence": [
+          {
+            "$ref": "statements.valuation-registration.evidence"
+          }
+        ]
+      },
+      "atStep": 5
+    },
+    {
+      "id": "relookup-found",
+      "agent": "sam-agent",
+      "type": "receive",
+      "from": "valuer-register-agent",
+      "atStep": 5
+    },
+    {
+      "id": "relookup-wait",
+      "agent": "sam-agent",
+      "type": "advance",
+      "milliseconds": 1728000000,
+      "segmentEnd": "added",
+      "atStep": 5
+    }
+  ],
+  "configuration": {
+    "id": "usage-control-odrl-model-tighten",
+    "change": {
+      "usage-control": "odrl-model-tighten"
+    },
+    "world": {
+      "stopAfter": "step-up-approval"
+    },
+    "added": [
+      {
+        "segment": "relookup",
+        "closes": {
+          "agent": "sam-agent",
+          "kind": "deliver",
+          "outcome": "admit"
+        }
+      }
+    ]
+  }
+}

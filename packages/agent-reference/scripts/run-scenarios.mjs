@@ -100,6 +100,14 @@ for (const file of readdirSync(join(root, "scenarios"))
             expected: path.expected,
             consequences: path.consequences,
             ...(path.note ? { note: path.note } : {}),
+            // Brief 31 §1: messages sent inside the configuration's own added segments.
+            ...(path.configuration
+              ? {
+                  addedExchanges: path.trace.events.filter(
+                    (event) => event.addedBy && event.kind === "message-out",
+                  ).length,
+                }
+              : {}),
             trace: `${stem}--${suffix}.json`,
             ...(jointPaths.has(`${id}/${path.path}`) && traceBytes
               ? { traceSha256: traceHash(traceBytes), recordedWith: SPARQ_AGGREGATE }
