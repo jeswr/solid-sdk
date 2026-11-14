@@ -210,6 +210,25 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly webId?: {
+    readonly resolve: (jws: string) => Promise<
+      | { readonly ok: true; readonly key: import("../mechanisms/trust.js").PinnedKey }
+      | {
+          readonly ok: false;
+          readonly reason: "sender-key-mismatch" | "lookup-failed" | "unknown-key" | "expired";
+        }
+      | undefined
+    >;
+    readonly recipient: (
+      actor: string | undefined,
+      configuration: string,
+    ) => Promise<string | undefined>;
+  };
+  /** Host-installed independent record store. Only the evidence gate decides release. */
+  readonly recordMirror?: {
+    readonly flush: () => Promise<boolean>;
+    readonly recover?: () => Promise<void>;
+  };
   readonly proofCache?: import("../derive/cache.js").ProofCache;
   readonly generateProofs?: boolean;
   readonly proofCredentials?: readonly {

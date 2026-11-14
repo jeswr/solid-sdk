@@ -66,7 +66,7 @@ export function matrixSink(
   configuration: Configuration,
   name: (id: string | undefined) => string,
 ): TraceSink {
-  if (configuration.id === "baseline" || !configuration.id.startsWith("transport-")) return sink;
+  if (configuration.id === "baseline") return sink;
   return {
     agent: sink.agent,
     emit(input) {
@@ -82,6 +82,7 @@ export function matrixSink(
             },
           }
         : input;
+      if (!configuration.id.startsWith("transport-")) return sink.emit(event);
       const raw = event.packet?.layers.header.raw as { configuration?: string } | undefined;
       if (!event.packet || !raw?.configuration) return sink.emit(event);
       const suite =

@@ -212,3 +212,27 @@ and the absence of anyone vouching for it, and asks at limits-and-approval with
 once. Payment and unrestricted disclosure dependencies fail at load. Catalogue
 comparison uses the first non-pass/admit/go decision, equates inbound `refuse` with
 catalogue `stop`, and keeps later decisions in manifest `consequences`.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Solid alternatives and remaining work (Brief 26b)
+
+`mortgage-main` uses the existing configuration matrix for the following alternatives.
+Each executable main path passes confinement and has a configuration-only failure branch.
+
+| Configuration | Execution | Failure |
+|---|---|---|
+| `transport-solid-inbox` | Receiver-description discovery, authenticated POST, receiver listing and read of the original signed bytes. | Changed stored signature: `integrity` / `bad-signature`. |
+| `accountability-pod-mirror` | Sam's signed ledger entries reach independent, principal-controlled storage before release. | Provider unavailable: `evidence` / `record-unavailable`; release waits until recovery. |
+| `identity-webid` | Safely fetched Controlled Identifier Multikey profiles, bound to independently signed register thumbprints and key lifetimes. | Changed profile key: `integrity` / `sender-key-mismatch`. |
+| `data-access-by-reference-solid` | Not run. The registry requires Solid usage control too, contradicting the single-layer matrix rule. Atomic grant/pointer release and five-check reference-message admission are also absent. | Both declared failure branches remain blocked, with no trace. |
+| `usage-control-solid-access-control` | Not run. Its specification keeps data in a pod, while the single-layer cell retains by-value delivery. The protected-reference transaction is absent. | The declared translation failure remains blocked, with no trace. |
+
+The shared storage is a fictional provider with its own signing key, WAC on each supported
+HTTP operation, guarded in-process fetches and an operator-visible read log. Its request
+authentication is an explicitly fictional signed-request format, not Solid-OIDC. WAC
+cannot express expiry or downstream purpose: expiry needs an enforcing withdrawal
+mechanism, while purpose and copying restrictions remain terms. The mirror has no
+persisted background recovery service, and the WebID resolver has no historical-key
+archive. These limits and the specification disagreements are detailed in
+[the Brief 26b report](ENGINE-REPORT.md#brief-26b). All parties and data are fictional;
+no live network, storage account or settlement service is used.

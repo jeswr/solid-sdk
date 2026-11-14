@@ -119,7 +119,42 @@ export const CONFIG_TRANSPORT_EMAIL = alternativeWireId("transport-email");
 export const CONFIG_TRANSPORT_A2A = alternativeWireId("transport-a2a");
 export const CONFIG_TRANSPORT_MCP = alternativeWireId("transport-mcp");
 
+export const CONFIG_WEBID = alternativeWireId("identity-webid");
+export const CONFIG_SOLID_ACCESS = alternativeWireId("usage-control-solid-access-control");
+export const CONFIG_POD_MIRROR = alternativeWireId("accountability-pod-mirror");
+export const CONFIG_SOLID_INBOX = alternativeWireId("transport-solid-inbox");
+export const CONFIG_SOLID_REFERENCE = alternativeWireId("data-access-by-reference-solid");
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [CONFIG_WEBID]: {
+    ...localDefinition(
+      CONFIG_WEBID,
+      "WebID keys from safely fetched Controlled Identifier profiles",
+    ),
+    authentication:
+      "Controlled Identifier Multikey profiles; key thumbprints and lifetimes committed by an independently signed fictional register answer",
+  },
+  [CONFIG_SOLID_ACCESS]: {
+    ...localDefinition(CONFIG_SOLID_ACCESS, "Solid access control — not run"),
+    status: "unresolved",
+    unresolved: [
+      "Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented.",
+    ],
+  },
+  [CONFIG_POD_MIRROR]: localDefinition(
+    CONFIG_POD_MIRROR,
+    "Independent principal-owned record mirror",
+  ),
+  [CONFIG_SOLID_INBOX]: {
+    ...localDefinition(CONFIG_SOLID_INBOX, "Signed messages through Solid inboxes"),
+    bindings: ["solid-inbox/0.1"],
+  },
+  [CONFIG_SOLID_REFERENCE]: {
+    ...localDefinition(CONFIG_SOLID_REFERENCE, "Solid reference access — not run"),
+    status: "unresolved",
+    unresolved: [
+      "Atomic WAC grant-and-pointer release is not implemented; the existing ResourceReader admits statements, not a signed reference-read message through all five inbound checks.",
+    ],
+  },
   [CONFIG_TRANSPORT_EMAIL]: {
     ...localDefinition(CONFIG_TRANSPORT_EMAIL, "Signed messages by email"),
     bindings: ["email-mime/0.1"],

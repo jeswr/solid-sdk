@@ -25,11 +25,15 @@ import { digestBytes } from "../core/canonical.js";
 import type { SigningKey } from "../mechanisms/jws.js";
 import type { OutboundMessage } from "../runtime/agent.js";
 import { type CarriageDelivery, signedReadable } from "../runtime/carriage-gate.js";
+import { SOLID_INBOX_BINDING, SolidInboxHost } from "../standins/solid-inbox.js";
+import { FictionalSolidStorage } from "../standins/storage.js";
 import { peekWire } from "../trace/packet.js";
+import type { TraceSink } from "../trace/recorder.js";
 import { carriageBytes } from "../wire/carriage.js";
 import type { Scenario } from "./schema.js";
 
 export class ScenarioCarriage {
+  private inboxHost?: SolidInboxHost;
   private token?: Awaited<ReturnType<FictionalAuthorizationServer["token"]>>;
   private server?: FictionalAuthorizationServer;
   private setup = false;
@@ -39,6 +43,8 @@ export class ScenarioCarriage {
     private readonly suite: string,
     private readonly keys: (party: string) => SigningKey,
     private readonly name: (id: string | undefined) => string,
+    private readonly now: () => string = () => new Date().toISOString(),
+    private readonly sink?: (party: string) => TraceSink,
   ) {}
   advertisements(agent: string): { id: string; endpoint?: string }[] {
     const scope =
@@ -47,7 +53,13 @@ export class ScenarioCarriage {
     if (!scope.includes(agent)) return [{ id: "direct-local/0.1" }];
     const actor = this.scenario.parties.find((party) => party.id === agent)?.actor;
     const id =
-      this.suite === "email" ? "email-mime/0.1" : this.suite === "a2a" ? A2A_BINDING : MCP_BINDING;
+      this.suite === "solid-inbox"
+        ? SOLID_INBOX_BINDING
+        : this.suite === "email"
+          ? "email-mime/0.1"
+          : this.suite === "a2a"
+            ? A2A_BINDING
+            : MCP_BINDING;
     const endpoint =
       this.suite === "email"
         ? `mailto:${agent}@fictional-agent-mail.example`
@@ -63,6 +75,8 @@ export class ScenarioCarriage {
     to: string,
     step: string,
   ): Promise<{ input: unknown; binding: string }> {
+    if (this.suite === "direct-http")
+      return { input: carriageBytes(wire), binding: "direct-local/0.1" };
     const parties =
       this.scenario.carriage?.parties ??
       this.scenario.parties.filter((party) => party.runs === "agent").map((party) => party.id);
@@ -77,6 +91,45 @@ export class ScenarioCarriage {
     const message = carriageBytes(wire);
     const notices: string[] = [];
     let input: CarriageDelivery;
+    if (this.suite === "solid-inbox") {
+      if (!this.inboxHost) {
+        const provider = this.scenario.parties.find(
+          (p) => p.id === "solid-provider" && p.runs === "issuer-only",
+        );
+        if (!provider)
+          throw new Error("Solid inboxes need a separately keyed fictional storage provider");
+        const storage = new FictionalSolidStorage(
+          new URL(provider.identity).origin,
+          provider.identity,
+          this.keys(provider.id),
+          this.now,
+        );
+        this.inboxHost = new SolidInboxHost(
+          storage,
+          new Map(
+            parties.map((id) => {
+              const actor = this.scenario.parties.find((p) => p.id === id)?.actor;
+              if (!actor) throw new Error("The inbox party has no actor");
+              return [id, { actor, key: this.keys(id) }];
+            }),
+          ),
+        );
+        await this.inboxHost.setup();
+      }
+      const input = await this.inboxHost.carry(
+        message,
+        from,
+        to,
+        fault === "inbox-item-changed-at-rest",
+      );
+      this.sink?.(to).emit({
+        part: "transport",
+        kind: "record",
+        caption:
+          "The receiver discovered its inbox from its description, listed the container and read the posted message. The fictional storage operator observes the read; write permission grants no message authority.",
+      });
+      return { input, binding: SOLID_INBOX_BINDING };
+    }
     if (this.suite === "email") {
       let readable = await signedReadable(out.wire, this.keys(from), this.name);
       if (fault === "email-readable-copy-differs")

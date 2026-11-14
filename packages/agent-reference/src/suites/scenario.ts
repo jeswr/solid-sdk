@@ -144,5 +144,46 @@ export function scenarioRegistry() {
     algs: ["EdDSA"],
     summary: "Canonical RDF proof; the graph-gate lane supplies runtime dispatch.",
   });
+  registry.register({
+    layer: "data-access",
+    id: "by-reference-solid",
+    name: "By reference on Solid",
+    mode: "by-reference",
+    summary:
+      "Not run: the runtime lacks atomic WAC grant-and-pointer release and a five-check reference-message admission boundary.",
+  });
+  registry.register({
+    layer: "transport",
+    id: "solid-inbox",
+    name: "Solid inbox",
+    binding: "solid-inbox/0.1",
+    summary:
+      "Receiver-description discovery, LDN POST, receiver listing and byte-exact retrieval under WAC; storage observes every read.",
+  });
+  registry.register({
+    layer: "accountability",
+    id: "pod-mirror",
+    name: "Record mirrored to a pod",
+    record: "pod-mirror",
+    summary:
+      "The evidence gate requires the actual signed record entries in independent principal-owned Solid storage before exposing an action.",
+  });
+  registry.register({
+    layer: "usage-control",
+    id: "solid-access-control",
+    name: "Solid access control",
+    rulesOnly: true,
+    policyLanguage: "ODRL pilot subset, narrowed to WAC Read plus scheduled ACL withdrawal",
+    summary:
+      "Not run: pod-only access needs the protected-reference transaction, while this single-layer configuration retains baseline by-value delivery.",
+  });
+  registry.register({
+    layer: "identity",
+    id: "webid",
+    name: "WebID",
+    resolution: "resolved",
+    summary:
+      "Safely fetched Controlled Identifier profiles supply the public keys; independently signed register thumbprints bind the names, methods and key lifetimes.",
+  });
   return registry;
 }

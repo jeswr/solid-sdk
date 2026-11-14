@@ -69,6 +69,8 @@
     "n3": "^2.1.0",
     "zod": "^4.4.3",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
     "@jeswr/model-runtime": "workspace:*",

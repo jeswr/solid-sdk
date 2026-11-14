@@ -183,7 +183,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
     "core": "scripted"
   },
   "standIns": [
@@ -2819,7 +2819,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1711877937e85a4df4a3bc5ee6005e8edcf3e1dd6b279db3dee66df097a63372"
+            "digest": "sha-256:799012df32532afc7cec6dd80956cc6633be815c2f387567c418b2d798929d8e"
           },
           "authority": {
             "present": false,
@@ -2892,6 +2892,9 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/identity-webid/0.1",
+                    "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1",
+                    "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-email/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
@@ -3097,7 +3100,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:0a9f38c47c1ea4730f66370099300ebb4af7f65cf1927acfab165d0e9ed455e8"
+            "digest": "sha-256:aea4614a43224bcd9a2308ed70e643ad5371899aab3a48b80ab16235cd04ee15"
           },
           "evidence": {
             "present": false,
@@ -3176,7 +3179,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1711877937e85a4df4a3bc5ee6005e8edcf3e1dd6b279db3dee66df097a63372"
+            "digest": "sha-256:799012df32532afc7cec6dd80956cc6633be815c2f387567c418b2d798929d8e"
           },
           "authority": {
             "present": false,
@@ -3249,6 +3252,9 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/identity-webid/0.1",
+                    "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1",
+                    "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-email/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
@@ -3454,7 +3460,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:0a9f38c47c1ea4730f66370099300ebb4af7f65cf1927acfab165d0e9ed455e8",
+            "digest": "sha-256:aea4614a43224bcd9a2308ed70e643ad5371899aab3a48b80ab16235cd04ee15",
             "untrusted": [
               {
                 "path": "description.type",
@@ -3578,66 +3584,78 @@
               },
               {
                 "path": "description.configurations.implemented.0",
-                "text": "https://w3id.org/jeswr/awp#config/transport-email/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/identity-webid/0.1"
               },
               {
                 "path": "description.configurations.implemented.1",
-                "text": "https://w3id.org/jeswr/awp#config/transport-a2a/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1"
               },
               {
                 "path": "description.configurations.implemented.2",
-                "text": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1"
               },
               {
                 "path": "description.configurations.implemented.3",
-                "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-email/0.1"
               },
               {
                 "path": "description.configurations.implemented.4",
-                "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-a2a/0.1"
               },
               {
                 "path": "description.configurations.implemented.5",
-                "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1"
               },
               {
                 "path": "description.configurations.implemented.6",
-                "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
               },
               {
                 "path": "description.configurations.implemented.7",
-                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
               },
               {
                 "path": "description.configurations.implemented.8",
-                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
               },
               {
                 "path": "description.configurations.implemented.9",
-                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
               },
               {
                 "path": "description.configurations.implemented.10",
-                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.11",
-                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
               },
               {
                 "path": "description.configurations.implemented.12",
-                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
               },
               {
                 "path": "description.configurations.implemented.13",
-                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
               },
               {
                 "path": "description.configurations.implemented.14",
-                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.15",
+                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.16",
+                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.17",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.18",
                 "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
               },
               {

@@ -70,6 +70,9 @@ import type {
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
 import { Ledger as PaymentLedger } from "../settlement/ledger.js";
 import { RdfOrderSuite } from "../settlement/rdf-order.js";
+import { PodRecordMirror } from "../standins/pod-mirror.js";
+import { FictionalSolidStorage } from "../standins/storage.js";
+import { FictionalWebIdDirectory } from "../standins/webid.js";
 import { MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
 import { BASELINE } from "../suites/baseline.js";
@@ -339,7 +342,7 @@ export async function runScenario(
     const blocker =
       path.blocked ??
       (combinationProblems.length
-        ? "A registered suite constraint excludes this single-layer combination."
+        ? `A registered suite constraint excludes this single-layer combination: ${combinationProblems.map((problem) => ("detail" in problem ? problem.detail : problem.problem)).join("; ")}`
         : undefined) ??
       (alternative &&
       "transport" in alternative.change &&
@@ -354,7 +357,7 @@ export async function runScenario(
         ? "The MCP channel needs a separately keyed fictional authorization-server party in its world."
         : undefined) ??
       (alternative && configurationById(alternativeWireId(alternative.id))?.status !== "executable"
-        ? "The selected suite has no executable runtime configuration installed. The wire implementation alone is insufficient."
+        ? `The selected suite has no executable runtime configuration installed. ${configurationById(alternativeWireId(alternative.id))?.unresolved.join(" ") ?? "The wire implementation alone is insufficient."}`
         : unsupported(pathProfile, world, path.id, verifiers));
     if (blocker) {
       results.push({
@@ -1187,6 +1190,48 @@ async function runPath(
     };
   }
   const ledgers = new Map<string, MemoryLedger>();
+  let solidStep = "";
+  let mirrorFault = false;
+  let webIdDirectory: FictionalWebIdDirectory | undefined;
+  if (configuration.layers.identity === "webid") {
+    const provider = required(parties.get("solid-provider")),
+      register = required(parties.get("webid-register"));
+    webIdDirectory = new FictionalWebIdDirectory(
+      { identity: provider.identity, key: required(sourceKeys.get(provider.id)) },
+      { identity: register.identity, key: required(sourceKeys.get(register.id)) },
+      ["sam-agent", "north-agent"].map((id) => {
+        const party = cast.get(id);
+        return {
+          actor: party.identity.actor,
+          party: required(party.identity.party),
+          actorKey: party.actorKey,
+          partyKey: party.ownerKey,
+        };
+      }),
+      () => now().toISOString(),
+      { from: now().toISOString(), until: new Date(clock + 60 * 86400000).toISOString() },
+    );
+    await webIdDirectory.setup();
+  }
+  let recordMirror: PodRecordMirror | undefined;
+  if (configuration.layers.accountability === "pod-mirror") {
+    const provider = required(parties.get("solid-provider"));
+    const owner = cast.get("sam-agent");
+    recordMirror = new PodRecordMirror(
+      new FictionalSolidStorage(
+        new URL(provider.identity).origin,
+        provider.identity,
+        required(sourceKeys.get(provider.id)),
+        () => now().toISOString(),
+      ),
+      owner.identity.actor,
+      required(owner.identity.party),
+      owner.actorKey,
+      owner.ownerKey,
+      () => required(ledgers.get("sam-agent")),
+    );
+    await recordMirror.setup();
+  }
   const outputs: Record<string, unknown> = {};
   const queue: Array<{ from: string; out: OutboundMessage }> = [];
   const openings = new Map<string, unknown>();
@@ -1211,6 +1256,8 @@ async function runPath(
     (party) =>
       cast.agents.has(party) ? cast.get(party).actorKey : required(sourceKeys.get(party)),
     name,
+    () => now().toISOString(),
+    (party) => recorder.sink(parties.get(party)?.traceId ?? party),
   );
   const task = `urn:scenario:${scenario.id}:task`;
   const variables = (current?: HandlerContext) => ({
@@ -1257,6 +1304,37 @@ async function runPath(
         )
       : [];
     const gate: GateContext = {
+      ...(webIdDirectory ? { webId: webIdDirectory } : {}),
+      ...(agent.id === "sam-agent" && recordMirror
+        ? {
+            recordMirror: {
+              flush: async () => {
+                if (
+                  scenario.solid?.fault === "mirror-unreachable" &&
+                  solidStep === scenario.solid.at &&
+                  !mirrorFault
+                ) {
+                  recordMirror.storage.available = false;
+                  mirrorFault = true;
+                }
+                return recordMirror.flush();
+              },
+              ...(scenario.solid?.fault === "mirror-unreachable"
+                ? {
+                    recover: async () => {
+                      recordMirror.storage.available = true;
+                      recorder.sink(agent.traceId ?? agent.id).emit({
+                        part: "transport",
+                        kind: "record",
+                        caption:
+                          "The fictional independent storage provider returns; the waiting action retries its record write before release.",
+                      });
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
       ...verifiers,
       acceptedProofs: profile.acceptedProofs,
       acceptedJoint: profile.acceptedJoint,
@@ -1738,6 +1816,23 @@ async function runPath(
     for (const out of result.outbound) queue.push({ from, out });
   };
   for (const [index, step] of scenario.script.entries()) {
+    solidStep = step.id;
+    if (
+      webIdDirectory &&
+      scenario.solid?.fault === "profile-key-swapped" &&
+      step.id === scenario.solid.at
+    ) {
+      await webIdDirectory.swapProfile(
+        cast.get("north-agent").identity.actor,
+        await testKey("fictional-profile-takeover"),
+      );
+      recorder.sink(parties.get(step.agent)?.traceId ?? step.agent).emit({
+        part: "transport",
+        kind: "record",
+        caption:
+          "The fictional profile host was taken over and now publishes a different lender key. The register commitment remains unchanged.",
+      });
+    }
     recorder.step(step.atStep ?? index + 1);
     if (step.segment) recorder.segment("payment");
     const runtime = runtimes.get(step.agent);
@@ -2693,9 +2788,13 @@ async function runPath(
         for (const runtime of runtimes.values()) runtime.notificationDuties();
         break;
     }
+    if (recordMirror && !(await recordMirror.flush()))
+      throw new Error("The principal record mirror is unavailable after a completed step");
     outputs[step.id] = result ?? null;
     if (step.segmentEnd) recorder.segmentEnd("payment");
   }
+  if (recordMirror && !(await recordMirror.flush()))
+    throw new Error("The final principal record could not be mirrored");
   await recorder.complete();
   return {
     schema: TRACE_SCHEMA,

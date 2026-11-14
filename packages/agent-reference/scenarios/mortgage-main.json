@@ -17964,6 +17964,796 @@
           }
         ]
       }
+    },
+    {
+      "id": "data-access-by-reference-solid",
+      "change": {
+        "data-access": "by-reference-solid"
+      },
+      "world": {
+        "branches": [
+          {
+            "id": "grant-wider-than-terms",
+            "what": "The core asks to grant access to the folder instead of the balance resource.",
+            "onlyUnder": "data-access-by-reference-solid",
+            "change": {},
+            "expect": {
+              "outcome": "stop",
+              "check": "disclosure",
+              "reason": "excessive-scope"
+            },
+            "outline": []
+          },
+          {
+            "id": "read-after-withdrawal",
+            "what": "The lender reads again after Sam withdraws access; the source refuses and the permitted copy remains recorded.",
+            "onlyUnder": "data-access-by-reference-solid",
+            "change": {},
+            "expect": {
+              "outcome": "refuse",
+              "check": "source",
+              "reason": "not-authorised"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "transport-solid-inbox",
+      "change": {
+        "transport": "solid-inbox"
+      },
+      "world": {
+        "parties": {
+          "sam-agent": {
+            "configurations": [
+              "transport-solid-inbox",
+              "baseline",
+              "public-read"
+            ]
+          },
+          "north-agent": {
+            "configurations": [
+              "transport-solid-inbox",
+              "baseline"
+            ]
+          },
+          "harbour-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          },
+          "solid-provider": {
+            "id": "solid-provider",
+            "identity": "https://fictional-solid-provider.example/#provider",
+            "name": "The fictional independent Solid storage provider",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "carriage": {
+          "parties": [
+            "sam-agent",
+            "north-agent"
+          ]
+        },
+        "standIns": [
+          {
+            "what": "Solid storage and network carriage",
+            "replacedBy": "A fictional provider with its own key stores opaque signed bytes in memory. LDN description reads, POSTs, listings and reads use guarded in-process HTTP; WAC checks verified request identities. The provider sees every read. Every party is fictional."
+          },
+          {
+            "what": "Storage authentication and DNS",
+            "replacedBy": "Pinned fictional request signatures authenticate method, target, body digest, headers, time and nonce. A fixed public-address DNS stand-in routes only to the in-process provider; this is not Solid-OIDC."
+          }
+        ],
+        "branches": [
+          {
+            "id": "inbox-item-changed-at-rest",
+            "what": "The storage operator alters a posted message before its receiver reads it.",
+            "onlyUnder": "transport-solid-inbox",
+            "change": {
+              "carriage": {
+                "fault": "inbox-item-changed-at-rest",
+                "at": "description-returned"
+              },
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "integrity",
+              "reason": "bad-signature"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "accountability-pod-mirror",
+      "change": {
+        "accountability": "pod-mirror"
+      },
+      "world": {
+        "parties": {
+          "solid-provider": {
+            "id": "solid-provider",
+            "identity": "https://fictional-independent-pod.example/#provider",
+            "name": "The fictional independent record storage provider",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "standIns": [
+          {
+            "what": "Independent principal-controlled record storage",
+            "replacedBy": "A fictional separately keyed Solid provider, independent of the agent operator, holds signed copies of the real ledger. Sam can read them with Sam’s own key. In-process guarded HTTP and WAC replace network storage. All parties are fictional."
+          },
+          {
+            "what": "Storage outage and recovery",
+            "replacedBy": "The outage branch makes the provider unavailable at disclosure approval, then returns it after the evidence gate has held the action. Recovery timing is controlled by the fictional host."
+          }
+        ],
+        "branches": [
+          {
+            "id": "mirror-unreachable",
+            "what": "The independent record store goes down before application evidence leaves; the evidence gate holds the action until storage returns.",
+            "onlyUnder": "accountability-pod-mirror",
+            "change": {
+              "solid": {
+                "fault": "mirror-unreachable",
+                "at": "consent"
+              }
+            },
+            "expect": {
+              "outcome": "ask-more",
+              "check": "evidence",
+              "reason": "record-unavailable"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "usage-control-solid-access-control",
+      "change": {
+        "usage-control": "solid-access-control"
+      },
+      "world": {
+        "parties": {
+          "solid-provider": {
+            "id": "solid-provider",
+            "identity": "https://fictional-access-pod.example/#provider",
+            "name": "The fictional Solid access-rule storage provider",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "standIns": [
+          {
+            "what": "Solid access rules and expiry scheduling",
+            "replacedBy": "A separately keyed fictional provider enforces WAC on a balance resource. A fictional provider timer withdraws the read ACL at expiry; WAC itself has no date condition. The ordinary signed terms still control downstream purposes and copying. All parties and HTTP exchanges are fictional and in process."
+          }
+        ],
+        "branches": [
+          {
+            "id": "translation-grants-more",
+            "what": "The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied.",
+            "onlyUnder": "usage-control-solid-access-control",
+            "change": {
+              "solid": {
+                "fault": "translation-grants-more"
+              },
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "bank-request",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 6,
+                  "peer": "harbour-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "contents": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "discover": false
+                },
+                {
+                  "id": "bank-challenges",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "challenge-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "bank-retry",
+                  "agent": "sam-agent",
+                  "type": "retry-challenge",
+                  "atStep": 8,
+                  "conversation": {
+                    "$ref": "steps.bank-request.conversation"
+                  }
+                },
+                {
+                  "id": "step-up-pending",
+                  "agent": "sam-agent",
+                  "type": "pending",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-check-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 8,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "attestation-id",
+                  "agent": "sam-agent",
+                  "type": "mint",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-attestation",
+                  "agent": "sam-agent",
+                  "type": "issue",
+                  "atStep": 8,
+                  "issuer": "identity-provider",
+                  "value": {
+                    "type": "ApprovalAttestation",
+                    "id": {
+                      "$ref": "steps.attestation-id"
+                    },
+                    "issuer": "https://id-provider.example/#org",
+                    "claimType": "identity.approval",
+                    "subject": "https://sam.example/#me",
+                    "method": "certified-face-check",
+                    "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+                    "approves": {
+                      "actor": "https://agents.hostco.example/sam#agent",
+                      "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                      "actionDigest": {
+                        "$ref": "steps.step-up-pending.actionDigest"
+                      },
+                      "challenge": {
+                        "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                      }
+                    },
+                    "issuedAt": {
+                      "$ref": "now"
+                    },
+                    "validUntil": "2026-11-13T10:01:00.000Z",
+                    "synthetic": true,
+                    "terms": {
+                      "policy": {
+                        "id": "urn:terms:face-check",
+                        "permissions": [
+                          {
+                            "type": "permission",
+                            "action": "use",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "permission",
+                            "action": "distribute",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              },
+                              {
+                                "leftOperand": "recipient",
+                                "operator": "eq",
+                                "rightOperand": "https://harbourbank.example/#org"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "attestation-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 8,
+                  "statements": [
+                    "face-attestation"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "step-up-approval",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 8,
+                  "decision": "approve",
+                  "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+                  "evidence": [
+                    "face-attestation"
+                  ]
+                },
+                {
+                  "id": "bank-releases",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 8,
+                  "from": "sam-agent",
+                  "outboundAtStep": 9
+                },
+                {
+                  "id": "balance-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 10,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "income-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 10,
+                  "statements": [
+                    "income"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "terms-arrive",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 11,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "approval-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 11,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "consent",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 11,
+                  "decision": "approve",
+                  "note": "Yes, share them with North Bank for the credit check."
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "data-terms",
+              "reason": "prohibited"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "identity-webid",
+      "change": {
+        "identity": "webid"
+      },
+      "world": {
+        "parties": {
+          "sam-agent": {
+            "configurations": [
+              "identity-webid",
+              "baseline",
+              "public-read"
+            ]
+          },
+          "north-agent": {
+            "configurations": [
+              "identity-webid",
+              "baseline"
+            ]
+          },
+          "index-agent": {
+            "configurations": [
+              "public-read"
+            ]
+          },
+          "harbour-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          },
+          "valuer-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          },
+          "payment-provider-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          },
+          "valuer-register-agent": {
+            "configurations": [
+              "baseline"
+            ]
+          },
+          "solid-provider": {
+            "id": "solid-provider",
+            "identity": "https://fictional-profile-provider.example/#provider",
+            "name": "The fictional WebID profile storage provider",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          "webid-register": {
+            "id": "webid-register",
+            "identity": "https://fictional-webid-register.example/#register",
+            "name": "The fictional WebID key-commitment register",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "standIns": [
+          {
+            "what": "WebID profile hosting and public DNS",
+            "replacedBy": "A separately keyed fictional Solid provider serves Sam’s and the lender’s agent and principal profiles in memory. SDK Controlled Identifier publication and resolution use guarded, bounded, redirect-refusing in-process HTTP. A fixed public-address DNS mapping replaces network DNS."
+          },
+          {
+            "what": "WebID key-commitment register",
+            "replacedBy": "A separately keyed fictional register signs only WebIDs, verification-method names, thumbprints and explicit key lifetimes. It supplies no public keys and conveys no authority to act. All parties are fictional."
+          }
+        ],
+        "branches": [
+          {
+            "id": "profile-key-swapped",
+            "what": "The lender profile publishes a different key while its independently signed register thumbprint remains unchanged.",
+            "onlyUnder": "identity-webid",
+            "change": {
+              "solid": {
+                "fault": "profile-key-swapped",
+                "at": "description-returned"
+              },
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "integrity",
+              "reason": "sender-key-mismatch"
+            },
+            "outline": []
+          }
+        ]
+      }
     }
   ],
   "paymentProviders": [

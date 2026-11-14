@@ -7,6 +7,7 @@ import { expect, it } from "vitest";
 import { confinementDifferences } from "../src/engine/confinement.js";
 import { loadCase } from "../src/engine/load.js";
 import { patch, runScenario } from "../src/engine/run.js";
+import { alternativeWireId, configurationById } from "../src/profile/configurations.js";
 import type { LayerId } from "../src/suites/registry.js";
 
 const root = join(import.meta.dirname, "..");
@@ -24,6 +25,14 @@ it("confines every scenario configuration to the changed layer and preserves the
       const changed = (await runScenario(profile, scenario, { configuration: entry.id })).find(
         (result) => result.path === "main",
       );
+      // Design 26 §2 requires honest not-run cells when a mechanism is unresolved.
+      if (configurationById(alternativeWireId(entry.id))?.status === "unresolved") {
+        expect(changed?.trace).toBeUndefined();
+        expect(changed?.blocked).toMatch(
+          /no executable runtime configuration|registered suite constraint/,
+        );
+        continue;
+      }
       expect(
         changed?.blocked,
         `${scenario.title}: selected configuration must run`,

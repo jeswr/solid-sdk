@@ -224,8 +224,19 @@ export class InboundGate {
     const rawDigest = digestBytes(JSON.stringify(w).slice(0, limits.maxEnvelopeBytes * 2));
 
     if (w.format === "awp-jws-compact/0.1" && typeof w.jws === "string") {
+      // Brief 26b resolver seam: selected WebID exchanges verify with fetched profile material.
+      const webId = await this.deps.gate.webId?.resolve(w.jws);
+      if (webId && !webId.ok)
+        return {
+          ok: false,
+          reason: webId.reason,
+          detail: "The WebID profile does not match the independently signed key commitment.",
+          extra: { binding: meta.binding ?? "unknown", digest: rawDigest },
+        };
       const v = await verifyCompact(w.jws, {
-        resolve: this.deps.trust.resolver("actor"),
+        resolve: webId?.ok
+          ? (kid) => (kid === webId.key.kid ? webId.key : undefined)
+          : this.deps.trust.resolver("actor"),
         typ: TYP.message,
         allowedAlgs: ["EdDSA", "ES256"],
         limits,
@@ -234,7 +245,7 @@ export class InboundGate {
         type: "verification",
         protectedObject: v.digest,
         property: "integrity-and-key-attribution",
-        mechanism: `${MECHANISM_ID} typ=${TYP.message}`,
+        mechanism: `${MECHANISM_ID} typ=${TYP.message}${webId?.ok ? " with WebID profile discovery" : ""}`,
         verifier: identity.actor,
         at,
         ...(v.kid ? { verificationMaterial: v.kid } : {}),
@@ -242,7 +253,11 @@ export class InboundGate {
         outcome: v.outcome,
         limitations:
           v.outcome === "valid"
-            ? ["integrity + attribution to a pinned actor key only; not authority or truth"]
+            ? [
+                webId?.ok
+                  ? "integrity + attribution to fetched WebID material bound to a signed thumbprint commitment; not authority or truth"
+                  : "integrity + attribution to a pinned actor key only; not authority or truth",
+              ]
             : [v.detail],
       };
       this.deps.record(verification);

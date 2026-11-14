@@ -643,6 +643,14 @@ export const scenarioSchema = z.strictObject({
     )
     .default([]),
   configurations: z.array(scenarioConfigurationSchema).default([]),
+  solid: z
+    .strictObject({
+      fault: z
+        .enum(["mirror-unreachable", "translation-grants-more", "profile-key-swapped"])
+        .optional(),
+      at: slug.optional(),
+    })
+    .optional(),
   carriage: z
     .strictObject({
       parties: strings.min(2).max(2),
@@ -653,6 +661,7 @@ export const scenarioSchema = z.strictObject({
           "a2a-task-state-lies",
           "mcp-tool-description-poisoned",
           "mcp-token-passed-on",
+          "inbox-item-changed-at-rest",
         ])
         .optional(),
       at: slug.optional(),

@@ -103,7 +103,7 @@
     }
   ],
   "generated": {
-    "commit": "50249cde7fe7358e9a3c08e3d59661dc1f647498",
+    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
     "core": "scripted"
   },
   "standIns": [
@@ -3026,7 +3026,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:47a68a4df570b097f4bdc8a9c58571a7e6fed5971aa1a500a7475e721b8a4490"
+            "digest": "sha-256:cac234a9b04a8f22abb2979fa0604dc0be120e3136153ea5c345f084729738c5"
           },
           "authority": {
             "present": false,
@@ -3098,6 +3098,9 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/identity-webid/0.1",
+                    "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1",
+                    "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-email/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
@@ -3175,7 +3178,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:6a42625c5f5f2e40e0755e88457d651256713a516d34d3e144d02ead64000299"
+            "digest": "sha-256:589e9c2edbd97b65e662a9d827aa00c220cee1b4e783c9bbdcec2b8f62167a51"
           },
           "evidence": {
             "present": false,
@@ -3595,7 +3598,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:f15a04307ec70f83c7cd494d390ebe83d996ae776448f525035c6ef613f6fc0f"
+            "digest": "sha-256:bb8369ada5e67ca650b31178af640046239f3e80826a30fb965bca6d9120f0de"
           },
           "authority": {
             "present": false,
@@ -3667,6 +3670,9 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/identity-webid/0.1",
+                    "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1",
+                    "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-email/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
                     "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
@@ -3744,7 +3750,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:d75dc036b47ca5e3a875773f3558f61d27a8592a4c452f91f3097abfeed5170c"
+            "digest": "sha-256:9d82d6667ab5c96231db914153845fdebb362417cab5afe4d1a20782e8c54ba3"
           },
           "evidence": {
             "present": false,

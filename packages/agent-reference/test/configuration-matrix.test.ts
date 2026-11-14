@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import { loadCase } from "../src/engine/load.js";
 import { patch, runScenario } from "../src/engine/run.js";
 import { scenarioSchema } from "../src/engine/schema.js";
+import { alternativeWireId, configurationById } from "../src/profile/configurations.js";
 import { BASELINE } from "../src/suites/baseline.js";
 
 const root = join(import.meta.dirname, "..");
@@ -57,7 +58,13 @@ it("upserts world and branch lists by id while preserving existing literal-array
 it("runs configuration-only branches only in their own matrix cell and keeps the full layer header", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
   const results = await runScenario(profile, scenario, { configuration: "all" });
-  expect(results).toHaveLength(12);
+  expect(results).toHaveLength(
+    4 +
+      scenario.configurations.reduce(
+        (count, entry) => count + 1 + (entry.world.branches as unknown[]).length,
+        0,
+      ),
+  );
   expect(results.filter((result) => !result.configuration).map((result) => result.path)).toEqual([
     "main",
     "fee-amount-differs",
@@ -70,6 +77,15 @@ it("runs configuration-only branches only in their own matrix cell and keeps the
       "main",
       ...(entry.world.branches as { id: string }[]).map((branch) => branch.id),
     ]);
+    if (configurationById(alternativeWireId(entry.id))?.status === "unresolved") {
+      for (const path of paths) {
+        expect(path.trace).toBeUndefined();
+        expect(path.blocked).toMatch(
+          /no executable runtime configuration|registered suite constraint/,
+        );
+      }
+      continue;
+    }
     const header = paths[0]?.trace?.configuration;
     expect(header?.id).toBe(entry.id);
     for (const event of paths[0]?.trace?.events ?? []) {
@@ -84,7 +100,7 @@ it("runs configuration-only branches only in their own matrix cell and keeps the
           header?.layers[layer as keyof typeof BASELINE.layers] !==
           BASELINE.layers[layer as keyof typeof BASELINE.layers],
       ),
-    ).toEqual(["transport"]);
+    ).toEqual(Object.keys(entry.change));
   }
 }, 60_000);
 

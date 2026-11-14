@@ -175,6 +175,44 @@
             "properties": {
               "id": {
                 "type": "string",
+                "const": "transport-solid-inbox"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "type": "string",
+                    "const": "solid-inbox"
+                  }
+                },
+                "required": [
+                  "transport"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
                 "const": "data-access-by-query"
               },
               "change": {
@@ -221,6 +259,44 @@
                   "data-access": {
                     "type": "string",
                     "const": "by-reference-local-holder"
+                  }
+                },
+                "required": [
+                  "data-access"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "data-access-by-reference-solid"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "data-access": {
+                    "type": "string",
+                    "const": "by-reference-solid"
                   }
                 },
                 "required": [
@@ -335,6 +411,44 @@
                   "identity": {
                     "type": "string",
                     "const": "organization-document-local"
+                  }
+                },
+                "required": [
+                  "identity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "identity-webid"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "string",
+                    "const": "webid"
                   }
                 },
                 "required": [
@@ -669,6 +783,44 @@
             "properties": {
               "id": {
                 "type": "string",
+                "const": "usage-control-solid-access-control"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "usage-control": {
+                    "type": "string",
+                    "const": "solid-access-control"
+                  }
+                },
+                "required": [
+                  "usage-control"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
                 "const": "commitments-agreement-credential"
               },
               "change": {
@@ -715,6 +867,44 @@
                   "accountability": {
                     "type": "string",
                     "const": "regulator-claim"
+                  }
+                },
+                "required": [
+                  "accountability"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "accountability-pod-mirror"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "accountability": {
+                    "type": "string",
+                    "const": "pod-mirror"
                   }
                 },
                 "required": [
@@ -895,6 +1085,24 @@
         ]
       }
     },
+    "solid": {
+      "type": "object",
+      "properties": {
+        "fault": {
+          "type": "string",
+          "enum": [
+            "mirror-unreachable",
+            "translation-grants-more",
+            "profile-key-swapped"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        }
+      },
+      "additionalProperties": false
+    },
     "carriage": {
       "type": "object",
       "properties": {
@@ -913,7 +1121,8 @@
             "a2a-text-part-instruction",
             "a2a-task-state-lies",
             "mcp-tool-description-poisoned",
-            "mcp-token-passed-on"
+            "mcp-token-passed-on",
+            "inbox-item-changed-at-rest"
           ]
         },
         "at": {
@@ -1438,13 +1647,16 @@
                 "transport-email",
                 "transport-a2a",
                 "transport-mcp",
+                "transport-solid-inbox",
                 "data-access-by-value",
                 "data-access-by-query",
                 "data-access-by-reference-local-holder",
+                "data-access-by-reference-solid",
                 "identity-pinned-key",
                 "identity-anonymous",
                 "identity-email-endpoint",
                 "identity-organization-document-local",
+                "identity-webid",
                 "meaning-fixed-vocabulary",
                 "meaning-registry-lookup",
                 "meaning-plain-language-upgrade",
@@ -1459,10 +1671,12 @@
                 "reliance-corroboration",
                 "usage-control-odrl-rules",
                 "usage-control-human-approval",
+                "usage-control-solid-access-control",
                 "commitments-signed-offer-acceptance",
                 "commitments-agreement-credential",
                 "accountability-local-ledger",
                 "accountability-regulator-claim",
+                "accountability-pod-mirror",
                 "settlement-rdf-order",
                 "settlement-ap2",
                 "settlement-acp",

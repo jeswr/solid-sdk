@@ -258,6 +258,50 @@ export class OutboundGate {
     return verdicts;
   }
 
+  /** Profile key control and trust/representation remain separate checks. */
+  async webIdRecipient(
+    actor: string | undefined,
+    configuration: string,
+    subject: string,
+  ): Promise<string | undefined> {
+    const reason = await this.deps.gate.webId?.recipient(actor, configuration);
+    if (reason) {
+      this.verdict(
+        [],
+        subject,
+        "recipient",
+        "fail",
+        "The recipient's profile key cannot be bound to its registered identity.",
+        { reason },
+      );
+      this.decide("stop", "The recipient identity cannot be established.", reason);
+    }
+    return reason;
+  }
+
+  /** Independent record availability is an evidence precondition, never a core assertion. */
+  async ensureRecord(subject: string): Promise<boolean> {
+    const mirror = this.deps.gate.recordMirror;
+    if (!mirror) return true;
+    if (await mirror.flush()) return true;
+    this.verdict(
+      [],
+      subject,
+      "evidence",
+      "indeterminate",
+      "The independent record store is unavailable; the action waits.",
+      { reason: "record-unavailable" },
+    );
+    this.decide(
+      "ask-more",
+      "The action waits for the independent record store.",
+      "record-unavailable",
+    );
+    if (!mirror.recover) return false;
+    await mirror.recover();
+    return mirror.flush();
+  }
+
   private narrowerAnswer(
     claim: JsonObject,
     purpose: string | undefined,

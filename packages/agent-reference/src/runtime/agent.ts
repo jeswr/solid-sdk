@@ -4803,7 +4803,19 @@ export class AgentRuntime {
         { conclusion: "not-executed", reason: "single-use check refused" },
         "direct-response",
       );
+    if (!(await this.outbound.ensureRecord(plan.key)))
+      return this.conclude(
+        planned,
+        { conclusion: "not-executed", reason: "record-unavailable" },
+        "direct-response",
+      );
     this.outbound.sealEffect(plan.intent, plan.key);
+    if (!(await this.outbound.ensureRecord(plan.key)))
+      return this.conclude(
+        planned,
+        { conclusion: "not-executed", reason: "record-unavailable" },
+        "direct-response",
+      );
     const attempting: EffectState = {
       ...planned,
       status: "attempting",
@@ -6360,6 +6372,20 @@ export class AgentRuntime {
         }),
       );
     }
+    const recipientIdentityFailure = await this.outbound.webIdRecipient(
+      conv.peer.actor,
+      message.configuration,
+      message.id,
+    );
+    if (recipientIdentityFailure)
+      throw new MessageReleaseError(
+        this.result("rejected", { reason: recipientIdentityFailure, outbound: [] }),
+      );
+    // Brief 26b seam: gate-owned evidence readiness before any conversation transition or outbox release.
+    if (!(await this.outbound.ensureRecord(message.id)))
+      throw new MessageReleaseError(
+        this.result("rejected", { reason: "record-unavailable", outbound: [] }),
+      );
     if (opts.intent?.purpose) this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
     if (!opts.force || !isTerminal(conv.phase)) {
       const next = transition(
@@ -6459,6 +6485,11 @@ export class AgentRuntime {
         jws: wire.jws,
       };
     this.recordItemTransfer(message, conv, false);
+    // Mirror the seal, decision and transfer entries before exposing the message to carriage.
+    if (!(await this.outbound.ensureRecord(message.id)))
+      throw new MessageReleaseError(
+        this.result("rejected", { reason: "record-unavailable", outbound: [] }),
+      );
     this.state.outbox[message.id] = entry;
     // Associate the response with the inbound message being processed NOW, so any
     // mid-dispatch snapshot already links them (a replay then returns this response).
