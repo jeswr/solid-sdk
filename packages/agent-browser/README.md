@@ -252,13 +252,16 @@ the profiler's source/repetition evidence. Models validate, round-trip through s
 and pass a dry executor construction before admission.
 Writes currently support flat JSON string/number/boolean fields and URL-encoded forms; unsupported bodies fail closed.
 
-Both learning paths share a recursive credential scan before GET replay or approved-write
-admission. It checks names and values, including headers, query/form fields, JSON keys and
-values at any depth, path segments, fragments and the method, using the executor's registered
-credential forms. A match rejects the whole candidate with a safe reason. Rejection survives
-header filtering and example removal; candidate redaction also scrubs object keys.
+Both learning paths share a recursive credential scan on the witnessed request before template
+normalization, GET replay or approved-write admission. It checks names and values, including
+headers, query/form fields, JSON keys and values at any depth, path segments, fragments and the
+method, using the executor's registered credential forms. A match rejects the whole candidate
+with a safe reason. Rejection survives
+header filtering, discarded cache-buster parameters and example removal; only verified CSRF
+slot values are exempt. Candidate redaction also scrubs object keys.
 `test/fallback-review-r10.test.ts` includes the meta-token header-name reproductions for GET
-and approved POST, JSON-key and form-name variants, and encoding and ordinary-request checks.
+and approved POST, JSON-key and form-name variants, discarded-query credentials and ordinary
+cache-busters, plus encoding and custom-driver checks.
 
 `test/fallback.test.ts` exercises real Chromium/loopback order learning, address approval and
 zero-launch executor replay, plus browser guards, pacing, snapshots, refs and revision rejection.

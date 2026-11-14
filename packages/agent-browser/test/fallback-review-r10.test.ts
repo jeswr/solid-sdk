@@ -12,7 +12,11 @@ import { type EndpointCandidate, launchChromium, type RecordedRequest } from "@j
 import { createServer, type Server } from "http";
 import type { AddressInfo } from "net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { containsCredential } from "../src/fallback/credential-scan.js";
+import {
+  containsCredential,
+  credentialRejection,
+  witnessedRequestContainsCredential,
+} from "../src/fallback/credential-scan.js";
 import { candidatesFromTrace, learnFallback } from "../src/fallback/learn.js";
 import { BrowserDriver } from "../src/index.js";
 
@@ -89,6 +93,16 @@ describe("fallback review r10 credential-bearing request strings", () => {
     ["omitted header value", (value) => ({ requestHeaders: { "display-mode": value } })],
     ["query name", (value) => ({ url: `${origin}/orders?${value}=1` })],
     ["query value", (value) => ({ url: `${origin}/orders?q=prefix-${value}` })],
+    ["discarded query value", (value) => ({ url: `${origin}/orders?_=prefix-${value}` })],
+    [
+      "discarded query beside a verified slot",
+      (value) => ({ url: `${origin}/orders?session=${value}&_=prefix-${value}` }),
+    ],
+    ["discarded path segment", (value) => ({ url: `${origin}/prefix-${value}/../orders` })],
+    [
+      "discarded encoded query value",
+      (value) => ({ url: `${origin}/orders?%5F%5F=prefix-${value}` }),
+    ],
     ["path segment", (value) => ({ url: `${origin}/orders/prefix-${value}` })],
     ["fragment", (value) => ({ url: `${origin}/orders#prefix-${value}` })],
     [
@@ -179,6 +193,63 @@ describe("fallback review r10 credential-bearing request strings", () => {
   });
 
   it.each([
+    "GET",
+    "POST",
+  ])("also scans raw query evidence from a custom %s driver", async (method) => {
+    const candidates = candidatesFromTrace(
+      [record(1, { method })],
+      origin,
+      [],
+      new Set(method === "POST" ? [1] : []),
+      (text) => text,
+    );
+    const candidate = candidates[0];
+    const sample = candidate?.samples[0];
+    if (!candidate || !sample) throw new Error("Missing candidate witness");
+    sample.url = `${origin}/orders?_=prefix-${token}`;
+    expect(candidate.unsupported).toBeUndefined();
+    expect(candidate.urlTemplate).toBe(`${origin}/orders`);
+    await assertRejected(candidates, method, origin, new Set([token]));
+  });
+
+  it.each([
+    "GET",
+    "POST",
+  ])("retains %s rejection after its query evidence is removed", async (method) => {
+    const candidates = candidatesFromTrace(
+      [credentialSource, record(1, { method, url: `${origin}/orders?_=prefix-${token}` })],
+      origin,
+      [],
+      new Set(method === "POST" ? [1] : []),
+      (text) => text,
+    ).filter((candidate) => candidate.samples.some((sample) => sample.seq === 1));
+    expect(candidates).toHaveLength(1);
+    for (const candidate of candidates) {
+      expect(candidate.unsupported).toBe(credentialRejection);
+      for (const sample of candidate.samples) sample.url = `${origin}/orders`;
+    }
+    await assertRejected(candidates, method);
+  });
+
+  it("exempts only verified top-level JSON slots while scanning the remaining raw body", () => {
+    const redact = secretRedactor(new Set([token]));
+    const scan = (postData: string) =>
+      witnessedRequestContainsCredential(
+        record(1, { requestHeaders: { "content-type": "application/json" }, postData }),
+        redact,
+        (kind, name, value) => kind === "form" && name === "csrf_token" && value === token,
+      );
+    expect(scan(JSON.stringify({ csrf_token: token, display: "compact" }))).toBe(false);
+    for (const body of [
+      JSON.stringify({ nested: { csrf_token: token } }),
+      JSON.stringify({ csrf_token: token, nested: [{ [token]: "1" }] }),
+      `{"csrf_token":"${token}","display":"${token}","display":"compact"}`,
+      JSON.stringify({ csrf_token: `prefix-${token}` }),
+    ])
+      expect(scan(body)).toBe(true);
+  });
+
+  it.each([
     "samples",
     "examples",
     "method",
@@ -218,9 +289,19 @@ describe("fallback review r10 credential-bearing request strings", () => {
     expect(containsCredential({ abc: "public", xa1b2y: "public" }, redact)).toBe(false);
   });
 
-  it.each(["GET", "POST"])("continues to admit an ordinary %s candidate", async (method) => {
+  it.each([
+    "GET",
+    "POST",
+  ])("continues to admit a %s with an ordinary cache-buster", async (method) => {
     const candidates = candidatesFromTrace(
-      [credentialSource, record(1, { method, requestHeaders: { "x-mode": "compact" } })],
+      [
+        credentialSource,
+        record(1, {
+          method,
+          url: `${origin}/orders?_=12345`,
+          requestHeaders: { "x-mode": "compact" },
+        }),
+      ],
       origin,
       [],
       new Set(method === "POST" ? [1] : []),
@@ -237,6 +318,9 @@ describe("fallback review r10 credential-bearing request strings", () => {
     expect(learned.proposed, JSON.stringify(learned.rejected)).toHaveLength(1);
     expect(transport).toHaveBeenCalledTimes(method === "GET" ? 1 : 0);
     expect(learned.proposed[0]?.request.headers).toEqual({ "x-mode": "compact" });
+    expect(learned.proposed[0]?.request.urlTemplate).toBe(`${origin}/orders`);
+    expect(validateSiteModel(learned.model)).toEqual([]);
+    expect(await writeSiteModel(learned.model)).not.toContain(token);
   });
 });
 
@@ -245,6 +329,7 @@ describe("fallback review r10 Chromium reproductions", () => {
   let site: string;
   const sent: {
     method: string;
+    url: string;
     headers: typeof import("http").IncomingMessage.prototype.headers;
     body: string;
   }[] = [];
@@ -257,6 +342,7 @@ describe("fallback review r10 Chromium reproductions", () => {
         if (url.pathname === "/orders") {
           sent.push({
             method: req.method ?? "",
+            url: req.url ?? "",
             headers: req.headers,
             body: Buffer.concat(chunks).toString(),
           });
@@ -265,7 +351,8 @@ describe("fallback review r10 Chromium reproductions", () => {
           return;
         }
         const variant = url.searchParams.get("variant");
-        const method = variant === "get-header" ? "GET" : "POST";
+        const method = variant?.startsWith("get-") ? "GET" : "POST";
+        const endpoint = variant?.endsWith("cachebuster") ? `/orders?_=prefix-${token}` : "/orders";
         const header = variant?.endsWith("header") ? `xhr.setRequestHeader('x-${token}','1');` : "";
         const contentType =
           variant === "json-key" ? "application/json" : "application/x-www-form-urlencoded";
@@ -277,7 +364,7 @@ describe("fallback review r10 Chromium reproductions", () => {
               : "x=1";
         res.setHeader("content-type", "text/html");
         res.end(
-          `<meta name="csrf-token" content="${token}"><button onclick="const xhr=new XMLHttpRequest();xhr.open('${method}','/orders');${header}xhr.setRequestHeader('content-type','${contentType}');xhr.onload=()=>document.getElementById('result').textContent='Loaded';xhr.send(${method === "GET" ? "null" : JSON.stringify(body).replaceAll('"', "&quot;")});">Load</button><p id="result"></p>`,
+          `<meta name="csrf-token" content="${token}"><button onclick="const xhr=new XMLHttpRequest();xhr.open('${method}','${endpoint}');${header}xhr.setRequestHeader('content-type','${contentType}');xhr.onload=()=>document.getElementById('result').textContent='Loaded';xhr.send(${method === "GET" ? "null" : JSON.stringify(body).replaceAll('"', "&quot;")});">Load</button><p id="result"></p>`,
         );
       });
     });
@@ -293,6 +380,8 @@ describe("fallback review r10 Chromium reproductions", () => {
     "post-header",
     "json-key",
     "form-name",
+    "get-cachebuster",
+    "post-cachebuster",
   ])("rejects %s learning after the single witnessed browser request", async (variant) => {
     const browser = await launchChromium();
     const sessions = new InMemorySessions();
@@ -320,12 +409,14 @@ describe("fallback review r10 Chromium reproductions", () => {
       );
       expect(candidates).toHaveLength(1);
       expect(JSON.stringify([candidates, driver.trace, driver.approvals])).not.toContain(token);
-      const method = variant === "get-header" ? "GET" : "POST";
+      const method = variant.startsWith("get-") ? "GET" : "POST";
       await assertRejected(candidates, method, site, driver.credentialContext.secrets);
       expect(sent.slice(before)).toHaveLength(1);
       expect(sent.at(-1)?.method).toBe(method);
       expect(approver).toHaveBeenCalledTimes(method === "GET" ? 0 : 1);
       if (variant.endsWith("header")) expect(sent.at(-1)?.headers[`x-${token}`]).toBe("1");
+      else if (variant.endsWith("cachebuster"))
+        expect(sent.at(-1)?.url).toBe(`/orders?_=prefix-${token}`);
       else expect(sent.at(-1)?.body).toContain(token);
     } finally {
       await driver.close();

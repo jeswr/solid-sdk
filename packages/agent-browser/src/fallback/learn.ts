@@ -22,6 +22,7 @@ import {
   discoverCredentialSources,
   discoverSessionTokens,
   type EndpointCandidate,
+  formCsrfRules,
   heuristicLabeller,
   type Labeller,
   matchRequest,
@@ -34,6 +35,7 @@ import {
   candidateContainsCredential,
   containsCredential,
   credentialRejection,
+  witnessedRequestContainsCredential,
 } from "./credential-scan.js";
 import type { BrowserDriver } from "./driver.js";
 import { fallbackRedactor, redactSnapshot } from "./redact.js";
@@ -83,11 +85,9 @@ export function candidatesFromTrace(
     ...discoverSessionTokens(pages, cookies, safe, cookieContext),
     ...credentials.tokens,
   ]);
-  // Recognised session URL tokens are slotted by the profiler before any redaction.
   const forms = pages
     .flatMap((p) => parseForms(p.html, p.url))
     .filter((f) => new URL(f.action).origin === origin);
-  const merged = wireCandidates(safe, origin, forms, tokens);
   const secrets = new Set<string>();
   for (const value of [
     ...credentials.secrets,
@@ -100,15 +100,48 @@ export function candidatesFromTrace(
   ])
     registerSecret(secrets, value);
   const redactSecrets = fallbackRedactor(secrets);
+  const scan = (value: string) => redactSecrets(redact(value));
   const clean = (value: string) =>
     secrets.has(value) ? "[redacted]" : redactSnapshot(redact(value), redactSecrets, secrets);
+  // Scan the complete witnessed request before template normalization can drop evidence.
+  // Only supported, witnessed CSRF sources may exempt a value, never its wire name.
+  const credentialBearingRequests = new Set(
+    safe.filter((request) => {
+      const url = new URL(request.url);
+      const form = forms.find((f) => {
+        const action = new URL(f.action);
+        return (
+          f.method === request.method &&
+          action.origin === url.origin &&
+          action.pathname === url.pathname
+        );
+      });
+      const formSlots = new Set(
+        form ? formCsrfRules(form, form.pageUrl).map((r) => r.target.name) : [],
+      );
+      return witnessedRequestContainsCredential(request, scan, (kind, name, value) => {
+        if (kind === "path" || kind === "query") return tokens.has(value);
+        if (kind === "header")
+          return request.headersFromCookies?.[name.toLowerCase()] !== undefined;
+        return (
+          request.bodyFromCookies?.[name] !== undefined ||
+          (formSlots.has(name) &&
+            (value === "[redacted]" ||
+              form?.fields.some((f) => f.name === name && f.value === value) === true))
+        );
+      });
+    }),
+  );
+  const merged = wireCandidates(safe, origin, forms, tokens);
   return merged
     .filter((c) => c.samples.length)
     .map((c) => {
       if (c.method === "GET" && c.samples.some((r) => approved.has(r.seq)))
         c.sources.push("fallback");
       // Preserve rejection before header filtering, sample redaction or write-example removal.
-      const credentialBearing = candidateContainsCredential(c, clean);
+      const credentialBearing =
+        c.samples.some((r) => credentialBearingRequests.has(r)) ||
+        candidateContainsCredential(c, scan);
       // Cookie-mapped/session headers and secret examples must never enter a model.
       c.headers = Object.fromEntries(
         Object.entries(c.headers).filter(([k, v]) => !sensitive.test(k) && clean(v) === v),

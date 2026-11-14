@@ -201,6 +201,9 @@ revision and one-update contract, and share pending persistence across concurren
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Learning uses one recursive credential scan for GET replay and approved-write admission.
+Scan the witnessed request before template normalization, including every raw query name/value
+even when a cache-buster will be discarded. Exempt only verified CSRF slot values. Carry any
+rejection through normalization and sanitization so the candidate can never replay or be admitted.
 Check every request string position, including object/JSON keys, header/query/form names and
 values, paths, fragments and methods, against all forms covered by the executor's shared
 registration/redactor. Reject the entire candidate with a reason that quotes no request text;
