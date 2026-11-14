@@ -119,6 +119,7 @@ export function installHandler(
       return new BalanceStatementHandler(
         { id: String(statement.statement.id), jws: statement.jws, label: p.label },
         p.terms,
+        typeof statement.statement.subject === "string" ? statement.statement.subject : undefined,
       );
     }
   }

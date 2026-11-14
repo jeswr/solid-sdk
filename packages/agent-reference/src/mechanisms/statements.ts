@@ -34,6 +34,8 @@ const iri = z.string().min(3).max(512).refine(isIri, "not a valid IRI (profile 0
 export const representationSchema = z
   .object({
     type: z.literal("RepresentationStatement"),
+    mandate: z.string().optional(),
+    authorityGrant: z.string().optional(),
     id: iri,
     party: iri,
     actor: iri,

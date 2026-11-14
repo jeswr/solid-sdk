@@ -8,6 +8,7 @@
 import type { OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
 import { vocabularyLabel } from "../model/labels.js";
+import { alternativeWireId } from "../profile/configurations.js";
 import { type ContentVocabulary, identifiersIn } from "../profile/content.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import type { Namer } from "../trace/packet.js";
@@ -233,7 +234,44 @@ export interface GateContext {
     readonly settings: import("../suites/meaning-registry.js").RegistryMeaning;
     readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
   };
+  readonly agentRegistry?: {
+    readonly check: (
+      actor: string,
+      principal: string,
+      kid: string,
+      operation: string,
+    ) => Promise<
+      | "representation-invalid"
+      | "representation-out-of-scope"
+      | "mandate-withdrawn"
+      | "lookup-failed"
+      | undefined
+    >;
+  };
+  readonly authorizationGrant?: {
+    readonly outbound?: () => string | undefined;
+    readonly load?: (
+      jws: string,
+    ) => ReturnType<typeof import("../mechanisms/mandate.js").loadMandate>;
+    readonly check: (
+      jws: string | undefined,
+      actor: string,
+      party: string,
+      kid: string,
+      operation: string,
+    ) => Promise<import("../mechanisms/mandate-status.js").MandateStatusFailure | undefined>;
+  };
+  readonly mandateCredential?: {
+    readonly outbound: () => string | undefined;
+    readonly check: (
+      mandate: string | undefined,
+      actor: string,
+      party: string,
+      kid: string,
+    ) => Promise<import("../mechanisms/mandate-status.js").MandateStatusFailure | undefined>;
+  };
   readonly webId?: {
+    readonly configuration?: string;
     readonly resolve: (jws: string) => Promise<
       | { readonly ok: true; readonly key: import("../mechanisms/trust.js").PinnedKey }
       | {
@@ -397,6 +435,15 @@ export interface GateContext {
   }[];
   /** What the agent tells its principal when a claim is admitted, if anything. */
   readonly tellPrincipal?: (statement: Readonly<Record<string, unknown>>) => string | undefined;
+}
+
+/** A configured suite is unavailable without the host adapter that actually enforces it. */
+export function alternativeInstalled(ctx: GateContext, id: string): boolean {
+  if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
+  if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
+  if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;
+  if (id === alternativeWireId("authority-agent-registry")) return !!ctx.agentRegistry;
+  return true;
 }
 
 /** The core clause each check applies (01-core). */

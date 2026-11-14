@@ -148,6 +148,18 @@ export const mandateSchema = z
     operator: iri.optional(),
     validFrom: instant,
     validUntil: instant,
+    credentialStatus: z
+      .array(
+        z.strictObject({
+          type: z.literal("BitstringStatusListEntry"),
+          statusPurpose: z.enum(["suspension", "revocation"]),
+          statusListIndex: z.string(),
+          statusListCredential: z.string().url(),
+        }),
+      )
+      .length(2)
+      .optional(),
+    actorKid: z.string().optional(),
     standing: z.array(standingRuleSchema).max(16).optional(),
     duties: z.array(dutyRuleSchema).max(64).optional(),
     autonomous: policy,

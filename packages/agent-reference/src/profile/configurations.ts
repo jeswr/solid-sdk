@@ -29,6 +29,7 @@ export interface ConfigurationDefinition {
     | { readonly status: "not-applicable"; readonly limitations: string };
   /** Whether the REQUESTER must sign. Responses are always signed in these configurations. */
   readonly requesterAuthentication: ConcernStatus;
+  readonly acceptedDidMethods?: readonly string[];
   readonly authentication: string;
   readonly representation: string;
   readonly authorisation: string;
@@ -157,6 +158,44 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
       "Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
     ],
   },
+  [alternativeWireId("authority-agent-registry")]: localDefinition(
+    alternativeWireId("authority-agent-registry"),
+    "Principal mandate checked against current signed registration",
+  ),
+  [alternativeWireId("authority-authorization-server")]: localDefinition(
+    alternativeWireId("authority-authorization-server"),
+    "Principal-approved key-bound authorization grant",
+  ),
+  [alternativeWireId("identity-anonymous")]: {
+    ...localDefinition(
+      alternativeWireId("identity-anonymous"),
+      "Anonymous public discovery — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6.",
+    ],
+  },
+  [alternativeWireId("identity-email-endpoint")]: {
+    ...localDefinition(
+      alternativeWireId("identity-email-endpoint"),
+      "Payroll mailbox identity — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+    ],
+  },
+  [alternativeWireId("identity-did")]: {
+    ...localDefinition(alternativeWireId("identity-did"), "DID web identities resolved in process"),
+    acceptedDidMethods: ["web"],
+    authentication:
+      "did:web Multikey documents matched against separately signed key commitments with explicit validity",
+  },
+  [alternativeWireId("authority-mandate-credential")]: localDefinition(
+    alternativeWireId("authority-mandate-credential"),
+    "Principal mandate credential with suspension and revocation lists",
+  ),
   ...Object.fromEntries(
     ["x402", "mpp", "ap2", "acp"].map((suite) => {
       const id = alternativeWireId(`settlement-${suite}`);

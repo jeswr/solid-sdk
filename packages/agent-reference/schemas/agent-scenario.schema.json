@@ -293,6 +293,55 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
     },
+    "authorityFault": {
+      "type": "string",
+      "enum": [
+        "token-as-the-person",
+        "registered-for-something-else"
+      ]
+    },
+    "identityNames": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+      }
+    },
+    "mandateStatusFault": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "suspension",
+            "revocation"
+          ]
+        },
+        "attempt": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      },
+      "required": [
+        "at",
+        "purpose"
+      ],
+      "additionalProperties": false
+    },
     "paymentProviders": {
       "default": [],
       "type": "array",
@@ -656,6 +705,44 @@
             "properties": {
               "id": {
                 "type": "string",
+                "const": "identity-did"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "string",
+                    "const": "did"
+                  }
+                },
+                "required": [
+                  "identity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
                 "const": "identity-email-endpoint"
               },
               "change": {
@@ -858,6 +945,82 @@
                 },
                 "required": [
                   "meaning"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "authority-agent-registry"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "authority": {
+                    "type": "string",
+                    "const": "agent-registry"
+                  }
+                },
+                "required": [
+                  "authority"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "authority-authorization-server"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "authority": {
+                    "type": "string",
+                    "const": "authorization-server"
+                  }
+                },
+                "required": [
+                  "authority"
                 ],
                 "additionalProperties": false
               },
@@ -2061,6 +2224,7 @@
                 "data-access-by-reference-solid",
                 "identity-pinned-key",
                 "identity-anonymous",
+                "identity-did",
                 "identity-email-endpoint",
                 "identity-organization-document-local",
                 "identity-webid",
@@ -2069,6 +2233,8 @@
                 "meaning-registry-lookup",
                 "meaning-plain-language-upgrade",
                 "authority-mandate-signed",
+                "authority-agent-registry",
+                "authority-authorization-server",
                 "authority-mandate-credential",
                 "authenticity-jws",
                 "authenticity-selective-disclosure",
@@ -8765,6 +8931,7 @@
     }
   },
   "required": [
+    "identityNames",
     "paymentProviders",
     "configurations",
     "requiredMethods",

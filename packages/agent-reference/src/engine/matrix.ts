@@ -76,7 +76,7 @@ export function matrixSink(
             ...input,
             chat: {
               ...input.chat,
-              text: input.chat.text.replace(/(?:https?:\/\/|urn:)[^\s<>"{}|\\^`]+/g, (id) =>
+              text: input.chat.text.replace(/(?:https?:\/\/|urn:|did:)[^\s<>"{}|\\^`]+/g, (id) =>
                 name(id),
               ),
             },

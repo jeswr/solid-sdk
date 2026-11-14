@@ -287,7 +287,7 @@ export class ProductSearchHandler implements OperationHandler {
       action: "use",
       target: PRODUCT_SEARCH_OP.id,
       purpose: PURPOSE.productSearch,
-      recipient: INDEX.party,
+      recipient: ctx.peer.party ?? INDEX.party,
       parameters: { query: input },
       conversation: ctx.conversation.id,
     };
@@ -337,11 +337,12 @@ export class BalanceStatementHandler implements OperationHandler {
   constructor(
     private readonly statement: { id: string; jws: string; label: string },
     private readonly terms: { id: string; text: string },
+    private readonly accountHolder: string = SAM.party,
   ) {}
 
   onInvoke(ctx: HandlerContext): HandlerReply {
     const holder = ctx.representation?.party;
-    if (holder !== SAM.party)
+    if (holder !== this.accountHolder)
       return { type: "refuse", reason: "not-authorised", detail: "not the account holder" };
     return {
       type: "deliver",
@@ -375,7 +376,7 @@ export class BalanceRequestHandler implements OperationHandler {
       action: "use",
       target: BALANCE_OP.id,
       purpose: PURPOSE.mortgageApplication,
-      recipient: HARBOUR,
+      recipient: ctx.peer.party ?? HARBOUR,
       parameters: {},
       conversation: ctx.conversation.id,
     };

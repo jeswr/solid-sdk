@@ -13264,6 +13264,115 @@
         "reason": "amount-differs"
       },
       "outline": []
+    },
+    {
+      "id": "mandate-suspended",
+      "onlyUnder": "authority-mandate-credential",
+      "what": "Sam suspends the mandate after evidence is requested. Its own gate stops first; the lender then rejects an authentic application packet already in transit.",
+      "change": {
+        "mandateStatusFault": {
+          "at": "acceptance-arrives",
+          "purpose": "suspension",
+          "attempt": {
+            "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "action": "use",
+            "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+            "recipient": "https://northbank.example/#org",
+            "parameters": {},
+            "conversation": {
+              "$ref": "steps.apply.conversation"
+            }
+          }
+        },
+        "stopAfter": "acceptance-arrives"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "mandate",
+        "reason": "mandate-withdrawn"
+      },
+      "outline": []
+    },
+    {
+      "id": "did-method-not-listed",
+      "onlyUnder": "identity-did",
+      "what": "An agent signs the application under a method not accepted by the configuration.",
+      "change": {
+        "inject": [
+          {
+            "step": "application-arrives",
+            "target": "message",
+            "path": [
+              "from",
+              "actor"
+            ],
+            "value": "did:key:z6MkFictionalUnacceptedMethod",
+            "resign": true
+          }
+        ],
+        "stopAfter": "application-arrives"
+      },
+      "expect": {
+        "outcome": "refuse",
+        "check": "integrity",
+        "reason": "unsupported-configuration"
+      },
+      "outline": []
+    },
+    {
+      "id": "mailbox-reply-as-evidence",
+      "onlyUnder": "identity-email-endpoint",
+      "what": "The core proposes relying on the payroll mailbox prose as income evidence.",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "check": "evidence",
+        "reason": "structured-form-required"
+      },
+      "outline": []
+    },
+    {
+      "id": "anonymous-asks-for-more",
+      "onlyUnder": "identity-anonymous",
+      "what": "An unnamed requester asks the index for an operation restricted to named parties.",
+      "change": {},
+      "expect": {
+        "outcome": "refuse",
+        "check": "authority",
+        "reason": "not-authorised"
+      },
+      "outline": []
+    },
+    {
+      "id": "token-as-the-person",
+      "onlyUnder": "authority-authorization-server",
+      "what": "The server issues a key-bound grant with no actor; the lender refuses to treat the agent as the principal.",
+      "change": {
+        "authorityFault": "token-as-the-person",
+        "stopAfter": "application-arrives"
+      },
+      "expect": {
+        "outcome": "refuse",
+        "check": "authority",
+        "reason": "representation-invalid"
+      },
+      "outline": []
+    },
+    {
+      "id": "registered-for-something-else",
+      "onlyUnder": "authority-agent-registry",
+      "what": "The current registry entry covers product search only; the lender refuses the application.",
+      "change": {
+        "authorityFault": "registered-for-something-else",
+        "stopAfter": "application-arrives"
+      },
+      "expect": {
+        "outcome": "refuse",
+        "check": "authority",
+        "reason": "representation-out-of-scope"
+      },
+      "outline": []
     }
   ],
   "expect": [
@@ -22337,6 +22446,316 @@
               "reason": "amount-differs"
             },
             "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "authority-mandate-credential",
+      "change": {
+        "authority": "mandate-credential"
+      },
+      "world": {
+        "standIns": [
+          {
+            "what": "Mandate status publication",
+            "replacedBy": "Sam signs suspension and revocation Bitstring Status List credentials. An in-process fictional host serves the current lists; each host turn refreshes the verified outbound snapshot, with a one-minute maximum age. No live service is contacted."
+          }
+        ],
+        "branches": [
+          {
+            "id": "mandate-suspended",
+            "onlyUnder": "authority-mandate-credential",
+            "what": "Sam suspends the mandate after evidence is requested. Its own gate stops first; the lender then rejects an authentic application packet already in transit.",
+            "change": {
+              "mandateStatusFault": {
+                "at": "acceptance-arrives",
+                "purpose": "suspension",
+                "attempt": {
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "action": "use",
+                  "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "recipient": "https://northbank.example/#org",
+                  "parameters": {},
+                  "conversation": {
+                    "$ref": "steps.apply.conversation"
+                  }
+                }
+              },
+              "stopAfter": "acceptance-arrives"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "mandate",
+              "reason": "mandate-withdrawn"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "identity-did",
+      "change": {
+        "identity": "did"
+      },
+      "world": {
+        "identityNames": {
+          "https://sam.example/#me": "did:web:sam.identity.example",
+          "https://northbank.example/#org": "did:web:north.identity.example",
+          "https://agents.hostco.example/sam#agent": "did:web:sam-agent.identity.example",
+          "https://agents.hostco.example/#org": "did:web:operator.identity.example",
+          "https://northbank.example/agents/intake#agent": "did:web:north-agent.identity.example",
+          "https://paywell.example/#org": "did:web:paywell.identity.example",
+          "https://harbourbank.example/#org": "did:web:harbour.identity.example",
+          "https://mortgage-index.example/#org": "did:web:index.identity.example",
+          "https://id-provider.example/#org": "did:web:identity-provider.identity.example",
+          "https://mortgage-index.example/agents/search#agent": "did:web:index-agent.identity.example",
+          "https://harbourbank.example/agents/statements#agent": "did:web:harbour-agent.identity.example",
+          "urn:fictional:bracken-lantern-valuations": "did:web:valuer.identity.example",
+          "urn:fictional:mossbridge-payment-desk": "did:web:payment-provider.identity.example",
+          "urn:fictional:valuation-register": "did:web:valuer-register.identity.example",
+          "urn:fictional:other-valuer": "did:web:other-valuer.identity.example",
+          "urn:fictional:valuer-agent": "did:web:valuer-agent.identity.example",
+          "urn:fictional:valuer-agent:actor": "did:web:valuer-agent.identity.example",
+          "urn:fictional:payment-provider-agent": "did:web:payment-provider-agent.identity.example",
+          "urn:fictional:payment-provider-agent:actor": "did:web:payment-provider-agent.identity.example",
+          "urn:fictional:valuer-register-agent": "did:web:valuer-register-agent.identity.example",
+          "urn:fictional:valuer-register-agent:actor": "did:web:valuer-register-agent.identity.example"
+        },
+        "parties": {
+          "did-resolver": {
+            "identity": "did:web:resolver.identity.example",
+            "name": "The fictional DID web host and resolver",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          "did-register": {
+            "identity": "did:web:register.identity.example",
+            "name": "The fictional DID key-commitment register",
+            "role": "register",
+            "runs": "issuer-only"
+          }
+        },
+        "branches": [
+          {
+            "id": "did-method-not-listed",
+            "onlyUnder": "identity-did",
+            "what": "An agent signs the application under a method not accepted by the configuration.",
+            "change": {
+              "inject": [
+                {
+                  "step": "application-arrives",
+                  "target": "message",
+                  "path": [
+                    "from",
+                    "actor"
+                  ],
+                  "value": "did:key:z6MkFictionalUnacceptedMethod",
+                  "resign": true
+                }
+              ],
+              "stopAfter": "application-arrives"
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "integrity",
+              "reason": "unsupported-configuration"
+            },
+            "outline": []
+          }
+        ],
+        "standIns": [
+          {
+            "what": "DID web resolution and key lifetimes",
+            "replacedBy": "A separately keyed fictional web host serves bounded DID documents in process at the did:web HTTPS paths. An independently keyed fictional register signs actor and principal key commitments and sixty-day validity periods. This configuration accepts only did:web; names are linkable, with no rotation or historical resolver archive."
+          }
+        ]
+      }
+    },
+    {
+      "id": "identity-email-endpoint",
+      "change": {
+        "identity": "email-endpoint"
+      },
+      "world": {
+        "parties": {
+          "paywell": {
+            "runs": "mailbox"
+          }
+        },
+        "mailboxes": [
+          {
+            "party": "paywell",
+            "address": "mailto:payroll@paywell.example",
+            "replies": [
+              "The annual gross income is 64800 USD. Please request a structured payslip statement."
+            ]
+          }
+        ],
+        "branches": [
+          {
+            "id": "mailbox-reply-as-evidence",
+            "onlyUnder": "identity-email-endpoint",
+            "what": "The core proposes relying on the payroll mailbox prose as income evidence.",
+            "change": {},
+            "expect": {
+              "outcome": "stop",
+              "check": "evidence",
+              "reason": "structured-form-required"
+            },
+            "outline": []
+          }
+        ],
+        "standIns": [
+          {
+            "what": "Payroll mailbox (not run)",
+            "replacedBy": "The proposed payroll party has a prose mailbox only. A real challenge-control exchange and approved exact-text send are required; the existing binding does not establish mailbox control."
+          }
+        ]
+      }
+    },
+    {
+      "id": "identity-anonymous",
+      "change": {
+        "identity": "anonymous"
+      },
+      "world": {
+        "branches": [
+          {
+            "id": "anonymous-asks-for-more",
+            "onlyUnder": "identity-anonymous",
+            "what": "An unnamed requester asks the index for an operation restricted to named parties.",
+            "change": {},
+            "expect": {
+              "outcome": "refuse",
+              "check": "authority",
+              "reason": "not-authorised"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "authority-authorization-server",
+      "change": {
+        "authority": "authorization-server"
+      },
+      "world": {
+        "parties": {
+          "authorization-server": {
+            "identity": "https://authorization.harbourbank.example/#server",
+            "name": "Sam’s fictional bank authorization server",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "trust": {
+          "root": {
+            "delegates": {
+              "urn:register:grant-issuers": {
+                "name": "The fictional register of accepted grant issuers",
+                "answersFor": "delegated authority grants",
+                "answerTtlMs": 60000,
+                "entries": [
+                  {
+                    "party": "https://authorization.harbourbank.example/#server",
+                    "authorizedFor": [],
+                    "claimTypes": [
+                      "authority.grant"
+                    ],
+                    "status": "authorized",
+                    "id": "urn:registration:bank-grant-issuer"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "branches": [
+          {
+            "id": "token-as-the-person",
+            "onlyUnder": "authority-authorization-server",
+            "what": "The server issues a key-bound grant with no actor; the lender refuses to treat the agent as the principal.",
+            "change": {
+              "authorityFault": "token-as-the-person",
+              "stopAfter": "application-arrives"
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "authority",
+              "reason": "representation-invalid"
+            },
+            "outline": []
+          }
+        ],
+        "standIns": [
+          {
+            "what": "Authorization server",
+            "replacedBy": "A separately keyed fictional server run for Sam’s bank verifies Sam’s signed consent and issues an RFC 9396 grant with RFC 8693 actor and cnf thumbprint. The existing trust-root chain explicitly accepts that server. The ODRL detail type, issuance UI and grant lifetime are a local profile; no live OAuth exchange is claimed."
+          }
+        ]
+      }
+    },
+    {
+      "id": "authority-agent-registry",
+      "change": {
+        "authority": "agent-registry"
+      },
+      "world": {
+        "parties": {
+          "agent-registry": {
+            "identity": "https://agent-register.example/#registry",
+            "name": "The fictional delegated-agent registry",
+            "role": "register",
+            "runs": "issuer-only"
+          }
+        },
+        "trust": {
+          "root": {
+            "delegates": {
+              "urn:register:authority-registries": {
+                "name": "The fictional register of agent registries",
+                "answersFor": "delegated agent registrations",
+                "answerTtlMs": 60000,
+                "entries": [
+                  {
+                    "party": "https://agent-register.example/#registry",
+                    "authorizedFor": [],
+                    "claimTypes": [
+                      "authority.registration"
+                    ],
+                    "status": "authorized",
+                    "id": "urn:registration:accepted-agent-registry"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "branches": [
+          {
+            "id": "registered-for-something-else",
+            "onlyUnder": "authority-agent-registry",
+            "what": "The current registry entry covers product search only; the lender refuses the application.",
+            "change": {
+              "authorityFault": "registered-for-something-else",
+              "stopAfter": "application-arrives"
+            },
+            "expect": {
+              "outcome": "refuse",
+              "check": "authority",
+              "reason": "representation-out-of-scope"
+            },
+            "outline": []
+          }
+        ],
+        "standIns": [
+          {
+            "what": "Agent authority registry",
+            "replacedBy": "A separately keyed fictional registry, accepted through the existing register chain, signs fresh query-bound entries naming principal, actor key, operation scope and active status. The entry format and one-minute lifetime are local; no live national or vendor registry is claimed."
           }
         ]
       }

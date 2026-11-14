@@ -54,12 +54,12 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "runs")).toHaveLength(152);
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(12);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
-  // 26e's alternatives plus the four native settlement configurations (three rows each).
-  expect(alternatives).toHaveLength(48);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(41);
+  // 26e, the four native settlement configurations and 26c's identity/authority rows.
+  expect(alternatives).toHaveLength(60);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(49);
   expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(0);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(7);
+  expect(blocked).toHaveLength(11);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,

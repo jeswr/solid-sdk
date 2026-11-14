@@ -651,6 +651,15 @@ export const scenarioSchema = z.strictObject({
   registryMeaning: registryMeaningSchema.optional(),
   settlementFault: z.enum(["tampered-order"]).optional(),
   stopAfter: slug.optional(),
+  authorityFault: z.enum(["token-as-the-person", "registered-for-something-else"]).optional(),
+  identityNames: z.record(iri, iri).default({}),
+  mandateStatusFault: z
+    .strictObject({
+      at: slug,
+      purpose: z.enum(["suspension", "revocation"]),
+      attempt: object.optional(),
+    })
+    .optional(),
   paymentProviders: z
     .array(
       z.strictObject({

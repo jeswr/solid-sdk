@@ -5,6 +5,32 @@ import { withPublicRead } from "./public-read.js";
 export function scenarioRegistry() {
   const registry = withPublicRead(baselineRegistry());
   registry.register({
+    layer: "authority",
+    id: "agent-registry",
+    name: "Current signed agent registration",
+    mandateFormat: "principal mandate plus signed registration",
+    approvalFormat: "existing exact-action approval",
+    summary:
+      "The receiver accepts a separately keyed registry through its trust chain and verifies the current principal, actor-key binding, registration status and operation scope.",
+  });
+  registry.register({
+    layer: "authority",
+    id: "authorization-server",
+    name: "Key-bound authorization-server grant",
+    mandateFormat: "at+jwt with authorization_details",
+    approvalFormat: "principal consent plus existing exact-action approval",
+    summary:
+      "A separately keyed fictional server issues RFC 9396 authorization details with an RFC 8693 actor and key confirmation; gates read the explicitly lifted ODRL policies.",
+  });
+  registry.register({
+    layer: "identity",
+    id: "did",
+    name: "Decentralized identifier (did:web)",
+    resolution: "resolved",
+    summary:
+      "DID documents served by a fictional in-process web host; only explicitly configured methods are accepted and key lifetimes are signed independently.",
+  });
+  registry.register({
     layer: "meaning",
     id: "negotiated",
     name: "Principal-approved term proposals",
@@ -125,11 +151,11 @@ export function scenarioRegistry() {
   registry.register({
     layer: "authority",
     id: "mandate-credential",
-    name: "Organization mandate credentials",
-    mandateFormat: "awp-organization-mandate+jws",
+    name: "Principal and organization mandate credentials",
+    mandateFormat: "principal operational VC with Bitstring Status Lists; organization-mandate+jws",
     approvalFormat: "exact-action",
     summary:
-      "Organization-signed agent-key, entity, role and action scope, with issuer-signed status and bounded freshness.",
+      "Principal-signed operational mandates carry suspension and revocation lists; the existing organization profile retains signed agent-key, entity, role and action scope with fresh issuer status.",
   });
   registry.register({
     layer: "authenticity",

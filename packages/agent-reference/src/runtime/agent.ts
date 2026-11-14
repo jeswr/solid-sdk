@@ -56,7 +56,7 @@ import { proofPolicy } from "../derive/verification.js";
 import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
 import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
-import { type GateContext, GateMemory } from "../gates/common.js";
+import { alternativeInstalled, type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { paymentDigest, periodKey, sameAmount } from "../gates/payment.js";
@@ -986,12 +986,14 @@ export class AgentRuntime {
       this.mandateFailure = "no mandate configured";
       return;
     }
-    const result = await loadMandate(source, {
-      trust: this.trust,
-      actor: this.identity.actor,
-      limits: this.limits,
-      at: this.now(),
-    });
+    const result = this.options.gates?.authorizationGrant?.load
+      ? await this.options.gates.authorizationGrant.load(source)
+      : await loadMandate(source, {
+          trust: this.trust,
+          actor: this.identity.actor,
+          limits: this.limits,
+          at: this.now(),
+        });
     this.record(result.ok ? result.loaded.verification : result.verification);
     if (result.ok) {
       this.mandate = result.loaded;
@@ -1058,6 +1060,7 @@ export class AgentRuntime {
 
   description(extensions?: JsonObject): ImplementationDescription {
     const implemented = Object.values(CONFIGURATIONS)
+      .filter((c) => alternativeInstalled(this.options.gates ?? {}, c.id))
       .filter(
         (c) =>
           !c.id.includes("#config/settlement-") ||

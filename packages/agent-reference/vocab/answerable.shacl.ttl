@@ -122,7 +122,7 @@ _:b1_b1_b0_n3-575 sh:name "validUntil";
 _:b1_b1_b0_n3-576 sh:name "credentialStatus";
     sh:path <https://www.w3.org/2018/credentials#credentialStatus>;
     sh:severity sh:Violation;
-    sh:maxCount 1;
+    sh:maxCount 8;
     sh:nodeKind sh:BlankNodeOrIRI.
 _:b1_b1_b0_n3-577 sh:name "proof";
     sh:path <https://w3id.org/security#proof>;
@@ -2462,3 +2462,6 @@ _:brief25bApprovalMismatch3 rdf:first <https://w3id.org/jeswr/awp#reason/approva
     rdf:rest _:b1_b1_b0_n3-335.
 _:brief25bApprovalMismatch4 rdf:first <https://w3id.org/jeswr/awp#reason/approval-mismatch>;
     rdf:rest _:b1_b1_b0_n3-452.
+
+# AUTHORED-BY Codex GPT-6
+awp:VerifiableCredentialShape sh:property [ sh:path awp:mandateCredential; sh:maxCount 1; sh:nodeKind sh:IRI; sh:node awp:VerifiableCredentialShape ].

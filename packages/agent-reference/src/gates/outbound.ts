@@ -52,6 +52,7 @@ import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import {
+  alternativeInstalled,
   type CheckVerdict,
   checkRefs,
   claimRequest,
@@ -152,7 +153,14 @@ function article(word: string): string {
 
 function mandateReason(decision: AuthorisationDecision): string {
   if (
-    ["source-unknown", "excessive-scope", "expired", "mandate-withdrawn"].includes(decision.reason)
+    [
+      "source-unknown",
+      "excessive-scope",
+      "expired",
+      "mandate-withdrawn",
+      "lookup-failed",
+      "unsupported-configuration",
+    ].includes(decision.reason)
   )
     return decision.reason;
   if (decision.reason.startsWith("mandate-invalid")) return "mandate-invalid";
@@ -667,6 +675,14 @@ export class OutboundGate {
 
   /** Checks 1 to 5 for a proposed action, around the pilot's mandate decision. */
   release(intent: ActionIntent, decision: AuthorisationDecision): Release {
+    const selected =
+      this.deps.gate.carriage?.() ?? this.deps.gate.configuration?.pilotConfiguration;
+    if (selected && !alternativeInstalled(this.deps.gate, selected))
+      decision = { ...decision, outcome: "deny", reason: "unsupported-configuration" };
+    const statusFailure =
+      this.deps.gate.mandateCredential?.outbound() ??
+      this.deps.gate.authorizationGrant?.outbound?.();
+    if (statusFailure) decision = { ...decision, outcome: "deny", reason: statusFailure };
     const scope = IntentScopeNode.fromIntent(intent);
     this.activePayment = undefined;
     this.activePaymentDocument = undefined;
@@ -1812,6 +1828,44 @@ export class OutboundGate {
         );
         return finish("ask-principal", "approval-required");
       }
+    }
+    if (!alternativeInstalled(this.deps.gate, envelope.configurationId)) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "fail",
+        "The selected identity or authority adapter is not installed.",
+        { reason: "unsupported-configuration" },
+      );
+      this.decide(
+        "stop",
+        "This configuration cannot release an action without its required adapter.",
+        "unsupported-configuration",
+      );
+      return finish("stop", "unsupported-configuration");
+    }
+    const statusFailure =
+      this.deps.gate.mandateCredential?.outbound() ??
+      this.deps.gate.authorizationGrant?.outbound?.();
+    if (
+      statusFailure &&
+      ["propose", "accept", "invoke", "deliver"].includes(envelope.messageKind)
+    ) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "fail",
+        "The mandate status does not permit releasing this action.",
+        { reason: statusFailure },
+      );
+      this.decide(
+        "stop",
+        "The mandate has been suspended or withdrawn; the action stays inside the gate.",
+        statusFailure,
+      );
+      return finish("stop", statusFailure);
     }
     if (
       opts.intent?.action === "pay" &&
