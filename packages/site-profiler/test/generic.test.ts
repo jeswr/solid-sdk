@@ -133,6 +133,23 @@ describe("generic application discovery", () => {
     expect(isStatic(`${origin}/api/words.json`, "xhr")).toBe(false);
   });
   it.each([
+    "/index.php?route=account/logout",
+    "/account?action=logout",
+    "/account?action=log_out",
+    "/account?logout=1",
+    "/account?signout",
+    "/account?do=signOut",
+    "/account?next=%2Fuser%2Fsign-out",
+    "/mail?unsubscribe=1",
+  ])("round 22: avoids a query-routed session-ending link %s", (path) =>
+    expect(isDangerousLink(origin + path)).toBe(true));
+  it("round 22: reads only session-ending words in the query string", () => {
+    for (const path of ["/search?q=delete", "/list?sort=updated_at", "/list?mode=save", "/a?x=%E0"])
+      expect(isDangerousLink(origin + path)).toBe(false);
+    // Templates that do not parse as URLs are still classified.
+    expect(isDangerousLink("/index.php{?route}&route=account/logout")).toBe(true);
+  });
+  it.each([
     "/logout",
     "/delete/1",
     "/refresh",

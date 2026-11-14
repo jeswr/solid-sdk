@@ -55,7 +55,30 @@ export function normaliseUrl(href: string, base?: string): string | undefined {
   }
 }
 
-/** Links a crawler must never follow: they change state even though they are GETs on bad sites. */
+const SESSION_END = /log[-_ ]?out|sign[-_ ]?out|log[-_ ]?off|unsubscribe/;
+
+/** Decoded query names and values; malformed escapes stay as written. */
+function queryWords(url: string): string {
+  const query = url.split("#")[0]?.split("?").slice(1).join("?") ?? "";
+  const decode = (part: string) => {
+    try {
+      return decodeURIComponent(part.replace(/\+/g, " "));
+    } catch {
+      return part;
+    }
+  };
+  return query
+    .split(/[&;]/)
+    .flatMap((pair) => pair.split("=").map(decode))
+    .join(" ");
+}
+
+/**
+ * Links a crawler must never follow: they change state even though they are GETs on bad sites.
+ * The path (and link text) is checked for any state-changing word; the query string's decoded
+ * names and values only for session-ending words (round 22: `?route=account/logout`,
+ * `?action=logout`, `?logout=1`, `?signout`), so a search for "delete" stays a search.
+ */
 export function isDangerousLink(url: string, text = ""): boolean {
   let path = url.split("?")[0] ?? url;
   try {
@@ -63,7 +86,9 @@ export function isDangerousLink(url: string, text = ""): boolean {
   } catch {
     /* templates and malformed links still get classified */
   }
-  const hay = `${path} ${text}`.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  const words = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  if (SESSION_END.test(words(queryWords(url)))) return true;
+  const hay = words(`${path} ${text}`);
   return /log-?out|sign-?out|logoff|unsubscribe|\bdelete\b|\bremove\b|\bcancel\b|destroy|\b(?:save|create|update|enable|disable|flush|refresh|reset|reindex|reorder|duplicate|send|run|execute|truncate|drop)\b/.test(
     hay,
   );

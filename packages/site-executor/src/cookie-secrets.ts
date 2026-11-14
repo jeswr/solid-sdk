@@ -10,8 +10,16 @@ import {
 
 export interface CookieSecretContext {
   model?: Pick<SiteModel, "login" | "operations">;
-  /** Credential cookie names explicitly declared by the vault or learned login. */
+  /**
+   * Credential cookie names for redaction: the vault's or learned login's declarations, which a
+   * host may widen (agent-browser adds CSRF cookie sources). Never used for the control.
+   */
   declaredNames?: readonly string[];
+  /**
+   * Credential cookie names the vault, host or learned login declared, never CSRF cookie
+   * sources: positive login evidence that the credentials-only control drops.
+   */
+  credentialCookieNames?: readonly string[];
   loginCookieNames?: readonly string[];
 }
 export type SecretCookie = { name: string; value: string; httpOnly?: boolean };
@@ -28,6 +36,7 @@ export function isSessionCredentialCookie(
       cookie.name,
     ) ||
     context.declaredNames?.includes(cookie.name) ||
+    context.credentialCookieNames?.includes(cookie.name) ||
     context.loginCookieNames?.includes(cookie.name) ||
     context.model?.login?.some((route) => route.sessionCookies?.includes(cookie.name)) ||
     context.model?.operations.some((op) =>
@@ -37,11 +46,12 @@ export function isSessionCredentialCookie(
 }
 
 /**
- * Positive login evidence only (round 21): a cookie the vault or host declared as a credential,
- * one the demonstrated login set or changed (`loginCookieNames`), or a learned login route's
- * `sessionCookies`. The credentials-only liveness control drops exactly these. It never uses the
- * redaction heuristic above (`httpOnly`, credential-like names, CSRF cookie sources), which
- * deliberately over-includes: a gate cookie classed as a credential would be dropped from the
+ * Positive login evidence only (round 21): a cookie the vault or host declared as a credential
+ * (`credentialCookieNames`), one the demonstrated login set or changed (`loginCookieNames`), or
+ * a learned login route's `sessionCookies`. The credentials-only liveness control drops exactly
+ * these. It never uses the redaction heuristic above (`httpOnly`, credential-like names, CSRF
+ * cookie sources) or the redaction list `declaredNames`, which a host may widen with CSRF
+ * cookie sources (round 22): a gate cookie classed as a credential would be dropped from the
  * control while an expired session still carries it, and the gate would pass for a refusal. An
  * unclassified credential is kept, the control renders, and the result is Uncertain.
  */
@@ -50,7 +60,7 @@ export function isLoginCredentialCookie(
   context: CookieSecretContext = {},
 ): boolean {
   return !!(
-    context.declaredNames?.includes(cookie.name) ||
+    context.credentialCookieNames?.includes(cookie.name) ||
     context.loginCookieNames?.includes(cookie.name) ||
     context.model?.login?.some((route) => route.sessionCookies?.includes(cookie.name))
   );

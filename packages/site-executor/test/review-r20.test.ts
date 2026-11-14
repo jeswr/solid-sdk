@@ -6,6 +6,7 @@
 // here is fictional.
 import { type Extraction, type Operation, SCHEMA } from "@jeswr/site-model";
 import { expect, it } from "vitest";
+import type { CookieSecretContext } from "../src/cookie-secrets.js";
 import { createExecutor } from "../src/executor.js";
 import { createApprovalGate } from "../src/gate.js";
 import { InMemorySessions } from "../src/index.js";
@@ -413,6 +414,7 @@ async function deleteItem(
     headers?: Record<string, string>;
     credentialCookies?: string[];
     sessionCookies?: string[];
+    credentialContext?: CookieSecretContext;
   } = {},
 ) {
   const sessions = new InMemorySessions();
@@ -451,6 +453,7 @@ async function deleteItem(
     },
     sessions,
     writeResponses: { [write.id]: options.policy ?? policy() },
+    ...(options.credentialContext ? { credentialContext: options.credentialContext } : {}),
     gate,
     fetch: async (input, init) => {
       const url = new URL(String(input));
@@ -800,4 +803,40 @@ it("rejects a verified login route at the site root", () => {
   ).toThrow("invalid liveness read");
   // The same declaration without a verified root route stays valid (a learned root route).
   expect(() => validateWriteResponsePolicy(policy(undefined), origin)).not.toThrow();
+});
+
+// ---------------------------------------------------------------- round 22, low finding 3
+// The control's drop list is separate from the redaction list: a host that widens
+// `declaredNames` with CSRF cookie sources (agent-browser does) still keeps them in the control,
+// as the profiler's control does; declared credential cookies (`credentialCookieNames`) go.
+it("keeps a CSRF cookie the host declared for redaction in the control, and drops declared credentials", async () => {
+  const run = await deleteItem(sessionGated, {
+    cookies: [
+      { name: "session", value: "fixture-secret-session", httpOnly: true },
+      { name: "XSRF-TOKEN", value: "fixture-csrf-value" },
+      { name: "host_marker", value: "fixture-secret-host" },
+    ],
+    credentialContext: {
+      declaredNames: ["session", "XSRF-TOKEN"],
+      credentialCookieNames: ["host_marker"],
+    },
+  });
+  expect(run.outcome).toBe("completed");
+  expect(run.listed.map((w) => w.cookie)).toEqual([
+    "session=fixture-secret-session; XSRF-TOKEN=fixture-csrf-value; host_marker=fixture-secret-host",
+    "XSRF-TOKEN=fixture-csrf-value",
+  ]);
+});
+
+it("drops nothing for a cookie only the redaction list declares: no control, Uncertain", async () => {
+  const site = (wire: Wire) =>
+    /(?:^|; )sid_x=fixture-secret-session/.test(wire.cookie) ? Response.json(liveRows) : toLogin();
+  const run = await deleteItem(site, {
+    cookies: [{ name: "sid_x", value: "fixture-secret-session" }],
+    sessionCookies: [],
+    credentialContext: { declaredNames: ["sid_x"] },
+  });
+  expect(run.outcome).toBe("uncertain");
+  expect(run.committed).toBe(1);
+  expect(run.listed.map((w) => w.cookie)).toEqual(["sid_x=fixture-secret-session"]);
 });

@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { expect, it } from "vitest";
 import {
+  isLoginCredentialCookie,
   isSessionCredentialCookie,
   MIN_REDACTION_LENGTH,
   registerCookieSecrets,
@@ -137,4 +139,13 @@ it("preserves Unicode boundaries and repeated matches with a large credential un
     expect(redact(`prefixfictional-credential-${i}-secretsuffix`)).toBe("prefix[redacted]suffix");
     expect(redact("%41b7x")).toBe("[redacted]");
   }
+});
+
+it("round 22: the control's drop list ignores the redaction list, and both see declared credentials", () => {
+  // agent-browser widens `declaredNames` with CSRF cookie sources for redaction.
+  const context = { declaredNames: ["XSRF-TOKEN"], credentialCookieNames: ["badge"] };
+  expect(isSessionCredentialCookie({ name: "XSRF-TOKEN", value: "x" }, context)).toBe(true);
+  expect(isLoginCredentialCookie({ name: "XSRF-TOKEN" }, context)).toBe(false);
+  expect(isSessionCredentialCookie({ name: "badge", value: "x" }, context)).toBe(true);
+  expect(isLoginCredentialCookie({ name: "badge" }, context)).toBe(true);
 });

@@ -729,15 +729,26 @@ Round 20: the control is a **credentials-only control**. It differs from the cre
 liveness read only by its credentials: no session headers and none of the cookies with
 positive login evidence (round 21, `isLoginCredentialCookie`: the vault's declared credential
 cookies, cookies the login set at runtime, and the login routes' `sessionCookies`); every other
-cookie is kept. The redaction classifier (`isSessionCredentialCookie`: any `httpOnly` cookie,
+cookie is kept. Round 22: the control has its own drop list (`credentialCookieNames`, the
+vault's `credentialCookies`, runtime login cookies, `loginCookieNames` and `sessionCookies`);
+`declaredNames`, which agent-browser widens with CSRF cookie sources for redaction, is never
+part of it, so a CSRF cookie such as `XSRF-TOKEN` stays in the control at runtime as it does
+in the profiler's. The redaction classifier (`isSessionCredentialCookie`: any `httpOnly` cookie,
 credential-like names, CSRF cookie sources) is never used for the control, so an HttpOnly or
 credential-named gate cookie (`age_ok` set HttpOnly, `remember_age`, `visitor_token`, an
 HttpOnly cookie check) is kept, and an expired session that still carries it cannot pass the
 gate off as a refusal. A credential without login evidence is kept too, which makes the
 control render, so the deletion ends Uncertain (fails safe). With nothing to drop (no session
 header and no login-evidence cookie for the URL) the control is not sent and the deletion is
-Uncertain. Residual: a gate cookie the login response itself sets or changes (for example an
-"I am over 18" box on the login form) is login evidence and is dropped. The refusal is pinned: the learned
+Uncertain. Residual (accepted): login evidence is every cookie whose value the sign-in changed,
+compared before the submit and after the post-login landing page loaded. That includes the
+session cookie itself and cookies the landing page or its sub-requests set, not only cookies
+the login response sets (for example an "I am over 18" box on the login form). All of them are
+dropped from the control, so a gate kept in one of them looks like a refusal. Gate state stored
+inside a credential cookie cannot be separated from the credential: a site that keeps an age
+or cookie-check flag in the server-side session, and signs the account out on an idle timeout
+while the session and its flag survive (a scope-only sign-out), still renders the listing to
+the expired session while the control, without the session, is refused. The refusal is pinned: the learned
 `anonymous.refusal` kind (`login-redirect`, `authentication-status`, `login-page` or
 `login-envelope`) and, for a redirect or login envelope, `anonymous.route` (one of
 `loginRoutes`) must be reproduced exactly (`refusalEvidence` plus `sameRefusal`); a legacy
@@ -764,7 +775,10 @@ password and declared form-key slot) while the signed-in fetch of that URL redir
 Magento admin shape); the target is never the site root, and the
 signed-in context must not be served it as an ordinary page (the profiler's gated signed-in
 fetch redirects or answers a login document, and no signed-in GET of that route in the trace
-answered anything else). `anonymous.verifiedRoutes` records each such route with its evidence
+answered anything else). Round 22: the profiler sends that signed-in fetch only after the
+control answered a login document there or hopped to a learned login route, and no target is
+probed whose path, or decoded query names and values, read as a session-ending link
+(`?route=account/logout`, `?action=logout`, `?logout=1`, `?signout`). `anonymous.verifiedRoutes` records each such route with its evidence
 (`{ route, url, via? }`); validation requires the route in `loginRoutes` and not the site root,
 the evidence URL on that origin and path, and a hop to another learned route. The runtime pin is unchanged: the
 control must reproduce the exact pinned route.

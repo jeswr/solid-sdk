@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   type CookieSecretContext,
   cookiesFor,
@@ -56,6 +57,15 @@ export function taskCredentialContext(options: {
         ...(context?.model?.operations.flatMap(
           (o) => o.csrf?.flatMap((r) => (r.source.kind === "cookie" ? [r.source.name] : [])) ?? [],
         ) ?? []),
+      ]),
+    ];
+    // The control's drop list: declared credentials and login session cookies, never the CSRF
+    // cookie sources above, which stay in the redaction union only (round 22).
+    values.credentialCookieNames = [
+      ...new Set([
+        ...(values.credentialCookieNames ?? []),
+        ...(context?.credentialCookieNames ?? []),
+        ...(context?.model?.login?.flatMap((r) => r.sessionCookies ?? []) ?? []),
       ]),
     ];
     values.loginCookieNames = [

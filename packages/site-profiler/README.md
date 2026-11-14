@@ -520,7 +520,13 @@ browser context's cookies minus those with positive login evidence (round 21: th
 passes its login evidence, and `isLoginCredentialCookie` drops only cookies the sign-in set or
 changed; the redaction classifier `isSessionCredentialCookie` is not used, so HttpOnly or
 credential-named gate cookies are kept), and no session headers. When no context cookie has
-login evidence the control is not sent, so no liveness read is learned (Uncertain). Verification's plain cookieless replays are never liveness evidence, so a
+login evidence the control is not sent, so no liveness read is learned (Uncertain). Residual
+(accepted, round 22): login evidence is every cookie whose value differs between the sign-in
+page before the submit and the post-login landing page after it loads, so it includes the
+session cookie itself and cookies the landing page or its sub-requests set, not only cookies
+the login response sets. A gate kept in such a cookie is dropped from the control with it, and
+gate state stored inside a credential cookie (an age or cookie-check flag in a server-side
+session that survives an idle sign-out) cannot be separated from the credential. Verification's plain cookieless replays are never liveness evidence, so a
 site gating on a consent, age or cookie-check cookie cannot pass its gate off as an
 authentication refusal. Every control replay of the exact URL must give one refusal kind and,
 for a redirect or login envelope, one login route; both are pinned in the policy
@@ -549,6 +555,10 @@ URL (empty, missing or self-referencing action), its credential field names are 
 learned login's (username field, password fields and the form-key slots: the login operation's
 form CSRF targets, or without one the sign-in form's hidden anti-forgery fields), and every
 signed-in fetch of that URL redirected to another route (never 200). A hop's login page must
-post to a learned target. The signed-in fetch to redirect or answer a login document, and no signed-in GET of
+post to a learned target. Round 22: the signed-in fetch is sent only after the control
+answered a login document at the target or hopped to a learned login route, and
+`isDangerousLink` also reads the decoded query names and values for session-ending words
+(`?route=account/logout`, `?action=logout`, `?logout=1`, `?signout`), so such a target is never
+probed, signed in or not; a search for "delete" stays a search. The signed-in fetch to redirect or answer a login document, and no signed-in GET of
 that route in the trace (after the sign-in POST) to have answered an ordinary page.
 Round-20 regressions are in `test/review-r20.test.ts`; round 21 in `test/review-r21.test.ts`.

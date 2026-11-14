@@ -352,7 +352,13 @@ Round 20/21: the control keeps every cookie except those with positive login evi
 (`isLoginCredentialCookie`: declared credential cookies, login-set cookies, the login routes'
 `sessionCookies`) and drops the session headers; never send it cookieless, and never use the
 redaction classifier `isSessionCredentialCookie` for it (an HttpOnly or credential-named gate
-cookie must stay). Nothing to drop means no control and no proof (Uncertain). Compare its answer with `sameRefusal(anonymous,
+cookie must stay). Round 22: the drop list is `controlContext` (`credentialCookieNames`, the vault's
+`credentialCookies`, runtime login cookies, `loginCookieNames`, `sessionCookies`); never feed it
+`declaredNames`, which hosts widen with CSRF cookie sources for redaction. Residual (accepted):
+login evidence is every cookie the sign-in changed, including the session cookie itself and
+cookies the post-login landing page sets; a gate stored in one of them (for example an age flag
+in a server-side session that outlives an idle sign-out) cannot be separated from the
+credential and is dropped with it. Nothing to drop means no control and no proof (Uncertain). Compare its answer with `sameRefusal(anonymous,
 refusalEvidence(...))`: the pinned kind and, for `login-redirect`/`login-envelope`, the pinned
 route. Refusal wording comes only from the title, headings outside chrome, the login form's
 labels/buttons and message-like JSON values; login pages must pass `isLoginDocument`; a login

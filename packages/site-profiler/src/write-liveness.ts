@@ -803,8 +803,15 @@ export async function probeLivenessReads(
         }
         // Round 21, decision 2: how the signed-in context is served the target. A route the
         // signed-in session gets as an ordinary page is no login route. Read gate first, no
-        // redirect followed; sent only when the control could still verify the target.
-        if (answer && ((answer.status >= 200 && answer.status < 300) || hops)) {
+        // redirect followed; round 22: sent only after the control answered a login document
+        // or hopped to a learned login route, so the session never fetches an arbitrary page.
+        const loginDocument =
+          !!answer &&
+          answer.status >= 200 &&
+          answer.status < 300 &&
+          /html/i.test(answer.contentType ?? "") &&
+          isLoginDocument(answer.body, target, learned, origin);
+        if (answer && (loginDocument || hops)) {
           const signedIn = authorizer(
             "Check how {host} serves a refusal's redirect target to the signed-in session",
             "login-route-signed-in",

@@ -306,8 +306,9 @@ type VerificationRead = {
   /**
    * The credentials-only liveness control: the same request without the session credentials.
    * No session headers and none of the cookies with positive login evidence
-   * (`isLoginCredentialCookie`: vault-declared, login-set or the login routes' session
-   * cookies) are sent; every other cookie is kept. Nothing the response sets reaches the
+   * (`isLoginCredentialCookie` over `controlContext`: declared credential cookies, login-set
+   * or the login routes' session cookies, never CSRF cookie sources) are sent; every other
+   * cookie is kept. Nothing the response sets reaches the
    * session, and an authentication challenge is reported rather than thrown, because a
    * refusal is the expected answer.
    */
@@ -527,6 +528,26 @@ export function createExecutor(options: ExecutorOptions): Executor {
     };
   }
 
+  /**
+   * The cookies the credentials-only control drops (round 22): only declared credential cookies
+   * (the host's `credentialCookieNames`, the vault's `credentialCookies` and the cookies this
+   * run's login set), the demonstrated login's cookies and the login routes' `sessionCookies`.
+   * Never `declaredNames`, which a host widens for redaction (agent-browser adds CSRF cookie
+   * sources): a CSRF cookie stays in the control, as it does in the profiler's.
+   */
+  function controlContext(ctx: RunContext): CookieSecretContext {
+    return {
+      ...(credentialContext.model ? { model: credentialContext.model } : {}),
+      ...(credentialContext.loginCookieNames
+        ? { loginCookieNames: credentialContext.loginCookieNames }
+        : {}),
+      credentialCookieNames: [
+        ...(credentialContext.credentialCookieNames ?? []),
+        ...(ctx.credentialCookies ?? []),
+      ],
+    };
+  }
+
   function authenticationContext(ctx: RunContext): string {
     return JSON.stringify([
       ctx.jar
@@ -627,7 +648,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       // renders, which fails safe; a gate cookie the redaction heuristic would class as a
       // credential is kept too, so an expired session that still carries it cannot pass.
       const cookies = anonymous
-        ? applicable.filter((cookie) => !isLoginCredentialCookie(cookie, cookieContext(ctx)))
+        ? applicable.filter((cookie) => !isLoginCredentialCookie(cookie, controlContext(ctx)))
         : applicable;
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       // Fetch's Headers object is authoritative for trimming and header names.
@@ -1217,7 +1238,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         (name) => !["cookie", "host", "content-length"].includes(name.toLowerCase()),
       ) &&
       !cookiesFor(ctx.jar, compiled.url, now()).some((cookie) =>
-        isLoginCredentialCookie(cookie, cookieContext(ctx)),
+        isLoginCredentialCookie(cookie, controlContext(ctx)),
       )
     )
       return false;

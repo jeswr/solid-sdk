@@ -792,3 +792,84 @@ it("r21 a signed-in page of the target route anywhere in the trace withdraws a v
     verify(at(62, { resourceType: "replay-anonymous", credentialsOnlyControl: true, ...page })),
   ).toEqual([{ route: `${origin}/admin/`, url: `${origin}/admin/` }]);
 });
+
+// ---------------------------------------------------------------- round 22, low finding 2
+// The signed-in fetch of a refusal's redirect target is sent only after the control answered a
+// login document or hopped to a learned login route, and a query-routed logout is never a
+// candidate route (`isDangerousLink` reads the decoded query string).
+/** A site whose listing refuses the control with a redirect to `target`, served by `page`. */
+const redirectingServer =
+  (f: Fixture, target: string, page: (url: URL, cookies: string) => Answer): Server =>
+  (url, cookies) =>
+    url.pathname === "/stores/main/listing"
+      ? has("session", "fixture-secret-session")(cookies)
+        ? { status: 200, contentType: "application/json", body: JSON.stringify(f.liveBody()) }
+        : { status: 302, body: "", location: target }
+      : url.pathname === new URL(target, origin).pathname
+        ? page(url, cookies)
+        : { status: 404, contentType: "text/plain", body: "" };
+const sessionJar = () => [cookie("session", "fixture-secret-session", true)];
+
+it.each([
+  "/index.php?route=account/logout",
+  "/account?action=logout",
+  "/account?logout=1",
+  "/account?signout",
+  "/account?next=%2Fuser%2Fsign-out",
+])("r22 a control redirected to the query-routed logout %s never fetches it, signed in or not", async (target) => {
+  const f = fixture();
+  const learned = await learn(
+    f,
+    sessionJar(),
+    redirectingServer(f, target, () => ({
+      status: 200,
+      contentType: "text/html",
+      body: "<main><h1>Signed out</h1><p>You have been logged off your account.</p></main>",
+    })),
+  );
+  expect(learned.log).toContain("control /stores/main/listing []");
+  const path = new URL(target, origin).pathname;
+  expect(learned.log.filter((l) => l.includes(` ${path}?`) || l.endsWith(` ${path} []`))).toEqual(
+    [],
+  );
+  expect(learned.anonymous).toBeUndefined();
+});
+
+it("r22 a control served an ordinary page at the redirect target sends no signed-in fetch", async () => {
+  const f = fixture();
+  const learned = await learn(
+    f,
+    sessionJar(),
+    redirectingServer(f, "/account/notice", () => ({
+      status: 200,
+      contentType: "text/html",
+      body: "<main><h1>Notice</h1><p>Your basket was kept for later.</p></main>",
+    })),
+  );
+  expect(learned.log).toContain("control /account/notice []");
+  expect(learned.log.filter((l) => l.startsWith("signed-in /account/notice"))).toEqual([]);
+  expect(learned.anonymous).toBeUndefined();
+});
+
+it("r22 a control served a login document at the redirect target still sends the signed-in fetch", async () => {
+  const f = fixture();
+  const learned = await learn(
+    f,
+    sessionJar(),
+    redirectingServer(f, "/account/signin", (_url, cookies) =>
+      has("session", "fixture-secret-session")(cookies)
+        ? { status: 302, body: "", location: "/account" }
+        : {
+            status: 200,
+            contentType: "text/html",
+            body: '<main><h1>Sign in</h1><form method="post" action="/login_check"><input name="user"><input type="password" name="pw"><button>Sign in</button></form></main>',
+          },
+    ),
+  );
+  expect(learned.log).toEqual(
+    expect.arrayContaining(["control /account/signin []", "signed-in /account/signin [session]"]),
+  );
+  expect(learned.anonymous?.verifiedRoutes).toEqual([
+    { route: `${origin}/account/signin`, url: `${origin}/account/signin` },
+  ]);
+});
