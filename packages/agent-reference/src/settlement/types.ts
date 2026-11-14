@@ -12,6 +12,8 @@ export interface ProtocolObjects {
   native?: unknown;
 }
 export interface AmountDue {
+  /** Host-issued invoice variation; P2 still compares it with the original agreement. */
+  amount?: string;
   agreement: PaymentAgreementNode;
   invoice: string;
   dueDate: string;
@@ -45,6 +47,9 @@ export interface SettlementSuite {
   order(checked: CheckedPayment, payer: PayerContext): Promise<ProtocolObjects>;
   settle(order: ProtocolObjects, provider: ProviderContext): Promise<ProtocolObjects>;
   lift(objects: ProtocolObjects): PaymentFacts;
+  trace?(objects: ProtocolObjects): Promise<SettlementTrace>;
+  restore?(objects: ProtocolObjects): ProtocolObjects;
+  objectsFor?(facts: PaymentFacts): ProtocolObjects | undefined;
 }
 export interface SettlementTrace {
   suite: string;

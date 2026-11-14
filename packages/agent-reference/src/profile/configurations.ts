@@ -157,6 +157,12 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
       "Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
     ],
   },
+  ...Object.fromEntries(
+    ["x402", "mpp", "ap2", "acp"].map((suite) => {
+      const id = alternativeWireId(`settlement-${suite}`);
+      return [id, localDefinition(id, `Signed RDF messages with ${suite} settlement`)];
+    }),
+  ),
   [CONFIG_WEBID]: {
     ...localDefinition(
       CONFIG_WEBID,

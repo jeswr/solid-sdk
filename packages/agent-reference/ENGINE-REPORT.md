@@ -3043,3 +3043,227 @@ The isolated `test/codegen.test.ts` retry also times out at thirty seconds, with
 | Artifact audit and `git diff --check` | PASS: 201 rows, ten new traces, zero raw identifiers in their captions/rules/chat; immutable oracle, maintained outlines and protected lane files unchanged. |
 
 Logs are `/tmp/brief26e-{final-build,final-typecheck,final-lint,final-layers,tests-final-verified,final-scenarios,codegen-isolated,codegen-direct}.log`; the guard inventory, model corpus and artifact audit are `/tmp/brief26e-{final-pipeline,model-final,artifact-audit}.json`. No commit, dependency installation, network, personal-agent test, evaluation, coverage or full-workspace gate is used. All work remains in the requested branch and working tree.
+
+## Brief 25b
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Offline implementation, Node 24 first on PATH; no commits. Required Briefs 24, 25p,
+25 and 22d and the sole protocol research source were read completely. The protected
+Brief 27 mechanism/derivation paths are not edited. Checkpoints below are superseded
+by final results as each part completes.
+
+**Part 1 checkpoint.** Outbound payment construction now takes an injected selected
+`SettlementSuite`; `protocolScoped` compares its identifier with the configured choice.
+The engine's two concrete RDF constructors use the same explicit selection registry,
+which refuses an uninstalled choice. `rdf-order` retains its existing content and captions.
+The runtime and cast expose the adapter injection seam. Focused protocol/check tests:
+**48/48 pass** in five files. Live protocol installation follows with the admission seam.
+
+**Parts 2–3 checkpoint.** Native x402, MPP and ACP mortgage main paths now complete
+with both unchanged receipt checks passing. The first AP2 run exposes an issue in its
+separate processor receipt path; it is under investigation and is not yet counted as a
+successful run. Native protocol messages use complete signed RDF carriage, one object
+per recipient-specific message, and a dedicated runtime ingress invokes the ordinary
+integrity/source/authority/terms/fitness admission before any adapter use. Secondary-key
+publications are identity-signed and additionally source-admitted in those messages.
+The existing attachment writer is reused for large fact graphs; no bound is increased.
+A first approval release implementation is being checked against the existing flows:
+one approved disclosure intent intentionally covers its acceptance and later disclosure,
+so both releases must retain the same exact intent, terms and evidence selection.
+
+**Part 3 checkpoint — all cells execute.** The four mortgage configurations change
+only `settlement`, with two `onlyUnder` branches each. Each native main path reaches one
+ledger transfer and both unchanged receipt checks. Each tampered order is source-admitted
+as exact carried content and then refused by its native verifier (`evidence-invalid`);
+each source-signed 495 USD request fails unchanged P2 (`amount-differs`). No provider
+order or ledger transfer follows either refusal. The live confinement tests pass outside
+the explicitly marked paid segment and retain the same final journey outcome. Individual
+HTTP requests/responses and AP2 mandates travel separately, never as an inspector transcript;
+ordinary invoice/order/receipt messages carry one exact native component and the retained
+host association resolves the already verified companion objects. AP2 additionally forwards
+the processor's original receipt through the merchant to the payer.
+
+**Part 4 checkpoint.** Pending approvals retain the exact intent digest and the projected
+message fields/terms before the principal answers. The outbound release reads the final
+prepared RDF graph, refuses changed intent/terms with `approval-mismatch`, and records its
+selected-suite message digest alongside the approval immediately before signing. Owner and
+organisation approvals use this binding; the original whole-message release approval path
+remains. Acceptance followed by the approved evidence disclosure is checked against the same
+terms and exact evidence selection. Direct tests include a changed prepared invocation that
+produces no signed outgoing message, and a successful release with the digest in the ledger.
+Local effects still use their approved exact ActionIntent/parameters; a local effect need not
+produce a message. Native receipt/order/invoice ingress refuses invalid carried objects before
+core use. Protocol ingress serializes its own admissions, including replay checks, separately
+from the enclosing runtime action to permit the in-process provider callback.
+
+**Adversarial checkpoint.** A temporary AST harness removed each of the four native order
+verification boundaries, shared P2, and the approval release predicate. All **6/6** removals
+were detected: all eight protocol refusal tests and all four approval attacks fail under the
+corresponding mutation. MPP's redundant lift/server verification calls were removed together
+as one native boundary. Every source file was restored in `finally`; results are in
+`/tmp/25b-mutations.json`. The first native mutation selection matched no tests because Vitest
+quotes string table labels; that selection was corrected and all six mutations were rerun.
+The successful live matrix/failure/confinement run plus approval/content checks passes **56
+checks in four files**. Closing validation follows below.
+
+**Baseline artifact audit correction.** The first generation exposed two integration
+side effects before publication: the runtime advertised the new wire configurations
+without an installed adapter, and standalone approval-binding ledger entries changed
+record-count captions. Advertisements now require the installed matching adapter; the
+approval binding is a field of the existing outgoing-message ledger entry, after the
+pre-signature release check and before the outbox is exposed. No extra entry is added.
+Generation was stopped and restarted after each fix. Final baseline event/byte accounting
+below distinguishes existing random joint proofs and generation metadata from actual
+protocol or decision changes; the protected oracle is never rewritten.
+
+**Final status by part.** Parts **1, 2, 3 and 4 are done** for the closed, paid
+`mortgage-main` journey. All implementation is offline and uncommitted. The original
+P1–P8 and `checkReceipt` implementation in `src/gates/payment.ts` has no diff. The
+Brief 27 policy/mandate/derivation and inbound claim-coverage paths are untouched.
+
+**Selection and carriage.** `selectedSettlement` in `src/settlement/configurations.ts`
+selects the host-installed suite by the configured identifier and refuses an unavailable
+choice. The engine installs one retained protocol adapter per run and injects it into
+the runtime/gates; the RDF suite remains the default. Invoice production, gated order
+production, provider dispatch, ingress and trace production all use that same choice.
+The four wire definitions are executable, but a runtime advertises a settlement wire
+configuration only when its matching adapter is installed and accepted. This preserves
+the earlier descriptions for baseline agents.
+
+| Configuration | Actual native exchange | Settlement and receipt source |
+|---|---|---|
+| `settlement-x402` | PaymentRequired from valuer to payer; PaymentPayload to valuer; individual `/verify` and `/settle` requests/responses between valuer and facilitator; SettlementResponse to payer. | Real EIP-712 verification, fictional ledger transfer and the facilitator's separate identity-signed receipt statement. |
+| `settlement-mpp` | HMAC-bound challenge to payer, EIP-3009 credential to valuer, Payment-Receipt response to payer. | The retained MPP server verifies and settles; the separate provider statement authenticates the otherwise unsigned receipt. |
+| `settlement-ap2` | Merchant checkout JWT; Checkout Mandate to merchant and Payment Mandate to credential provider; processor Payment Receipt to merchant and then forwarded to payer; merchant Checkout Receipt to payer. | Distinct fictional credential provider and merchant processor. Processor `urn:fictional:merchant-processor` is the expected receipt source in both profile and runtime order records. Both ES256 receipts use the previously documented local claim profile. |
+| `settlement-acp` | Individual signed checkout creation/session, delegation/201 token and completion/session exchanges, routed to merchant or provider as specified. | Endpoint-scoped idempotency stores and one-use delegated token on the fictional ledger; provider statement binds the receipt/order scope. |
+
+Each carried protocol component retains its exact native string or HTTP method, path,
+headers and body. A transcript is inspector output, never a send unit. Ordinary invoice,
+order and receipt messages carry one native component; the retained adapter resolves only
+an exact previously verified component to its companion objects and facts. A core-supplied
+`native` field confers no authority. Normal order/invoice/receipt ingress lifts only after
+ordinary enclosing-message admission; changed objects stop with `evidence-invalid`.
+The provider independently verifies the held original offer/acceptance and acceptance
+mandate/approval before its ledger effect. Native auxiliary exchanges use the dedicated
+serialized host ingress: complete signed RDF messages, all five ordinary inbound checks,
+configuration/audience/time/replay checks, no core dispatch and no ledger effect.
+
+**Source admission.** The existing identity-signed `awp-settlement-key+jws` publishes
+`type/party/suite/algorithm/publicKey/validFrom/validUntil`. x402/MPP publish Sam's
+secp256k1 address; AP2 publishes separate person, merchant and processor ES256 public
+JWKs. Each publication is carried with a party-signed `settlement-key` source statement;
+other native objects use `settlement-object`. Those ordinary source statements bind
+`objectDigest` to the exact enclosing message content and pass the configured inbound
+source check. The adapter then verifies the original key publication with the pinned
+party identity and matches party, suite, algorithm, public key and validity before use.
+A valid signature without the source statement/authority is `source-not-authoritative`.
+ACP directly uses the parties' pinned Ed25519 identity keys. EVM accounts are admitted
+through the provider's signed payee-account bindings, using the corresponding did:pkh
+account IRI. No core assertion supplies account ownership or expected receipt authority.
+
+**Confinement and failures.** All four cells preserve the ordered unfed checks outside
+the marked payment segment and the final journey outcome. Their ordered shared P1–P8
+and receipt verdicts are also identical to baseline. Additional ordinary admissions of
+native exchanges occur inside the paid segment. Each main path performs one fictional
+ledger transfer and passes both receipt checks. The manifest's main-path `actual` summary
+still names the mortgage's earlier `authority/assurance-insufficient` hold, as the baseline
+does; the complete trace continues through approval and successful payment.
+
+| Cell | Main/confinement | Tampered native object | Changed signed invoice |
+|---|---|---|---|
+| x402 | PASS | `x402-object-tampered`: recipient changed under the original EIP-712 signature; `evidence` / `evidence-invalid`. | `x402-fee-amount-differs`: P2 / `amount-differs`. |
+| MPP | PASS | `mpp-object-tampered`: credential recipient changed under its original signature; `evidence` / `evidence-invalid`. | `mpp-fee-amount-differs`: P2 / `amount-differs`. |
+| AP2 | PASS | `ap2-object-tampered`: changed SD-JWT key-binding signature; `evidence` / `evidence-invalid`. | `ap2-fee-amount-differs`: P2 / `amount-differs`. |
+| ACP | PASS | `acp-object-tampered`: changed completion token under the original detached signature; `evidence` / `evidence-invalid`. | `acp-fee-amount-differs`: P2 / `amount-differs`. |
+
+Each refusal stops before a provider order or ledger transfer. The amount branches ask
+for 495 USD under the unchanged 450 USD agreement. All eight are `onlyUnder` branches;
+`stopAfter` ends their declarative fixture scripts at the actual refusal. The exact HTTP
+stand-in appears in all twelve traces: “HTTP requests and responses are passed in process
+with the same method, path, headers and body. No money moves: the payment provider is a
+fictional party that keeps a ledger.”
+
+**Approval release.** Before principal/role review the runtime saves the exact intent
+digest and the continuation's intended message fields and terms; absent selections and
+challenge fields are bound too. At release the outbound approval gate reads the final
+prepared `MessageNode` and `ActionIntentNode`, checks the approved intent/terms, validates
+any carried intent and the exact lifted payment scope, and refuses mismatch before calling
+the document signer. This covers start proposals/invocations, action-bearing replies and
+planned messages, including paid acceptance. Owner and organization approvals retain the
+snapshot across persistence. The acceptance and its subsequent approved evidence disclosure
+share only the exact approved intent, terms and evidence selection. Resumed continuations
+cannot remove or substitute their intent. Local effects retain their existing exact
+intent/parameter authorization; they need not emit an instruction message.
+
+At release the **existing `message-out` ledger entry** gains `approvalBinding`, containing
+approval IDs, the intent/terms digests, message ID and selected-suite whole-message digest.
+The check occurs before signing; the binding is persisted before exposing the outbox. No
+extra ledger entry changes baseline audit-count captions. The original whole-message held
+release path remains intact. Tests alter both a real paid mortgage acceptance's carried
+intent and its terms; both stop with `approval-mismatch`, and a signer spy proves the changed
+message was never signed. A successful release's recorded digest is recomputed from the
+actual outgoing packet. `approval-mismatch` is added to the vocabulary/context/shapes;
+codegen regenerated its lock/diagnostics, retaining **218 admission errors** without changing
+any generator rule.
+
+**Artifacts and immutable baseline.** The completed build executes **192 live data paths**.
+The maintained manifest has **206 rows: 181 runs, 11 disagrees, 14 blocked**. These are the
+original **194 rows unchanged**, plus **12 runs**: one main and two refusal paths per protocol.
+There are twelve new traces and twelve matching outlines. Existing traces/outlines are
+preserved; their index gains only the twelve native entries. The original 161-path oracle
+is untouched. The prescribed snapshot was compared as parsed JSON **before** artifact
+preservation, so retained baseline files do not substitute for live decision verification.
+All **161 generated baseline decision arrays match** the oracle. Full event arrays match
+for **155** paths; the six existing real-joint paths regenerate ephemeral session keys/proofs:
+`cohort-count/{main,branch-1,branch-2}`, `platform-income/main` and
+`salary-benchmark/{main,branch-1}`. Generation metadata also reflects its environment.
+Original artifacts and their original manifest/hash metadata are retained for these paths,
+rather than claiming those random proofs are byte deterministic. SHA-256 verification proves
+**all 161 maintained baseline trace files remain byte-identical** to their starting bytes.
+
+A separate artifact audit passes all twelve protocol rows: **716 complete packet occurrences,
+343 distinct JSON-LD/RDF graph pairs, 204 carried native components**, zero graph differences,
+no transcript used as a send unit, no attachment bytes in packet metadata, correct native
+settlement annotations, both receipt checks, all eight refusal outcomes, shared-payment
+verdict equality and confinement. Native inspector facts use the existing `writeDocument`
+path and bounded attachment fallback. Invalid native bytes retain their packet inspector;
+no unverified facts are invented for their settlement annotation.
+
+**Not from the specification.** All local subsets/strict schemas, precision/token/domain
+choices and receipt JWT/statement claim tables documented in Briefs 25p/25 remain local
+profiles. This wiring additionally chooses: signed RDF receipt-message wrappers for auxiliary
+HTTP exchanges; `settlement-key`/`settlement-object` source claims with a JCS/SHA-256 object
+digest; host-retained exact-component associations and per-run in-memory adapter state;
+serialized auxiliary admission with no core dispatch; the new declarative `stopAfter`
+fixture scheduling field; and a common 09:05 order expiry in the four alternatives, within
+the EIP/MPP short-lived profile (baseline retains 10:00). The fictional EVM token has the
+explicit USD/two-decimal profile and test-network identifiers; no live asset registry is
+implied. AP2 is the person-present closed-mandate mode, without a FIDO claim. ACP's required
+signatures and account-reference instrument remain local stand-ins. No live HTTP, real
+money, chain, card network, cross-process protocol-state persistence or protocol-conformance
+certification is claimed.
+
+**Last commands and actual results** (Node **24.22.3** first on PATH, offline):
+
+| Command/check | Result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference build` | PASS, including schema drift and all 192 live data paths. Earlier interrupted generations/type-fix attempt are superseded by `/tmp/25b-build.log`. |
+| `node scripts/oracle-snapshot.mjs /tmp/oracle-check.json` and parsed JSON deep comparison | PASS, **161 paths unchanged**, checked against the generated traces before preserving baseline artifacts and again afterward. |
+| Focused `vitest run test/settlement test/approval-release.test.ts test/content.test.ts test/organizations.test.ts test/runtime-data-integrity.test.ts test/runtime-packets.test.ts test/wire.test.ts --maxWorkers=1` | PASS, **450/450 in 27 files**, `/tmp/25b-final-green-tests.log`. |
+| Final `vitest run test/approval-release.test.ts` | PASS, **8/8**, including the two added paid-acceptance attacks and signer/digest assertions. Together with the focused run this validates **452 distinct reference tests**. `/tmp/25b-paid-approval-final.log`. |
+| `vitest run test/codegen.test.ts test/rdf-pipeline.test.ts test/oracle-snapshot.test.ts` | PASS, **3/3**, including generated byte drift. `/tmp/25b-guards-tests.log`. |
+| `vitest run --config eval/e0/vitest.config.ts` | PASS, **17/17 existing fixtures**. This is not a live evaluation run. `/tmp/25b-fixtures.log`. |
+| `node /tmp/25b-mutate.mjs` | PASS, **6/6** selected removals detected; all source restored. `/tmp/25b-mutations.json`. |
+| `node /tmp/25b-artifact-audit.mjs` | PASS with the packet/graph/confinement/carriage totals above. `/tmp/25b-artifact-audit.json`. |
+| Final TypeScript compilation and package typecheck | PASS. `/tmp/25b-compile-final.log`, `/tmp/25b-typecheck-final.log`. |
+| Package lint | PASS, zero errors; 121 warnings / 441 informational diagnostics. `/tmp/25b-lint-final.log`. |
+| `node scripts/check-rdf-pipeline.mjs` | PASS: **0 hard failures / 213 existing allowances**, no allowance added. `/tmp/25b-guard-final.log`. |
+| Root `check:agent-layers` and `check:codegen` | PASS; codegen guard covers eight projects. |
+| `pnpm run gate:full` | FAIL outside this package: missing `jose` in `create-solid-app`, and missing `oauth4webapi`/`@simplewebauthn/browser` in `solid-webauthn-reauth`, with consequent type errors. Five cached tasks succeed before the gate stops. No dependency installation/network workaround was attempted. `/tmp/25b-gate-full.log`. |
+
+No commit, merge, publication, dependency installation or network request was made. The
+working copy remains on the requested live branch. The complete package/reference suite
+and the full model corpus were not rerun; validation is the completed focused runs, live
+scenario build, immutable oracle and artifact audit above. The earlier focused run's ACP
+expiry-error mapping failure was fixed and the definitive 450-test invocation passes.

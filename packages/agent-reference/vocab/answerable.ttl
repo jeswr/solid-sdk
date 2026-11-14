@@ -1681,3 +1681,7 @@ awp:Attachment a rdfs:Class; rdfs:label "Content attachment"; rdfs:comment "A bo
 awp:attachmentDigest a rdf:Property; rdfs:label "Attachment digest"; rdfs:comment "SHA-256 of the exact attachment bytes, with the sha-256: prefix."; rdfs:domain awp:Attachment; rdfs:range xsd:string.
 awp:byteLength a rdf:Property; rdfs:label "Byte length"; rdfs:comment "The length in bytes of the exact attachment payload."; rdfs:domain awp:Attachment; rdfs:range xsd:integer.
 awp:attachmentDatatype a rdf:Property; rdfs:label "Attached literal datatype"; rdfs:comment "The RDF datatype of an attached literal's exact UTF-8 lexical value."; rdfs:domain awp:Attachment; rdfs:range rdfs:Datatype.
+
+# AUTHORED-BY Codex GPT-6
+<https://w3id.org/jeswr/awp#reason/approval-mismatch> a awp:ReasonCode;
+    rdfs:label "The released message differs from the approved intent or terms".

@@ -125,6 +125,7 @@ export interface PendingAction {
   readonly conversation: Iri;
   /** The serialisable continuation the runtime resumes once approved. */
   readonly continuation: Json;
+  readonly releaseBinding?: import("../gates/approval-release.js").ApprovalReleaseBinding;
   readonly createdAt: string;
 }
 
@@ -167,6 +168,7 @@ export interface RuntimeState {
       validUntil: string;
       jws: string;
       payment?: import("../settlement/types.js").PaymentApprovalBinding;
+      releaseBinding?: import("../gates/approval-release.js").ApprovalReleaseBinding;
     }
   >;
   agreements: Record<Iri, Agreement>;

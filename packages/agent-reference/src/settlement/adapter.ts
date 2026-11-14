@@ -13,7 +13,7 @@ import {
   verifyCompact,
 } from "../mechanisms/jws.js";
 import { PaymentAgreementNode, PaymentFacts, paymentOnceKey } from "../model/payment.js";
-import { writeDocument } from "../wire/document.js";
+import { paymentDocument } from "../wire/payment.js";
 import { decodeBase64url, type HttpExchange, strictJson } from "./http.js";
 import type { Ledger } from "./ledger.js";
 import type {
@@ -151,7 +151,7 @@ export function bundle(suite: string, objects: ProtocolObjects["objects"]): Prot
 export class LiftStore {
   private readonly admitted = new Map<
     string,
-    { facts: PaymentFacts; from: Record<string, string> }
+    { facts: PaymentFacts; from: Record<string, string>; objects: ProtocolObjects }
   >();
   constructor(readonly suite: string) {}
   private key(objects: ProtocolObjects): string {
@@ -191,21 +191,44 @@ export class LiftStore {
       )
         origins[field] = supplied[field];
     }
-    this.admitted.set(this.key(objects), { facts: facts.snapshot(), from: origins });
+    this.admitted.set(this.key(objects), {
+      facts: facts.snapshot(),
+      from: origins,
+      objects: bundle(this.suite, objects.objects),
+    });
     return objects;
   }
   lift(objects: ProtocolObjects): PaymentFacts {
-    const value = this.admitted.get(this.key(objects));
+    const value = this.admitted.get(this.key(this.restore(objects)));
     if (!value) return invalid();
     return value.facts.snapshot();
   }
+  restore(objects: ProtocolObjects): ProtocolObjects {
+    this.key(objects);
+    const direct = this.admitted.get(this.key(objects));
+    if (direct) return bundle(this.suite, direct.objects.objects);
+    if (objects.objects.length !== 1) return invalid();
+    const object = objects.objects[0];
+    const matches = [...this.admitted.values()].filter((v) =>
+      v.objects.objects.some((o) => digestOf(o) === digestOf(object)),
+    );
+    if (!matches.length) return invalid();
+    const last = requireValue(matches.at(-1));
+    return bundle(this.suite, last.objects.objects);
+  }
+  find(facts: PaymentFacts): ProtocolObjects | undefined {
+    return [...this.admitted.values()].findLast(
+      (v) => v.facts.id === facts.id || v.facts.id === facts.invoice,
+    )?.objects;
+  }
   async trace(objects: ProtocolObjects): Promise<SettlementTrace> {
+    objects = this.restore(objects);
     const facts = this.lift(objects);
     const from = requireValue(this.admitted.get(this.key(objects))).from;
     return {
       suite: this.suite,
       objects: structuredClone(objects.objects),
-      facts: await writeDocument(facts),
+      facts: await paymentDocument(facts),
       from: { ...from },
     };
   }

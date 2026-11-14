@@ -54,6 +54,7 @@ import type {
 import { evaluateRule, queryFor } from "../derive/rules.js";
 import { proofPolicy } from "../derive/verification.js";
 import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
+import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
 import { type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
@@ -110,6 +111,8 @@ import {
   selectConfiguration,
 } from "../profile/description.js";
 import { PILOT_PROFILE } from "../profile/vocabulary.js";
+import { SettlementError } from "../settlement/adapter.js";
+import { readCarried } from "../settlement/carried.js";
 import {
   type EvidenceLedger,
   type LedgerEntry,
@@ -127,6 +130,7 @@ import type {
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
+import { snapshotApprovalRelease } from "../wire/approval-release.js";
 import { readAttachmentDocument, writeAttachmentDocument } from "../wire/attachments.js";
 import { digest as documentDigest, sign as signDocument } from "../wire/authenticity.js";
 import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
@@ -193,6 +197,8 @@ export interface AgentIdentity {
 }
 
 export interface AgentRuntimeOptions {
+  readonly settlement?: import("../settlement/types.js").SettlementSuite;
+  readonly settlementReceiptSource?: string;
   readonly identity: AgentIdentity;
   /** Actor signing keys (one per algorithm). Absent for an anonymous public client. */
   readonly actorKeys?: readonly SigningKey[];
@@ -379,7 +385,9 @@ export class AgentRuntime {
   /** The admission of the inbound message being processed now (serial executor). */
   private admission: Admission | undefined;
   /** Set while an approved action resumes, so the core is not shown proposing it twice. */
+  private settlementIngress: Promise<void> = Promise.resolve();
   private resuming = false;
+  private resumingDigest: string | undefined;
   private reauthorising = false;
   private notificationWork: Promise<StepResult> | undefined;
   /** The pilot configuration of the exchange the gates are checking now. */
@@ -595,6 +603,7 @@ export class AgentRuntime {
         const purpose = (sent?.body as { purpose?: unknown } | undefined)?.purpose;
         return typeof purpose === "string" ? purpose : undefined;
       },
+      settlement: this.options.settlement,
       receiptOrder: (receipt) => {
         const sent = this.state.paymentOrders[receipt.order ?? ""];
         if (sent) return { order: PaymentFacts.create(sent.data), provider: sent.provider };
@@ -609,7 +618,7 @@ export class AgentRuntime {
           order.currency !== agreement.duty?.constraint?.currency
         )
           return undefined;
-        return { order, provider: receipt.provider ?? "" };
+        return { order, provider: this.options.settlementReceiptSource ?? receipt.provider ?? "" };
       },
       recordReceipt: (receipt, document) => {
         this.state.paymentReceipts[receipt.id] = { document, order: receipt.order ?? "" };
@@ -681,6 +690,7 @@ export class AgentRuntime {
             },
           }
         : {}),
+      settlement: this.options.settlement,
       paymentApprovalMatches: (facts, intent) => {
         const binding = this.state.approvals[actionDigest(intent)]?.payment;
         return (
@@ -781,7 +791,7 @@ export class AgentRuntime {
         }
         this.state.paymentOrders[facts.id] = {
           data: facts.data(),
-          provider: intent.recipient ?? "",
+          provider: this.options.settlementReceiptSource ?? intent.recipient ?? "",
           intentDigest: actionDigest(intent),
         };
         this.state.paymentReleases[releaseId] = true;
@@ -1050,6 +1060,12 @@ export class AgentRuntime {
     const implemented = Object.values(CONFIGURATIONS)
       .filter(
         (c) =>
+          !c.id.includes("#config/settlement-") ||
+          (this.options.accepted.includes(c.id) &&
+            c.id.includes(`/settlement-${this.options.settlement?.id}/`)),
+      )
+      .filter(
+        (c) =>
           this.options.accepted.includes(c.id) ||
           (c.status === "executable" &&
             c.integrity.status === "selected" &&
@@ -1145,7 +1161,108 @@ export class AgentRuntime {
       : undefined;
   }
 
-  async receivedPaymentOrder(id: string): Promise<{ facts: PaymentFacts; payer: string }> {
+  /** In-process protocol carriage still admits a complete signed RDF message through all five checks.
+   * This host-only ingress has no core dispatch and cannot execute an effect.
+   */
+  admitSettlementMessage(wire: WireMessage): Promise<AnyMessage> {
+    const admitted = this.settlementIngress.then(() => this.admitSettlementMessageInner(wire));
+    this.settlementIngress = admitted.then(
+      () => undefined,
+      () => undefined,
+    );
+    return admitted;
+  }
+
+  private async admitSettlementMessageInner(wire: WireMessage): Promise<AnyMessage> {
+    const gate = new InboundGate({
+      identity: this.identity,
+      trust: this.trust,
+      limits: this.limits,
+      now: () => this.now(),
+      record: (r) => this.record(r),
+      gate: this.options.gates ?? {},
+      memory: this.gateMemory,
+      agreementTerms: () => ({ purpose: "urn:purpose:valuation" }),
+    });
+    const checked = await gate.verifyIntegrity(wire, { binding: "direct-local/0.1" }, () => false);
+    const admission = gate.arrive(wire, "direct-local/0.1", checked.message);
+    if (!checked.ok) {
+      admission.failIntegrity(checked.reason, checked.detail);
+      throw new Error(checked.reason);
+    }
+    admission.passIntegrity(checked);
+    const message = checked.message;
+    if (this.state.seen[message.id]) {
+      admission.failIntegrity(
+        "replay-conflict",
+        "The protocol message identifier has already been admitted.",
+      );
+      admission.refuse("replay-conflict");
+      throw new RejectError("replay-conflict", "The protocol message was already admitted.");
+    }
+    if (
+      message.kind !== "receipt" ||
+      !this.options.accepted.includes(message.configuration) ||
+      message.body.observed?.suite !== this.options.settlement?.id
+    )
+      throw new SettlementError("evidence-invalid");
+    const conv = openConversation({
+      id: message.conversation,
+      role: "responder",
+      peer: { actor: message.from.actor, party: message.from.onBehalfOf },
+      configuration: message.configuration,
+      at: this.now(),
+    });
+    await admission.source(message);
+    const evidence = (message.evidence ?? []).find((e) => {
+      if (!isClaimEvidence(e)) return false;
+      const c = unverifiedEvidenceClaim(e);
+      return c.claimType === "settlement-object" || c.claimType === "settlement-key";
+    });
+    const assessed = evidence
+      ? await gate.assessClaim(evidence, message.from.onBehalfOf)
+      : undefined;
+    if (!assessed || assessed.verdict !== "pass") {
+      const reason =
+        assessed?.reason === "evidence-invalid" || assessed?.reason === "unknown-key"
+          ? "evidence-invalid"
+          : "source-not-authoritative";
+      admission.refuse(reason, "The protocol source statement is not authoritative.");
+      throw new SettlementError(reason);
+    }
+    const result = await admission.complete(conv, message);
+    if (!result.ok) throw new Error(result.reason);
+    const claim = assessed.claim;
+    if (
+      !claim ||
+      claim.issuer !== message.from.onBehalfOf ||
+      claim.subject !== message.from.onBehalfOf ||
+      !this.gateMemory.facts.has(String(claim.id)) ||
+      claim.objectDigest !== digestOf(message.body.observed)
+    )
+      throw new SettlementError("source-not-authoritative");
+    this.record({
+      type: "settlement-message-admitted",
+      message: message.id,
+      objectDigest: claim.objectDigest,
+      at: this.now(),
+    });
+    this.state.seen[message.id] = {
+      digest: digestOf(message),
+      conversation: message.conversation,
+      disposition: "accepted",
+      responses: [],
+      expiresAt: message.expiresAt,
+    };
+    this.persist();
+    return message;
+  }
+
+  async receivedPaymentOrder(id: string): Promise<{
+    facts: PaymentFacts;
+    payer: string;
+    objects: import("../settlement/types.js").ProtocolObjects;
+  }> {
     const retained = this.state.recordMessages[id];
     if (!retained || retained.direction !== "in" || this.state.seen[id]?.disposition !== "accepted")
       throw new TypeError("No admitted provider order");
@@ -1156,8 +1273,12 @@ export class AgentRuntime {
       message.to?.party !== this.identity.party
     )
       throw new TypeError("Order is not addressed to this provider");
-    const objects = await readPaymentObjects(message.body.input);
-    const facts = liftPaymentObjects(objects);
+    const suite = this.options.settlement;
+    const objects =
+      suite && suite.id !== "rdf-order"
+        ? readCarried(message.body.input, suite)
+        : await readPaymentObjects(message.body.input);
+    const facts = suite ? suite.lift(objects) : liftPaymentObjects(objects);
     if (!facts.payer || facts.payer !== message.from.onBehalfOf)
       throw new TypeError("Order payer is not the authenticated principal");
     if (!(await verifyPaymentProofs(facts, this.trust, this.now())))
@@ -1168,7 +1289,7 @@ export class AgentRuntime {
       order: facts.id,
       at: this.now(),
     });
-    return { facts, payer: facts.payer };
+    return { facts, payer: facts.payer, objects };
   }
 
   agreements(): readonly Agreement[] {
@@ -2655,6 +2776,10 @@ export class AgentRuntime {
     if (plan.type === "propose" && plan.terms) {
       const intent = handler.intentForProposal?.(ctx, plan.terms);
       if (!intent) throw new Error("handler provides no proposal intent");
+      if (this.resuming && this.resumingDigest !== actionDigest(intent))
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "approval-mismatch", outbound: [] }),
+        );
       const decision = this.authorise(intent);
       if (decision.outcome === "approval-required") {
         return {
@@ -2699,6 +2824,10 @@ export class AgentRuntime {
         },
       };
     if (intent) {
+      if (this.resuming && this.resumingDigest !== actionDigest(intent))
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "approval-mismatch", outbound: [] }),
+        );
       const decision = this.authorise(intent);
       if (decision.outcome === "approval-required") {
         return {
@@ -5660,6 +5789,14 @@ export class AgentRuntime {
       intent: copyData(intent),
       conversation: ownerId,
       continuation: copyData(continuation) as unknown as Json,
+      releaseBinding: snapshotApprovalRelease(
+        intent,
+        continuation,
+        this.state.conversations[ownerId]?.openProposal,
+        this.state.conversations[ownerId]?.openProposal
+          ? this.getDomain(`_offer:${this.state.conversations[ownerId]!.openProposal!.id}`)
+          : undefined,
+      ),
       createdAt: this.now(),
     };
     if (continuation.type === "effect")
@@ -5708,7 +5845,12 @@ export class AgentRuntime {
           return this.result("rejected", { reason: "not-authorised", outbound: [] });
         this.state.organisationApprovals[a.actionDigest] = [
           ...approvals,
-          { ...a, kid: check.signer.kid, jws },
+          {
+            ...a,
+            kid: check.signer.kid,
+            jws,
+            ...(waiting.releaseBinding ? { releaseBinding: copyData(waiting.releaseBinding) } : {}),
+          },
         ];
         this.record({
           type: "organisation-approval",
@@ -5816,6 +5958,9 @@ export class AgentRuntime {
       validUntil: a.validUntil,
       jws,
       ...(a.payment ? { payment: a.payment } : {}),
+      ...(this.state.pending[a.actionDigest]?.releaseBinding
+        ? { releaseBinding: copyData(this.state.pending[a.actionDigest]!.releaseBinding) }
+        : {}),
     };
     this.record({
       type: "approval",
@@ -5863,7 +6008,22 @@ export class AgentRuntime {
     delete this.state.pending[a.actionDigest];
     if (a.decision === "deny") this.outbound.declined(pending.intent);
     this.resuming = true;
+    this.resumingDigest = a.actionDigest;
     const cont = pending.continuation as unknown as Continuation;
+    if (a.decision === "approve" && cont.type !== "release-message") {
+      const carriedIntent =
+        cont.type === "reply" && "intent" in cont.reply
+          ? cont.reply.intent
+          : cont.type === "message" || cont.type === "effect"
+            ? cont.plan.intent
+            : pending.intent;
+      if (
+        !carriedIntent ||
+        actionDigest(pending.intent) !== a.actionDigest ||
+        actionDigest(carriedIntent) !== a.actionDigest
+      )
+        return this.result("rejected", { reason: "approval-mismatch", outbound: [] });
+    }
     const task = this.state.tasks[pending.conversation];
     if (task && cont.type === "effect") {
       let outbound: OutboundMessage[] = [];
@@ -6280,7 +6440,16 @@ export class AgentRuntime {
       classifyOffer(proposedTerms.payment, "terms.payment");
     }
     if (!opts.resume && opts.intent?.action === "pay" && kind === "invoke") {
-      const document = await this.outbound.paymentOrder(opts.intent);
+      let document: unknown;
+      try {
+        document = await this.outbound.paymentOrder(opts.intent);
+      } catch (error) {
+        if (error instanceof SettlementError)
+          throw new MessageReleaseError(
+            this.result("rejected", { reason: error.reason, outbound: [] }),
+          );
+        throw error;
+      }
       body = { ...body, input: document };
       const classify = (value: unknown, path: string): void => {
         if (Array.isArray(value)) {
@@ -6483,6 +6652,73 @@ export class AgentRuntime {
         });
     message = new MessageNode(message.id, prepared.dataset).live;
     const suite = cfg.integrity.mechanism === "data-integrity" ? "data-integrity" : "jws";
+    const ownerApproval = opts.intent ? this.state.approvals[actionDigest(opts.intent)] : undefined;
+    const approvals = opts.intent
+      ? [
+          ...(ownerApproval?.decision === "approve" ? [ownerApproval] : []),
+          ...(this.state.organisationApprovals[actionDigest(opts.intent)] ?? []),
+        ]
+      : [];
+    const approval = approvals.find((a) => a.releaseBinding);
+    let approvalBindingRecord: object | undefined;
+    if (opts.intent && approvals.length && !approval)
+      throw new MessageReleaseError(
+        this.result("rejected", { reason: "approval-mismatch", outbound: [] }),
+      );
+    if (opts.intent && approval?.releaseBinding) {
+      const offerId = message.kind === "accept" ? message.body.proposal : undefined;
+      const basis = (message.body as { basis?: { agreement?: string } }).basis;
+      const terms = offerId
+        ? this.getDomain(`_offer:${offerId}`)
+        : basis?.agreement
+          ? this.state.agreements[basis.agreement]?.terms
+          : undefined;
+      let paymentMatches: boolean | undefined;
+      if (opts.intent.action === "pay" && message.kind === "invoke") {
+        try {
+          const objects =
+            this.options.settlement?.id !== "rdf-order" && this.options.settlement
+              ? readCarried(message.body.input, this.options.settlement)
+              : await readPaymentObjects(message.body.input);
+          const facts = this.options.settlement
+            ? this.options.settlement.lift(objects)
+            : liftPaymentObjects(objects);
+          paymentMatches =
+            paymentDigest(facts) ===
+            paymentDigest(
+              PaymentFacts.fromIntent(
+                opts.intent,
+                this.identity.party ?? this.identity.actor,
+                this.now(),
+              ),
+            );
+        } catch {
+          paymentMatches = false;
+        }
+      }
+      const matches = checkApprovalRelease({
+        message: new MessageNode(message.id, prepared.dataset),
+        intent: ActionIntentNode.toNode(opts.intent),
+        binding: approval.releaseBinding,
+        ...(terms ? { termsDigest: digestOf(terms) } : {}),
+        ...(paymentMatches === undefined ? {} : { paymentMatches }),
+        sink: this.options.gates?.sink,
+      });
+      if (!matches)
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "approval-mismatch", outbound: [] }),
+        );
+      approvalBindingRecord = {
+        type: "approval-message-binding",
+        approval: approval.id,
+        approvals: approvals.map((a) => a.id),
+        intentDigest: actionDigest(opts.intent),
+        termsDigest: approval.releaseBinding.termsDigest ?? null,
+        message: message.id,
+        messageDigest: await documentDigest(prepared.document, suite),
+        at: this.now(),
+      };
+    }
     const release = this.outbound.checkMessage(message, {
       documentDigest: await documentDigest(prepared.document, suite),
       content: { ...content, vocabulary },
@@ -6618,6 +6854,8 @@ export class AgentRuntime {
       conversation: conversationId,
       digest: digestOf(message),
       at: message.createdAt,
+      // Bind the approved scope to this exact release without adding a separate ledger event.
+      ...(approvalBindingRecord ? { approvalBinding: approvalBindingRecord } : {}),
       // The payload-free authorisation basis of a protected disclosure (kind + reference).
       ...(opts.conditions ? { conditions: opts.conditions } : {}),
     });

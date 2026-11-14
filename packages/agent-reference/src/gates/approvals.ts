@@ -15,6 +15,7 @@ export const organisationApprovalSchema = z.strictObject({
 export type OrganisationApproval = z.infer<typeof organisationApprovalSchema> & {
   kid: string;
   jws?: string;
+  releaseBinding?: import("./approval-release.js").ApprovalReleaseBinding;
 };
 export interface ApprovalsRule {
   count: number;

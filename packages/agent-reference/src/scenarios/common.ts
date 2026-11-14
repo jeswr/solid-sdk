@@ -217,7 +217,14 @@ export class Cast {
     accepted: string[] = [CONFIG_ED25519],
     extra: Pick<
       AgentRuntimeOptions,
-      "gates" | "core" | "disclosureChecks" | "sourceKey" | "organizationMandateJws" | "bindings"
+      | "gates"
+      | "core"
+      | "disclosureChecks"
+      | "sourceKey"
+      | "organizationMandateJws"
+      | "bindings"
+      | "settlement"
+      | "settlementReceiptSource"
     > = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);

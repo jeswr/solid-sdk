@@ -74,7 +74,7 @@ export class Ap2Suite implements SettlementSuite {
     due = snapshotDue(due);
 
     const key = await this.key(this.profile.merchant, this.profile.merchantKey);
-    const amount = requireValue(due.agreement.duty?.constraint?.amount);
+    const amount = due.amount ?? requireValue(due.agreement.duty?.constraint?.amount);
     const checkout: Checkout = {
       order_id: due.invoice,
       merchant: {
@@ -310,6 +310,12 @@ export class Ap2Suite implements SettlementSuite {
       order: "Payment Receipt.payment.id (local profile)",
       status: "verified Payment Receipt and matching Checkout Receipt (local profile)",
     });
+  }
+  restore(objects: ProtocolObjects) {
+    return this.store.restore(objects);
+  }
+  objectsFor(facts: PaymentFacts) {
+    return this.store.find(facts);
   }
   lift(objects: ProtocolObjects): PaymentFacts {
     return this.store.lift(objects);

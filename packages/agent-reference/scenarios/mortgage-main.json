@@ -13128,6 +13128,142 @@
           "reason": "no-agreement"
         }
       ]
+    },
+    {
+      "id": "x402-object-tampered",
+      "onlyUnder": "settlement-x402",
+      "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+      "change": {
+        "settlementFault": "tampered-order",
+        "stopAfter": "fee-payment-approved"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "evidence",
+        "reason": "evidence-invalid"
+      },
+      "outline": []
+    },
+    {
+      "id": "x402-fee-amount-differs",
+      "onlyUnder": "settlement-x402",
+      "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+      "change": {
+        "script": {
+          "fee-invoice": {
+            "amount": "495.00"
+          }
+        },
+        "stopAfter": "pay"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "P2",
+        "reason": "amount-differs"
+      },
+      "outline": []
+    },
+    {
+      "id": "mpp-object-tampered",
+      "onlyUnder": "settlement-mpp",
+      "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+      "change": {
+        "settlementFault": "tampered-order",
+        "stopAfter": "fee-payment-approved"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "evidence",
+        "reason": "evidence-invalid"
+      },
+      "outline": []
+    },
+    {
+      "id": "mpp-fee-amount-differs",
+      "onlyUnder": "settlement-mpp",
+      "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+      "change": {
+        "script": {
+          "fee-invoice": {
+            "amount": "495.00"
+          }
+        },
+        "stopAfter": "pay"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "P2",
+        "reason": "amount-differs"
+      },
+      "outline": []
+    },
+    {
+      "id": "ap2-object-tampered",
+      "onlyUnder": "settlement-ap2",
+      "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+      "change": {
+        "settlementFault": "tampered-order",
+        "stopAfter": "fee-payment-approved"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "evidence",
+        "reason": "evidence-invalid"
+      },
+      "outline": []
+    },
+    {
+      "id": "ap2-fee-amount-differs",
+      "onlyUnder": "settlement-ap2",
+      "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+      "change": {
+        "script": {
+          "fee-invoice": {
+            "amount": "495.00"
+          }
+        },
+        "stopAfter": "pay"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "P2",
+        "reason": "amount-differs"
+      },
+      "outline": []
+    },
+    {
+      "id": "acp-object-tampered",
+      "onlyUnder": "settlement-acp",
+      "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+      "change": {
+        "settlementFault": "tampered-order",
+        "stopAfter": "fee-payment-approved"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "evidence",
+        "reason": "evidence-invalid"
+      },
+      "outline": []
+    },
+    {
+      "id": "acp-fee-amount-differs",
+      "onlyUnder": "settlement-acp",
+      "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+      "change": {
+        "script": {
+          "fee-invoice": {
+            "amount": "495.00"
+          }
+        },
+        "stopAfter": "pay"
+      },
+      "expect": {
+        "outcome": "stop",
+        "check": "P2",
+        "reason": "amount-differs"
+      },
+      "outline": []
     }
   ],
   "expect": [
@@ -22023,6 +22159,182 @@
               "outcome": "ask-principal",
               "check": "disclosure",
               "reason": "approval-required"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "settlement-x402",
+      "change": {
+        "settlement": "x402"
+      },
+      "world": {
+        "branches": [
+          {
+            "id": "x402-object-tampered",
+            "onlyUnder": "settlement-x402",
+            "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+            "change": {
+              "settlementFault": "tampered-order",
+              "stopAfter": "fee-payment-approved"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "evidence",
+              "reason": "evidence-invalid"
+            },
+            "outline": []
+          },
+          {
+            "id": "x402-fee-amount-differs",
+            "onlyUnder": "settlement-x402",
+            "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+            "change": {
+              "script": {
+                "fee-invoice": {
+                  "amount": "495.00"
+                }
+              },
+              "stopAfter": "pay"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "P2",
+              "reason": "amount-differs"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "settlement-mpp",
+      "change": {
+        "settlement": "mpp"
+      },
+      "world": {
+        "branches": [
+          {
+            "id": "mpp-object-tampered",
+            "onlyUnder": "settlement-mpp",
+            "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+            "change": {
+              "settlementFault": "tampered-order",
+              "stopAfter": "fee-payment-approved"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "evidence",
+              "reason": "evidence-invalid"
+            },
+            "outline": []
+          },
+          {
+            "id": "mpp-fee-amount-differs",
+            "onlyUnder": "settlement-mpp",
+            "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+            "change": {
+              "script": {
+                "fee-invoice": {
+                  "amount": "495.00"
+                }
+              },
+              "stopAfter": "pay"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "P2",
+              "reason": "amount-differs"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "settlement-ap2",
+      "change": {
+        "settlement": "ap2"
+      },
+      "world": {
+        "branches": [
+          {
+            "id": "ap2-object-tampered",
+            "onlyUnder": "settlement-ap2",
+            "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+            "change": {
+              "settlementFault": "tampered-order",
+              "stopAfter": "fee-payment-approved"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "evidence",
+              "reason": "evidence-invalid"
+            },
+            "outline": []
+          },
+          {
+            "id": "ap2-fee-amount-differs",
+            "onlyUnder": "settlement-ap2",
+            "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+            "change": {
+              "script": {
+                "fee-invoice": {
+                  "amount": "495.00"
+                }
+              },
+              "stopAfter": "pay"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "P2",
+              "reason": "amount-differs"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "settlement-acp",
+      "change": {
+        "settlement": "acp"
+      },
+      "world": {
+        "branches": [
+          {
+            "id": "acp-object-tampered",
+            "onlyUnder": "settlement-acp",
+            "what": "The carried native payment object is tampered with after signing; its protocol verifier refuses it.",
+            "change": {
+              "settlementFault": "tampered-order",
+              "stopAfter": "fee-payment-approved"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "evidence",
+              "reason": "evidence-invalid"
+            },
+            "outline": []
+          },
+          {
+            "id": "acp-fee-amount-differs",
+            "onlyUnder": "settlement-acp",
+            "what": "A source-signed native invoice asks for 495 USD against the 450 USD agreement.",
+            "change": {
+              "script": {
+                "fee-invoice": {
+                  "amount": "495.00"
+                }
+              },
+              "stopAfter": "pay"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "P2",
+              "reason": "amount-differs"
             },
             "outline": []
           }

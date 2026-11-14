@@ -12,8 +12,17 @@ export function confinementDifferences(
   layer: LayerId,
 ): string[] {
   const fed = LAYER_FEEDS[layer];
-  const rows = (trace: TraceFile) =>
-    trace.events
+  const rows = (trace: TraceFile) => {
+    // Protocol exchanges add ordinary message admissions within the paid segment.
+    // Outside that segment every unfed check must remain in exactly the same order.
+    let payment = false;
+    const events = trace.events.filter((event) => {
+      if (event.segment === "payment") payment = true;
+      const inside = payment;
+      if (event.segmentEnd === "payment") payment = false;
+      return layer !== "settlement" || !inside;
+    });
+    return events
       .filter((event) => event.kind === "check" && event.check && !fed.includes(event.check))
       .map((event) => ({
         agent: event.agent,
@@ -22,6 +31,7 @@ export function confinementDifferences(
         verdict: event.verdict,
         reason: event.reason ?? null,
       }));
+  };
   const before = rows(baseline),
     after = rows(alternative),
     differences: string[] = [];

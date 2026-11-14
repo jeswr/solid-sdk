@@ -29,14 +29,14 @@ function run(id: string) {
   }
   return result;
 }
-it("registers exactly five settlement choices without claiming the four protocol adapters ran", () => {
+it("registers exactly five executable settlement choices", () => {
   const registry = scenarioRegistry();
   expect(registry.suitesFor("settlement").map((s) => [s.id, s.partOf, s.status])).toEqual([
     ["rdf-order", "commitments", "run"],
-    ["ap2", "commitments", "not-run"],
-    ["acp", "commitments", "not-run"],
-    ["x402", "commitments", "not-run"],
-    ["mpp", "commitments", "not-run"],
+    ["ap2", "commitments", "run"],
+    ["acp", "commitments", "run"],
+    ["x402", "commitments", "run"],
+    ["mpp", "commitments", "run"],
   ]);
   expect(registry.suite("commitments", "payment")).toBeUndefined();
   expect(registry.configuration("baseline")?.layers.settlement).toBe("rdf-order");

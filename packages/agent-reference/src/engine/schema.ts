@@ -649,6 +649,8 @@ export const scenarioSchema = z.strictObject({
   statedConfidence: statedConfidenceSchema.optional(),
   relianceCorroboration: relianceCorroborationSchema.optional(),
   registryMeaning: registryMeaningSchema.optional(),
+  settlementFault: z.enum(["tampered-order"]).optional(),
+  stopAfter: slug.optional(),
   paymentProviders: z
     .array(
       z.strictObject({

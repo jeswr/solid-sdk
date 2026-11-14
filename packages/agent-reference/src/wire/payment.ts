@@ -7,7 +7,7 @@ import type { ProtocolObjects, SettlementTrace } from "../settlement/types.js";
 import { readAttachmentDocument, writeAttachmentDocument } from "./attachments.js";
 import { readDocument, writeDocument } from "./document.js";
 
-async function paymentDocument(
+export async function paymentDocument(
   facts: PaymentFacts,
 ): Promise<import("./document.js").JsonLdDocument> {
   try {

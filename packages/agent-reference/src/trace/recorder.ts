@@ -12,7 +12,15 @@ import { digestOf } from "../core/canonical.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { copyData } from "../model/copy.js";
 import type { LabelIndex } from "../model/labels.js";
-import { liftPaymentObjects, paymentTrace, readPaymentObjects } from "../wire/payment.js";
+import { SettlementError } from "../settlement/adapter.js";
+import { readCarried } from "../settlement/carried.js";
+import type { SettlementSuite } from "../settlement/types.js";
+import {
+  liftPaymentObjects,
+  paymentDocument,
+  paymentTrace,
+  readPaymentObjects,
+} from "../wire/payment.js";
 import type { TraceEvent, TraceEventInput } from "./types.js";
 
 /** What the runtime and gates write to. */
@@ -23,11 +31,15 @@ export interface TraceSink {
 }
 
 export class TraceRecorder {
+  private selected?: SettlementSuite;
+  settlement(suite: SettlementSuite): void {
+    this.selected = suite;
+  }
   private readonly list: TraceEvent[] = [];
   private readonly settlementJobs: Promise<void>[] = [];
   private readonly settlements = new Map<
     string,
-    Promise<import("../settlement/types.js").SettlementTrace>
+    Promise<import("../settlement/types.js").SettlementTrace | undefined>
   >();
   private readonly settlementErrors: unknown[] = [];
   async complete(): Promise<void> {
@@ -84,7 +96,7 @@ export class TraceRecorder {
           ...displayed,
         });
         this.nextSegment = undefined;
-        if (settlementFacts || settlementDocument) {
+        if ((settlementFacts || settlementDocument) && !event.settlement) {
           const index = this.list.length - 1;
           const key = settlementFacts
             ? `rdf:${settlementFacts.fingerprint()}`
@@ -93,14 +105,37 @@ export class TraceRecorder {
           if (!promised) {
             const snapshot = settlementFacts?.snapshot();
             const document = snapshot ? undefined : copyData(settlementDocument);
-            promised = (async () =>
-              paymentTrace(snapshot ?? liftPaymentObjects(await readPaymentObjects(document))))();
+            promised = (async () => {
+              const suite = this.selected;
+              if (suite && suite.id !== "rdf-order") {
+                let carried: import("../settlement/types.js").ProtocolObjects | undefined;
+                if (document && typeof document === "object" && "suite" in document) {
+                  try {
+                    carried = readCarried(document, suite);
+                  } catch (error) {
+                    // Refused native bytes stay in their packet inspector; they have no lifted facts.
+                    if (error instanceof SettlementError && error.reason === "evidence-invalid")
+                      return undefined;
+                    throw error;
+                  }
+                }
+                const objects = carried ?? (snapshot ? suite.objectsFor?.(snapshot) : undefined);
+                if (objects && suite.trace) {
+                  const trace = await suite.trace(objects);
+                  return snapshot ? { ...trace, facts: await paymentDocument(snapshot) } : trace;
+                }
+              }
+              return paymentTrace(
+                snapshot ?? liftPaymentObjects(await readPaymentObjects(document)),
+              );
+            })();
             // Observe errors immediately; complete() still fails rather than publishing missing facts.
             promised.catch(() => undefined);
             this.settlements.set(key, promised);
           }
           const job = promised
             .then((settlement) => {
+              if (!settlement) return;
               const previous = this.list[index];
               if (!previous) throw new Error("Payment trace event was removed before completion");
               this.list[index] = { ...previous, settlement };
