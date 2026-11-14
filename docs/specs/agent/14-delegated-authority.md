@@ -59,6 +59,11 @@ The mandate is an ODRL policy, signed as a JWS with a key the principal controls
 the agent by its key thumbprint (AU-3), lists permissions and prohibitions, and marks the
 actions that need approval first. It has a start and an end.
 
+A permission is read as written. A permission to use something does not let the agent
+disclose it, pay for it, accept an offer about it or pass authority on: each of those has
+to be permitted by name (CORE-OUT-2a). A person who writes "may use my payslip for this
+application" has not said "may send my payslip to anyone".
+
 **Approval levels.** The mandate carries an approval statement saying how the principal
 approved it. Three levels are defined:
 

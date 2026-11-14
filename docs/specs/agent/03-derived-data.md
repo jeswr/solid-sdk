@@ -138,6 +138,10 @@ rely on besides the sources and the rule.
   defines. The record names the computing parties and the assumption. The receiver MUST
   verify every attestation and MUST treat a missing one as a failed derivation, never as a
   smaller total.
+- **DER-14b. Who counts toward a minimum.** Where a rule or a profile sets a minimum number
+  of contributors, only a party whose verified attestation commits at least one input
+  counts. A party that only computes, or attests no inputs, does not, whatever role the
+  roster gives it.
 - **DER-15. `attested`.** A deriver's signature shows only that the deriver says so. The
   receiver MUST establish, under the trust framework, that the deriver is accepted to
   attest derivations of this kind for this purpose. Hardware attestation of the deriver's

@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Core
 
-Draft 0.5, 13 November 2026. Normative unless a section says otherwise.
+Draft 0.6, 13 November 2026. Normative unless a section says otherwise.
 
 The core defines the terms, the verifiable message, the checks an agent runs and their
 outcomes, the record, and how layers, suites and configurations fit together. It chooses no
@@ -312,6 +312,14 @@ rules. Deciding to accept an issuer is validation, not verification.
   accept, and gives the reason the statement failed. When nothing the sender could supply
   would cure it, the outcome is refuse. An action proposed later that depends on a claim
   that was not admitted MUST stop, with the reason that claim failed for.
+- **CORE-IN-21. A message that lacks a claim its operation needs.** When the operation a
+  message belongs to declares the kinds of claim it needs, the fitness check on the message
+  MUST establish that each kind is covered: by a statement admitted from this message, or by
+  one already held for this task about the same subject and still fit. Where a kind is not
+  covered, the outcome for the message is ask for more, with the reason `evidence-missing`.
+  The receiver names each kind that is missing and what it would accept. Statements in the
+  message that passed stay admitted. The operation does not go ahead, and the core is not
+  handed the message as a request to act on.
 
 ### 5.3 Outbound checks
 
@@ -332,6 +340,12 @@ tool, changing who can read something, making a payment, accepting an offer.
 - **CORE-OUT-2.** The mandate check MUST evaluate the action as proposed, not as described by
   the core. An action the mandate does not allow gives `fail`. An action the mandate
   prohibits gives `fail` whatever else allows it.
+- **CORE-OUT-2a. General permissions.** A permission for a general action grants the more
+  specific actions it includes only where they have no effect outside the agent. An action
+  that discloses data to another party, moves or pays money, accepts or makes an offer,
+  deletes, or passes authority on MUST be permitted by name. A prohibition on a general
+  action still prohibits every action it includes. The same reading applies to the terms
+  attached to data: terms that permit use do not permit passing the data on.
 - **CORE-OUT-3.** The recipient check MUST establish the recipient under the identity and
   trust framework suites in force, and MUST keep the lookup path as in CORE-IN-6. When the
   trust framework states what a recipient is registered to ask for, the check MUST also

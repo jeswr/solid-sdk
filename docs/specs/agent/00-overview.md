@@ -68,6 +68,7 @@ they are what the explorer site replays.
 | [02 Reference architecture](02-reference-architecture.md) | Two gates around a black-box core, and its variants. Not normative. | A (informative) |
 | [03 Derived data and inference](03-derived-data.md) | Answers, proofs and joint results as one thing: a rule applied to source statements, and how each check treats the result. Normative. | A. Conceptual framework |
 | [04 Content that does not fit](04-unstructured-content.md) | Words, pictures and judgement: what an agent may do with content no vocabulary carries, in both directions. Normative. | A. Conceptual framework |
+| [05 The model and the wire](05-model-and-wire.md) | What a message is made of as data: one RDF model, its JSON-LD and Turtle forms, the signed document and attachments. Normative. | A. Conceptual framework |
 | [10 Transport](10-transport.md) | How a message gets there | E. Bindings |
 | [11 Data access](11-data-access.md) | How the content gets there | E. Bindings |
 | [12 Identity](12-identity.md) | What names a party, and how its key is found | C. Mechanism profiles |
