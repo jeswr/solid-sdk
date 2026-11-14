@@ -79,6 +79,8 @@ import { unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import { approvalSchema, TYP } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { PaymentAgreementNode, PaymentOfferNode } from "../model/payment.js";
+import { alternativeWireId } from "../profile/configurations.js";
+import { AgreementCredentialProtocol, agreementMessageNode } from "./agreement-credential.js";
 import { verifyCompact } from "./jws-compact.js";
 import { verifyRecordedMessage } from "./recorded-message.js";
 /** Independently check both carried message proofs and the acceptance's mandate/approval. */
@@ -86,6 +88,8 @@ export async function verifyPaymentProofs(
   facts: PaymentFacts,
   trust: TrustStore,
   now: string,
+  credentialProtocol?: AgreementCredentialProtocol,
+  requireCredential = false,
 ): Promise<boolean> {
   const agreement = facts.heldAgreement;
   if (!agreement?.offerProof || !agreement.acceptanceProof) return false;
@@ -103,6 +107,23 @@ export async function verifyPaymentProofs(
     return false;
   const offer = offered.message,
     acceptance = accepted.message;
+  if (
+    requireCredential ||
+    offer.configuration === alternativeWireId("commitments-agreement-credential")
+  ) {
+    if (
+      !credentialProtocol ||
+      (
+        await credentialProtocol.check(
+          agreementMessageNode(acceptance)!,
+          agreementMessageNode(offer),
+          trust,
+          now,
+        )
+      ).state !== "agreement"
+    )
+      return false;
+  }
   if (
     offered.pinned.subject !== offer.from.actor ||
     offered.pinned.party !== offer.from.onBehalfOf ||

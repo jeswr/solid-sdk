@@ -1144,6 +1144,47 @@ export class InboundGate {
     });
   }
 
+  /** A paid acceptance is an agreement only when both native credential proofs verify. */
+  async checkAgreementCredential(
+    message: MessageNode,
+    offer?: MessageNode,
+  ): Promise<string | undefined> {
+    const protocol = this.deps.gate.agreementCredential;
+    if (!protocol) return undefined;
+    const checked = await protocol.check(message, offer, this.deps.trust, this.deps.now());
+    if (checked.state === "not-applicable") return undefined;
+    this.verdictEvent(
+      "authority",
+      checked.reason ? "fail" : "pass",
+      checked.reason === "no-agreement"
+        ? "Only the valuer's proof is present. This remains an offer, not an agreement."
+        : checked.reason
+          ? "The agreement credential proofs, terms or current status could not be verified."
+          : checked.state === "agreement"
+            ? "Both parties' Data Integrity proofs cover the same valuation terms and their signed status lists are clear."
+            : "The valuer's Data Integrity proof establishes an offer; the acceptor's proof is still required.",
+      {
+        reason: checked.reason ?? "authority-valid",
+        ...(checked.credential
+          ? {
+              fact: {
+                id: checked.credential.id!,
+                label:
+                  checked.state === "agreement"
+                    ? "The two-proof valuation agreement"
+                    : "The valuer's signed credential offer",
+                claimType: "agreement.credential",
+                subject: message.id,
+                source: checked.credential.issuer,
+                value: checked.credential,
+              },
+            }
+          : {}),
+      },
+    );
+    return checked.reason;
+  }
+
   decisionEvent(outcome: InboundOutcome, caption: string, reason?: string): void {
     this.emit({
       part: "inbound-gate",

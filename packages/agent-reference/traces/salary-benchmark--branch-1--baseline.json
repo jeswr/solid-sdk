@@ -217,7 +217,7 @@
     "id": "baseline",
     "layers": {
       "transport": "direct-http",
-      "data-access": "by-value",
+      "data-access": "aggregate-mpc",
       "identity": "pinned-key",
       "meaning": "fixed-vocabulary",
       "authority": "mandate-signed",

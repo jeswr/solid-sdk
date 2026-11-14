@@ -152,6 +152,64 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("trust-pinned-list"),
     "Only the principal’s scoped own list; no register fallback",
   ),
+  [alternativeWireId("accountability-reputation-score")]: {
+    ...localDefinition(
+      alternativeWireId("accountability-reputation-score"),
+      "Evidence-backed contested reputation score — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement.",
+    ],
+  },
+  [alternativeWireId("accountability-reputation-post")]: {
+    ...localDefinition(
+      alternativeWireId("accountability-reputation-post"),
+      "Evidence-backed organisational reputation post — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published.",
+    ],
+  },
+  [alternativeWireId("accountability-vendor-fault")]: {
+    ...localDefinition(
+      alternativeWireId("accountability-vendor-fault"),
+      "Claim against the gate operator — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run.",
+    ],
+  },
+  [alternativeWireId("usage-control-odrl-model-tighten")]: localDefinition(
+    alternativeWireId("usage-control-odrl-model-tighten"),
+    "ODRL rules followed by a model that can only narrow",
+  ),
+  [alternativeWireId("accountability-regulator-claim")]: {
+    ...localDefinition(
+      alternativeWireId("accountability-regulator-claim"),
+      "Register-routed regulator claim — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery.",
+    ],
+  },
+  [alternativeWireId("commitments-agreement-credential")]: localDefinition(
+    alternativeWireId("commitments-agreement-credential"),
+    "Native two-proof Data Integrity valuation credential inside signed messages",
+  ),
+  [alternativeWireId("usage-control-human-approval")]: {
+    ...localDefinition(
+      alternativeWireId("usage-control-human-approval"),
+      "Approval of an undecided use — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed.",
+    ],
+  },
   [alternativeWireId("meaning-negotiated")]: localDefinition(
     alternativeWireId("meaning-negotiated"),
     "Exact-exchange principal approval of a recorded term proposal",
