@@ -213,6 +213,8 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly agreementCredential?: import("../wire/agreement-credential.js").AgreementCredentialProtocol;
+  readonly usageModel?: import("../mechanisms/usage-model.js").UsageModel;
   readonly negotiatedMeaning?: {
     readonly operation: string;
     readonly term: string;
@@ -439,6 +441,9 @@ export interface GateContext {
 
 /** A configured suite is unavailable without the host adapter that actually enforces it. */
 export function alternativeInstalled(ctx: GateContext, id: string): boolean {
+  if (id === alternativeWireId("commitments-agreement-credential"))
+    return !!ctx.agreementCredential;
+  if (id === alternativeWireId("usage-control-odrl-model-tighten")) return !!ctx.usageModel;
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

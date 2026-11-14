@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
+import { tightenUsage } from "../mechanisms/usage-model.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
 import { IntentScopeNode } from "../model/intent.js";
-import { MessageNode } from "../model/message-nodes.js";
+import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
 import { PaymentAccountNode, PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
 import { SettlementError } from "../settlement/adapter.js";
@@ -36,6 +37,7 @@ import type {
 import { ruleInputs } from "../derive/rules.js";
 import { actionDigest, type OwnerMandate } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import type { TrustStore } from "../mechanisms/trust.js";
 import { configurationById } from "../profile/configurations.js";
 import {
   CORE_CONTENT_VOCABULARY,
@@ -74,7 +76,7 @@ import {
   paymentBinding,
   paymentDigest,
 } from "./payment.js";
-import { evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
+import { evaluateItemTerms, fitnessOf, type TermsVerdict, termsSummary } from "./quality.js";
 
 /** Where the core took a proposed action from, when it came from a received message. */
 export interface ProposalOrigin {
@@ -1582,6 +1584,53 @@ export class OutboundGate {
   }
 
   /** Data terms: do the terms on each item allow this use and this recipient? */
+  private modelTerms(rules: TermsVerdict, intent: ActionIntent, item: string): TermsVerdict {
+    if (this.deps.gate.configuration?.layers["usage-control"] !== "odrl-model-tighten")
+      return rules;
+    if (rules.verdict !== "pass") return rules;
+    const model = this.deps.gate.usageModel;
+    if (!model)
+      return {
+        verdict: "indeterminate",
+        reason: "unsupported-configuration",
+        text: "The configured usage model is unavailable.",
+      };
+    const action = intent instanceof ActionIntentNode ? intent : ActionIntentNode.toNode(intent);
+    const termsDigest = action.live.parameters.termsDigest;
+    const request = typeof termsDigest === "string" ? this.deps.offerTerms(termsDigest) : undefined;
+    const input = Object.freeze({
+      action: canonicalJson(action.toObject()),
+      actionDigest: actionDigest(intent),
+      operation: action.operation,
+      ...(action.purpose ? { purpose: action.purpose } : {}),
+      ...(action.recipient ? { recipient: action.recipient } : {}),
+      item,
+      ...(request ? { request: canonicalJson(request) } : {}),
+      at: this.deps.now(),
+    });
+    const reviewed = tightenUsage(rules, input, model);
+    if (reviewed.opinion)
+      this.emit({
+        part: "record",
+        kind: "record",
+        caption: "The model's opinion is recorded after the rules permit this use.",
+        fact: {
+          id: actionDigest(intent),
+          label: "The model's opinion about this use",
+          claimType: "usage-model.opinion",
+          subject: item,
+          source: model.id,
+          value: {
+            input,
+            rules: { ...rules },
+            opinion: reviewed.opinion,
+            at: this.deps.now(),
+          },
+        },
+      });
+    return reviewed.terms;
+  }
+
   private dataTerms(
     verdicts: CheckVerdict[],
     subject: string,
@@ -1637,7 +1686,7 @@ export class OutboundGate {
       return undefined;
     }
     let blocked: string | undefined;
-    for (const id of p.evidence) {
+    const ruledItems = p.evidence.map((id) => {
       const fact = this.deps.memory.facts.get(String(id));
       const terms: ItemTerms | undefined = fact?.terms;
       const t = evaluateItemTerms(terms, {
@@ -1651,6 +1700,11 @@ export class OutboundGate {
         at: this.deps.now(),
         recipientAllowed: (label) => this.recipientAllows(scope.recipient, scope.operation, label),
       });
+      return { id: String(id), fact, terms, t };
+    });
+    const allRulesPermit = ruledItems.every(({ t }) => t.verdict === "pass");
+    for (const { id, fact, terms, t: rules } of ruledItems) {
+      const t = allRulesPermit ? this.modelTerms(rules, intent, id) : rules;
       let verdict = t.verdict;
       let text = t.text;
       let reason = t.reason;
@@ -1695,6 +1749,48 @@ export class OutboundGate {
       reason: "evidence-invalid",
     });
     this.decide("stop", "Unverified evidence cannot leave.", "evidence-invalid");
+  }
+  stopAgreementCredential(subject: string, reason: string): void {
+    this.verdict(
+      [],
+      subject,
+      "evidence",
+      "fail",
+      "The valuation credential or its current signed status does not authorize acceptance.",
+      { reason },
+    );
+    this.decide("stop", "The acceptance stays inside the gate.", reason);
+  }
+
+  async checkAgreementCredential(
+    message: MessageNode,
+    offer: MessageNode | undefined,
+    trust: TrustStore,
+  ): Promise<boolean> {
+    const protocol = this.deps.gate.agreementCredential;
+    if (!protocol) return true;
+    const checked = await protocol.check(message, offer, trust, this.deps.now());
+    if (checked.state === "not-applicable") return true;
+    if (checked.state === "invalid") {
+      this.stopAgreementCredential(message.id, checked.reason ?? "evidence-invalid");
+      return false;
+    }
+    this.verdict(
+      [],
+      message.id,
+      "evidence",
+      "pass",
+      checked.state === "agreement"
+        ? "The final credential carrier contains both verified proofs over exactly the approved valuation terms."
+        : "The final credential carrier is an authentic offer; it creates no agreement without the acceptor's proof.",
+      {
+        rule: {
+          id: "CM-6",
+          text: "The credential's exact terms, parties, proofs and current status are checked before release.",
+        },
+      },
+    );
+    return true;
   }
 
   stopLimit(subject: string, reason: "round-limit"): void {

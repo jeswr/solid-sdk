@@ -650,6 +650,7 @@ export const scenarioSchema = z.strictObject({
   relianceCorroboration: relianceCorroborationSchema.optional(),
   registryMeaning: registryMeaningSchema.optional(),
   settlementFault: z.enum(["tampered-order"]).optional(),
+  agreementCredentialFault: z.enum(["one-proof-missing"]).optional(),
   stopAfter: slug.optional(),
   authorityFault: z.enum(["token-as-the-person", "registered-for-something-else"]).optional(),
   identityNames: z.record(iri, iri).default({}),

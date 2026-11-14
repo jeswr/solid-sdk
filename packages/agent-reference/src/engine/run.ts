@@ -90,6 +90,7 @@ import { FictionalDeliberationPlatform } from "../standins/deliberation.js";
 import { FictionalDidDirectory, renameIdentities } from "../standins/did.js";
 import { PodRecordMirror } from "../standins/pod-mirror.js";
 import { FictionalSolidStorage } from "../standins/storage.js";
+import { FixedUsageModel } from "../standins/usage-model.js";
 import { FictionalWebIdDirectory } from "../standins/webid.js";
 import { MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
@@ -101,6 +102,7 @@ import { scenarioRegistry } from "../suites/scenario.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { AgreementCredentialProtocol } from "../wire/agreement-credential.js";
 import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
@@ -274,7 +276,8 @@ function unsupported(
             meaning: ["plain-language-upgrade", "registry-lookup"],
           } as Record<string, string[]>
         )[layer] ?? []
-      ).includes(suite)
+      ).includes(suite) &&
+      !(layer === "usage-control" && suite === "odrl-model-tighten")
     )
       return `suite ${layer}/${suite} is not implemented by this engine`;
   if (
@@ -643,6 +646,14 @@ async function runPath(
         cast.pinIssuer(agent.id, party.identity, key);
   }
   let mandateLists: MandateStatusLists | undefined;
+  let agreementStatus: MandateStatusLists | undefined;
+  if (configuration.id === "commitments-agreement-credential") {
+    const valuer = cast.get("valuer-agent");
+    agreementStatus = new MandateStatusLists(valuer.identity.party, valuer.ownerKey, () =>
+      now().toISOString(),
+    );
+    await agreementStatus.setup();
+  }
   if (configuration.id === "authority-mandate-credential") {
     const sam = cast.get("sam-agent");
     mandateLists = new MandateStatusLists(sam.identity.party, sam.ownerKey, () =>
@@ -1743,6 +1754,17 @@ async function runPath(
           }
         : {}),
       configuration: agent.configurations[0] === "public-read" ? PUBLIC_READ : configuration,
+      ...(agreementStatus
+        ? {
+            agreementCredential: new AgreementCredentialProtocol(
+              agreementStatus,
+              scenario.agreementCredentialFault === "one-proof-missing",
+            ),
+          }
+        : {}),
+      ...(configuration.layers["usage-control"] === "odrl-model-tighten"
+        ? { usageModel: new FixedUsageModel() }
+        : {}),
       configurations: {
         [CONFIG_PUBLIC]: PUBLIC_READ,
         [BASELINE.pilotConfiguration]: BASELINE,
@@ -2262,6 +2284,7 @@ async function runPath(
     for (const out of result.outbound) queue.push({ from, out });
   };
   for (const [index, step] of scenario.script.entries()) {
+    if (agreementStatus) await agreementStatus.refresh();
     solidStep = step.id;
     if (authorizationServer) await authorizationServer.refreshStatus();
     if (mandateLists) {
@@ -3372,7 +3395,17 @@ async function runPath(
         ).map(([id, caption]) => [id, /[.!?]$/.test(caption) ? caption : `${caption}.`]),
       ),
     },
-    configuration: { id: configuration.id, layers: { ...configuration.layers } },
+    configuration: {
+      id: configuration.id,
+      layers: {
+        ...configuration.layers,
+        ...(["cohort-count", "platform-income", "salary-benchmark"].includes(scenario.id) &&
+        scenario.jointSession?.method === SPARQ_AGGREGATE.method &&
+        verifiers.jointProtocols.get(SPARQ_AGGREGATE.method)?.kind === "real"
+          ? { "data-access": "aggregate-mpc" }
+          : {}),
+      },
+    },
     agents: [
       ...agents,
       ...scenario.parties.filter(

@@ -3867,3 +3867,283 @@ The definitive frozen broad-run result is appended when it finishes. No commit, 
 **Definitive frozen reference result — complete.** `pnpm --filter @jeswr/agent-reference exec vitest run --reporter=dot` finished in **1,271.57 seconds**: **834 passed, 7 optional skips, 1 failed; 99 files (98 passed, 1 failed)**. The sole failure is the supplied pre-existing missing `rdfs:comment` on `awp:reason/approval-mismatch`; its assertion and ontology entry remain untouched. All twenty new tests, current DID compatibility/availability checks, unchanged live 161-path oracle, matrix/confinement tests, generated-byte drift and sampled complete-model corpus pass in this frozen invocation. Log: `/tmp/26c-reference-final.log`. The earlier stale-DID broad-run failure is absent. This is explicitly a reference command with one known failure, not a claimed all-green package `test` command.
 
 Final suite outcomes are: mandate credential **RUNS / confinement PASS / both suspension stops observed**; DID **RUNS / confinement PASS / unlisted method refused**; email endpoint **NOT RUN / confinement NOT RUN / declared failure blocked**; anonymous **NOT RUN / confinement NOT RUN / declared failure blocked**; authorization server **RUNS / confinement PASS / missing actor refused**; agent registry **RUNS / confinement PASS / wrong registration scope refused**. The final manifest is **218 rows: 189 runs, 11 pre-existing disagrees, 18 blocked**, with **eight new traces and outlines**. Everything remains uncommitted on the requested branch.
+
+
+## Brief 26f
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Offline, Node 24, no commits. The supplied design sections 1–3 and 9 and specifications
+17–19 were read, alongside the required earlier report sections. Later checkpoints
+supersede provisional results. No network, dependency installation or allowance is added.
+
+**1. `usage-control-human-approval`: NOT RUN.** The registered suite now describes
+exact-action approvals rather than only email approval. Its mortgage configuration and
+`approval-reused` onlyUnder branch are explicitly unresolved. Design §9 requires an
+additional signed valuer request and balance disclosure; their integrity, recipient,
+source, authority, limits/approval and evidence verdicts cannot be confined to specification
+17's usage-control feeds under design §2. This is a source-level contradiction, not a
+measured passing confinement run. Moreover, the original bank policy requires a regulated
+lender: a principal approval cannot waive that supplier condition (UC-9). Changing the
+bank's own signed terms would be an explicit fictional-world change, not evidence of
+approval overriding them. No second approval/status mechanism is built; Brief 25b's
+exact-action release binding and existing single-use, expiry and digest checks remain.
+Confinement and the prescribed approval-reuse refusal are NOT RUN. The blocked-cell test
+requires both paths to have no trace and retain the precise blockers.
+
+**Suite 1 focused result:** PASS, 1/1; both paths explicitly blocked without traces.
+
+**2. Initial dependency interpretation — SUPERSEDED below.** The required
+`authenticity-data-integrity` configuration is present and executable. There is still a
+composition conflict: design §2 requires exactly one changed layer from a JWS baseline,
+while §9 and specification 18 require the Data Integrity authenticity suite alongside
+this commitments suite. The SDK's `issue`, `countersign` and multi-proof verifier were
+inspected; they supply real proof sets, and the existing signed-status-list machinery
+could supply status. The existing local agreement coordinator instead collects separate
+JWS requests; labelling that a two-proof VC would be false. Neither changing the outer
+authenticity silently nor inventing a mixed embedded-DI/JWS profile is specified. No
+second runner or two-layer cell is added. This is the unresolved combination specified
+by design §2, not a claim that the SDK cannot countersign. The single-layer cell and
+`one-proof-missing` failure branch are registered unresolved. Confinement and failure
+execution are NOT RUN. Its regression requires the DI prerequisite to exist and both
+paths to remain explicitly blocked.
+
+**Suite 2 focused result:** PASS, 1/1; DI availability is checked and neither path has a fabricated trace.
+
+**3. `accountability-regulator-claim`: NOT RUN.** The existing `LocalForum` and
+its signed-record/gap tests were inspected and retained. Design §9 requires new signed
+fee, claim, production-request, record and decision exchanges. Specification 19 lists
+only outbound evidence as this layer's feed; all five ordinary inbound checks and the
+additional outbound mandate/recipient checks would violate design §2 confinement. AC-7
+also requires discovery through the lender register. The current resolver has unsigned
+local register tables with task/source scopes and no regulator-route answer; `LocalForum`
+uses a profile-selected forum. Reusing that endpoint would not implement discovery.
+The mortgage cell and `entry-withheld` onlyUnder branch are explicitly unresolved, with
+no trace. Confinement and the specified missing-entry claim are NOT RUN. This is not a
+claim that the existing forum fails its own signed-segment gap detection.
+
+**Suite 3 focused result:** PASS, 1/1; both regulator paths remain explicitly blocked.
+
+**4. `usage-control-odrl-model-tighten`: RUNS.** The separately keyed mortgage
+journey completes through its existing face check, principal disclosure approval and
+450 USD valuation settlement. The ordered confinement comparison passes. The gate
+evaluates every selected item's rules before any model call; only when all those
+answers permit does the host-installed model review immutable canonical action/request
+text, recipient, purpose, item, digest and time. It cannot mutate the live action graph.
+An opinion may preserve permission, prohibit it, or leave it undecided; an unavailable
+or malformed answer stops release. Neither a prohibition nor an unmatched/unsupported
+policy nor a supplier registration restriction reaches the model. Opinions are labelled
+as opinions with their inputs in the trace and the runtime's hash-chained record.
+The exact stand-in declaration is: “A fixed stand-in played the model in this run.”
+
+`model-says-yes-to-a-no` uses the bank's genuinely signed additional distribution
+prohibition. A core proposes disclosure under the received lender terms; the real
+release gate stops at data terms with `prohibited`, before approval, effect or signing.
+The stand-in would always answer permit, but no prohibited item is submitted to it.
+The focused five-test file passes, including actual model prohibitions/indecision,
+missing and invalid models, non-consultation on rules failures, real mortgage confinement
+and the own-failure witness. The RDF guard remains 0 failures / 213 allowances.
+
+**Not from a specification — model profile so far.** The synchronous, host-installed
+`review` interface accepts immutable strings/scalars; a host may prepare a real model
+response behind it. No live model service or model accuracy is claimed. The stand-in's
+fixed answer is permit. Unusable model output and model indecision stop with the existing
+`indeterminate-policy` reason; explicit narrowing uses `prohibited`. The model sees the
+canonical proposed action and, where the action names it, the admitted offer terms.
+Its view is ordinary untrusted context, never an instruction channel to the gate.
+The failure schedules the same disclosure through the existing local effect release
+after receiving the terms without an automatic reply, to observe the stopped action
+without emitting a separate refusal response. No effect adapter executes.
+
+**5. `accountability-vendor-fault`: NOT RUN.** Its registry row, mortgage cell
+and `fault-was-the-principals` onlyUnder branch are explicit. The extra signed claim
+exchange again violates design §2 / specification 19 confinement outside evidence.
+Design §9 / CORE-L-13 additionally require signed attribution of who built and operates
+the gate and the core separately; the current implementation description names the
+agent's operator, not those component relationships. A normal mandate refusal is not
+a released fault. No gate is weakened or bypassed in the main path to pretend otherwise.
+Confinement and the principal-fault counterexample are NOT RUN.
+
+**Suite 5 focused result:** PASS, 1/1; both fault-claim rows stay explicitly blocked.
+
+**6. `accountability-reputation-post`: NOT RUN.** Registered with its mortgage
+cell and `post-about-a-person` onlyUnder branch. Design §9 depends on the unresolved
+regulator result, then adds publication, a lender reply and independent reader admission.
+Those messages add unfed checks under design §2 / specification 19; the original
+bank terms also restrict recipients and do not permit public redistribution of Sam's
+evidence (UC-9, AC-4). No principal approval is used to waive supplier terms, and no
+restricted private record is called a public post. Confinement and the individual-post
+prohibition are NOT RUN. The profile's existing fictional people and services are not
+relabelled as a rating or publication service that never exchanged a message.
+
+**Suite 6 focused result:** PASS, 1/1; no publication or reader trace is fabricated.
+
+**7. `accountability-reputation-score`: NOT RUN.** Registered with the mortgage
+cell and `score-without-evidence` onlyUnder branch. The regulator decision and public
+post required by design §9 are unresolved; the added rating, score and contest messages
+also conflict with design §2 / specification 19 confinement. Specification 19 explicitly
+says this sketch still needs the evidence criteria, contest and service-accountability
+rules (AC-7/8). No unreviewed numerical scoring policy is presented as normative.
+Reading a signed score under the separate trust `reputation` suite remains with the
+other lane; no trust/authenticity implementation or `src/mechanisms/trust.ts` is edited.
+Confinement and the evidence-free submission path are NOT RUN.
+
+**Suite 7 focused result:** PASS, 1/1; both score rows are blocked without traces.
+
+**2. Definitive revision — `commitments-agreement-credential`: RUNS.** The
+user's note that the existing Data Integrity capability makes this suite runnable is
+applied to the credential's own proof set. The outer messages retain the baseline JWS
+authenticity suite; the embedded credential uses the installed `eddsa-rdfc-2022`
+implementation. The matrix therefore still changes exactly commitments. The earlier
+interpretation that this necessarily required two changed outer-message layers was
+overly restrictive and is superseded, not treated as a specification defect.
+
+The valuer signs one native SDK VC containing the exact valuation terms, digest,
+offeror, offeree and signed suspension/revocation entries. Sam's actor countersigns
+the same unsigned claim graph with `solid-vc.countersign` only after the existing
+principal-approved acceptance resumes. Both independent proofs verify through the
+SDK's `DataIntegritySuite`; proof order is immaterial, and the parties, distinct
+introduced actor keys, exact terms and validity are checked separately. This uses a
+proof set rather than falsely asserting that Sam's key is controlled by the valuer.
+The existing representation and principal mandate/approval proofs remain required.
+The original credential is carried as an actor-signed evidence envelope in the complete
+RDF message and retained in both agents' records. The inbound authority check exposes
+the verified native credential as an inspectable fact. No local JWS coordinator is
+relabelled as a VC. The valuer's original signed Bitstring Status Lists reuse the
+26c status implementation and refresh before each host turn; no second status path
+or approval mechanism is built. The payer's payment gate requires a verified, current
+two-proof agreement, and the payment provider independently verifies it again from
+the original recorded offer/acceptance before its ledger transfer.
+
+The main path completes and its confinement comparison passes. `one-proof-missing`
+carries a genuinely signed single-proof credential in the acceptance: the receiving
+gate classifies it as an offer, refuses at authority with `no-agreement`, and forms
+no agreement or payment. Five native-credential tests initially passed across two
+files; the additional provider test passes and proves a failed independent recheck
+produces no transfer. Unit attacks cover changed terms/parties/issuer/status, wrong
+carrier signer, copied and altered proofs, wrong proof purpose/time, a sole acceptor
+proof, reordered proof sets, unavailable/suspended status and exact expiry. Final
+frozen validation and mutation-test results follow below.
+
+**Not from a specification — credential profile.** The local native VC uses the
+existing ODRL Agreement type and Answerable terms/terms-digest predicates, wrapped in
+an `agreement-credential+jws` evidence item for the existing RDF carriage. Native VC
+proofs use the existing actor-key methods; the envelope adds no agreement authority.
+Exactly one valuer and one acceptor proof are required. The fixture uses the existing
+status-list slot 42 and one-day list lifetime; the seven-day offer cannot be relied
+on once fresh list status is unavailable. Verified-agreement state is local to the
+host-installed protocol; missing state after host replacement fails closed and no
+restart reconstruction is claimed. The only injected production fault omits the
+acceptor proof in the configuration-only failure branch.
+
+**Final release-boundary hardening.** The outbound evidence gate also verifies the
+native credential before signing or sending its carrier. An authentic carrier that
+adds unapproved private credential fields is refused before any message leaves.
+A valid single-proof offer can travel, but cannot form an agreement. The provider's
+independent recheck cannot fall back to the baseline coordinator when the order
+requires the native format. The final native trace pair was refreshed through the
+existing selected-configuration API after this hardening; it was not scripted to pass.
+
+**Specification limits.** For human approval, attaching the request to an existing
+fee exchange would still change source/fitness checks outside the usage layer's feeds;
+it does not resolve design §2 confinement. For model indecision, specification 17's
+baseline rules description permits asking the principal when the mandate allows it.
+This local model profile conservatively stops with `indeterminate-policy`; it does
+not implement that optional escalation for model output. This stricter behavior is
+reported rather than represented as a complete implementation of that fallback.
+The external specifications are outside the writable roots and their Sketch/Defined
+status text has not been edited. No new vocabulary term was needed; existing terms
+retain their labels and comments, checked by the vocabulary tests.
+
+**Every stand-in.** The new live traces inherit the existing fictional, separately
+keyed bank, payroll, lender, product-index, identity-provider and register parties,
+the fictional payment provider with its no-money ledger, and in-process HTTP transport.
+The credential adds the fictional valuer's original signed suspension/revocation lists
+through the existing status-list host. The valuer and Sam each use their own existing
+actor key for the native proof set; there is no coordinator signature standing in for
+either party. The usage-model trace declares exactly: “A fixed stand-in played the
+model in this run.” No live model, public regulator, vendor judgment, rating service,
+network transfer or production credential ecosystem is claimed. The five blocked cells
+have no trace and no simulated successful exchange.
+
+**Not from a specification — remaining choices.**
+
+1. The embedded native Data Integrity credential travels inside baseline JWS RDF messages,
+   so the single changed matrix layer is commitments. This is a local profile, not a claim
+   of generic credential interoperability. Two independently authorized actor proofs are
+   required, with no proof-order meaning. The carrier format, exact schema, status slot,
+   status lifetime and local verified-state choices are specified above.
+2. The model interface is synchronous, with immutable canonical strings and scalar context.
+   Its fixed permit answer demonstrates tightening enforcement through separate injected
+   prohibit/undecided tests. A model failure stops release. The failure branch's local
+   effect scheduling and lack of an automatic reply are fixture choices, described above.
+3. Blocked failure rows retain the closest existing check/reason vocabulary as expected
+   outcomes, without asserting that those unexecuted outcomes occurred. The vendor branch
+   slug normalizes the design's apostrophe to `fault-was-the-principals`.
+4. Generated artifacts were already behind the supplied source. The build therefore
+   reconciles fifteen previously declared source rows as well as this brief's fourteen
+   rows. Existing captures were preserved after decision-by-decision comparison; new
+   captures use the existing engine and configuration selector.
+
+**Final suite results.**
+
+| Suite | Main | Confinement | Own failure |
+| --- | --- | --- | --- |
+| human approval | NOT RUN | source contradiction | NOT RUN; explicit blocker |
+| agreement credential | RUNS | PASS | single proof refused at authority / no-agreement |
+| regulator claim | NOT RUN | source contradiction | NOT RUN; explicit blocker |
+| ODRL model tightening | RUNS | PASS | signed prohibition stopped at data-terms / prohibited |
+| vendor fault | NOT RUN | source contradiction | NOT RUN; explicit blocker |
+| reputation post | NOT RUN | source contradiction | NOT RUN; explicit blocker |
+| reputation score | NOT RUN | source contradiction | NOT RUN; explicit blocker |
+
+**Artifacts and optional joint-computation correction.** The final manifest has
+247 rows: 205 runs, 12 disagreements and 30 blocked. Alternatives account for 74 rows
+(53 runs, 21 blocked); baseline accounts for 173 (152 runs, 12 disagreements, 9 blocked).
+This brief adds fourteen rows: four runs and ten blocked; no new disagreement is hidden.
+The input artifact had 218 rows; the other fifteen additions were already in source.
+All 200 previous captures and outlines were retained after semantic comparison; the
+fresh build captures seventeen additional source paths, including this brief's four.
+The packet audit checks 165 packet occurrences / 81 distinct JSON-LD and RDF document
+pairs and finds zero graph differences. Both new live main paths pass confinement.
+
+The real joint-computation runs for cohort count, platform income and salary benchmark
+now state `data-access: aggregate-mpc` in seven trace configuration headers, including
+the existing platform-income failure path. Six existing recorded trace hashes were
+refreshed. This is trace metadata only: no gate, decision or wire configuration changed.
+The 164-path oracle is byte-for-byte unchanged, and a fresh oracle snapshot deep-equals it.
+
+**Final commands and results (Node 24).**
+
+- `pnpm run build`: PASS, including the full trace generation. After the final outbound
+  check, TypeScript was compiled again and the two native credential traces refreshed
+  through the same configuration API; the final packet/confinement artifact audit passes.
+- `pnpm exec vitest run` on the nine new test files: 9 files / 22 tests PASS. These cover
+  both live suites, their own failures, confinement, all five explicit blockers, missing
+  adapters, malformed opinions, immutable model context, native proof tampering, current
+  signed status, outbound private-field refusal and provider-independent verification.
+- The broader focused regression run initially had 79 passes and two ten-minute timeouts
+  while competing with trace generation. An isolated rerun of
+  `test/configuration-matrix.test.ts test/confinement.test.ts --maxWorkers=1` passes all
+  8 tests in 701.77 seconds. No behavioral failure was converted to an expected result.
+- Artifact/labels/traces/recorded-joint/golden-fixture and native/model unit checks:
+  39/39 PASS before the final boundary hardening; final native unit checks 5/5 PASS.
+  Codegen-drift/RDF-guard fixtures/vocabulary checks: 6/6 PASS.
+- Six isolated source mutations each produce the expected failing test: removing model
+  narrowing, cryptographic native-proof verification, current-status verification,
+  inbound native-agreement enforcement, provider rechecking, or outbound carrier checks.
+  The unmutated control passes all six selected checks. An initial child-process harness
+  failed with sandbox EPERM and supplies no test evidence; direct tool-launched runs
+  provide these six assertion failures. All isolated mutated files were restored;
+  the working copy was never mutated by this exercise.
+- `pnpm run typecheck`: PASS. `pnpm run lint`: PASS (0 errors; 260 warnings / 508 infos).
+  `pnpm run lint:root`: PASS. SDK layer and codegen project guards: PASS.
+- Schema drift check: PASS. `node scripts/check-rdf-pipeline.mjs`: 0 failures,
+  213 allowances, unchanged. `node scripts/oracle-snapshot.mjs /tmp/oracle-check.json`:
+  164 executable paths, identical oracle decisions; oracle checksum unchanged.
+- `git diff --check`: PASS. Parsed mortgage source audit confirms exactly seven new
+  configurations and seven new branches, with all original content unchanged. Trust,
+  authenticity implementation, dependency/lock files and the oracle have no diff.
+
+No full workspace gate, coverage run, personal-agent run or evaluation run was invoked.
+No commit, network request or dependency addition was made.

@@ -289,6 +289,12 @@
         "tampered-order"
       ]
     },
+    "agreementCredentialFault": {
+      "type": "string",
+      "enum": [
+        "one-proof-missing"
+      ]
+    },
     "stopAfter": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -1313,6 +1319,44 @@
             "properties": {
               "id": {
                 "type": "string",
+                "const": "usage-control-odrl-model-tighten"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "usage-control": {
+                    "type": "string",
+                    "const": "odrl-model-tighten"
+                  }
+                },
+                "required": [
+                  "usage-control"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
                 "const": "usage-control-human-approval"
               },
               "change": {
@@ -1401,6 +1445,120 @@
                 },
                 "required": [
                   "commitments"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "accountability-reputation-score"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "accountability": {
+                    "type": "string",
+                    "const": "reputation-score"
+                  }
+                },
+                "required": [
+                  "accountability"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "accountability-reputation-post"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "accountability": {
+                    "type": "string",
+                    "const": "reputation-post"
+                  }
+                },
+                "required": [
+                  "accountability"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "accountability-vendor-fault"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "accountability": {
+                    "type": "string",
+                    "const": "vendor-fault"
+                  }
+                },
+                "required": [
+                  "accountability"
                 ],
                 "additionalProperties": false
               },
@@ -2246,11 +2404,15 @@
                 "reliance-stated-confidence",
                 "reliance-corroboration",
                 "usage-control-odrl-rules",
+                "usage-control-odrl-model-tighten",
                 "usage-control-human-approval",
                 "usage-control-solid-access-control",
                 "commitments-signed-offer-acceptance",
                 "commitments-agreement-credential",
                 "accountability-local-ledger",
+                "accountability-reputation-score",
+                "accountability-reputation-post",
+                "accountability-vendor-fault",
                 "accountability-regulator-claim",
                 "accountability-pod-mirror",
                 "settlement-rdf-order",

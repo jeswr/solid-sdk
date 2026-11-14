@@ -5,6 +5,39 @@ import { withPublicRead } from "./public-read.js";
 export function scenarioRegistry() {
   const registry = withPublicRead(baselineRegistry());
   registry.register({
+    layer: "accountability",
+    id: "reputation-score",
+    name: "Evidence-backed contested reputation score",
+    record: "hash-chained-local",
+    summary:
+      "Not run: the regulator and public-post prerequisites are unresolved, and no evidence-admission, scoring, contest or service-accountability policy is specified.",
+  });
+  registry.register({
+    layer: "accountability",
+    id: "reputation-post",
+    name: "Evidence-backed organisational reputation post",
+    record: "hash-chained-local",
+    summary:
+      "Not run: regulator outcome, authorised public evidence, attached organisational reply and independent reader admission are required; the added exchanges violate accountability confinement.",
+  });
+  registry.register({
+    layer: "accountability",
+    id: "vendor-fault",
+    name: "Fault claim against the gate operator",
+    record: "hash-chained-local",
+    summary:
+      "Not run: signed gate/core attribution and a fault-claim exchange are required; the added exchange cannot satisfy accountability confinement.",
+  });
+  registry.register({
+    layer: "usage-control",
+    id: "odrl-model-tighten",
+    name: "Rules with a model that may tighten",
+    rulesOnly: false,
+    policyLanguage: "ODRL pilot subset plus a narrowing model opinion",
+    summary:
+      "Rules decide first; only permitted uses reach the host-installed model, whose opinion may narrow but never grant a use. The mortgage uses a declared fixed stand-in.",
+  });
+  registry.register({
     layer: "authority",
     id: "agent-registry",
     name: "Current signed agent registration",
@@ -80,19 +113,19 @@ export function scenarioRegistry() {
   registry.register({
     layer: "usage-control",
     id: "human-approval",
-    name: "Approve each email",
+    name: "Principal approval of undecided uses",
     rulesOnly: false,
-    policyLanguage: "exact-text owner approval",
+    policyLanguage: "ODRL pilot subset plus exact-action principal approval",
     summary:
-      "The principal sees the exact email including its footer before every send; task context is checked.",
+      "The existing exact-action approval also protects email sends; the mortgage valuer-disclosure alternative is unresolved because its added exchanges violate confinement and its bank terms restrict recipients.",
   });
   registry.register({
     layer: "commitments",
     id: "agreement-credential",
-    name: "Local multi-party agreement credentials",
+    name: "Two-proof agreement credentials",
     agreement: "agreement-credential",
     summary:
-      "Every required party signs one digest; durable local holds, conditional completion and fresh signed status.",
+      "The mortgage uses one native Data Integrity credential with proofs from the valuer and Sam's approved agent, plus signed current status. The legacy local JWS coordinator retains its separate conditional multi-party holds.",
   });
   for (const [id, name] of [
     ["ap2", "Agent Payments Protocol 0.2"],

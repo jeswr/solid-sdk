@@ -91,7 +91,12 @@ import { copyData } from "../model/copy.js";
 import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
 import { PaymentAgreementNode, PaymentFacts, type PaymentOfferNode } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
-import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
+import {
+  alternativeWireId,
+  CONFIGURATIONS,
+  configurationById,
+  POLICY_PROFILE,
+} from "../profile/configurations.js";
 import {
   CORE_CONTENT_VOCABULARY,
   type ContentProfile,
@@ -130,6 +135,7 @@ import type {
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
+import { AgreementCredentialError, agreementMessageNode } from "../wire/agreement-credential.js";
 import { snapshotApprovalRelease } from "../wire/approval-release.js";
 import { readAttachmentDocument, writeAttachmentDocument } from "../wire/attachments.js";
 import { digest as documentDigest, sign as signDocument } from "../wire/authenticity.js";
@@ -492,6 +498,8 @@ export class AgentRuntime {
     const auditSink = {
       agent: originalSink?.agent ?? this.identity.actor,
       emit: (event: import("../trace/types.js").TraceEventInput) => {
+        if (event.kind === "record" && event.fact?.claimType === "usage-model.opinion")
+          this.record({ type: "usage-model-opinion", ...copyData(event.fact), at: this.now() });
         if (event.kind === "check") {
           const record = {
             type: "gate-check",
@@ -734,7 +742,11 @@ export class AgentRuntime {
             }));
         return {
           agreement: node,
-          proofsVerified: !!offer && !!acceptance,
+          proofsVerified:
+            !!offer &&
+            !!acceptance &&
+            (this.options.gates?.configuration?.layers.commitments !== "agreement-credential" ||
+              this.options.gates.agreementCredential?.current(facts.agreement ?? "") === true),
           inEffect: confirmed,
           ordered: (key) =>
             !!this.state.paymentOrderKeys[key] &&
@@ -1284,7 +1296,15 @@ export class AgentRuntime {
     const facts = suite ? suite.lift(objects) : liftPaymentObjects(objects);
     if (!facts.payer || facts.payer !== message.from.onBehalfOf)
       throw new TypeError("Order payer is not the authenticated principal");
-    if (!(await verifyPaymentProofs(facts, this.trust, this.now())))
+    if (
+      !(await verifyPaymentProofs(
+        facts,
+        this.trust,
+        this.now(),
+        this.options.gates?.agreementCredential,
+        message.configuration === alternativeWireId("commitments-agreement-credential"),
+      ))
+    )
       throw new TypeError("Payment agreement proofs or acceptance authority do not verify");
     this.record({
       type: "payment-agreement-proofs-verified",
@@ -3579,6 +3599,13 @@ export class AgentRuntime {
         "representation not accepted",
       );
     }
+    const credentialFailure = await this.inbound.checkAgreementCredential(
+      agreementMessageNode(msg)!,
+    );
+    if (credentialFailure) {
+      this.admission?.refuse(credentialFailure, "The offered agreement credential is invalid.");
+      return this.replyClose(conv, msg, "refuse", credentialFailure as ReasonCode);
+    }
     const refused = await this.admitToCore(conv, msg);
     if (refused) return refused;
     const reply = await handler.onProposal(this.context(conv, msg, rep), msg.body);
@@ -3621,6 +3648,14 @@ export class AgentRuntime {
         { inReplyTo: msg.id, force: true },
       );
       return { disposition: "accepted" as const, outbound: [out], reason: rep.reason };
+    }
+    const credentialFailure = await this.inbound.checkAgreementCredential(
+      agreementMessageNode(msg)!,
+      agreementMessageNode(this.retainedMessageViews.get(msg.body.proposal)),
+    );
+    if (credentialFailure) {
+      this.admission?.refuse(credentialFailure, "No two-proof agreement has been established.");
+      return this.replyClose(conv, msg, "refuse", credentialFailure as ReasonCode);
     }
     const refused = await this.admitToCore(conv, msg);
     if (refused) return refused;
@@ -4032,6 +4067,20 @@ export class AgentRuntime {
           agreement: agreementId,
         };
         const terms = this.getDomain(`_offer:${open.id}`) as JsonObject;
+        const credentialProtocol = this.options.gates?.agreementCredential;
+        const credentialOffer = agreementMessageNode(this.retainedMessageViews.get(open.id));
+        const credentialKey = this.keysByAlg.get("EdDSA");
+        const nativeAcceptance =
+          credentialProtocol && credentialOffer && credentialKey
+            ? await credentialProtocol
+                .accept(credentialOffer, credentialKey, this.trust, this.now())
+                .catch((error) => {
+                  const reason =
+                    error instanceof AgreementCredentialError ? error.reason : "evidence-invalid";
+                  this.outbound.stopAgreementCredential(open.id, reason);
+                  throw new MessageReleaseError(this.result("rejected", { reason, outbound: [] }));
+                })
+            : undefined;
         const acceptanceApproval = intent ? this.state.approvals[actionDigest(intent)] : undefined;
         const paymentEvidence: EvidenceItem[] =
           terms.compensation && this.options.mandateJws && intent
@@ -4055,9 +4104,15 @@ export class AgentRuntime {
             : [];
         const out = await this.emit(conv.id, "accept", body, {
           inReplyTo,
-          evidence: [...this.ownEvidence(), ...paymentEvidence, ...(reply.evidence ?? [])],
+          evidence: [
+            ...this.ownEvidence(),
+            ...paymentEvidence,
+            ...(nativeAcceptance ? [nativeAcceptance.evidence] : []),
+            ...(reply.evidence ?? []),
+          ],
           ...authorised,
         });
+        if (nativeAcceptance && !nativeAcceptance.complete) return [out];
         const agreement: Agreement = {
           type: "agreement",
           id: agreementId,
@@ -6648,9 +6703,33 @@ export class AgentRuntime {
         );
       }
     }
+    let credentialMessage: MessageNode | undefined;
+    if (!opts.resumePacket && this.options.gates?.agreementCredential) {
+      const credentialKey = this.keysByAlg.get("EdDSA");
+      if (!credentialKey) throw new Error("The agreement credential needs an Ed25519 actor key.");
+      credentialMessage = agreementMessageNode(message)!;
+      const credential = await this.options.gates.agreementCredential.offer(
+        credentialMessage,
+        credentialKey,
+      );
+      if (credential)
+        credentialMessage.evidence = [...(credentialMessage.evidence ?? []), credential];
+      message = credentialMessage.live;
+    }
+    if (this.options.gates?.agreementCredential) {
+      credentialMessage ??= agreementMessageNode(message)!;
+      const offered =
+        message.kind === "accept"
+          ? agreementMessageNode(this.retainedMessageViews.get(message.body.proposal))
+          : undefined;
+      if (!(await this.outbound.checkAgreementCredential(credentialMessage, offered, this.trust)))
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "evidence-invalid", outbound: [] }),
+        );
+    }
     const prepared = opts.resumePacket
       ? await readHeldMessagePacket(opts.resumePacket, nativeDocumentLimits(this.limits))
-      : await writeAttachmentDocument(MessageNode.toNode(message), {
+      : await writeAttachmentDocument(credentialMessage ?? MessageNode.toNode(message), {
           limits: nativeDocumentLimits(this.limits),
         });
     message = new MessageNode(message.id, prepared.dataset).live;
