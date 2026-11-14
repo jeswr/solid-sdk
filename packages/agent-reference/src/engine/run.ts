@@ -3,10 +3,12 @@ import { decodeCompactPayload } from "../wire/inspect.js";
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
 
 import type { OdrlRule } from "@jeswr/solid-odrl";
+import { Store } from "n3";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { isDeepStrictEqual } from "util";
 import { ScriptedMailbox } from "../bindings/email.js";
 import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
+import { DEFAULT_LIMITS } from "../core/limits.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import { availableAdapters } from "../derive/adapters/index.js";
 import { SPARQ_AGGREGATE } from "../derive/adapters/sparq-aggregate.js";
@@ -20,15 +22,19 @@ import {
   purposeStoreReleaseCheck,
 } from "../domains/purpose-store.js";
 import type { GateContext } from "../gates/common.js";
+import { FictionalAgentRegistry } from "../mechanisms/agent-registry.js";
 import {
   type AgreementCredential,
   LocalAgreementCoordinator,
   verifyAgreementCredential,
 } from "../mechanisms/agreements.js";
+import { FictionalAuthorizationServer } from "../mechanisms/authorization-server.js";
 import { issueMappingAttestation } from "../mechanisms/code-mapping.js";
 import { LocalDatasetHolder } from "../mechanisms/dataset-query.js";
 import { LocalForum, RECORD_LIMITS } from "../mechanisms/forum.js";
 import { JOINT_OPERATIONS, JointParty } from "../mechanisms/joint.js";
+import { mandateSchema, type OwnerMandate, signMandate } from "../mechanisms/mandate.js";
+import { MandateStatusLists } from "../mechanisms/mandate-status.js";
 import { LocalDocumentResolver } from "../mechanisms/organizations.js";
 import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
 import {
@@ -37,8 +43,14 @@ import {
   unverifiedEvidenceClaim,
 } from "../mechanisms/selective.js";
 import { LocalSingleUseRegister, type SingleUseItem } from "../mechanisms/single-use.js";
-import { signStatement, TYP } from "../mechanisms/statements.js";
+import {
+  representationSchema,
+  signStatement,
+  TYP,
+  verifyStatement,
+} from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
+import { EmbeddedCredentialNode } from "../model/evidence-item.js";
 import { LabelIndex } from "../model/labels.js";
 import { MessageNode } from "../model/message-nodes.js";
 import { PaymentFacts } from "../model/payment.js";
@@ -73,6 +85,7 @@ import { HTTP_STAND_IN } from "../settlement/adapter.js";
 import { carry } from "../settlement/carried.js";
 import { selectedSettlement } from "../settlement/configurations.js";
 import { Ledger as PaymentLedger } from "../settlement/ledger.js";
+import { FictionalDidDirectory, renameIdentities } from "../standins/did.js";
 import { PodRecordMirror } from "../standins/pod-mirror.js";
 import { FictionalSolidStorage } from "../standins/storage.js";
 import { FictionalWebIdDirectory } from "../standins/webid.js";
@@ -342,6 +355,10 @@ export async function runScenario(
     );
     if (alternative?.change.settlement)
       settlementWorld(world, pathProfile, alternative.change.settlement);
+    if (alternative?.change.identity === "did") {
+      Object.assign(pathProfile, renameIdentities(pathProfile, world.identityNames));
+      Object.assign(world, renameIdentities(world, world.identityNames));
+    }
     validateReferences(pathProfile, world);
     const combinationProblems = alternative
       ? scenarioRegistry().check({ layers: { ...BASELINE.layers, ...alternative.change } })
@@ -620,6 +637,106 @@ async function runPath(
     for (const agent of agents)
       if (!required(cast.trust.get(agent.id)).keys.some((k) => k.kid === key.kid))
         cast.pinIssuer(agent.id, party.identity, key);
+  }
+  let mandateLists: MandateStatusLists | undefined;
+  if (configuration.id === "authority-mandate-credential") {
+    const sam = cast.get("sam-agent");
+    mandateLists = new MandateStatusLists(sam.identity.party, sam.ownerKey, () =>
+      now().toISOString(),
+    );
+    await mandateLists.setup();
+    const payload = mandateSchema.parse(decodeCompactPayload(sam.mandateJws)) as OwnerMandate;
+    const mandateJws = await signMandate(sam.ownerKey, {
+      ...payload,
+      actorKid: sam.actorKey.kid,
+      credentialStatus: mandateLists.entries,
+    });
+    const rep = representationSchema.parse(decodeCompactPayload(sam.representationJws));
+    cast.agents.set("sam-agent", {
+      ...sam,
+      mandateJws,
+      representationJws: await signStatement(sam.ownerKey, TYP.representation, {
+        ...rep,
+        mandate: mandateJws,
+      }),
+    });
+  }
+  let authorizationServer: FictionalAuthorizationServer | undefined;
+  let authorizationGrant: string | undefined;
+  if (configuration.id === "authority-authorization-server") {
+    const server = required(parties.get("authorization-server")),
+      sam = cast.get("sam-agent");
+    authorizationServer = new FictionalAuthorizationServer(
+      server.identity,
+      required(sourceKeys.get(server.id)),
+      () => now().toISOString(),
+    );
+    const m = mandateSchema.parse(decodeCompactPayload(sam.mandateJws)) as OwnerMandate;
+    const consent = await signStatement(sam.ownerKey, "awp-grant-consent+jws", {
+      issuer: sam.identity.party,
+      actor: sam.identity.actor,
+      kid: sam.actorKey.kid,
+      mandateDigest: digestOf(m),
+      validUntil: m.validUntil,
+    });
+    const approvalTrust = await TrustStore.load(required(cast.trust.get("sam-agent")));
+    const audiences = [
+      ...new Set([sam.identity.actor, ...[...cast.agents.values()].map((p) => p.identity.party)]),
+    ];
+    authorizationGrant = await authorizationServer.issue(
+      m,
+      sam.actorKey.kid,
+      audiences,
+      consent,
+      approvalTrust,
+    );
+    const presented =
+      scenario.authorityFault === "token-as-the-person"
+        ? await authorizationServer.issue(
+            m,
+            sam.actorKey.kid,
+            audiences,
+            consent,
+            approvalTrust,
+            true,
+          )
+        : authorizationGrant;
+    const rep = representationSchema.parse(decodeCompactPayload(sam.representationJws));
+    cast.agents.set("sam-agent", {
+      ...sam,
+      representationJws: await signStatement(sam.ownerKey, TYP.representation, {
+        ...rep,
+        authorityGrant: presented,
+      }),
+    });
+  }
+  let agentRegistry: FictionalAgentRegistry | undefined;
+  if (configuration.id === "authority-agent-registry") {
+    const service = required(parties.get("agent-registry")),
+      sam = cast.get("sam-agent");
+    agentRegistry = new FictionalAgentRegistry(
+      service.identity,
+      required(sourceKeys.get(service.id)),
+      () => now().toISOString(),
+    );
+    const m = mandateSchema.parse(decodeCompactPayload(sam.mandateJws));
+    const operations = [
+      ...new Set(
+        [...(m.autonomous.permissions ?? []), ...(m.withApproval.permissions ?? [])].flatMap((r) =>
+          r.target && profile.operations.some((op) => op.id === r.target) ? [r.target] : [],
+        ),
+      ),
+    ];
+    agentRegistry.register({
+      actor: sam.identity.actor,
+      principal: sam.identity.party,
+      actorKid: sam.actorKey.kid,
+      status: "active",
+      operations:
+        scenario.authorityFault === "registered-for-something-else"
+          ? ["https://w3id.org/jeswr/awp#op/mortgage-product-search"]
+          : operations,
+    });
   }
   const signed: Record<
     string,
@@ -1199,7 +1316,24 @@ async function runPath(
   const ledgers = new Map<string, MemoryLedger>();
   let solidStep = "";
   let mirrorFault = false;
-  let webIdDirectory: FictionalWebIdDirectory | undefined;
+  let webIdDirectory: FictionalWebIdDirectory | FictionalDidDirectory | undefined;
+  if (configuration.layers.identity === "did") {
+    const provider = required(parties.get("did-resolver")),
+      register = required(parties.get("did-register"));
+    webIdDirectory = new FictionalDidDirectory(
+      { identity: provider.identity, key: required(sourceKeys.get(provider.id)) },
+      { identity: register.identity, key: required(sourceKeys.get(register.id)) },
+      [...cast.agents.values()].map((p) => ({
+        actor: p.identity.actor,
+        party: p.identity.party,
+        actorKey: p.actorKey,
+        partyKey: p.ownerKey,
+      })),
+      () => now().toISOString(),
+      { from: now().toISOString(), until: new Date(clock + 60 * 86400000).toISOString() },
+    );
+    await webIdDirectory.setup();
+  }
   if (configuration.layers.identity === "webid") {
     const provider = required(parties.get("solid-provider")),
       register = required(parties.get("webid-register"));
@@ -1325,6 +1459,200 @@ async function runPath(
         )
       : [];
     const gate: GateContext = {
+      ...(agentRegistry
+        ? {
+            agentRegistry: {
+              check: async (actor, principal, kid, operation) => {
+                if (actor !== cast.get("sam-agent").identity.actor) return undefined;
+                const accepted = gate.resolver?.resolveSource({
+                  evaluator: cast.get(agent.id).identity.actor,
+                  source: agentRegistry.identity,
+                  claimType: "authority.registration",
+                  subject: principal,
+                  at: now().toISOString(),
+                });
+                const checked = await agentRegistry.check({
+                  actor,
+                  principal,
+                  kid,
+                  operation,
+                  trust,
+                  accepted: accepted?.outcome === "accepted",
+                });
+                recorder.sink(agent.traceId ?? agent.id).emit({
+                  part: "inbound-gate",
+                  kind: "record",
+                  caption: checked.ok
+                    ? "The accepted registry's current signed entry names Sam as principal, binds the agent key and covers this operation."
+                    : "The current registry entry does not establish authority for this operation.",
+                  ...(accepted
+                    ? {
+                        resolution: {
+                          question: accepted.question,
+                          path: accepted.path.map((p) => ({ ...p })),
+                          answer: accepted.answer,
+                        },
+                      }
+                    : {}),
+                  ...(checked.ok
+                    ? {
+                        fact: {
+                          id: checked.entry.id,
+                          label: "Current signed agent registration",
+                          source: agentRegistry.identity,
+                          subject: principal,
+                          claimType: "authority.registration",
+                          value: {
+                            entry: checked.entry,
+                            credential: checked.credential,
+                            digest: checked.digest,
+                          },
+                        },
+                      }
+                    : {}),
+                });
+                return checked.ok ? undefined : checked.reason;
+              },
+            },
+          }
+        : {}),
+      ...(authorizationServer && authorizationGrant
+        ? {
+            authorizationGrant: {
+              outbound: () =>
+                agent.id === "sam-agent" ? authorizationServer.current() : undefined,
+              ...(agent.id === "sam-agent"
+                ? {
+                    load: async (source: string) => {
+                      const checked = await authorizationServer.verify(authorizationGrant, {
+                        trust,
+                        actor: cast.get(agent.id).identity.actor,
+                        party: cast.get(agent.id).identity.party,
+                        kid: cast.get(agent.id).actorKey.kid,
+                        audience: cast.get(agent.id).identity.actor,
+                        accepted:
+                          source === cast.get(agent.id).mandateJws &&
+                          gate.resolver?.resolveSource({
+                            evaluator: cast.get(agent.id).identity.actor,
+                            source: authorizationServer.identity,
+                            claimType: "authority.grant",
+                            subject: cast.get(agent.id).identity.party,
+                            at: now().toISOString(),
+                          }).outcome === "accepted",
+                      });
+                      if (checked.ok)
+                        recorder.sink(agent.traceId ?? agent.id).emit({
+                          part: "record",
+                          kind: "record",
+                          caption:
+                            "Sam approved at the fictional bank authorization server. Its signed authorization details are lifted into the autonomous and with-approval ODRL policies read by the gate.",
+                          fact: {
+                            id: checked.loaded.mandate.id,
+                            label: "ODRL mandate lifted from the server grant",
+                            claimType: "authority.grant-lift",
+                            subject: cast.get(agent.id).identity.party,
+                            source: authorizationServer.identity,
+                            value: {
+                              grantDigest: digestOf(authorizationGrant),
+                              autonomous: checked.loaded.mandate.autonomous,
+                              withApproval: checked.loaded.mandate.withApproval,
+                            },
+                          },
+                        });
+                      return checked;
+                    },
+                  }
+                : {}),
+              check: async (jws, actor, party, kid, operation) => {
+                if (actor !== cast.get("sam-agent").identity.actor) return undefined;
+                if (!jws) return "representation-invalid" as const;
+                const accepted = gate.resolver?.resolveSource({
+                  evaluator: cast.get(agent.id).identity.actor,
+                  source: authorizationServer.identity,
+                  claimType: "authority.grant",
+                  subject: party,
+                  at: now().toISOString(),
+                });
+                const checked = await authorizationServer.verify(jws, {
+                  trust,
+                  actor,
+                  party,
+                  kid,
+                  audience: cast.get(agent.id).identity.party,
+                  accepted: accepted?.outcome === "accepted",
+                });
+                recorder.sink(agent.traceId ?? agent.id).emit({
+                  part: "inbound-gate",
+                  kind: "record",
+                  caption: checked.ok
+                    ? "The accepted authorization server binds the principal, the explicit actor and the actor key to the lifted permissions."
+                    : "The authorization grant does not establish the required principal, actor and key binding.",
+                  ...(accepted
+                    ? {
+                        resolution: {
+                          question: accepted.question,
+                          path: accepted.path.map((p) => ({ ...p })),
+                          answer: accepted.answer,
+                        },
+                      }
+                    : {}),
+                });
+                if (!checked.ok) return checked.reason;
+                return [
+                  checked.loaded.mandate.autonomous,
+                  checked.loaded.mandate.withApproval,
+                ].some((p) => p.permissions?.some((r) => r.target === operation))
+                  ? undefined
+                  : ("representation-invalid" as const);
+              },
+            },
+          }
+        : {}),
+      ...(mandateLists
+        ? {
+            mandateCredential: {
+              outbound: () => (agent.id === "sam-agent" ? mandateLists.current() : undefined),
+              check: async (jws, actor, party, kid) => {
+                if (actor !== cast.get("sam-agent").identity.actor) return undefined;
+                if (!jws) return "representation-invalid";
+                const checked = await verifyStatement(jws, {
+                  trust,
+                  typ: TYP.mandate,
+                  role: "party",
+                  schema: mandateSchema,
+                  limits: DEFAULT_LIMITS,
+                  verifier: agent.actor ?? agent.identity,
+                  at: now().toISOString(),
+                });
+                const m = checked.payload
+                  ? (EmbeddedCredentialNode.fromJws(jws, "urn:awp:checked-mandate", new Store())
+                      .payload as unknown as OwnerMandate)
+                  : undefined;
+                if (
+                  !m ||
+                  checked.verification.outcome !== "valid" ||
+                  checked.signer?.subject !== party ||
+                  m.issuer !== party ||
+                  m.subject !== actor ||
+                  m.actorKid !== kid ||
+                  !m.credentialStatus ||
+                  Date.parse(m.validFrom) > clock ||
+                  Date.parse(m.validUntil) <= clock
+                )
+                  return "representation-invalid";
+                const failure = await mandateLists.check(m.credentialStatus);
+                recorder.sink(agent.traceId ?? agent.id).emit({
+                  part: "inbound-gate",
+                  kind: "record",
+                  caption: failure
+                    ? "The principal-signed mandate status list does not authorize this action."
+                    : "Both principal-signed mandate status lists are current and clear before this action takes effect.",
+                });
+                return failure;
+              },
+            },
+          }
+        : {}),
       ...(webIdDirectory ? { webId: webIdDirectory } : {}),
       ...(agent.id === "sam-agent" && recordMirror
         ? {
@@ -1846,11 +2174,43 @@ async function runPath(
   };
   for (const [index, step] of scenario.script.entries()) {
     solidStep = step.id;
+    if (authorizationServer) await authorizationServer.refreshStatus();
+    if (mandateLists) {
+      if (scenario.mandateStatusFault?.at === step.id) {
+        await mandateLists.set(scenario.mandateStatusFault.purpose, true);
+        recorder.sink(parties.get("sam-agent")?.traceId ?? "sam-agent").emit({
+          part: "principal",
+          kind: "record",
+          caption:
+            "Sam suspends the mandate. The principal signs and republishes the status list before the next action.",
+        });
+        if (scenario.mandateStatusFault.attempt) {
+          const attempted = resolveTemplate(
+            scenario.mandateStatusFault.attempt,
+            variables(),
+          ) as ActionIntent;
+          await required(runtimes.get("sam-agent")).runTask({
+            taskId: `urn:scenario:${scenario.id}:suspended-action`,
+            kind: "application",
+            plan: {
+              adapter: "urn:scenario:effect",
+              key: `urn:scenario:${scenario.id}:suspended-action`,
+              activityType: "urn:activity:application",
+              intent: attempted,
+              params: {},
+            },
+          });
+        }
+      }
+      await mandateLists.refresh();
+    }
     if (
       webIdDirectory &&
       scenario.solid?.fault === "profile-key-swapped" &&
       step.id === scenario.solid.at
     ) {
+      if (!(webIdDirectory instanceof FictionalWebIdDirectory))
+        throw new Error("Wrong profile resolver");
       await webIdDirectory.swapProfile(
         cast.get("north-agent").identity.actor,
         await testKey("fictional-profile-takeover"),

@@ -79,7 +79,7 @@ export class EmbeddedCredentialNode extends RdfNode {
     const { payload } = inspectEvidenceJws(jws);
     const node = new EmbeddedCredentialNode(id, dataset);
     node.types.add(VC + "VerifiableCredential");
-    const issuer = payload.issuer ?? payload.party;
+    const issuer = payload.issuer ?? payload.party ?? payload.iss;
     if (typeof issuer !== "string" || !isSafeAbsoluteIri(issuer))
       throw new TypeError("JWS statement does not identify its issuer");
     node.setIri(VC + "issuer", issuer);
@@ -104,6 +104,21 @@ export class EmbeddedCredentialNode extends RdfNode {
     subject.types.add(AWP + "LegacyCredentialSubject");
     subject.payload = NamedValuesNode.from(payload, scopedId(id, "payload"), dataset);
     node.setNode(VC + "credentialSubject", subject);
+    if (Array.isArray(payload.credentialStatus)) {
+      for (const [index, raw] of payload.credentialStatus.entries()) {
+        const entry = MandateStatusEntryNode.from(raw, scopedId(id, `status:${index}`), dataset);
+        dataset.addQuad(
+          node as never,
+          DataFactory.namedNode(VC + "credentialStatus"),
+          entry as never,
+        );
+      }
+    }
+    if (payload.type === "RepresentationStatement" && typeof payload.mandate === "string")
+      node.setNode(
+        AWP + "mandateCredential",
+        EmbeddedCredentialNode.fromJws(payload.mandate, scopedId(id, "mandate"), dataset),
+      );
     const graph = DataFactory.namedNode(scopedId(id, "proof"));
     const proof = DataFactory.namedNode(scopedId(id, "proof-statement"));
     node.setIri(SEC + "proof", graph.value);
@@ -234,6 +249,28 @@ export class EmbeddedCredentialNode extends RdfNode {
     }
   }
 }
+class MandateStatusEntryNode extends RdfNode {
+  static from(raw: unknown, id: string, dataset: Store): MandateStatusEntryNode {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+      throw new TypeError("Invalid status entry");
+    const entry = raw as Record<string, unknown>;
+    if (
+      entry.type !== "BitstringStatusListEntry" ||
+      !["suspension", "revocation"].includes(String(entry.statusPurpose)) ||
+      typeof entry.statusListIndex !== "string" ||
+      !/^(0|[1-9][0-9]*)$/.test(entry.statusListIndex) ||
+      typeof entry.statusListCredential !== "string"
+    )
+      throw new TypeError("Invalid status entry");
+    const node = new MandateStatusEntryNode(id, dataset);
+    const status = "https://www.w3.org/ns/credentials/status#";
+    node.types.add(status + "BitstringStatusListEntry");
+    node.setText(status + "statusPurpose", String(entry.statusPurpose));
+    node.setText(status + "statusListIndex", entry.statusListIndex);
+    node.setIri(status + "statusListCredential", entry.statusListCredential);
+    return node;
+  }
+}
 class EmbeddedSubjectNode extends RdfNode {
   get payload(): NamedValuesNode {
     return this.child(AWP + "statementPayload", NamedValuesNode) ?? missing();
@@ -259,6 +296,8 @@ function credentialClosure(node: EmbeddedCredentialNode): Store {
       else if (quad.object.termType === "NamedNode") {
         const structural = [
           VC + "credentialSubject",
+          VC + "credentialStatus",
+          AWP + "mandateCredential",
           VC + "verifiableCredential",
           AWP + "statementPayload",
           "https://schema.org/itemListElement",

@@ -1630,6 +1630,7 @@
           "jws": "https://w3id.org/jeswr/awp#jws"
         }
       },
+      "mandateCredential": { "@id": "https://w3id.org/jeswr/awp#mandateCredential", "@type": "@id" },
       "LegacyCredentialSubject": "https://w3id.org/jeswr/awp#LegacyCredentialSubject",
       "ItemList": "https://schema.org/ItemList",
       "ListItem": "https://schema.org/ListItem",

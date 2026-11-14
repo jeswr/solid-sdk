@@ -9,14 +9,14 @@ import type { TraceEventInput, TraceRef } from "../trace/types.js";
 import { vocabularyDataset } from "../wire/vocabulary.js";
 
 const LABEL = "http://www.w3.org/2000/01/rdf-schema#label";
-const IRI_IN_TEXT = /(?:https?:\/\/|urn:)[^\s<>"'\\()[\]{},;]+/g;
+const IRI_IN_TEXT = /(?:https?:\/\/|urn:|did:)[^\s<>"'\\()[\]{},;]+/g;
 
 /** A per-run RDF label index, using the SDK's standard Resource.label accessor. */
 export class LabelIndex {
   private readonly dataset = vocabularyDataset();
 
   add(iri: string, label: string): void {
-    if (!isSafeAbsoluteIri(iri) || !label.trim() || /https?:\/\/|urn:/i.test(label)) return;
+    if (!isSafeAbsoluteIri(iri) || !label.trim() || /https?:\/\/|urn:|did:/i.test(label)) return;
     const node = new Resource(iri, this.dataset, DataFactory);
     if (node.label === undefined) RequiredAs.object(node, LABEL, label, LiteralFrom.string);
   }

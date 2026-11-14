@@ -1308,6 +1308,12 @@
     "message": "http://www.w3.org/ns/shacl#pattern: unknown pattern; no reviewed closed guard"
   },
   {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#3435334f117bf41d2f309fcbd7c46898b501090b54787c3eaac15683d1e80381-VerifiableCredential-mandateCredential",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
     "code": "missing-cardinality",
     "severity": "warning",
     "subject": "http://www.w3.org/ns/odrl/2/duty",

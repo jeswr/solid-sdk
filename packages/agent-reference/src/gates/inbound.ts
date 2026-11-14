@@ -81,6 +81,7 @@ import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../
 import type { Resolution } from "../trust/resolver.js";
 import {
   type AdmittedFact,
+  alternativeInstalled,
   CURABLE_CLAIM_FAILURES,
   checkRefs,
   claimRequest,
@@ -282,7 +283,8 @@ export class InboundGate {
         return {
           ok: false,
           reason: webId.reason,
-          detail: "The WebID profile does not match the independently signed key commitment.",
+          detail:
+            "The resolved identity document does not match the independently signed key commitment.",
           extra: { binding: meta.binding ?? "unknown", digest: rawDigest },
         };
       const fetched = webId?.ok ? webId.key : undefined;
@@ -309,14 +311,16 @@ export class InboundGate {
         type: "verification",
         protectedObject: digestBytes(wire.jsonld),
         property: pinned ? "integrity-and-key-attribution" : "none-unsigned",
-        mechanism: pinned ? `${suite}${fetched ? " with WebID profile discovery" : ""}` : "none",
+        mechanism: pinned
+          ? `${suite}${fetched ? " with resolved identity document discovery" : ""}`
+          : "none",
         verifier: identity.actor,
         at,
         ...(pinned ? { verificationMaterial: pinned.kid, attributedTo: pinned.subject } : {}),
         outcome: pinned ? "valid" : "not-applicable",
         limitations: [
           fetched
-            ? "integrity + attribution to fetched WebID material bound to a signed thumbprint commitment; not source authority"
+            ? "integrity + attribution to resolved identity material bound to a signed thumbprint commitment; not source authority"
             : "integrity and pinned-key attribution only; not source authority",
         ],
       };
@@ -328,7 +332,8 @@ export class InboundGate {
         return {
           ok: false,
           reason: webId.reason,
-          detail: "The WebID profile does not match the independently signed key commitment.",
+          detail:
+            "The resolved identity document does not match the independently signed key commitment.",
           extra: { binding: meta.binding ?? "unknown", digest: rawDigest },
         };
       const webIdKey = webId?.ok ? webId.key : undefined;
@@ -344,7 +349,7 @@ export class InboundGate {
         type: "verification",
         protectedObject: v.digest,
         property: "integrity-and-key-attribution",
-        mechanism: `${MECHANISM_ID} typ=${TYP.message}${webId?.ok ? " with WebID profile discovery" : ""}`,
+        mechanism: `${MECHANISM_ID} typ=${TYP.message}${webId?.ok ? " with resolved identity document discovery" : ""}`,
         verifier: identity.actor,
         at,
         ...(v.kid ? { verificationMaterial: v.kid } : {}),
@@ -354,7 +359,7 @@ export class InboundGate {
           v.outcome === "valid"
             ? [
                 webId?.ok
-                  ? "integrity + attribution to fetched WebID material bound to a signed thumbprint commitment; not authority or truth"
+                  ? "integrity + attribution to resolved identity material bound to a signed thumbprint commitment; not authority or truth"
                   : "integrity + attribution to a pinned actor key only; not authority or truth",
               ]
             : [v.detail],
@@ -420,6 +425,23 @@ export class InboundGate {
 
     // Sender ↔ key binding and configuration ↔ mechanism binding.
     const config = configurationById(envelope.configuration ?? "");
+    if (!alternativeInstalled(this.deps.gate, envelope.configuration ?? ""))
+      return fail(
+        "unsupported-configuration",
+        "The selected identity or authority adapter is not installed.",
+      );
+    if (
+      config?.acceptedDidMethods &&
+      [sender.actor, sender.onBehalfOf, sender.operator].some(
+        (id) =>
+          id &&
+          (!id.startsWith("did:") || !config.acceptedDidMethods!.includes(id.split(":")[1] ?? "")),
+      )
+    )
+      return fail(
+        "unsupported-configuration",
+        "The declared identity method is not listed in this configuration.",
+      );
     if (signedBy) {
       if (sender.actor !== signedBy.subject) {
         return fail(
@@ -614,6 +636,55 @@ export class InboundGate {
         outcome: "not-accepted",
         reason: "representation-out-of-scope",
       });
+    }
+    if (this.deps.gate.agentRegistry) {
+      const failure = await this.deps.gate.agentRegistry.check(
+        s.actor,
+        s.party,
+        s.actorKid,
+        expect.operation,
+      );
+      if (failure)
+        return done({
+          ...base,
+          party: s.party,
+          statement: s.id,
+          outcome: "not-accepted",
+          reason: failure,
+        });
+    }
+    if (this.deps.gate.authorizationGrant) {
+      const failure = await this.deps.gate.authorizationGrant.check(
+        s.authorityGrant,
+        s.actor,
+        s.party,
+        s.actorKid,
+        expect.operation,
+      );
+      if (failure)
+        return done({
+          ...base,
+          party: s.party,
+          statement: s.id,
+          outcome: "not-accepted",
+          reason: failure,
+        });
+    }
+    if (this.deps.gate.mandateCredential) {
+      const failure = await this.deps.gate.mandateCredential.check(
+        s.mandate,
+        s.actor,
+        s.party,
+        s.actorKid,
+      );
+      if (failure)
+        return done({
+          ...base,
+          party: s.party,
+          statement: s.id,
+          outcome: "not-accepted",
+          reason: failure,
+        });
     }
     return done({ ...base, party: s.party, statement: s.id, outcome: "accepted" });
   }
@@ -1943,7 +2014,12 @@ export class Admission {
       return rep;
     }
     const ok = rep.outcome === "accepted";
-    if (!ok && rep.reason === "representation-out-of-scope" && !this.deps.gate.authorityChains) {
+    if (
+      !ok &&
+      rep.reason === "representation-out-of-scope" &&
+      !this.deps.gate.authorityChains &&
+      !this.deps.gate.agentRegistry
+    ) {
       this.gate.verdictEvent(
         "authority",
         "ask-more",

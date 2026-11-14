@@ -1685,3 +1685,10 @@ awp:attachmentDatatype a rdf:Property; rdfs:label "Attached literal datatype"; r
 # AUTHORED-BY Codex GPT-6
 <https://w3id.org/jeswr/awp#reason/approval-mismatch> a awp:ReasonCode;
     rdfs:label "The released message differs from the approved intent or terms".
+
+# AUTHORED-BY Codex GPT-6
+awp:mandateCredential a rdf:Property;
+    rdfs:label "Operational mandate credential";
+    rdfs:comment "The principal-signed operational mandate bound to this representation, including its status entries.";
+    rdfs:domain <https://www.w3.org/2018/credentials#VerifiableCredential>;
+    rdfs:range <https://www.w3.org/2018/credentials#VerifiableCredential>.

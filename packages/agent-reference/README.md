@@ -237,3 +237,25 @@ persisted background recovery service, and the WebID resolver has no historical-
 archive. These limits and the specification disagreements are detailed in
 [the Brief 26b report](ENGINE-REPORT.md#brief-26b). All parties and data are fictional;
 no live network, storage account or settlement service is used.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Identity and authority alternatives (Brief 26c)
+
+These mortgage cells use the existing configuration matrix and configuration-scoped branches.
+All providers are fictional and operate in process. Detailed limitations, local protocol
+choices and validation results are recorded in `ENGINE-REPORT.md`, Brief 26c.
+
+| Configuration | Mortgage status | Its own failure |
+| --- | --- | --- |
+| `authority-mandate-credential` | Runs; principal-signed suspension and revocation lists, checked at action/release and by the receiver. | Suspension stops Sam's gate first; the lender separately refuses an authentic packet already in transit, `mandate-withdrawn`. |
+| `identity-did` | Runs; explicit `did:web` methods, Multikey documents and independently signed key commitments. | Unlisted `did:key` actor, `unsupported-configuration`. |
+| `identity-email-endpoint` | Not run; mailbox-control proof is absent, and the added approved email workflow conflicts with ordered identity confinement. | `mailbox-reply-as-evidence` is declared and blocked; no prose is promoted to payroll evidence. |
+| `identity-anonymous` | Not run; product search is already anonymous, but the existing lender-register lookup has no signed exchange. | `anonymous-asks-for-more` is declared and blocked. |
+| `authority-authorization-server` | Runs; principal-approved, actor/key-bound rich authorization grant, lifted into the actual ODRL mandate. | Server-signed grant with no actor, `representation-invalid`. |
+| `authority-agent-registry` | Runs; fresh signed registration binds principal, actor key, status and operation scope. | Product-search-only registration, `representation-out-of-scope`. |
+
+The four running main paths pass confinement and retain the face-check step-up and paid
+journey ending. The DID resolver is a closed fictional-host subset, without rotation or
+historical resolution. The grant and registration formats are explicit local profiles of
+the supplied sketches. Neither blocked cell publishes a trace. No live OAuth, mailbox,
+DID host, registry or status service is claimed.
