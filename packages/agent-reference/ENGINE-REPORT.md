@@ -2266,3 +2266,285 @@ of all six fixture graphs/signatures, the 165-path corpus and the unchanged orac
 Codegen drift, typecheck, lint, build, scenarios and both guards retain the final results
 above. The capacity inventory was refreshed from that final run; source digests for
 fresh joint-protocol ciphertext can differ between runs without changing any decision.
+
+
+## Brief 25
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Implementation is offline under Node 24 from `/opt/node24/bin`, without commits or
+new dependencies. The required Brief 24 and 25p reports and the sole protocol research
+file were read. All pre-existing protocol functions are retained. Work stays within
+settlement adapters, their profile/configuration descriptions, tests and this append.
+
+**Live wiring stopped at the ownership boundary.** The running outbound gate constructs
+`new RdfOrderSuite()` in `src/gates/outbound.ts:paymentOrder`; its return value is a
+single RDF document. There is no settlement-adapter injection point. The invoice and
+provider paths in `src/engine/run.ts` also construct that concrete suite. Ordinary
+receipt ingress and native-document trace production use `src/wire/payment.ts`.
+The brief forbids editing the gate, runtime, wire and trace trees, and limits this lane
+to settlement/profile/configuration work. Installing four configurations without those
+changes would label RDF payments as protocol executions. That portion is stopped:
+no new live mortgage run, manifest run row or baseline oracle entry is claimed.
+The adapters and unchanged P1–P8/receipt checks are tested independently instead.
+
+**Synchronous lift contract.** `SettlementSuite.lift` returns `PaymentFacts` immediately,
+whereas the existing JOSE verifiers return promises. Following the explicit Brief 24
+adapter handover, each async request/order/settle admission invokes the protocol's
+verifier in its `lift.ts`, then pins the complete raw and shown objects. `lift()` accepts
+only such exact admitted content and returns a fresh dataset snapshot. Caller-provided
+`native` values confer no admission. A mandatory host `admit` callback is the seam for
+the ordinary inbound checks; isolated tests authenticate their local test carriage but
+do not claim to execute AgentRuntime's five inbound gates. Actual runtime integration
+of this callback and protocol-key source admission remains part of the stopped wiring.
+
+**Part 1 checkpoint.** `settlement/x402/index.ts` implements all four suite methods;
+`x402/lift.ts` admits one exact/EVM requirement, signature and settlement header, with
+explicit currency precision and account mapping. The provider verifies then settles
+on the existing ledger and identity-signs a separate `payment-receipt` statement binding
+its protocol transcript and order digest. x402 does not sign SettlementResponse.
+`x402-suite.test.ts` passes seven isolated tests, including P1/P2, replay, source/key
+refusal, pinned object tampering, receipt checking and `x402-recipient-swapped`:
+`invalid_exact_evm_payload_recipient_mismatch` / engine `evidence-invalid`, zero debits.
+Full shared-failure equality and later parts are recorded below as they finish.
+
+**Part 2 checkpoint.** `mpp/index.ts` and `mpp/lift.ts` wire the HMAC-bound 402
+challenge, JCS/base64url request, gate-created credential, EIP-3009 verification and
+provider ledger receipt. `externalId` binds the request to the agreement digest; the
+host binds the challenge to the engine once-key. MPP's receipt has no signature; the
+local provider statement authenticates it. Six isolated adapter tests pass, including
+`mpp-challenge-reused`: fresh challenge, 402 invalid-challenge problem, engine
+`evidence-invalid`, exactly one ledger entry. HMAC and externalId tampering, missing
+settlement-key statements, credential tampering and P1/P2 refusals are covered.
+
+**Part 3 checkpoint.** `ap2/index.ts`, `ap2/lift.ts` and the explicitly local
+`ap2/receipt.ts` implement person-present checkout, both ES256 SD-JWT mandates and
+merchant/processor ES256 receipts. Existing `sdjwt.ts` and its disclosure tests are
+reused unchanged. Identity-signed secondary-key statements are mandatory for the
+person, merchant and second fictional processor. The receipt facts attribute settlement
+to the processor, so the receipt check's expected provider must be that processor,
+not the credential provider; the live runner currently installs only its RDF provider.
+Five isolated tests pass, including a genuinely person-signed wrong transaction_id
+refused as `terms-digest-mismatch`, tampered disclosure, missing key statements, receipt
+pinning and concurrent single settlement. The optional autonomous shopping run has
+not been implemented; its runtime/P5 mandate wiring is outside this lane's ownership.
+
+**Part 4 checkpoint.** `acp/index.ts` and `acp/lift.ts` wrap session creation, delegation
+and completion in endpoint-scoped idempotency stores. Agent POSTs and merchant responses
+use the existing detached identity signatures and timestamps; bearer identity is bound
+to the installed fictional account. ACP leaves signatures optional; this profile requires
+them. Card details are replaced with `{type: account, account_id}`. Five initial isolated
+tests pass, including signed changed-body completion returning 422 idempotency_conflict,
+engine `evidence-invalid`, exactly one debit; identical retries return the exact cached
+response, unsigned requests/responses stop with `unsigned-not-allowed`, and substituted
+tokens cannot settle. The unchanged provider receipt check admits the separately signed
+provider statement and completed session order.
+
+**Shared checks and configuration checkpoint.** `suite-equality.test.ts` proves the
+three isolated P1/P2/P3 refusals have exactly the same check and reason across
+`rdf-order`, `x402`, `mpp`, `ap2` and `acp`: P1/no-agreement, P2/amount-differs,
+P3/payee-differs. These fixtures deliberately isolate payment checking; their offer and
+acceptance proof markers are not real mortgage negotiations. Separately, the actual
+unchanged runner was invoked in memory with each proposed settlement configuration:
+all sixteen mortgage paths are blocked before a trace is produced, with "no executable
+runtime configuration installed". `settlement/configurations.ts` retains those exact
+single-layer declarations as blocked candidates; it does not install wire definitions
+or advertise them as running. No scenario, live trace, outline or manifest row is added.
+
+`settlement/profiles.ts` records the version/subset, closed-instruction guarantee,
+key/source requirements and exact stand-ins. Per-field `from` maps accompany each
+adapter trace's JSON-LD facts, including explicit host origins for fields absent from
+the protocol. Inlining those origin annotations into the facts graph itself would
+require new vocabulary/shape/model work in the other lane; it is not faked with
+unrecognised JSON-LD fields. The existing trace recorder does not yet attach native
+protocol traces to actual messages; adapters expose `trace()` for that integration.
+
+The immutable 161-path live oracle passes without a snapshot update; current oracle
+SHA-256 is `b4c928de53dc96228087009792da1be646f760e705d6343b48a8441c841d6f25`.
+The RDF guard remains exactly 15 hard failures and 213 allowances. Additional isolated
+adversarial tests cover check-digest forgery, changed checked facts, cross-suite input,
+provider-account substitution, parser/signature failures, returned-dataset mutation,
+field origins, signer-handle mismatch before debit, whole-second EIP-3009 expiry,
+zero-decimal JPY, and a second MPP challenge for an already ordered engine once-key.
+Receipt tests separately prove wrong-key refusals, unsigned response transcript binding,
+AP2 transaction binding and genuinely signed wrong-amount receipts reaching the
+unchanged receipt-mismatch check.
+
+**What each protocol gives the checks.** “Host” below means authenticated host state
+and admitted source statements, never a field supplied as authority by a core. This
+maps the isolated adapters; the four new live configurations remain blocked.
+
+| Check | rdf-order | x402 | mpp | ap2 | acp |
+|---|---|---|---|---|---|
+| P1 agreement in effect | RDF `awp:settles`, held Offer/Agreement and original proofs | Not in protocol: host requirements-to-agreement association and original offer/acceptance | `Challenge.request.externalId` names terms digest; proofs and in-effect status supplied by host | `checkout_hash` / `transaction_id` identify exact checkout; agreement/proofs supplied by host | Not in protocol: host session-to-agreement association and original proofs |
+| P2 amount and currency | `schema:price` / `schema:totalPaymentDue`, `schema:priceCurrency` | `accepts[0].amount`, authorization `value`; currency and precision supplied by configured asset profile | Request `amount/currency`, credential `value`; configured precision | `checkout_jwt.total_price/currency`, Payment Mandate `payment_amount.amount/currency`; configured precision | Session `totals[0].amount/currency`, allowance `max_amount/currency`; configured precision |
+| P3 agreed payee | `schema:recipient`, admitted account ownership | `payTo`, authorization `to`; party ownership supplied by authenticated resource server and accepted account source | Request `recipient`, credential `to`; party ownership supplied by accepted account source | `checkout_jwt.merchant.id`, Payment Mandate `payee.id`; account ownership supplied by host | Session / allowance `merchant_id` is this profile's ledger account; party ownership supplied by host account binding |
+| P4 accepted account source | Not in RDF invoice alone: admitted `payee-account` statement and its current terms | Not in protocol: admitted binding of `did:pkh:eip155:84532:<payTo>` to valuer | Not in protocol: admitted binding of `did:pkh:eip155:84532:<recipient>` to valuer | Not in protocol: admitted merchant-to-ledger-account binding | Not in protocol: admitted merchant-to-`merchant_id` account binding |
+| P5 mandate and limits | Not in payment protocol: retained signed Answerable mandate and period ledger | Not in protocol: host signed mandate/limits | Not in protocol: host signed mandate/limits | Closed mandate `payee/payment_amount` states the instruction; authority/limits remain host signed Answerable mandate. Open-constraint P5 integration is unfinished | Not in protocol: host signed mandate/limits; allowance does not grant permission |
+| P6 required approval | Not in payment protocol: gate's terms/order-digest-bound owner approval | Not in protocol: gate approval before EIP-3009 signing | Not in protocol: gate approval before credential signing | Person's ES256 closed mandates reflect the gate approval; approval decision and digest binding supplied by host | Not in protocol: gate approval before delegate_payment |
+| P7 once | `awp:onceKey`, held agreement instalment and persistent engine record | Authorization `nonce` derived from `awp:onceKey`; shared signer/domain nonce ledger | Challenge `id` and credential `nonce` = challenge hash; host binds challenge to engine once-key and forbids a second instruction | Key-binding `nonce` and checkout `transaction_id`; host once-key association and provider consumed-transaction state | Every POST `Idempotency-Key` derived from engine once-key, endpoint cache and one-use `vt_` token; host session association |
+| P8 closed instruction | RDF recipient/account/price/currency/validUntil and executable adapter | Authorization `to/value/validAfter/validBefore`, configured token domain/currency | Credential `to/value/validAfter/validBefore` bound to issued charge challenge/domain | Closed Payment Mandate `payee/payment_amount/payment_instrument/transaction_id`; expiry supplied by checked host order and key-binding freshness | Allowance `reason/max_amount/currency/checkout_session_id/merchant_id/expires_at`, single-use delegated token |
+| receipt | RDF `awp:settles`, `schema:about/recipient/price/priceCurrency/actionStatus/confirmationNumber`, provider attribution | `SettlementResponse.success/transaction/payer/network`; missing amount/payee/agreement/order/source supplied by signed facilitator `payment-receipt` | `Payment-Receipt.status/reference/challengeId/chainId`; missing amount/payee/agreement/order/source supplied by signed provider `payment-receipt` | Processor Payment Receipt and merchant Checkout Receipt ES256 JWTs; all field names are the explicit local receipt profile in `ap2/receipt.ts` | Completed session `status/order`, plus signed provider `payment-receipt` for ledger reference, amount, party, currency, agreement and recorded order |
+
+**Not from the specification.** The existing 25p choices remain exactly as documented
+in its sections above: strict example-field subsets, HTTP/JSON bounds and duplicate
+rejection, EIP-712 wire construction, money precision, MPP HMAC/hash serialization,
+AP2 SD-JWT serialization/freshness and ACP session/signature/token formats are not new
+confirmed specification material. This brief adds the following local choices:
+
+- `AdapterProfile.admit` is a mandatory host integration seam, not a protocol operation
+  or a substitute implementation of the five inbound gates. Tests sign a local carriage
+  object with each fictional identity; they do not call it an ordinary live message run.
+- Async admission plus a digest-indexed `LiftStore` implements the synchronous interface.
+  Both decoded inspector content and raw protocol objects are pinned; `native` has no
+  authority. Snapshots prevent callers mutating admitted datasets or pending requests.
+  All stores and pending associations are in memory and must be retained across exchanges;
+  process restart/distributed durability is not implemented here.
+- The local identity-signed key statement is `awp-settlement-key+jws` with
+  `type/party/suite/algorithm/publicKey/validFrom/validUntil`. It uses the pinned party
+  identity, not an embedded key. `publicKey` holds the recovered EVM address for
+  secp256k1 or a public P-256 JWK for ES256. Payer and AP2 person/merchant/processor
+  bindings are checked before use. Signing-handle possession is internally checked
+  before ledger effects, including non-extractable keys; this is not a protocol object.
+- The valuation resource is `GET /valuation-booking` at
+  `https://valuer.example/valuation-booking`; MPP realm is `valuer.example`. The EVM
+  profile fixes the researched test network 84532 and takes the token address/domain
+  and precision from explicit fictional configuration. No live asset registry or chain
+  is consulted. EVM account IRIs use `did:pkh:eip155:84532:<lowercase address>`.
+- EIP-3009 validity starts one second before signing. Checked expiry must be exactly
+  representable in whole seconds. The sample profile uses at most 300 seconds, with
+  MPP challenge expiry and all checked order expiries within the held agreement; every order rechecks expiry after
+  asynchronous admission. The EVM adapter once-key-to-nonce derivation uses the existing JCS/SHA-256
+  `digestOf` over the once-key string. MPP challenge `opaque` combines the invoice
+  digest and a retained counter; fresh refusal challenges use a distinct counter.
+- The local facilitator/provider `awp-payment-receipt+jws` claim contains
+  `claimType/provider/reference/protocolDigest/orderDigest/payment`, where `payment`
+  retains the normalized checked order scope needed by `PaymentFacts.receipt`.
+  It signs the exact protocol transcript as well as the order digest. This supplies
+  facts absent from the unsigned x402 and MPP responses and from ACP's order object.
+  Genuine signed semantic differences remain for `checkReceipt` to reject.
+- AP2 receipt field tables are unconfirmed. `ap2/receipt.ts` explicitly specifies the
+  local processor claim `type/transaction_id/processor/reference/order_digest/payment`
+  and merchant claim `type/checkout_hash/order_id/merchant/payment_receipt_hash`.
+  Their JWT types are `ap2-payment-receipt+jwt` and `ap2-checkout-receipt+jwt`.
+  Checkout ids follow the host invoice association; the sample has one fictional
+  valuation line item and merchant website. `payment_instrument` is a fictional
+  provider account (`type: account`); no card credential or FIDO claim is made.
+  The closed mandate carries no researched expiry field: the host checks its recorded
+  order expiry in addition to the existing key-binding freshness rule. Receipt facts
+  identify the merchant's processor, not Sam's credential provider.
+- ACP uses explicit uppercase engine currency / lowercase native ledger currency
+  without conversion, no exchange rate, hash-derived `cs_` ids, sequence-derived order
+  ids and fictional order permalinks. Path segments are percent-encoded. Bearer tokens
+  are checked against installed account configuration. Provider delegation responses
+  are signed too. `risk_signals` and `metadata` are empty; card data is replaced by the
+  provider account reference. Every POST uses the same derived once-key in separate
+  endpoint scopes. Errors returned by these wrappers map to `evidence-invalid`, except
+  required-signature absence (`unsigned-not-allowed`) and AP2 checkout mismatch
+  (`terms-digest-mismatch`); protocol codes and HTTP responses remain inspectable.
+- Protocol object `form` labels and top-level per-field `from` maps are inspector
+  metadata, not protocol fields or authority. The exact HTTP/no-money stand-in is in
+  every proposed suite profile; no chain, live HTTP, card network or real money moves.
+
+**Remaining integration, precisely scoped.** `OutboundGate.paymentOrder` needs an
+injected selected adapter instead of constructing RDF directly; its existing
+`protocolScoped` expression also allows only `rdf-order`. This is a host capability
+selection change, not a change to P1–P8. The engine's invoice/provider dispatch needs
+the corresponding adapter methods. `AgentRuntime.receivedPaymentOrder` and the native
+receipt/invoice ingress currently read RDF documents only, and must admit the exact
+carried protocol objects with their enclosing message before calling the adapter.
+The inspector transcript is not a send unit: individual HTTP calls and the two AP2
+mandates must be routed to their specified recipients, with gate-held credentials.
+Source admission needs the secondary-key statement and accepted EVM account bindings;
+AP2 additionally needs the separate processor and its expected receipt-source profile.
+The trace recorder must use adapter traces instead of the RDF-only `paymentTrace`.
+Only after these changes may the candidate wire configurations be installed, real
+configuration runs recorded and their actual manifest rows published. None of these
+other-lane files was edited. The optional autonomous AP2 shopping form is not wired.
+
+**Manifest accounting.** The maintained manifest is unchanged: **178 rows, 158 runs,
+11 disagrees, 9 blocked**, all with `settlement: rdf-order`. The sixteen blocked
+configuration attempts are test results, not additional maintained manifest rows.
+There are zero new successful live protocol paths, zero changed baseline paths and
+zero recorded protocol-only live traces. Isolated adapters exercise all four protocol
+failures and shared-check equality; that is deliberately distinguished from the
+unfinished live suite wiring.
+
+**Broad validation checkpoint.** The full reference test command completed with
+735 passed, 4 failed and 7 skipped (746 total). Failures are the unchanged codegen
+30-second timeout, mortgage trace 5-second timeout, sixteen existing complete-model
+`Unsupported evidence envelope` cases on accept messages, and the embedded-proof
+inspector's missing `CompactJwsProof` lookup. The trace timeout passes on an isolated
+rerun; the proof-inspector assertion still fails. No test timeout, expectation, gate,
+wire/model file or protected oracle is relaxed. The final settlement-specific tests
+and isolated baseline reproduction are recorded below after their remaining checks.
+
+An attempted test in an untouched HEAD archive initially lacked the root package-manager
+pin, so Corepack attempted a registry version lookup; the sandbox rejected it with
+EAI_AGAIN and no dependency was downloaded. The archive is now given the original root
+metadata and tests run with the already installed Vitest binary directly. There was
+no deliberate network research or dependency installation; that rejected implicit
+lookup is explicitly recorded rather than described as a successful offline command.
+
+**Final review checkpoint.** The independent codegen rerun passes in 20.49 seconds;
+the trace rerun passes. An untouched HEAD archive, using the original source plus
+installed dependency links, also reports the unsupported evidence envelopes and the
+same missing embedded-proof node. Its optional runtime resources were not copied, so
+its corpus has 163 paths and fails the earlier minimum-count assertion as well; it is
+not claimed as an equivalent full-workspace gate. Neither pre-existing wire/model
+failure was repaired from this settlement lane.
+
+The new code remains twelve source modules plus the compatible `types.ts` inspector
+metadata extension, seven test modules and one fixture module. No 25p function was
+changed. The final focused run passes **366 tests in 18 settlement files**, including
+**70 new tests in seven files**. Source/test typechecking passes. The broad command's
+four failures above remain reported; the two timed-out files pass independently.
+
+Review tightened two additional boundaries: refused orders do not reserve a different
+once-key instruction, and order expiry is rechecked after asynchronous admission.
+ACP's actual 422 idempotency response is merchant-signed and verified; an invalid
+incoming message is retained as the failed input rather than relabelled as an unsigned
+merchant reply. The first mutation audit exposed a test whose unconsumed removal stream
+had not cleared the dataset. Both snapshot tests now remove quads synchronously and
+assert that the returned dataset is empty before checking cache isolation. Final
+selected guard-removal results and commands follow below.
+
+**Paths and outcomes by suite.** All new protocol rows below are isolated adapter/gate
+checks. Actual `mortgage-main` execution under each candidate remains blocked for all
+four requested paths; no protocol trace is published as a live run.
+
+| Suite / candidate configuration | Main adapter path | Three shared failures | Protocol-only adapter path |
+|---|---|---|---|
+| `rdf-order` / baseline | Existing live mortgage and oracle paths unchanged | `fee-amount-differs`: P2/amount-differs; `fee-payee-differs`: P3/payee-differs; `fee-no-offer`: P1/no-agreement | No new baseline path |
+| `x402` / `settlement-x402` | Real EIP-712 authorization, one ledger debit, signed facilitator receipt accepted | Exactly P2/amount-differs, P3/payee-differs, P1/no-agreement; no order or debit | `x402-recipient-swapped`: actual facilitator `/verify` result `invalid_exact_evm_payload_recipient_mismatch`, engine evidence-invalid, zero debits |
+| `mpp` / `settlement-mpp` | HMAC-bound challenge, real EIP-712 credential, one ledger debit, signed provider receipt accepted | Exactly P2/amount-differs, P3/payee-differs, P1/no-agreement; no order or debit | `mpp-challenge-reused`: 402 with fresh challenge and invalid-challenge problem, engine evidence-invalid, ledger remains at one debit |
+| `ap2` / `settlement-ap2` | ES256 checkout, both holder-bound SD-JWT mandates, one ledger debit, processor and merchant receipts verified | Exactly P2/amount-differs, P3/payee-differs, P1/no-agreement; no order or debit | `ap2-mandate-for-another-checkout`: genuine person signature but wrong transaction_id; terms-digest-mismatch, zero debits |
+| `acp` / `settlement-acp` | Signed session, bounded allowance, delegated token, one ledger debit and authenticated order/receipt | Exactly P2/amount-differs, P3/payee-differs, P1/no-agreement; no order or debit | `acp-idempotency-conflict`: merchant-signed 422 idempotency_conflict after a signed changed body; engine evidence-invalid, ledger remains at one debit |
+
+**Final commands and results.** These are actual command results, not waived gates.
+Final work is uncommitted. No dependency, lockfile, scenario, manifest, outline, trace,
+oracle, generated model, gate, wire, runtime, core or trace-source file was changed.
+The original report prefix is byte-for-byte intact. The full build/scenario/workspace
+gate commands were not run because they regenerate protected existing artifacts and
+other-lane files; compilation to `/tmp` and source tests were used instead. This is a
+partial Brief 25 implementation with explicit live-wiring blockers, not a passing
+full-workspace gate or a completed protocol deployment.
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/settlement` | PASS: **366 tests, 18 files**, including 70 new tests; final log `/tmp/brief25-settlement-final.log`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/oracle.test.ts` | PASS: **161 immutable baseline paths**, no snapshot update; `/tmp/brief25-oracle-final.log`. |
+| `pnpm --filter @jeswr/agent-reference run typecheck` | PASS: source and tests; `/tmp/brief25-typecheck-final.log`. |
+| `pnpm --filter @jeswr/agent-reference exec tsc -p tsconfig.build.json --outDir /tmp/brief25-dist` | PASS: compilation and declarations outside the working tree; `/tmp/brief25-compile-final.log`. |
+| `pnpm --filter @jeswr/agent-reference run lint` | PASS: no errors, 41 warnings and 393 informational diagnostics; no broad formatting rewrite; `/tmp/brief25-lint-final.log`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run` | **735 passed, 4 failed, 7 skipped, 746 total** at the broad checkpoint. Two timeouts pass on isolated reruns; the two unchanged wire/model failures are reproduced in HEAD as described above. `/tmp/brief25-all-tests.log`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/codegen.test.ts` | PASS on isolated rerun, byte-for-byte regeneration in a temporary directory; `/tmp/brief25-codegen-recheck.log`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/traces.test.ts test/wire-proof-graphs.test.ts` | Trace tests pass; existing proof-inspector assertion fails. **30 passed, 1 failed**; `/tmp/brief25-existing-failures.log`. |
+| Installed Vitest directly in `/tmp/brief25-head/packages/agent-reference`, `run test/wire-proof-graphs.test.ts test/complete-model.test.ts` | HEAD also has the same missing-proof assertion and **exactly the same sixteen conversion-failure objects**. The archive additionally lacks optional runtime resources, so its corpus-count assertion fails first. No passing full HEAD run is claimed; `/tmp/brief25-head-test.log`. |
+| `node /tmp/brief25-mutate.mjs` | **9/9 selected guard removals detected** through failed behavioral assertions, with every source restored in `finally`. Covers checked digest, dataset isolation, source admission, signing-key possession, once-key association, both approved EIP expiries, AP2 receipt transaction and ACP signature. `/tmp/brief25-mutations-final.log`, `/tmp/brief25-mutations.json`. |
+| `node packages/agent-reference/scripts/check-rdf-pipeline.mjs` | Expected exit 1: exactly **15 failures and 213 allowances**, no new finding; `/tmp/brief25-pipeline-final.log`. Protected files unchanged. |
+| `pnpm run check:codegen` | PASS: eight generated projects; `/tmp/brief25-root-codegen.log`. |
+| `pnpm run check:agent-layers` | PASS; `/tmp/brief25-layers-final.log`. |
+| `git diff --check`, report-prefix byte comparison, protected-path/status inspection | PASS. Only settlement source, settlement tests and this append are authored here; all earlier report bytes are intact. |
+
+No evaluation run, commit, mirror publication or live settlement was performed.

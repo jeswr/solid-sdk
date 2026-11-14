@@ -7,7 +7,7 @@ import type { Ledger } from "./ledger.js";
 /** Opaque protocol bytes/objects. Gates read only lift()'s dataset wrappers. */
 export interface ProtocolObjects {
   suite: string;
-  objects: readonly { name: string; form: string; shown: unknown }[];
+  objects: readonly { name: string; form: string; shown: unknown; raw?: unknown }[];
   /** Adapters retain their authenticated local profile/association here, never core authority. */
   native?: unknown;
 }
@@ -48,7 +48,9 @@ export interface SettlementSuite {
 }
 export interface SettlementTrace {
   suite: string;
-  objects: readonly { name: string; form: string; shown: unknown }[];
+  objects: ProtocolObjects["objects"];
   facts: JsonLdDocument;
+  /** Inspector-only field origins; never authority for the gate. */
+  from?: Readonly<Record<string, string>>;
   sameDocument?: string;
 }
