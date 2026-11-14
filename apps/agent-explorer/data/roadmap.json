@@ -1,0 +1,447 @@
+{
+  "updated": "2026-11-13T18:30Z",
+  "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
+  "phases": [
+    {
+      "id": "P9",
+      "title": "RDF throughout, and every option a real run",
+      "goal": "From Jesse's review on 13 Nov 2026, now first in the order: meaning explicit at every gate, payment treated as a contract, and every option on every selector backed by a real run you can switch to on the mortgage journey. Of 38 alternative options, 13 have a real run somewhere in the use cases and 25 have none. On the mortgage journey none can be switched to as a real run today: the email trace shown there is a development fixture and is labelled as one. Done means: the journey runs under the baseline with that one option changed, between separately keyed agents, and one failure only that option can have also runs.",
+      "items": [
+        {
+          "id": "P9.1",
+          "title": "RDF through the pipeline: model, wire and gates",
+          "detail": "One ontology with SHACL shapes and a JSON-LD context. Messages travel as JSON-LD under pinned contexts, every gate reads RDF through typed wrappers, statements and mandates become W3C Verifiable Credentials, terms stay ODRL. The baseline keeps a plain signature over the document; the Data Integrity option signs the canonical graph. Being built since 18:04 UTC on 13 Nov.",
+          "status": "doing",
+          "owner": "Fable (design), Codex (build)"
+        },
+        {
+          "id": "P9.2",
+          "title": "RDF in the stores, the record and the explorer",
+          "detail": "Policies, memory, trust store and record held as RDF. Profiles and scenario files as JSON-LD. The inspector shows JSON-LD with the context folded away, and Turtle beside it.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.3",
+          "title": "Payment as a contract, with a selector at the point of payment",
+          "detail": "A payment settles an agreement: the agent may pay only what a signed, accepted offer says is due, to the party it names, once. A paid valuation step is added to the mortgage journey. Options at the point of payment: a plain RDF description, x402, the Machine Payments Protocol, AP2 mandates and the Agentic Commerce Protocol, each lifted to the same RDF terms so the same checks run. Four failures: the amount differs, the payee differs, there is no offer behind it, and asked to look but not to buy. Designed (specification 18 updated); the build follows the RDF build.",
+          "status": "doing",
+          "owner": "Fable (design), Codex (build)"
+        },
+        {
+          "id": "P9.4",
+          "title": "Transport options",
+          "detail": "A2A 1.0, MCP (revision 2026-07-28) and email as real runs of the mortgage journey, with a test that changing the transport changes no verdict. Each has a failure of its own, for example a readable copy of an email that says something different from the signed part. Designed; built with the configuration matrix right after the RDF build. Solid inbox comes with the Solid options.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.5",
+          "title": "Solid options",
+          "detail": "One in-process storage that speaks the Solid Protocol, then: messages through an inbox, data by reference with a grant no wider than the terms, terms translated into access rules, the record mirrored to the person's own storage, and WebID. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.6",
+          "title": "Identity and authority options",
+          "detail": "Decentralized identifier, email address as an endpoint, no identifier, mandate as a credential with a status list, grant from an authorization server, agent registry. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.7",
+          "title": "Authenticity and trust options",
+          "detail": "Data Integrity proof (built with P9.1), served from the source's domain, selective disclosure, own list only, federation membership, trusted index with receipts, reputation. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.8",
+          "title": "Meaning and reliance options",
+          "detail": "Registry lookup, negotiated meaning, plain language then upgrade, stated confidence, two sources must agree, certified quality. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.9",
+          "title": "Usage control, commitments and accountability options",
+          "detail": "A model that may tighten the rules, human approval, agreement credential, claim to a regulator, fault passed to the vendor, public reputation, reputation score. Designed.",
+          "status": "next",
+          "owner": "Codex (to Fable's design)"
+        },
+        {
+          "id": "P9.10",
+          "title": "Proof of a query, and joint computation",
+          "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov.",
+          "status": "doing",
+          "owner": "Engine project, Codex"
+        },
+        {
+          "id": "P9.11",
+          "title": "Two gate gaps found by the first evaluation pass",
+          "detail": "Settled: both are real gaps in the gates. First, a message that leaves out a claim its operation needs was admitted and nothing asked for it (six cases in three use cases). Second, a permission to use something was read as also allowing it to be passed on (682 cases). Two new core clauses say what must happen, and a build brief is written (brief 27). It runs once the RDF build has landed, because it changes the same gate code. Still open: whether a person's own instructions and reads from memory count as admitted input in the evaluation's third property. The rest of the evaluation stays paused.",
+          "status": "next",
+          "owner": "Fable (settled), Codex (fix)"
+        }
+      ]
+    },
+    {
+      "id": "P1",
+      "title": "The reference agent and this explorer",
+      "goal": "A real agent built to the reference design, a site that replays what it did, and a narrated walkthrough.",
+      "items": [
+        {
+          "id": "P1.1",
+          "title": "Reference design",
+          "detail": "Two gates around a black-box core, five inbound and six outbound checks, four stores, the verifiable message.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P1.2",
+          "title": "Check against OWASP, W3C and current practice",
+          "detail": "Terms aligned; ten added requirements; see the Requirements view.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P1.3",
+          "title": "Explorer site",
+          "detail": "Step-through and play modes, a selector per layer, message inspector, guided tour, use cases, evaluation. Public copy live at answerableagents.org.",
+          "status": "done",
+          "owner": "Fable (design), Opus (plumbing)"
+        },
+        {
+          "id": "P1.4",
+          "title": "Reference agent package",
+          "detail": "Two gates, stores, a suite registry and a trace for every decision. Built; in review before merge (pull request 635).",
+          "status": "doing",
+          "owner": "Opus (to Fable's brief)"
+        },
+        {
+          "id": "P1.5",
+          "title": "Real traces: main flow and three failures",
+          "detail": "The full 14-step flow with four parties running as agents, and three failures (the lender over-asks, an offer outside the limits, an injected instruction). All real runs, replayed in this explorer.",
+          "status": "done",
+          "owner": "Opus (to Fable's brief)"
+        },
+        {
+          "id": "P1.6",
+          "title": "Swap the transport",
+          "detail": "Direct transport and plain email both run through the same gates. The other transports are in the first section of this roadmap.",
+          "status": "doing",
+          "owner": "Opus (to Fable's brief)"
+        },
+        {
+          "id": "P1.7",
+          "title": "Product index and sector register",
+          "detail": "Find lenders through a trusted index with no personal data; check them on a register.",
+          "status": "done",
+          "owner": "Opus (to Fable's brief)"
+        },
+        {
+          "id": "P1.8",
+          "title": "Step-up challenge",
+          "detail": "A bank asks for a certified face check before it accepts the mandate.",
+          "status": "done",
+          "owner": "Opus (to Fable's brief)"
+        },
+        {
+          "id": "P1.9",
+          "title": "Joint computation as a data-sharing option",
+          "detail": "Design and the seam are being built; the computation itself waits on packages from the engine project, due before 17 Nov.",
+          "status": "doing",
+          "owner": "Fable (design), Opus (plumbing)"
+        },
+        {
+          "id": "P1.10",
+          "title": "Data by reference on Solid",
+          "detail": "Grant read access in the pod and send a pointer with terms, instead of a copy.",
+          "status": "done",
+          "owner": "Opus (to Fable's brief)"
+        },
+        {
+          "id": "P1.11",
+          "title": "When things go wrong",
+          "detail": "Accountability flows you can switch between: a claim to a regulator, fault passed to the vendor, reputation.",
+          "status": "done",
+          "owner": "Fable (design), Opus (plumbing)"
+        },
+        {
+          "id": "P1.12",
+          "title": "Narrated walkthrough video",
+          "detail": "First narrated version made. A re-record against the current site is owed.",
+          "status": "doing",
+          "owner": "Fable"
+        },
+        {
+          "id": "P1.13",
+          "title": "Comparison with the agents already built",
+          "detail": "The pilot, the suite agent and the policy sandbox drawn against the reference design, with gaps.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P1.14",
+          "title": "A core that is a real model",
+          "detail": "AgentDojo with a real model as the core: 1,325 runs, five conditions, three attacks. See the Evaluation view.",
+          "status": "done",
+          "owner": "Opus (to Fable's brief)"
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "The specification family",
+      "goal": "One core document and a document per layer, written so someone else could implement them.",
+      "items": [
+        {
+          "id": "P2.1",
+          "title": "Core specification",
+          "detail": "Roles, the verifiable message, the checks and their outcomes, the record, configurations.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.2",
+          "title": "Ten layer specifications",
+          "detail": "For each layer: what a suite must define, and the suites registered so far.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.3",
+          "title": "Baseline configuration",
+          "detail": "The recommended default, one suite per layer, so two strangers' agents can always talk.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.4",
+          "title": "Conformance",
+          "detail": "The trace format, expected outlines, and the rule: no suite without a trace.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.5",
+          "title": "Mortgage profile",
+          "detail": "The claims, accepted sources and assurance levels for the worked example.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.6",
+          "title": "Vocabulary",
+          "detail": "Terms and reason codes as an ontology, governed on Concord.",
+          "status": "later",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.7",
+          "title": "Zero-knowledge query proof suite",
+          "detail": "Drafted as an authenticity suite. Waits on the engine project for a proof that binds issuer and subject.",
+          "status": "doing",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.8",
+          "title": "Derived data and inference",
+          "detail": "Answers by query, by proof and by joint computation as one idea: a published rule applied to signed sources, with five ways of assuring the result.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.9",
+          "title": "Content that does not fit",
+          "detail": "Rules for prose, pictures and judgement, in both directions: a model's reading is a new statement, and free text leaves unasked only when everything the model has seen could be sent.",
+          "status": "done",
+          "owner": "Fable"
+        }
+      ]
+    },
+    {
+      "id": "P6",
+      "title": "Use cases and evaluation",
+      "goal": "Show that the same design works across sectors and settings, say plainly where it does not, and measure it.",
+      "items": [
+        {
+          "id": "P6.1",
+          "title": "Catalog of use cases by context",
+          "detail": "70 use cases in 15 sectors and five settings, each with what makes it hard, what goes wrong and the expected outcome.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P6.2",
+          "title": "A real run for every use case",
+          "detail": "151 of 166 paths are real runs. The other 15 are listed by name: nine wait on a proof system, six on a joint computation.",
+          "status": "doing",
+          "owner": "Fable (design and review), Codex (build)"
+        },
+        {
+          "id": "P6.3",
+          "title": "Review of where the design fits and where it does not",
+          "detail": "13 kinds of case where messages in agreed terms fall short, what the design does about each, and what it leaves unsolved.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P6.4",
+          "title": "Evaluation plan",
+          "detail": "Ten questions with a measure each, six methods, nine published benchmarks and how each maps onto the design.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P6.5",
+          "title": "Evaluation without a model",
+          "detail": "Worst-case core, one-change and injected-fault runs: being built now. Paused on 13 Nov: benchmarking waits until the development above is done.",
+          "status": "doing",
+          "owner": "Fable (design and review), Codex (build)"
+        },
+        {
+          "id": "P6.6",
+          "title": "Benchmarks with a real model",
+          "detail": "First run done with one model. Repeats, a second model and an attack written against the model are still to do.",
+          "status": "done",
+          "owner": "Fable (design and review), Codex (build)"
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "The paper",
+      "goal": "Bring what the implementation taught us back into the paper.",
+      "items": [
+        {
+          "id": "P3.1",
+          "title": "Review the paper against the implementation",
+          "detail": "Where the seven gaps held up, where the design changed, what is missing.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P3.2",
+          "title": "Propose a new version",
+          "detail": "Version 2 and a CACM-length version are in the paper document.",
+          "status": "done",
+          "owner": "Fable"
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Zero-knowledge and joint computation",
+      "goal": "Review and update the specifications, papers and code.",
+      "items": [
+        {
+          "id": "P4.1",
+          "title": "Review the zero-knowledge specifications and architecture",
+          "detail": "Against the authenticity layer and the query-proof suite.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P4.2",
+          "title": "Review the joint computation specification and paper",
+          "detail": "Against the data-sharing suite built in P1.9.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P4.3",
+          "title": "Updated specifications, papers and implementations",
+          "detail": "Findings sent to the engine project, which is building four packages in answer.",
+          "status": "doing",
+          "owner": "Fable, with the engine project"
+        }
+      ]
+    },
+    {
+      "id": "P5",
+      "title": "Thesis first draft",
+      "goal": "A first full pass, including a study of how trust is governed today.",
+      "items": [
+        {
+          "id": "P5.1",
+          "title": "Landscape study of governance",
+          "detail": "eIDAS, the UK digital identity and attributes trust framework, GLEIF and vLEI, sector registers, legal accountability, agent registries.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P5.2",
+          "title": "Which frameworks to build on",
+          "detail": "What can be used as it is, what is missing, and the shortest path to working infrastructure.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P5.3",
+          "title": "Full first draft",
+          "detail": "First full draft, about 97,000 words, with a reading view.",
+          "status": "done",
+          "owner": "Fable"
+        }
+      ]
+    },
+    {
+      "id": "P7",
+      "title": "Adoption",
+      "goal": "A name, a default, and a way for someone to start with nothing but email.",
+      "items": [
+        {
+          "id": "P7.1",
+          "title": "A name",
+          "detail": "Answerable. Chosen by Jesse on 13 Nov 2026.",
+          "status": "done",
+          "owner": "Fable, Jesse decides"
+        },
+        {
+          "id": "P7.2",
+          "title": "Email footer upgrade path",
+          "detail": "\"I use an agent that supports this\" with a link; plain email still works, and both sides upgrade when they can.",
+          "status": "next",
+          "owner": "Fable"
+        },
+        {
+          "id": "P7.3",
+          "title": "Setup page",
+          "detail": "How to get an agent: connect an existing assistant through an adapter, or sign up to a hosted one.",
+          "status": "next",
+          "owner": "Fable (design), Opus (plumbing)"
+        },
+        {
+          "id": "P7.4",
+          "title": "Bring the suite's own agent up to the reference design",
+          "detail": "Its channels do not yet verify signatures and it has no memory at runtime.",
+          "status": "later",
+          "owner": "Opus (to Fable's brief)"
+        }
+      ]
+    },
+    {
+      "id": "P8",
+      "title": "The rest of the app suite",
+      "goal": "If usage remains after everything above, and only once the gate is met.",
+      "items": [
+        {
+          "id": "P8.1",
+          "title": "Drive the remaining app suite work",
+          "detail": "Pick up the paused suite workstreams and take them forward.",
+          "status": "later",
+          "owner": "Fable (orchestration)"
+        },
+        {
+          "id": "P8.2",
+          "title": "Hand off to the engine project",
+          "detail": "Tell the engine project to run its own work to completion under the same usage rules.",
+          "status": "later",
+          "owner": "Fable"
+        }
+      ]
+    }
+  ]
+}

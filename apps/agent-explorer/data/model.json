@@ -1,0 +1,1365 @@
+{
+  "version": "0.9",
+  "name": {
+    "family": "Answerable",
+    "adjective": "Answerable",
+    "baseline": "Answerable baseline",
+    "chosen": "2026-11-13",
+    "meaning": "An agent that follows these specifications answers for what it does, and answers to the person or organization it acts for.",
+    "footer": "Sent by Sam's agent, an automated assistant acting for Sam. It is an Answerable agent: this message is signed, says what the agent is allowed to do, and is recorded. You can reply as normal. If you use an agent of your own, it can check all of this for you."
+  },
+  "note": "Canonical words and ids for the explorer site, the runtime's traces and the specs. Layer ids and suite ids here are the LayerId and SuiteId values used in agent-trace files.",
+  "parts": [
+    {
+      "id": "principal",
+      "name": "Principal",
+      "summary": "The person or organization the agent acts for. Signs the mandate, answers requests for approval, and can stop the agent."
+    },
+    {
+      "id": "inbound-gate",
+      "name": "Inbound gate",
+      "summary": "Checks every message and every piece of data before the core sees it. Ordinary code, not a model."
+    },
+    {
+      "id": "core",
+      "name": "Agent core",
+      "summary": "The model, its tools and any code it writes. Treated as a black box. It sees only admitted, labelled data. It proposes actions and never sends anything itself. It holds no keys."
+    },
+    {
+      "id": "outbound-gate",
+      "name": "Outbound gate",
+      "summary": "Checks every action and every disclosure the core proposes before anything leaves. Ordinary code, not a model."
+    },
+    {
+      "id": "policies",
+      "name": "Policies",
+      "summary": "The mandate, the principal's own rules, and agreements made with other parties."
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "summary": "Facts the agent holds. Each keeps its source, its terms of use, its origin and how sure the source was."
+    },
+    {
+      "id": "trust-store",
+      "name": "Trust store",
+      "summary": "Where the agent looks up who is accepted for what. It is not one list. It starts with the principal's own short list, such as friends trusted for particular tasks, and for everything else follows delegations out to registers and trust frameworks, the way a name lookup follows the domain name system. It also holds the rules for which source is an authority for which kind of claim."
+    },
+    {
+      "id": "record",
+      "name": "Record",
+      "summary": "A signed, tamper-evident log of every decision. Written by the gates, never by the model."
+    },
+    {
+      "id": "transport",
+      "name": "Transport",
+      "summary": "Whatever carries a message. It is never trusted."
+    }
+  ],
+  "inboundChecks": [
+    {
+      "id": "integrity",
+      "n": 1,
+      "name": "Integrity",
+      "short": "Intact? Who sent it?",
+      "question": "Is the message intact, and whose key signed it?",
+      "detail": "Checks the signature, the time window and that the message has not been seen before. Everything after this depends on it."
+    },
+    {
+      "id": "source",
+      "n": 2,
+      "name": "Source",
+      "short": "Source trusted for this?",
+      "question": "Do I accept this source for this kind of claim, for the task in hand?",
+      "detail": "A bank is an authority on a balance, not on a salary. Each claim is checked against the source the sector's rules accept for it."
+    },
+    {
+      "id": "authority",
+      "n": 3,
+      "name": "Authority",
+      "short": "Sender has authority here?",
+      "question": "Is the sending agent acting for who it says, and may that party deal with me in this context?",
+      "detail": "Follows the mandate back to the person who signed it and checks how that person approved it. The receiver can ask for a stronger approval."
+    },
+    {
+      "id": "terms",
+      "n": 4,
+      "name": "Terms",
+      "short": "Agreed terms for this use?",
+      "question": "Is there an agreement that covers this exchange, and what terms of use arrive with the data?",
+      "detail": "The terms stay attached to the data as a label, and the outbound gate reads them before the data is passed on."
+    },
+    {
+      "id": "fitness",
+      "n": 5,
+      "name": "Fitness",
+      "short": "Good enough for the task?",
+      "question": "Is this data good enough for this task?",
+      "detail": "Is it fresh and complete? How sure was the source? If two sources disagree, which one wins? Payroll outranks a self-reported income, and a doctor outranks the patient's own notes."
+    }
+  ],
+  "inboundOutcomes": [
+    {
+      "id": "admit",
+      "name": "Admit",
+      "summary": "The data is rewritten into the shared vocabulary, labelled, and passed to the core."
+    },
+    {
+      "id": "ask-more",
+      "name": "Ask for more",
+      "summary": "The gate replies with a challenge: missing evidence, or a stronger approval such as a face check."
+    },
+    {
+      "id": "refuse",
+      "name": "Refuse",
+      "summary": "Nothing reaches the core. The refusal and its reason go in the record."
+    }
+  ],
+  "outboundChecks": [
+    {
+      "id": "mandate",
+      "n": 1,
+      "name": "Mandate",
+      "short": "Allowed by the mandate?",
+      "question": "Does the principal's mandate allow this action, for this purpose, with this party?",
+      "detail": "The mandate is a signed policy. Anything it does not allow is held for the principal or stopped."
+    },
+    {
+      "id": "recipient",
+      "n": 2,
+      "name": "Recipient",
+      "short": "Recipient verified?",
+      "question": "Is the other side who it claims to be, and accredited for this?",
+      "detail": "Looks the recipient up in the trust store: a pinned key, a sector register, or a federation."
+    },
+    {
+      "id": "disclosure",
+      "n": 3,
+      "name": "Disclosure",
+      "short": "Only the data needed?",
+      "question": "Is this the least data that does the job?",
+      "detail": "A proof that income is above a threshold can replace a year of payslips. A query to an index should carry no personal data."
+    },
+    {
+      "id": "data-terms",
+      "n": 4,
+      "name": "Data terms",
+      "short": "Data's own terms allow it?",
+      "question": "Do the terms on each piece of data, and the principal's own rules, allow it to go to this recipient for this purpose?",
+      "detail": "Reads the labels in memory. Also decides which terms go out with the data."
+    },
+    {
+      "id": "limits-approval",
+      "n": 5,
+      "name": "Limits and approval",
+      "short": "Within limits? Ask first?",
+      "question": "Is it inside the spending and rate limits, and does it need the principal's approval?",
+      "detail": "An approval is bound to the exact terms, so a changed offer needs a new approval."
+    },
+    {
+      "id": "evidence",
+      "n": 6,
+      "name": "Evidence",
+      "short": "Sign; add terms and origin",
+      "question": "Is the message signed, with its terms and provenance attached, and is the decision recorded?",
+      "detail": "The last step before anything leaves. It is what makes the action checkable later."
+    }
+  ],
+  "outboundOutcomes": [
+    {
+      "id": "go",
+      "name": "Go",
+      "summary": "The message is sent or the action is taken."
+    },
+    {
+      "id": "ask-principal",
+      "name": "Ask the principal",
+      "summary": "The action waits for the principal's approval of the exact terms."
+    },
+    {
+      "id": "stop",
+      "name": "Stop",
+      "summary": "The action is never taken, even if approved."
+    }
+  ],
+  "message": {
+    "name": "Verifiable message",
+    "summary": "Every message between agents has the same layers, whatever carries it. The sender's signature covers everything except the carriage.",
+    "layers": [
+      {
+        "id": "carriage",
+        "name": "Carriage",
+        "summary": "HTTP, A2A, MCP, email, or a pointer to a resource in a pod.",
+        "readBy": "never trusted",
+        "signed": false
+      },
+      {
+        "id": "header",
+        "name": "Header and proof",
+        "summary": "From, to, conversation, kind of message, time; signed by the sender.",
+        "readBy": "integrity",
+        "signed": true
+      },
+      {
+        "id": "authority",
+        "name": "Authority",
+        "summary": "The mandate chain, and proof of how the person approved it.",
+        "readBy": "authority",
+        "signed": true
+      },
+      {
+        "id": "content",
+        "name": "Content",
+        "summary": "The request, offer or data, in agreed terms. Original statements or an answer derived from them; by value or by reference.",
+        "readBy": "shared meaning",
+        "signed": true
+      },
+      {
+        "id": "evidence",
+        "name": "Evidence",
+        "summary": "Statements signed by the authority for each claim, or, for a derived answer, the record of how it was derived.",
+        "readBy": "source",
+        "signed": true
+      },
+      {
+        "id": "terms",
+        "name": "Terms of use",
+        "summary": "What the receiver may do with it, for what purpose, and for how long.",
+        "readBy": "terms",
+        "signed": true
+      },
+      {
+        "id": "provenance",
+        "name": "Provenance and quality",
+        "summary": "Where each part came from, which activity produced it, how fresh it is and how sure the source was.",
+        "readBy": "fitness, record",
+        "signed": true
+      }
+    ]
+  },
+  "layers": [
+    {
+      "id": "transport",
+      "group": "plumbing",
+      "name": "Transport",
+      "question": "How does a message get there?",
+      "suites": [
+        {
+          "id": "direct-http",
+          "name": "Direct HTTP",
+          "baseline": true,
+          "summary": "One agent calls the other's endpoint.",
+          "maturity": "standard",
+          "basis": "HTTP; HTTP Message Signatures (RFC 9421) optional"
+        },
+        {
+          "id": "a2a",
+          "name": "A2A",
+          "summary": "The message rides in an A2A data part.",
+          "maturity": "industry specification",
+          "basis": "A2A 1.0 data parts and agent cards"
+        },
+        {
+          "id": "mcp",
+          "name": "MCP",
+          "summary": "The message is the argument and result of an MCP tool call.",
+          "maturity": "industry specification",
+          "basis": "Model Context Protocol tool calls; its authorization rules"
+        },
+        {
+          "id": "email",
+          "name": "Email",
+          "summary": "A structured part inside an ordinary email, with a readable copy for people.",
+          "maturity": "standard",
+          "basis": "Internet mail with a structured MIME part"
+        },
+        {
+          "id": "solid-inbox",
+          "name": "Solid inbox",
+          "summary": "The message is written to the receiver's inbox in a pod.",
+          "maturity": "community draft",
+          "basis": "Solid Protocol; W3C Linked Web Storage (working draft)"
+        }
+      ],
+      "label": "·"
+    },
+    {
+      "id": "data-access",
+      "group": "plumbing",
+      "name": "Data access",
+      "question": "How does the content get there?",
+      "suites": [
+        {
+          "id": "by-value",
+          "name": "By value",
+          "baseline": true,
+          "summary": "The data travels inside the message.",
+          "maturity": "this work",
+          "basis": ""
+        },
+        {
+          "id": "by-reference-solid",
+          "name": "By reference on Solid",
+          "summary": "The sender grants read access to a resource in a pod and sends a pointer. Withdrawing the grant ends the sharing.",
+          "maturity": "community draft",
+          "basis": "Solid access grants; W3C Linked Web Storage (working draft)"
+        },
+        {
+          "id": "by-query",
+          "name": "By query",
+          "summary": "The asker sends a question and gets back only the answer, as a derived statement. The source of the data signs the answer itself; an index returns rows that each carry their own source's signature.",
+          "maturity": "standard",
+          "basis": "SPARQL; DCAT catalog records"
+        },
+        {
+          "id": "aggregate-mpc",
+          "name": "Joint computation",
+          "summary": "Several holders work out one answer together, such as a total. Each sees only its own input. The receiver sees only the answer: a derived statement, jointly computed. (Multi-party computation.)",
+          "maturity": "research",
+          "basis": "Additive secret sharing; signed input attestations"
+        }
+      ],
+      "label": "·"
+    },
+    {
+      "id": "identity",
+      "group": "plumbing",
+      "name": "Identity",
+      "question": "What names a party, and how is its key found?",
+      "suites": [
+        {
+          "id": "pinned-key",
+          "name": "Web address with a pinned key",
+          "baseline": true,
+          "summary": "Keys are exchanged in advance and looked up locally.",
+          "maturity": "standard",
+          "basis": "JWK thumbprints (RFC 7638)"
+        },
+        {
+          "id": "webid",
+          "name": "WebID",
+          "summary": "The key is published in the party's own profile document.",
+          "maturity": "community draft",
+          "basis": "WebID; W3C Controlled Identifiers 1.0"
+        },
+        {
+          "id": "did",
+          "name": "Decentralized identifier",
+          "summary": "The key is resolved from a DID document.",
+          "maturity": "standard",
+          "basis": "W3C Decentralized Identifiers 1.0"
+        },
+        {
+          "id": "email-endpoint",
+          "name": "Email address as an endpoint",
+          "summary": "An address names a mailbox, with separate evidence of who controls it.",
+          "maturity": "this work",
+          "basis": "mailto identifiers with separate control evidence"
+        },
+        {
+          "id": "anonymous",
+          "name": "No identifier",
+          "summary": "For public requests that need no identity.",
+          "maturity": "this work",
+          "basis": ""
+        }
+      ],
+      "label": "·"
+    },
+    {
+      "id": "meaning",
+      "n": 1,
+      "group": "gap",
+      "name": "Shared meaning",
+      "question": "Do both sides read the terms the same way?",
+      "suites": [
+        {
+          "id": "fixed-vocabulary",
+          "name": "Fixed vocabulary",
+          "baseline": true,
+          "summary": "Both sides use a versioned vocabulary published by one body.",
+          "maturity": "standard",
+          "basis": "RDF vocabularies with versions; W3C Profiles Vocabulary (draft)"
+        },
+        {
+          "id": "registry-lookup",
+          "name": "Registry lookup",
+          "summary": "Terms and mappings are looked up in a shared registry.",
+          "maturity": "this work",
+          "basis": "A term and mapping registry"
+        },
+        {
+          "id": "negotiated",
+          "name": "Negotiated",
+          "summary": "The agents propose and agree terms through a deliberation platform, and a person approves the result.",
+          "maturity": "research",
+          "basis": "Concord deliberation platform"
+        },
+        {
+          "id": "plain-language-upgrade",
+          "name": "Plain language, then upgrade",
+          "summary": "Start in plain language and move to structured terms once both sides support them.",
+          "maturity": "research",
+          "basis": "Plain text first, structured terms when both sides can"
+        }
+      ],
+      "label": "1"
+    },
+    {
+      "id": "authority",
+      "n": 2,
+      "group": "gap",
+      "name": "Delegated authority",
+      "question": "May this agent do this for this person?",
+      "suites": [
+        {
+          "id": "mandate-signed",
+          "name": "Signed mandate, stronger approval on request",
+          "baseline": true,
+          "summary": "A policy signed with a key the person controls. A receiver can ask for proof of how the person approved it, such as a certified face check attested by an identity provider, before it acts.",
+          "maturity": "standard",
+          "basis": "ODRL 2.2 policy in a JWS; step-up as in RFC 9470; WebAuthn"
+        },
+        {
+          "id": "mandate-credential",
+          "name": "Mandate as a verifiable credential",
+          "summary": "The same policy inside a verifiable credential, with a status list so it can be suspended or withdrawn.",
+          "maturity": "standard",
+          "basis": "ODRL 2.2 in a W3C Verifiable Credential 2.0; Bitstring Status List"
+        },
+        {
+          "id": "authorization-server",
+          "name": "Grant from an authorization server",
+          "summary": "The person approves at a server they already use, which issues a grant that names the actions allowed.",
+          "maturity": "standard",
+          "basis": "OAuth rich authorization requests (RFC 9396), token exchange (RFC 8693), or GNAP (RFC 9635)"
+        },
+        {
+          "id": "agent-registry",
+          "name": "Agent registry",
+          "summary": "A registry links each agent to the person or organization behind it, and says what it is registered to do.",
+          "maturity": "draft",
+          "basis": "Agent registries are at draft and vendor stage"
+        }
+      ],
+      "label": "2"
+    },
+    {
+      "id": "authenticity",
+      "n": 3,
+      "group": "gap",
+      "name": "Authenticity",
+      "question": "Is this statement really from its source?",
+      "suites": [
+        {
+          "id": "jws",
+          "name": "Signed statement (JWS)",
+          "baseline": true,
+          "summary": "A compact signature over the statement.",
+          "maturity": "standard",
+          "basis": "JWS (RFC 7515) with EdDSA or ES256; JCS (RFC 8785)"
+        },
+        {
+          "id": "data-integrity",
+          "name": "Data Integrity proof",
+          "summary": "A W3C Data Integrity proof over the statement as a graph.",
+          "maturity": "standard",
+          "basis": "W3C Data Integrity 1.0 with the EdDSA or ECDSA cryptosuites"
+        },
+        {
+          "id": "origin-hosted",
+          "name": "Served from the source's domain",
+          "summary": "The statement is trusted because it is fetched from the source's own web address.",
+          "maturity": "standard",
+          "basis": "HTTPS; a register that anchors each source to its address"
+        },
+        {
+          "id": "selective-disclosure",
+          "name": "Selective disclosure",
+          "summary": "The holder shows only some of the signed claims. The simplest proved derivation: the rule just picks claims.",
+          "maturity": "standard",
+          "basis": "SD-JWT VC or ecdsa-sd-2023; BBS is a candidate recommendation"
+        },
+        {
+          "id": "zk-query-proof",
+          "name": "Zero-knowledge proof of a query",
+          "summary": "A proof that a query over signed statements has a stated result, without showing the statements. A derived statement, proved.",
+          "maturity": "research",
+          "basis": "Zero-knowledge proofs of SPARQL query results over signed credentials"
+        }
+      ],
+      "label": "3"
+    },
+    {
+      "id": "trust",
+      "n": 4,
+      "group": "gap",
+      "name": "Trust framework",
+      "question": "Why should I accept this party or source at all?",
+      "suites": [
+        {
+          "id": "register-chain",
+          "name": "Own list, then a chain of registers",
+          "summary": "The principal's own list is checked first. Otherwise a lookup starts at a root the principal accepts, such as a national register, and follows its delegations to the register that answers for this kind of party.",
+          "baseline": true,
+          "maturity": "this work",
+          "basis": "Modeled on trusted lists (eIDAS), the UK trust framework register, GLEIF vLEI chains and OpenID Federation trust chains"
+        },
+        {
+          "id": "pinned-list",
+          "name": "Own list only",
+          "summary": "Only parties the principal has listed by hand, each with a pinned key. For closed groups and tests.",
+          "maturity": "this work",
+          "basis": ""
+        },
+        {
+          "id": "federation",
+          "name": "Federation membership",
+          "summary": "Membership of a federation, signed by the authority that runs it, with the federation's own rules.",
+          "maturity": "standard",
+          "basis": "OpenID Federation 1.0"
+        },
+        {
+          "id": "trusted-index",
+          "name": "Trusted index",
+          "summary": "Parties are found through an index of records that each source has signed. The index is trusted only for coverage and freshness, and gives a receipt for what it holds.",
+          "maturity": "standard",
+          "basis": "SCITT signed statements and receipts (RFC 9943); DCAT 3"
+        },
+        {
+          "id": "reputation",
+          "name": "Reputation",
+          "summary": "Scores for how a party's agents have behaved, from a rating service the principal accepts.",
+          "maturity": "research",
+          "basis": "No standards-track scheme exists"
+        }
+      ],
+      "label": "4"
+    },
+    {
+      "id": "reliance",
+      "group": "gap",
+      "n": 4.5,
+      "label": "4b",
+      "name": "Reliance",
+      "question": "How far should I rely on this, for this task?",
+      "note": "Split out of the trust framework layer. Authenticity says who said it. The trust framework says whether to accept them. Reliance says how much weight their statement gets here.",
+      "suites": [
+        {
+          "id": "precedence-rules",
+          "name": "Precedence and freshness rules",
+          "baseline": true,
+          "summary": "For each kind of claim, rules say which kind of source wins when two disagree and how old is too old. The principal can mark their own facts, such as: take a professional's word over mine.",
+          "maturity": "this work",
+          "basis": "PROV-O for sources; ranked statements"
+        },
+        {
+          "id": "stated-confidence",
+          "name": "Stated confidence",
+          "summary": "Each claim carries how sure its source is and how that was worked out. The receiver sets a threshold per task. A model's own confidence counts as uncalibrated unless a method is given.",
+          "maturity": "draft",
+          "basis": "W3C Data Quality Vocabulary (a note); RDF 1.2 annotations (candidate recommendation)"
+        },
+        {
+          "id": "corroboration",
+          "name": "Two sources must agree",
+          "summary": "A claim is relied on only when independent sources agree within a tolerance.",
+          "maturity": "this work",
+          "basis": ""
+        },
+        {
+          "id": "quality-certificate",
+          "name": "Certified quality",
+          "summary": "A third party certifies that a data set or index meets a stated quality policy: accurate, up to date, complete.",
+          "maturity": "draft",
+          "basis": "W3C Data Quality Vocabulary quality certificates and policies"
+        }
+      ]
+    },
+    {
+      "id": "usage-control",
+      "n": 5,
+      "group": "gap",
+      "name": "Usage control",
+      "question": "What may be done with the data, and who enforces it?",
+      "suites": [
+        {
+          "id": "odrl-rules",
+          "name": "ODRL terms, rules only",
+          "baseline": true,
+          "summary": "Terms are ODRL policies checked by code.",
+          "maturity": "standard",
+          "basis": "ODRL 2.2, a stated subset, three-valued evaluation"
+        },
+        {
+          "id": "odrl-model-tighten",
+          "name": "Rules, and a model that may tighten",
+          "summary": "A model may make the answer stricter but never looser.",
+          "maturity": "research",
+          "basis": "ODRL 2.2 plus a model that can only narrow"
+        },
+        {
+          "id": "human-approval",
+          "name": "Human approval",
+          "summary": "Rules decide what they can. A person approves each use the rules do not settle.",
+          "maturity": "this work",
+          "basis": "ODRL 2.2 plus approvals bound to the exact action"
+        },
+        {
+          "id": "solid-access-control",
+          "name": "Solid access control",
+          "summary": "The terms are translated into access rules on a pod that grant no more than the mandate allows.",
+          "maturity": "community draft",
+          "basis": "Solid access control (WAC or ACP); Linked Web Storage access grants"
+        }
+      ],
+      "label": "5"
+    },
+    {
+      "id": "commitments",
+      "n": 6,
+      "group": "gap",
+      "name": "Commitments",
+      "question": "What was agreed, and is it binding?",
+      "suites": [
+        {
+          "id": "signed-offer-acceptance",
+          "name": "Signed offer and acceptance",
+          "baseline": true,
+          "summary": "Each side signs the exact terms. The acceptance refers to the offer by its digest.",
+          "maturity": "standard",
+          "basis": "ODRL Offer and Agreement; JWS over the terms digest"
+        },
+        {
+          "id": "agreement-credential",
+          "name": "Agreement credential",
+          "summary": "One countersigned record of what was agreed.",
+          "maturity": "standard",
+          "basis": "W3C Verifiable Credential 2.0 with two proofs"
+        }
+      ],
+      "label": "6"
+    },
+    {
+      "id": "accountability",
+      "n": 7,
+      "group": "gap",
+      "name": "Accountability and redress",
+      "question": "What happens when something goes wrong?",
+      "suites": [
+        {
+          "id": "local-ledger",
+          "name": "Signed ledger on each side",
+          "baseline": true,
+          "summary": "Each party keeps a hash-chained record of its own decisions.",
+          "maturity": "this work",
+          "basis": "Hash-chained signed entries"
+        },
+        {
+          "id": "pod-mirror",
+          "name": "Record mirrored to a pod",
+          "summary": "As the baseline, and the record is also kept in a pod the principal controls.",
+          "maturity": "community draft",
+          "basis": "Solid or Linked Web Storage"
+        },
+        {
+          "id": "regulator-claim",
+          "name": "Claim to a regulator",
+          "summary": "As the baseline, and a wronged party can file a claim with a regulator using its record. The person who delegated the act answers for it.",
+          "maturity": "this work",
+          "basis": "Follows sector complaint routes; EU AI Act logging and oversight duties"
+        },
+        {
+          "id": "vendor-fault",
+          "name": "Fault passed to the vendor",
+          "summary": "As the baseline, and when the record shows the act was outside the mandate, the claim moves to whoever built or runs the agent.",
+          "maturity": "this work",
+          "basis": "Product liability and contract terms"
+        },
+        {
+          "id": "reputation-post",
+          "name": "Public reputation",
+          "summary": "As the baseline, and a wronged party's agent can publish what happened, with evidence a reader can check.",
+          "maturity": "research",
+          "basis": ""
+        },
+        {
+          "id": "reputation-score",
+          "name": "Reputation score",
+          "summary": "As the baseline, and a rating service scores how each party's agents behave, sector by sector.",
+          "maturity": "research",
+          "basis": ""
+        }
+      ],
+      "label": "7"
+    }
+  ],
+  "parties": [
+    {
+      "id": "sam",
+      "name": "Sam",
+      "kind": "person",
+      "role": "Wants a mortgage in principle"
+    },
+    {
+      "id": "sams-agent",
+      "name": "Sam's agent",
+      "kind": "agent",
+      "actsFor": "sam",
+      "role": "Personal agent"
+    },
+    {
+      "id": "index",
+      "name": "Mortgage product index",
+      "kind": "service",
+      "role": "Aggregates lenders' signed product records"
+    },
+    {
+      "id": "trust-root",
+      "name": "National trust root",
+      "kind": "service",
+      "role": "Says which register answers for which kind of organization"
+    },
+    {
+      "id": "register",
+      "name": "Sector register",
+      "kind": "service",
+      "role": "Lists regulated lenders"
+    },
+    {
+      "id": "lender",
+      "name": "North Bank",
+      "kind": "agent",
+      "role": "Lender"
+    },
+    {
+      "id": "bank",
+      "name": "Harbour Bank",
+      "kind": "agent",
+      "role": "Sam's own bank; authority for balances"
+    },
+    {
+      "id": "second-bank",
+      "name": "Canal Bank",
+      "kind": "agent",
+      "role": "Sam's own bank; authority for balances"
+    },
+    {
+      "id": "payroll",
+      "name": "Paywell",
+      "kind": "agent",
+      "role": "Payroll provider; authority for income"
+    },
+    {
+      "id": "identity-provider",
+      "name": "Identity provider",
+      "kind": "service",
+      "role": "Attests a face check"
+    }
+  ],
+  "evidenceLevel": "Everyone here is fictional. Both sides of every exchange run the same code base. This shows what the design does, not that independent implementations interoperate.",
+  "requirements": {
+    "note": "How the design lines up with current security guidance and web standards. Checked 13 Nov 2026. Internet-Drafts and community group reports are work in progress, not standards.",
+    "sources": [
+      {
+        "id": "owasp-asi-top10",
+        "name": "OWASP Top 10 for Agentic Applications (2026)",
+        "publisher": "OWASP GenAI Security Project",
+        "date": "2025-12",
+        "status": "published guidance",
+        "url": "https://genai.owasp.org/"
+      },
+      {
+        "id": "owasp-asi-threats",
+        "name": "Agentic AI: Threats and Mitigations (T1 to T15)",
+        "publisher": "OWASP Agentic Security Initiative",
+        "date": "2025-02",
+        "status": "published guidance",
+        "url": "https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/"
+      },
+      {
+        "id": "vc2",
+        "name": "Verifiable Credentials Data Model 2.0",
+        "publisher": "W3C",
+        "status": "Recommendation",
+        "url": "https://www.w3.org/TR/vc-data-model-2.0/"
+      },
+      {
+        "id": "vc-di",
+        "name": "Verifiable Credential Data Integrity 1.0",
+        "publisher": "W3C",
+        "status": "Recommendation",
+        "url": "https://www.w3.org/TR/vc-data-integrity/"
+      },
+      {
+        "id": "did",
+        "name": "Decentralized Identifiers",
+        "publisher": "W3C",
+        "status": "Recommendation",
+        "url": "https://www.w3.org/TR/did-core/"
+      },
+      {
+        "id": "odrl",
+        "name": "ODRL Information Model 2.2",
+        "publisher": "W3C",
+        "status": "Recommendation",
+        "url": "https://www.w3.org/TR/odrl-model/"
+      },
+      {
+        "id": "prov",
+        "name": "PROV-O: the provenance ontology",
+        "publisher": "W3C",
+        "status": "Recommendation",
+        "url": "https://www.w3.org/TR/prov-o/"
+      },
+      {
+        "id": "dqv",
+        "name": "Data Quality Vocabulary",
+        "publisher": "W3C",
+        "status": "Working Group Note",
+        "url": "https://www.w3.org/TR/vocab-dqv/"
+      },
+      {
+        "id": "w3c-agent-cg",
+        "name": "AI Agent Protocol Community Group",
+        "publisher": "W3C",
+        "status": "community group, drafts only",
+        "url": "https://www.w3.org/groups/cg/agentprotocol"
+      },
+      {
+        "id": "w3c-agent-id-cg",
+        "name": "Agent Identity Registry Protocol Community Group",
+        "publisher": "W3C",
+        "status": "community group, started April 2026",
+        "url": "https://www.w3.org/groups/cg/agent-identity/"
+      },
+      {
+        "id": "rfc9421",
+        "name": "HTTP Message Signatures (RFC 9421)",
+        "publisher": "IETF",
+        "status": "standard",
+        "url": "https://www.rfc-editor.org/rfc/rfc9421"
+      },
+      {
+        "id": "ietf-agent-auth",
+        "name": "AI Agent Authentication and Authorization",
+        "publisher": "IETF individual draft",
+        "status": "Internet-Draft",
+        "url": "https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/"
+      },
+      {
+        "id": "ap2",
+        "name": "Agent Payments Protocol (AP2)",
+        "publisher": "industry group",
+        "status": "open specification",
+        "url": "https://ap2-protocol.org/"
+      },
+      {
+        "id": "camel",
+        "name": "Defeating Prompt Injections by Design (CaMeL)",
+        "publisher": "research paper",
+        "date": "2025",
+        "status": "research",
+        "url": "https://arxiv.org/abs/2503.18813"
+      },
+      {
+        "id": "patterns",
+        "name": "Design Patterns for Securing LLM Agents against Prompt Injections",
+        "publisher": "research paper",
+        "date": "2025",
+        "status": "research",
+        "url": "https://arxiv.org/abs/2506.08837"
+      }
+    ],
+    "principle": {
+      "title": "Assume the model can be fooled",
+      "text": "Current guidance agrees on one thing: no filter reliably stops a model from being talked into something. So the checks that matter sit outside the model, in ordinary code. The core proposes. The gates decide. An agent that reads untrusted content, holds private data and can act on the world is only safe if something other than the model stands between those three.",
+      "sources": [
+        "owasp-asi-top10",
+        "camel",
+        "patterns"
+      ]
+    },
+    "owaspAgentic": [
+      {
+        "id": "ASI01",
+        "name": "Agent goal hijack",
+        "risk": "Content the agent reads changes what it tries to do.",
+        "answer": "Incoming content is data, never instructions. The core sees only admitted, labelled data, and it cannot send anything itself. The outbound gate checks every proposed action against the mandate, whatever the model was told.",
+        "where": [
+          "inbound-gate",
+          "outbound-gate",
+          "mandate"
+        ],
+        "status": "shown",
+        "trace": "mortgage-injected-fee--baseline"
+      },
+      {
+        "id": "ASI02",
+        "name": "Tool misuse and exploitation",
+        "risk": "The agent uses a tool it holds in a way nobody approved.",
+        "answer": "Every tool call is a proposed action. The mandate, limits and approval checks run on each one.",
+        "where": [
+          "mandate",
+          "limits-approval"
+        ],
+        "status": "shown",
+        "trace": "mortgage-out-of-limit--baseline"
+      },
+      {
+        "id": "ASI03",
+        "name": "Identity and privilege abuse",
+        "risk": "The agent reuses, widens or leaks access it inherited.",
+        "answer": "The core holds no keys. Authority comes from a mandate signed by the principal, scoped by purpose, party, limits and expiry. The receiver follows it back to the signer and can ask for stronger proof.",
+        "where": [
+          "authority",
+          "mandate"
+        ],
+        "status": "shown",
+        "trace": "mortgage-main--baseline"
+      },
+      {
+        "id": "ASI04",
+        "name": "Agentic supply chain vulnerabilities",
+        "risk": "A tool, description, model or register the agent depends on has been tampered with.",
+        "answer": "The configuration names every suite and tool and is signed. Agent descriptions and register entries are signed and checked like any other message.",
+        "where": [
+          "source",
+          "trust"
+        ],
+        "status": "partly",
+        "gap": "Tool pinning and a signed configuration are specified but not yet in a trace."
+      },
+      {
+        "id": "ASI05",
+        "name": "Unexpected code execution",
+        "risk": "The agent writes or runs code that does harm.",
+        "answer": "Code the core writes runs inside the core's sandbox, with no keys and no network. Its results are proposals, and pass the outbound gate like anything else.",
+        "where": [
+          "core",
+          "outbound-gate"
+        ],
+        "status": "by-design",
+        "gap": "Shown in the policy sandbox, not in this walkthrough."
+      },
+      {
+        "id": "ASI06",
+        "name": "Memory and context poisoning",
+        "risk": "A false fact is planted in memory and steers later decisions.",
+        "answer": "Only admitted items are stored. Each fact keeps its source, time, terms and confidence. The fitness check decides which source wins when two disagree.",
+        "where": [
+          "fitness",
+          "memory",
+          "provenance",
+          "reliance"
+        ],
+        "status": "shown",
+        "trace": "mortgage-main--baseline"
+      },
+      {
+        "id": "ASI07",
+        "name": "Insecure inter-agent communication",
+        "risk": "Messages between agents are forged, altered or replayed.",
+        "answer": "Every message is a verifiable message: signed, time-limited and single-use. Transport is never trusted, so the same checks give the same answers over HTTP, A2A, MCP or email.",
+        "where": [
+          "integrity",
+          "transport",
+          "authenticity"
+        ],
+        "status": "shown",
+        "trace": "mortgage-main--transport-email"
+      },
+      {
+        "id": "ASI08",
+        "name": "Cascading failures",
+        "risk": "One bad step spreads across agents and systems.",
+        "answer": "Limits on spend, rate and number of steps. A failed check stops the flow rather than passing it on. Each side keeps its own record, so the first bad step can be found.",
+        "where": [
+          "limits-approval",
+          "record",
+          "accountability"
+        ],
+        "status": "partly",
+        "gap": "Step budgets are specified but not yet enforced in a trace."
+      },
+      {
+        "id": "ASI09",
+        "name": "Human-agent trust exploitation",
+        "risk": "The agent talks its principal into approving something they should not.",
+        "answer": "The approval request is built by the gate from the rule and the facts, not written by the model. High-risk approvals need a step-up check that the person is present.",
+        "where": [
+          "limits-approval",
+          "human-approval",
+          "authority"
+        ],
+        "status": "shown",
+        "trace": "mortgage-main--baseline"
+      },
+      {
+        "id": "ASI10",
+        "name": "Rogue agents",
+        "risk": "An agent keeps acting outside its role.",
+        "answer": "Mandates expire and can be withdrawn. Registers carry status. The principal can stop the agent. The record shows who allowed what.",
+        "where": [
+          "authority",
+          "trust",
+          "record"
+        ],
+        "status": "partly",
+        "gap": "Withdrawal and status lookups are specified but not yet in a trace."
+      }
+    ],
+    "added": [
+      {
+        "id": "R-fresh",
+        "name": "Freshness and single use",
+        "text": "Every message carries a time window and a one-time value. The integrity check refuses anything stale or seen before.",
+        "check": "integrity",
+        "from": [
+          "ASI07"
+        ]
+      },
+      {
+        "id": "R-status",
+        "name": "Status and withdrawal",
+        "text": "Mandates, credentials and register entries can be withdrawn. The source and authority checks look up their status.",
+        "check": "authority",
+        "from": [
+          "ASI03",
+          "ASI10"
+        ]
+      },
+      {
+        "id": "R-fitness",
+        "name": "Fitness for purpose",
+        "text": "Admitted data carries how it was produced, how old it is and how sure the source is. The receiver decides whether that is good enough for the task, and which source wins when two disagree.",
+        "check": "fitness",
+        "from": [
+          "ASI06"
+        ]
+      },
+      {
+        "id": "R-memory",
+        "name": "Gated memory",
+        "text": "Nothing enters memory except through the inbound gate, and every fact keeps its labels.",
+        "check": "fitness",
+        "from": [
+          "ASI06"
+        ]
+      },
+      {
+        "id": "R-labels",
+        "name": "Labels travel with data",
+        "text": "Source and terms stay attached to data inside the core and on anything derived from it, so the outbound gate can apply them.",
+        "check": "data-terms",
+        "from": [
+          "ASI01",
+          "ASI06"
+        ]
+      },
+      {
+        "id": "R-budget",
+        "name": "Budgets",
+        "text": "Spend, rate and step limits. Loops of asking for more are bounded.",
+        "check": "limits-approval",
+        "from": [
+          "ASI08"
+        ]
+      },
+      {
+        "id": "R-config",
+        "name": "Signed configuration",
+        "text": "The set of suites, tools and model an agent runs is written down, signed and named in every record entry.",
+        "check": "evidence",
+        "from": [
+          "ASI04"
+        ]
+      },
+      {
+        "id": "R-approval",
+        "name": "Approval the model cannot write",
+        "text": "What the principal sees when asked to approve is produced by the gate from the rule and the facts.",
+        "check": "limits-approval",
+        "from": [
+          "ASI09"
+        ]
+      },
+      {
+        "id": "R-sandbox",
+        "name": "Contained core",
+        "text": "The core has no keys and no network. Its only way out is a proposal to the outbound gate.",
+        "check": "mandate",
+        "from": [
+          "ASI05",
+          "ASI01"
+        ]
+      },
+      {
+        "id": "R-record",
+        "name": "A record others can check",
+        "text": "Each decision is written to an append-only record with the rule that decided it, so a third party can replay it.",
+        "check": "evidence",
+        "from": [
+          "ASI08",
+          "ASI10"
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "ours": "Verifiable message",
+        "standard": "Verifiable credential and verifiable presentation (W3C); verifiable digital credential (AP2)",
+        "note": "A message whose claims can be checked without trusting how it arrived. Replaces the earlier working name, trust envelope."
+      },
+      {
+        "ours": "The five inbound checks",
+        "standard": "Verification and validation (W3C Verifiable Credentials 2.0)",
+        "note": "Integrity is verification: is it authentic and current. Source, authority, terms and fitness are validation: does it meet this receiver's rules."
+      },
+      {
+        "ours": "Header and proof",
+        "standard": "proof (W3C Data Integrity); HTTP message signature (RFC 9421)",
+        "note": "Who sent it, to whom, when, and the signature."
+      },
+      {
+        "ours": "Mandate",
+        "standard": "Intent, cart and payment mandates (AP2); delegation and acting on behalf of (OAuth)",
+        "note": "A signed statement of what the agent may do, for whom, and within what limits."
+      },
+      {
+        "ours": "Principal",
+        "standard": "Resource owner (OAuth); user (AP2); controller (data protection law)",
+        "note": "The person or organization the agent acts for."
+      },
+      {
+        "ours": "Issuer, holder, verifier",
+        "standard": "The same three roles in W3C Verifiable Credentials",
+        "note": "Used as defined there."
+      },
+      {
+        "ours": "Evidence",
+        "standard": "evidence (W3C Verifiable Credentials 2.0)",
+        "note": "What backs a claim."
+      },
+      {
+        "ours": "Confidence",
+        "standard": "confidenceMethod (reserved in Verifiable Credentials 2.0); quality measurements (W3C Data Quality Vocabulary)",
+        "note": "How sure the source is, and how the receiver should weigh it."
+      },
+      {
+        "ours": "Provenance",
+        "standard": "PROV-O (W3C): attributed to, derived from, generated at",
+        "note": "Where data came from and what was done to it."
+      },
+      {
+        "ours": "Terms of use",
+        "standard": "termsOfUse (W3C Verifiable Credentials 2.0), expressed as an ODRL policy: permission, prohibition, duty",
+        "note": "What the receiver may do with the data."
+      },
+      {
+        "ours": "Inbound gate, outbound gate",
+        "standard": "Policy decision point and policy enforcement point (zero-trust architecture); security policy outside the model (CaMeL)",
+        "note": "Ordinary code that decides, outside the model."
+      },
+      {
+        "ours": "Trust framework, register",
+        "standard": "Trust list, trust registry",
+        "note": "Who is accepted for what, and who says so."
+      },
+      {
+        "ours": "Agent description",
+        "standard": "Agent card (A2A)",
+        "note": "What an agent says about itself. Signed, and checked like any other claim."
+      },
+      {
+        "ours": "Record",
+        "standard": "Audit log; signed statement and receipt (IETF SCITT)",
+        "note": "The append-only account of each decision."
+      },
+      {
+        "ours": "Reliance",
+        "standard": "No standard property for confidence exists. Builds on the W3C Data Quality Vocabulary, PROV and ranked statements",
+        "note": "How much weight a statement gets for a task. A new layer, split from the trust framework."
+      }
+    ]
+  },
+  "trustResolution": {
+    "title": "Trust is looked up, not stored in one place",
+    "text": "An agent does not carry one list of everyone it trusts. It keeps a short list of its own: people and services its principal has chosen, each for particular tasks. For everyone else it asks. A lookup starts at a root the principal accepts and follows delegations until it reaches the register that can answer, much as a name lookup follows the domain name system. A national root can point to the business register for companies and to a regulator's register for lenders. An international root can link national ones. Every answer comes back signed, says how fresh it is, and is kept with the path that produced it.",
+    "levels": [
+      {
+        "id": "own-list",
+        "name": "The principal's own list",
+        "text": "Friends, family and services the principal trusts, each for named tasks. Checked first. Can also block."
+      },
+      {
+        "id": "root",
+        "name": "A root the principal accepts",
+        "text": "Usually national. Says which registers and trust frameworks answer for which kinds of party."
+      },
+      {
+        "id": "register",
+        "name": "The register that answers",
+        "text": "A business register, a regulator's register of authorized firms, a trust framework's list of certified providers."
+      },
+      {
+        "id": "international",
+        "name": "A link between countries",
+        "text": "A higher root, or agreements between national ones, so a lookup can cross a border."
+      }
+    ],
+    "example": {
+      "question": "Is North Bank a lender I can send a mortgage application to?",
+      "path": [
+        {
+          "at": "Sam's own list",
+          "kind": "own-list",
+          "says": "No entry for North Bank."
+        },
+        {
+          "at": "National trust root",
+          "kind": "root",
+          "says": "Lenders are answered by the financial sector register."
+        },
+        {
+          "at": "Sector register",
+          "kind": "register",
+          "says": "North Bank is authorized for mortgage lending. Checked today."
+        }
+      ],
+      "answer": "Accepted, for mortgage applications only."
+    }
+  },
+  "maturityNote": "Maturity is of the standards a suite builds on, not of the suite. Standard: a published recommendation or RFC. Industry specification: published by an industry group. Draft: a working or community draft. Research: no settled specification. This work: defined here.",
+  "configurationNote": "A configuration is chosen for the main exchange, between the principal's agent and the parties it deals with. Lookups against public services, such as an index, a register or a trust root, use a public read configuration: no identifier for the asker, by query, signed answers.",
+  "derivation": {
+    "name": "Derived data",
+    "spec": "03-derived-data",
+    "idea": "A receiver that accepts the sources, accepts the rule, and can check how the rule was applied, can treat the result as data.",
+    "summary": "An agent often conveys an answer instead of the records behind it: a total, a yes or no, the rows that match a question. The answer is a derived statement: a published rule, such as a query, applied to statements signed by their sources. Answering a query, giving a proof and computing jointly are not three different things. They are three ways for the receiver to know the rule was applied honestly.",
+    "steps": [
+      {
+        "id": "sources",
+        "name": "Source statements",
+        "summary": "Signed by whoever is the authority for each claim. The source check runs on these issuers, never on whoever worked out the answer."
+      },
+      {
+        "id": "rule",
+        "name": "Rule",
+        "summary": "A published, deterministic query, named by its digest. The profile lists which rules answer which question."
+      },
+      {
+        "id": "derived",
+        "name": "Derived statement",
+        "summary": "The answer, with a record of the rule, the inputs and how the derivation is assured."
+      }
+    ],
+    "assurances": [
+      {
+        "id": "by-source",
+        "name": "Answered by the source",
+        "runs": "The source, over its own records",
+        "sees": "The answer",
+        "relies": "Nothing more: the source signs the answer as its own statement",
+        "mechanism": "By query, asked of the source",
+        "baseline": true
+      },
+      {
+        "id": "recomputed",
+        "name": "Recomputed by the receiver",
+        "runs": "The receiver, again",
+        "sees": "The answer and every input",
+        "relies": "Nothing more",
+        "mechanism": "Inputs attached; or rows from an index",
+        "baseline": true
+      },
+      {
+        "id": "proved",
+        "name": "Proved",
+        "runs": "The holder",
+        "sees": "The answer, and who the issuers are",
+        "relies": "That the proof system is sound",
+        "mechanism": "Selective disclosure; zero-knowledge proof of a query"
+      },
+      {
+        "id": "joint",
+        "name": "Jointly computed",
+        "runs": "Several holders together",
+        "sees": "The answer, and who contributed",
+        "relies": "That the computing parties do not collude",
+        "mechanism": "Joint computation"
+      },
+      {
+        "id": "attested",
+        "name": "Attested by a deriver",
+        "runs": "A party that is not the source",
+        "sees": "The answer",
+        "relies": "The deriver, who must be accepted under the trust framework",
+        "mechanism": "Any signature; a pod or service that runs rules"
+      }
+    ],
+    "acceptance": [
+      "The rule is accepted for this kind of claim.",
+      "Every input comes from an issuer accepted as a source for what was read from it.",
+      "The assurance is one the receiver accepts for the task, and it verifies.",
+      "Any completeness the rule needs is established, or the task accepts a partial result.",
+      "The receiver can keep the terms, which are worked out from the terms of the inputs.",
+      "The claim is fit for the task, with the quality of its weakest input."
+    ],
+    "limits": [
+      "A proof shows what is present, not what was left out. A total is only as complete as its inputs, so completeness has to be a signed claim from someone in a position to know.",
+      "A proof makes a claim checkable, not better founded. A total of self-reported figures is still self-reported.",
+      "A model's summary is not a derivation. No rule can be named, so it is marked as model output."
+    ]
+  },
+  "settlement": {
+    "id": "settlement",
+    "partOf": "commitments",
+    "name": "Settlement",
+    "question": "How is money moved, and what shows that it was?",
+    "note": "A payment settles an agreement. Whichever is chosen, the same checks run: the amount, the payee, the mandate, the approval, and that it is paid once.",
+    "suites": [
+      {
+        "id": "rdf-order",
+        "name": "Described in RDF",
+        "short": "Described in RDF",
+        "baseline": true,
+        "summary": "The invoice, the order to pay and the receipt are plain linked data inside ordinary signed messages.",
+        "maturity": "reference design",
+        "basis": "ODRL Offer and Agreement; schema.org Invoice and PayAction"
+      },
+      {
+        "id": "x402",
+        "name": "x402 version 2",
+        "short": "x402",
+        "summary": "The service answers \"payment required\" over HTTP, and the payer retries with a signed authorisation for one transfer.",
+        "maturity": "industry specification",
+        "basis": "x402 version 2, scheme exact, EIP-3009 authorisation"
+      },
+      {
+        "id": "mpp",
+        "name": "Machine Payments Protocol",
+        "short": "MPP",
+        "summary": "The service sends a payment challenge as an HTTP authentication scheme, and the payer answers it with a credential bound to that challenge.",
+        "maturity": "internet draft",
+        "basis": "The \"Payment\" HTTP authentication scheme, draft 01, intent charge"
+      },
+      {
+        "id": "ap2",
+        "name": "Agent Payments Protocol",
+        "short": "AP2",
+        "summary": "The person signs a mandate for this checkout and a mandate for this payment, each usable once.",
+        "maturity": "industry specification",
+        "basis": "Agent Payments Protocol 0.2, mandates as SD-JWT"
+      },
+      {
+        "id": "acp",
+        "name": "Agentic Commerce Protocol",
+        "short": "ACP",
+        "summary": "The agent opens a checkout session with the seller and completes it with a payment token limited to that session.",
+        "maturity": "industry specification",
+        "basis": "Agentic Commerce Protocol 2026-04-17, delegated payment"
+      }
+    ]
+  }
+}

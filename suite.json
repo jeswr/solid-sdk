@@ -180,6 +180,11 @@
       "kind": "application"
     },
     {
+      "slug": "agent-explorer",
+      "name": "@jeswr/app-agent-explorer",
+      "kind": "application"
+    },
+    {
       "slug": "mobile",
       "name": "@jeswr/app-mobile",
       "kind": "application"
