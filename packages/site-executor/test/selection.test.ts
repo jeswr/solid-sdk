@@ -207,7 +207,7 @@ describe("filter selection approvals", () => {
     if (result.approval) {
       r.gate.approve(result.approval.id);
       expect((await r.executor.execute(request(), { approvalId: result.approval.id })).status).toBe(
-        "done",
+        "error",
       );
       expect(r.calls).toEqual(["GET", "GET", "GET", "GET", "POST"]);
     } else expect(result.error).toContain("completeness unknown");
@@ -253,7 +253,7 @@ describe("filter selection approvals", () => {
     expect(a.digest).not.toBe(other.digest);
     r.gate.approve(a.id);
     const done = await r.executor.execute(request(), { approvalId: a.id });
-    expect(done.status).toBe("done");
+    expect(done.status).toBe("error");
     expect(done.committed).toHaveLength(1);
     expect(r.calls).toEqual(["GET", "GET", "POST"]);
   });
@@ -298,7 +298,7 @@ describe("filter selection approvals", () => {
     r.gate.approve(a.id);
     r.change([...rows].reverse());
     // Response order cannot change the selection digest.
-    expect((await r.executor.execute(req, { approvalId: a.id })).status).toBe("done");
+    expect((await r.executor.execute(req, { approvalId: a.id })).status).toBe("error");
     expect(r.calls).toEqual(["GET", "GET", "POST"]);
   });
   it.each([
@@ -452,7 +452,7 @@ describe("filter selection approvals", () => {
     const a = await approval(r);
     const before = await r.sessions.get("https://shop.test");
     r.gate.approve(a.id);
-    expect((await r.executor.execute(request(), { approvalId: a.id })).status).toBe("done");
+    expect((await r.executor.execute(request(), { approvalId: a.id })).status).toBe("error");
     expect((await r.sessions.get("https://shop.test"))?.revision).not.toBe(before?.revision);
     expect(r.calls).toEqual(["GET", "GET", "POST"]);
   });
@@ -529,7 +529,7 @@ it.each([
   } else {
     gate.approve(required(result.approval).id);
     expect((await executor.execute(request(), { approvalId: result.approval?.id })).status).toBe(
-      "done",
+      "error",
     );
   }
   expect(writes).toBe(empty ? 1 : 0);

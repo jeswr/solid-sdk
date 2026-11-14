@@ -73,6 +73,7 @@ export function responsePageError(
   body: string,
   contentType: string | undefined,
   includeAlerts = true,
+  allowNotFound = false,
 ): boolean {
   if (!body) return false;
   if (/json/i.test(contentType ?? "")) {
@@ -97,8 +98,15 @@ export function responsePageError(
     (includeAlerts && selectElements(FLASH_SELECTOR, doc).length)
   )
     return true;
-  return selectElements("title, h1", doc).some((el) =>
-    /\b(error|invalid|validation|forbidden|not found|access denied)\b/i.test(elementText(el)),
+  return selectElements("title, h1", doc).some(
+    (el) =>
+      /\b(error|invalid|validation|forbidden|not found|access denied)\b/i.test(elementText(el)) &&
+      !(
+        allowNotFound &&
+        /^(?:\d{3}\s*[-:]?\s*)?(?:page |resource |item )?(?:not found|gone)[.!]?$/i.test(
+          elementText(el).trim(),
+        )
+      ),
   );
 }
 

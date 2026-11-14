@@ -7,133 +7,29 @@ import {
   landingItemValues,
   matchesCreatedIdentity,
   readBackIdentityMatches,
-  responseFlash,
+  requiresEffectVerification,
   sentInputValue,
   type WriteResponsePolicy,
 } from "@jeswr/site-executor";
 import { type Operation, responseIdentity, SCHEMA } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
+import { locationPattern, readBackResource, safeUrl } from "./read-resource.js";
 import { responsePageError } from "./response-evidence.js";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
-import { demonstratedEffectVerified } from "./write-effect.js";
+import { learnEffectVerification } from "./write-effect.js";
 
-function safeUrl(value: string, origin: string): URL | undefined {
-  try {
-    const url = new URL(value, origin);
-    if (url.origin !== origin || url.username || url.password || url.search || url.hash) return;
-    if (/\[redacted\]|[{}]/i.test(decodeURIComponent(url.href))) return;
-    // Error routes are evidence against success even when they return HTTP 200.
-    if (
-      url.pathname
-        .split("/")
-        .some((p) => /^(?:errors?|validation|invalid|login|sign[-_]?in)$/i.test(p))
-    )
-      return;
-    return url;
-  } catch {
-    return;
-  }
-}
-
-function failedPage(r: RecordedRequest, completionOnly = false): boolean {
-  if (
+function failedPage(r: RecordedRequest): boolean {
+  return !!(
     r.blocked ||
-    (r.bodyTruncated &&
-      (completionOnly
-        ? r.responsePageFailure === undefined || r.responseFlash === undefined
-        : r.responsePageError === undefined)) ||
+    (r.bodyTruncated && r.responsePageError === undefined) ||
     r.status === undefined ||
     r.status < 200 ||
-    r.status >= 400
-  )
-    return true;
-  if (completionOnly)
-    return (
-      r.responsePageError === true ||
-      (r.responsePageFailure ?? responsePageError(r.bodySample ?? "", r.contentType, false))
-    );
-  return (
+    r.status >= 400 ||
     r.responsePageError === true ||
-    !!r.responseFlash?.length ||
+    r.responseFlash?.length ||
     responsePageError(r.bodySample ?? "", r.contentType)
   );
-}
-
-/** Slot only the identity, retaining literal resource, tenant and store prefixes. */
-function readBackResource(
-  urls: readonly string[],
-  identity: string,
-  origin: string,
-  follow: RecordedRequest,
-  trace: readonly RecordedRequest[],
-):
-  | Pick<NonNullable<WriteResponsePolicy["readBack"]>, "identityPattern" | "identityAliases">
-  | undefined {
-  if (!urls.length) return;
-  const patterns = new Set<string>();
-  const add = (value: string): boolean => {
-    const url = safeUrl(value, origin);
-    if (!url || responseIdentity(url.href)?.identifier !== identity) return false;
-    const pattern = locationPattern(url, undefined, follow);
-    if (!pattern?.includes("{id}")) return false;
-    patterns.add(`${origin}${pattern}`);
-    return true;
-  };
-  if (!urls.every(add)) return;
-  // Recorder-linked GET redirects witness aliases; equal numeric suffixes do not.
-  let child = follow;
-  const seen = new Set<number>();
-  while (child.redirectedFrom !== undefined && !seen.has(child.seq)) {
-    seen.add(child.seq);
-    const parent = trace.find((r) => r.seq === child.redirectedFrom);
-    const childUrl = safeUrl(child.url, origin);
-    if (
-      !parent ||
-      parent.blocked ||
-      parent.method !== "GET" ||
-      ![301, 302, 303].includes(parent.status ?? 0) ||
-      parent.redirectedTo !== child.url ||
-      !childUrl ||
-      !patterns.has(`${origin}${locationPattern(childUrl, undefined, child)}`) ||
-      !add(parent.url)
-    )
-      break;
-    child = parent;
-  }
-  const [identityPattern, ...identityAliases] = [...patterns];
-  return identityPattern
-    ? { identityPattern, ...(identityAliases.length ? { identityAliases } : {}) }
-    : undefined;
-}
-
-/** Only declared whole path inputs and the response identity can become slots. */
-function locationPattern(
-  url: URL,
-  read: Operation | undefined,
-  request: RecordedRequest,
-): string | undefined {
-  const parts = url.pathname.split("/");
-  const template = read?.request.urlTemplate.replace(/\{[?&][^}]*\}.*$/, "").split("?")[0];
-  const declared = new Set(read?.inputs.filter((p) => p.location === "path").map((p) => p.name));
-  if (template && read && matchRequest(read.request, request)) {
-    const path = template.replace(/^https?:\/\/[^/]+/, "").split("/");
-    if (path.length === parts.length) {
-      for (let i = 0; i < parts.length; i++) {
-        const name = /^\{([A-Za-z][\w]*)\}$/.exec(path[i] ?? "")?.[1];
-        if (name && declared.has(name)) parts[i] = `{${name}}`;
-      }
-    }
-  }
-  const identity = responseIdentity(url.href);
-  if (identity) {
-    const segments = url.pathname.split("/").map((p) => decodeURIComponent(p));
-    const labelled = segments.findIndex((p) => /^(id|identifier)$/i.test(p));
-    const at = labelled >= 0 ? labelled + 1 : segments.lastIndexOf(identity.identifier);
-    if (at < 0) return;
-    parts[at] = "{id}";
-  }
-  return parts.join("/");
 }
 
 export function learnWriteResponses(
@@ -145,9 +41,16 @@ export function learnWriteResponses(
   const policies: NonNullable<ExecutorOptions["writeResponses"]> = {};
   for (const op of operations) {
     if (op.effect === "read" || op.provenance.method !== "demonstration") continue;
-    const completionOnly = ["UpdateAction", "DeleteAction", "VoteAction"].some(
-      (type) => op.actionType === `${SCHEMA}${type}`,
-    );
+    if (requiresEffectVerification(op)) {
+      const verification = learnEffectVerification(op, learnedOperations, trace, origin);
+      if (verification)
+        policies[op.id] = {
+          createdLocationPattern: "/",
+          completionOnly: true,
+          verification,
+        };
+      continue;
+    }
     const witnesses: WriteResponsePolicy[] = [];
     let rejected = false;
     for (const write of trace.filter(
@@ -188,7 +91,7 @@ export function learnWriteResponses(
         current.status < 200 ||
         current.status >= 300 ||
         !current.bodySample ||
-        chain.some((r) => failedPage(r, completionOnly)) ||
+        chain.some((r) => failedPage(r)) ||
         chain.slice(1).some((r) => safeUrl(r.url, origin)?.pathname !== first.pathname)
       ) {
         rejected = true;
@@ -203,7 +106,6 @@ export function learnWriteResponses(
       const read = reads.find((read) => {
         const ex = read.extraction;
         if (!ex) return false;
-        if (completionOnly) return true;
         if (!identity || ex.itemType !== createdObjectType(op)) return false;
         const main = landingItemValues(ex, current.bodySample ?? "");
         if (!main) return false;
@@ -239,7 +141,7 @@ export function learnWriteResponses(
       });
       // A script-only landing can use a learned, witnessed identity read instead.
       let readBack: WriteResponsePolicy["readBack"];
-      if (!completionOnly && !read && !reads.length && identity) {
+      if (!read && !reads.length && identity) {
         outer: for (const candidate of learnedOperations) {
           const ex = candidate.extraction;
           if (
@@ -329,7 +231,7 @@ export function learnWriteResponses(
           }
         }
       }
-      if (!completionOnly && ((!read && !readBack) || !inputEvidence)) {
+      if ((!read && !readBack) || !inputEvidence) {
         rejected = true;
         continue;
       }
@@ -342,22 +244,10 @@ export function learnWriteResponses(
         createdLocationPattern: pattern,
         redirectCount: chain.length - 1,
         finalStatus: current.status,
-        ...(completionOnly ? { completionOnly: true } : { inputEvidence }),
+        inputEvidence,
       };
       if (read?.extraction) policy.extraction = structuredClone(read.extraction);
       if (readBack) policy.readBack = readBack;
-      const flashes =
-        current.responseFlash ?? responseFlash(current.bodySample, current.contentType);
-      if (
-        completionOnly &&
-        flashes.length &&
-        current.responsePageError === false &&
-        !responsePageError(current.bodySample, current.contentType, false) &&
-        // Cleanup may make this detail unreadable during later replay verification.
-        // Its successful recorded read still proves the demonstration's effect.
-        demonstratedEffectVerified(op, write, current, operations, trace, origin)
-      )
-        policy.successFlash = flashes;
       witnesses.push(policy);
     }
     // Conflicting or incomplete demonstrations never widen a policy.

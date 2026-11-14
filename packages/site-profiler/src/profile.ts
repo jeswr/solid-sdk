@@ -524,6 +524,19 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       verifiedOps = v.operations;
       warnings.push(...v.warnings);
     }
+    // Cleanup may remove a demonstrated target before replay. A witnessed target
+    // read remains executable evidence: runtime still requires a fresh baseline.
+    const witnessedResponses = learnWriteResponses(operations, recorder.trace, origin);
+    const verificationReads = new Set(
+      Object.values(witnessedResponses).flatMap((policy) =>
+        policy.verification ? [policy.verification.operation] : [],
+      ),
+    );
+    for (const read of operations) {
+      if (verificationReads.has(read.id) && !verifiedOps.some((op) => op.id === read.id)) {
+        verifiedOps.push({ ...read, session: login?.success ? "signed-in" : read.session });
+      }
+    }
     const byId = new Map(verifiedOps.map((op) => [op.id, op]));
 
     // 7b. Selection witnesses and their explicit resolver flows survive RDF round trips.

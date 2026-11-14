@@ -147,6 +147,9 @@ export function forumDemonstration(origin: string, item: ForumFixture): Demonstr
           (await comment.locator("a.comment__permalink").getAttribute("href")) ?? "",
           origin,
         ).href;
+        // Witness the item's own permalink as an executable verification read,
+        // independent of the parent discussion and editor form.
+        await page.goto(item.commentUrl);
         await comment.getByRole("link", { name: "Edit", exact: true }).click();
         await page.locator("textarea").fill(item.edited);
         await Promise.all([

@@ -298,7 +298,7 @@ function deletion() {
 
 it.each([
   404, 410,
-])("learns a deletion flash after the witnessed form's exact detail returns %s, even when cleanup drops the read from replay", (status) => {
+])("does not learn a deletion flash after a witnessed detail returns %s", (status) => {
   const { remove, read, records } = deletion();
   const after = records[3];
   if (!after) throw new Error("Missing follow-up");
@@ -309,7 +309,7 @@ it.each([
   // after cleanup must not erase that independently witnessed evidence.
   expect(
     learnWriteResponses([remove, read], records, origin, [remove])[remove.id]?.successFlash,
-  ).toHaveLength(1);
+  ).toBeUndefined();
 });
 
 it.each([

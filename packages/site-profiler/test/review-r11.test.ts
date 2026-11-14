@@ -138,7 +138,7 @@ it.each([
     retry = true;
     gate.approve(result.approval.id);
     expect((await executor.execute(request, { approvalId: result.approval.id })).status).toBe(
-      _name === "error only on approval retry" ? "refused" : "done",
+      _name === "error only on approval retry" ? "refused" : "error",
     );
   } else expect(result.errorKind).toBe("ambiguous-target");
   expect(writes).toBe(accepted && _name !== "error only on approval retry" ? 1 : 0);

@@ -52,6 +52,7 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
         JSON.stringify(
           {
             model: result.model,
+            trace: result.trace,
             writeResponses: result.writeResponses,
             redirects: result.trace
               .filter(
@@ -242,8 +243,13 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
         return { kind: "act" as const, turtle: await write(operation, extra) };
       },
       async (input: PlannerInput) => {
-        expect(last(input).status, last(input).error).toBe("done");
-        expect(last(input).observations).toContain("Completed");
+        const unverifiedVote = operation === vote && !result.writeResponses[vote.id]?.verification;
+        expect(last(input).status, last(input).error).toBe(unverifiedVote ? "error" : "done");
+        expect(last(input).observations).toContain(unverifiedVote ? "Uncertain" : "Completed");
+        if (unverifiedVote) {
+          expect(last(input).observations).not.toContain("Completed");
+          expect(last(input).error).toContain("not verified");
+        }
         expect(sent()).toBe(++expectedPosts);
         after?.(input);
         return { kind: "act" as const, turtle: await readAfter() };
@@ -341,9 +347,19 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
       );
       if (plannerFailure) throw plannerFailure;
       expect(trace.text).toBe("Forum cycle complete");
+      const unverifiedVote = !result.writeResponses[vote.id]?.verification;
+      const errors = trace.steps.filter((step) => step.status === "error");
+      expect(errors).toHaveLength(unverifiedVote ? 1 : 0);
+      if (unverifiedVote) {
+        expect(errors[0]?.error).toBe("write effect is not verified; outcome is uncertain");
+        expect(errors[0]?.observations).toContain("Uncertain");
+        expect(errors[0]?.observations).not.toContain("Completed");
+      }
       expect(
-        trace.steps.every((st) =>
-          ["done", "denied", "repeat-blocked", "answer"].includes(st.status),
+        trace.steps.every(
+          (step) =>
+            ["done", "denied", "repeat-blocked", "answer"].includes(step.status) ||
+            (unverifiedVote && step === errors[0]),
         ),
       ).toBe(true);
       expect(approvals).toHaveLength(12);
@@ -355,6 +371,10 @@ it.skipIf(!process.env.SAB_LIVE_FORUM_URL)(
           JSON.stringify(
             {
               approvals,
+              outcomes: [create, comment, edit, vote, delComment, delPost].map((operation) => ({
+                operation: operation.label,
+                outcome: operation === vote && unverifiedVote ? "uncertain" : "completed",
+              })),
               operations: [create, comment, edit, vote, delComment, delPost].map((o) => ({
                 method: o.request.method,
                 path: o.request.urlTemplate,

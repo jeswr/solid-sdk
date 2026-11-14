@@ -9,11 +9,46 @@ import { guardUrl } from "./origin.js";
 import {
   createdObjectType,
   landingItemValues,
-  responseFlash,
   responsePageError,
   sentInputValue,
 } from "./response-evidence.js";
 import { BindingError } from "./values.js";
+
+export interface EffectVerification {
+  operation: string;
+  bind: Record<string, { input: string } | { value: string }>;
+  identityInput: string;
+  identityPattern: string;
+  identityAliases?: string[];
+  /** Submitted values, or a demonstrated numeric delta (for example a vote count). */
+  changes: {
+    input: string;
+    property: string;
+    mode?: "delta";
+    /** Exact numeric presentation witnessed after submitting this typed input. */
+    format?: { prefix: string; suffix: string; scale: number };
+  }[];
+  /** A witnessed display slug immediately following the numeric resource identity. */
+  displaySlug?: boolean;
+}
+
+export function requiresEffectVerification(operation: Operation): boolean {
+  return (
+    operation.effect !== "read" &&
+    ![
+      "CreateAction",
+      "AddAction",
+      "AddToCartAction",
+      "ReviewAction",
+      "CommentAction",
+      "BuyAction",
+      "OrderAction",
+      "PayAction",
+      "RegisterAction",
+    ].some((type) => operation.actionType === `${SCHEMA}${type}`) &&
+    operation.actionType !== "https://jeswr.org/ns/site-action#LoginAction"
+  );
+}
 
 export interface WriteResponsePolicy {
   /** On-origin URL/path with whole-segment {variables}, e.g. /products/id/{id}. */
@@ -37,8 +72,10 @@ export interface WriteResponsePolicy {
     /** Additional resource routes witnessed as aliases of the same read item. */
     identityAliases?: string[];
   };
-  /** Opaque hashes of flash regions witnessed on a successful completion landing. */
+  /** Ignored legacy artifact. Reprofile to learn runtime effect verification. */
   successFlash?: string[];
+  /** A witnessed read of the existing target, run before and after the approved write. */
+  verification?: EffectVerification;
   success?:
     | { format: "json"; path: string; value: string }
     | { format: "html"; selector: string; attribute?: string; value?: string };
@@ -72,14 +109,20 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
       policy.finalStatus >= 300)
   )
     throw new BindingError("invalid write-response final status");
-  if (policy.successFlash?.some((hash) => !/^[a-f0-9]{64}$/.test(hash)))
-    throw new BindingError("invalid write-response flash evidence");
   if (policy.readBack) {
-    for (const pattern of [
-      policy.readBack.identityPattern,
-      ...(policy.readBack.identityAliases ?? []),
-    ])
+    const declaration = policy.readBack;
+    for (const pattern of [declaration.identityPattern, ...(declaration.identityAliases ?? [])])
       readBackIdentityUrl(pattern, "1", origin);
+  }
+  if (policy.verification) {
+    for (const pattern of [
+      policy.verification.identityPattern,
+      ...(policy.verification.identityAliases ?? []),
+    ]) {
+      patternPath(pattern, origin);
+      if (pattern.split("{id}").length !== 2)
+        throw new BindingError("verification needs an identity slot");
+    }
   }
   for (const error of policy.errorLocationPatterns ?? []) patternPath(error, origin);
 }
@@ -169,24 +212,11 @@ export async function verifiedCreatedLocation(
   const ex = policy.extraction;
   const contentType =
     ex?.format === "json" || /^\s*[[{]/.test(body) ? "application/json" : "text/html";
-  if (policy.completionOnly) {
-    if (
-      responsePageError(body, contentType, false) ||
-      JSON.stringify(responseFlash(body, contentType)) !== JSON.stringify(policy.successFlash ?? [])
-    )
-      return undefined;
-  } else if (responsePageError(body, contentType)) return undefined;
-  if (policy.completionOnly) {
-    // A completion policy must never be used to bypass creation evidence.
-    if (
-      !operation ||
-      !["UpdateAction", "DeleteAction", "VoteAction"].some(
-        (type) => operation.actionType === `${SCHEMA}${type}`,
-      )
-    )
-      return undefined;
-    return first.href;
-  }
+  // Existing-item writes can complete only through runtime before/after reads.
+  // Neither a learned flash nor a completion-only route is success evidence.
+  if (policy.completionOnly || (operation && requiresEffectVerification(operation)))
+    return undefined;
+  if (responsePageError(body, contentType)) return undefined;
   const identity = responseIdentity(first.href);
   const templateParts = new URL(
     policy.createdLocationPattern.replaceAll("{", "%7B").replaceAll("}", "%7D"),

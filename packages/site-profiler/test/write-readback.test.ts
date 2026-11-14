@@ -295,7 +295,7 @@ it.each(
   ["DeleteAction", "UpdateAction", "VoteAction"].flatMap((type) =>
     ["matching", "different alert", "missing alert"].map((mode) => [type, mode] as const),
   ),
-)("compares the witnessed %s success flash (%s) without creating an identity", async (type, mode) => {
+)("never accepts a witnessed %s flash (%s) without a runtime verification read", async (type, mode) => {
   const remove = {
     ...create,
     actionType: `${SCHEMA}${type}`,
@@ -328,15 +328,10 @@ it.each(
   });
   records.push(follow);
   const policy = learnWriteResponses([remove, read], records, origin)[remove.id];
-  expect(policy?.completionOnly).toBe(true);
-  expect(JSON.stringify(policy)).not.toContain("Deleted successfully");
+  expect(policy?.successFlash).toBeUndefined();
+  expect(JSON.stringify(policy ?? {})).not.toContain("Deleted successfully");
   const { result } = await execute(policy, mode, remove, []);
-  expect(result.outcome?.status).toBe(
-    (mode === "matching" && type !== "VoteAction") ||
-      (mode === "missing alert" && type === "VoteAction")
-      ? "completed"
-      : "uncertain",
-  );
+  expect(result.outcome?.status).toBe("uncertain");
   expect(result.outcome?.result).toBeUndefined();
 });
 
@@ -514,13 +509,13 @@ it.each([
   ).toBeUndefined();
 });
 
-it("r12 learns a verified successful deletion notice from a follow-up crawl", async () => {
+it("does not learn a success flash even from a successful deletion follow-up crawl", async () => {
   const { remove, records, follow } = deletionEvidence();
   follow.phase = "crawl";
   follow.demonstration = undefined;
   const policy = learnWriteResponses([remove, read], records, origin)[remove.id];
-  expect(policy?.successFlash).toHaveLength(1);
-  expect((await execute(policy, "matching", remove, [])).result.outcome?.status).toBe("completed");
+  expect(policy?.successFlash).toBeUndefined();
+  expect((await execute(policy, "matching", remove, [])).result.outcome?.status).toBe("uncertain");
 });
 
 it.each([

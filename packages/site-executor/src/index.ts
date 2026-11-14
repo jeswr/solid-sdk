@@ -33,6 +33,7 @@ export {
   type SessionUpdateResult,
 } from "./cookies.js";
 export { jsonPointer } from "./dom.js";
+export { learnEffectValueFormat } from "./effect-verification.js";
 export {
   type CommittedWrite,
   createExecutor,
@@ -100,8 +101,10 @@ export {
 } from "./uri-template.js";
 export { BindingError, idFromIri, resolveParameter, validateValue } from "./values.js";
 export {
+  type EffectVerification,
   matchesCreatedIdentity,
   readBackIdentityMatches,
+  requiresEffectVerification,
   verifiedReadBackItem,
   type WriteResponsePolicy,
 } from "./write-response.js";

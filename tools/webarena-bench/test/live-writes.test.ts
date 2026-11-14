@@ -106,6 +106,7 @@ it.skipIf(!process.env.SAB_LIVE_SITE_URL)(
         JSON.stringify(
           {
             model,
+            trace: learned.trace,
             writeResponses: learned.writeResponses,
             warnings: learned.warnings,
             demonstrated,

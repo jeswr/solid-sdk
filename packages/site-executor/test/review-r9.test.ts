@@ -110,6 +110,7 @@ describe("r9 display money", () => {
         pay.request.contentType = "application/x-www-form-urlencoded";
       }
       const prepare = operation("prepare", "reversible-write");
+      prepare.actionType = `${S}CreateAction`;
       const source = model([read, pay, prepare]);
       source.flows = [
         {
@@ -159,6 +160,7 @@ describe("r9 display money", () => {
 describe("r9 redirect identities", () => {
   function creation() {
     const op = operation("create", "irreversible-write");
+    op.actionType = `${S}CreateAction`;
     op.inputs = [
       {
         name: "item",
@@ -353,7 +355,8 @@ describe("r9 redirect identities", () => {
           });
         },
       }).execute(actionRequest("[] a schema:CreateAction."));
-      expect(result.outcome?.status).toBe(contradictory ? "uncertain" : "completed");
+      // The identity binding still executes exactly once; the update has no verifier.
+      expect(result.outcome?.status).toBe("uncertain");
       expect(writes).toEqual(contradictory ? ["/create"] : ["/create", "/update"]);
     }
   });

@@ -128,7 +128,7 @@ it.each([
   if (result.approval) {
     gate.approve(result.approval.id);
     expect((await executor.execute(request, { approvalId: result.approval.id })).status).toBe(
-      "done",
+      "error",
     );
     expect(positions).toEqual([
       String(start),

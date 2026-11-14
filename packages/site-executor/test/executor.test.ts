@@ -341,7 +341,8 @@ describe("CSRF sources", () => {
     const r = await executor.execute(
       actionRequest(`[] a schema:LikeAction ; schema:object [ schema:sku "HB-12" ] .`),
     );
-    expect(r.status).toBe("done");
+    expect(r.status).toBe("error");
+    expect(r.outcome?.status).toBe("uncertain");
     expect(r.requests).toBe(2);
     expect(shop.state.wishlist).toEqual(["HB-12"]);
     expect(shop.requests[0]?.url).toBe("/api/csrf");

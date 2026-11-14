@@ -535,21 +535,37 @@ records a submitted input name and main-item property. Learning and execution re
 an exact field match to the concrete value sent. Untrusted title/name text may satisfy
 only this equality check; it remains untrusted in observations and flow bindings.
 Missing or changed evidence yields Uncertain and retains the repeat guard. No route/status
-fallback creates an identity. Updates, deletes and votes may instead learn `completionOnly`
-policies; these never promote a landing URL to a created identity.
+fallback creates an identity. Updates, deletes and votes instead require a learned `verification` read;
+these never promote a landing URL to a created identity.
 
 Neutral alerts (`role=alert`) and assertive live regions block created-identity promotion.
-Error-classed alerts, aria-invalid and shared HTML/JSON failure evidence block all write
-response verification. A demonstration flash becomes `successFlash` only after a 2xx
-landing explicitly marked free of page errors by the recorder and an independent learned
-read verifies the effect before another write: a targeted empty JSON collection proves
-deletion, as does a 404/410 at the exact previously readable main-item URL whose witnessed
-form submitted that delete. The prior item must expose its own matching permalink; all
-path context must agree, and collections, access errors and redirects prove no absence.
-An identified item's edited fields must equal the submitted values. Votes have
-no independent effect verifier yet and teach no flash. Hashes of stable attributes and
-normalized text are equality evidence only. A changed, additional or missing learned flash
-at runtime yields Uncertain; flash-free landings retain the existing route/status rules.
+Learned flashes never establish success. The profiler does not learn `successFlash`, and
+legacy sidecars carrying it confer no completion evidence.
+
+Existing-item writes (delete, update, vote and similar) need `verification` in the trusted
+`writeResponses` sidecar. It names a learned GET, its concrete input bindings, the target
+identity input and a witnessed resource pattern with aliases. Whole path context inputs
+can occupy slots, so parent IDs and tenant/store inputs stay bound to the write. Literal
+namespace segments stay literal. A numeric detail route may witness a following display
+slug; this affects only that single presentation segment. A related parent item cannot
+stand in for the operation's object. Filter-selected writes can bind their structurally
+validated resolver identity to an ordinary identity-filtered read.
+
+After approval, immediately before sending the write, the executor runs that read through
+the read gate. A complete matching target establishes the baseline. An unverified baseline stops before
+the write and returns Uncertain without a committed write fingerprint. The same compiled GET,
+headers, session and origin are used after the write. A deletion needs a 404/410 without
+authentication/failure evidence, or a successful explicitly empty identity-filtered JSON
+collection with total zero and the baseline's envelope keys. Updates need the submitted
+field values; votes may use a witnessed numeric count delta. Neither read can be redirected,
+partial, a login/password page, 401/403, a changed credential-cookie context or a shared
+failure envelope. Any missing verification leaves a sent write Uncertain, with its
+fingerprint retained and no automatic retry. A denial before approval sends nothing.
+Typed numeric inputs may carry a bounded presentation template learned from that submitted
+value on a later target read. Verification compares its exact prefix, suffix and decimal
+scale without rounding. This private comparison never converts RDF observations or money
+evidence; all payment and display-money checks remain in force.
+
 Login-discovered session cookie names and model declarations feed every profiler cookie
 context. Re-register all retained cookie values as soon as their classification is known,
 before returning traces or warnings. Round-11 regressions live in the profiler's

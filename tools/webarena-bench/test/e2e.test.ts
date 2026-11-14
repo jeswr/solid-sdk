@@ -125,7 +125,12 @@ describe("test-shop -> fixture model -> semantic runner -> submission -> evaluat
       const response = JSON.parse(
         await readFile(join(out, String(task.task_id), "agent_response.json"), "utf8"),
       );
-      expect(response).toMatchObject({ task_type: task.taskType, status: "SUCCESS" });
+      // This fixed legacy model has no deletion verifier. Site state changed,
+      // but a planner's success claim cannot override its Uncertain receipt.
+      expect(response).toMatchObject({
+        task_type: task.taskType,
+        status: task.taskType === "MUTATE" ? "UNKNOWN_ERROR" : "SUCCESS",
+      });
       const har = JSON.parse(
         await readFile(join(out, String(task.task_id), "network.har"), "utf8"),
       );
@@ -146,6 +151,7 @@ describe("test-shop -> fixture model -> semantic runner -> submission -> evaluat
     }
     const approvals = JSON.parse(await readFile(join(out, "1/approvals.json"), "utf8"));
     const trace: TaskTrace = JSON.parse(await readFile(join(out, "1/agent_trace.json"), "utf8"));
+    expect(trace.steps.some((step) => step.observations?.includes("Uncertain"))).toBe(true);
     expect(approvals).toHaveLength(2);
     expect(trace.steps.flatMap((s) => s.approvals ?? [])).toHaveLength(2);
     const navigation = JSON.parse(await readFile(join(out, "2/network.har"), "utf8"));

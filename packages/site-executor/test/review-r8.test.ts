@@ -59,7 +59,7 @@ function fixture(
   const operation = (name: string, effect: Operation["effect"]): Operation => ({
     id: `urn:${name}`,
     label: name,
-    actionType: `${S}ViewAction`,
+    actionType: `${S}${effect === "read" ? "ViewAction" : effect === "payment" ? "PayAction" : "CreateAction"}`,
     effect,
     session: "none",
     provenance,

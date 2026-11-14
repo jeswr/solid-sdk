@@ -407,6 +407,8 @@ describe("credentials and redaction", () => {
     const ex = createExecutor({
       model: model([
         {
+          actionType: `${S}CreateAction`,
+          label: "Create saved search",
           request: {
             method: "POST",
             urlTemplate: `${site.url}/search{?q}`,
@@ -434,8 +436,9 @@ describe("credentials and redaction", () => {
       sessions,
       gate: allow,
     });
-    const r = await ex.execute(search());
+    const r = await ex.execute(actionRequest('[] a schema:CreateAction; schema:query "x".'));
     expect(r.status).toBe("done");
+    expect(r.observations.at(-1)?.turtle).toContain("[redacted]");
     expect(site.requests[1]?.body).toBe("t=csrf-SECRET-998877");
     expect(JSON.stringify(r)).not.toContain("csrf-SECRET-998877");
   });

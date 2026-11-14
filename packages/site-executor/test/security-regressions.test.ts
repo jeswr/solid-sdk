@@ -358,6 +358,7 @@ describe("security review regressions", () => {
     const write = op({
       id: "urn:write",
       effect: "reversible-write",
+      actionType: `${S}CreateAction`,
       request: { method: "POST", urlTemplate: `${O}/write` },
       csrf: [
         {
@@ -369,6 +370,7 @@ describe("security review regressions", () => {
     const end = op({
       id: "urn:end",
       effect: "reversible-write",
+      actionType: `${S}CreateAction`,
       request: { method: "POST", urlTemplate: `${O}/end` },
     });
     const fetch: typeof globalThis.fetch = async (url) =>

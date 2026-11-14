@@ -39,7 +39,11 @@ import {
   isForbiddenHeader,
   requestFingerprint,
 } from "./compile.js";
-import { type CookieSecretContext, registerCookieSecrets } from "./cookie-secrets.js";
+import {
+  type CookieSecretContext,
+  isSessionCredentialCookie,
+  registerCookieSecrets,
+} from "./cookie-secrets.js";
 import {
   applySetCookies,
   type Cookie,
@@ -50,6 +54,11 @@ import {
   type SessionProvider,
 } from "./cookies.js";
 import { attribute, jsonPointer, metaContent, parseHtml, selectElement } from "./dom.js";
+import {
+  effectChangesMatch,
+  effectSnapshot,
+  emptyEffectCollection,
+} from "./effect-verification.js";
 import {
   type ExtractedItem,
   ExtractionError,
@@ -80,7 +89,7 @@ import {
 } from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { outcomeTurtle } from "./outcome.js";
-import { createdObjectType, sentInputValue } from "./response-evidence.js";
+import { createdObjectType, responsePageError, sentInputValue } from "./response-evidence.js";
 import { registerSecret, secretRedactor } from "./secrets.js";
 import {
   assertSelectionFilters,
@@ -98,6 +107,7 @@ import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
 import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
 import {
   matchesCreatedIdentity,
+  requiresEffectVerification,
   validateWriteResponsePolicy,
   verifiedCreatedLocation,
   verifiedReadBackItem,
@@ -257,6 +267,8 @@ interface RunContext {
   storedHeaders?: Record<string, string>;
   revision?: string;
   persistRejected?: boolean;
+  sessionEpoch?: number;
+  baselineUnverified?: boolean;
   requests: number;
   secrets: Set<string>;
   controller: AbortController;
@@ -265,6 +277,9 @@ interface RunContext {
 
 interface Response0 {
   status: number;
+  /** Private wire context, including every transmitted header and applicable cookie. */
+  requestContext: string;
+  contentType?: string;
   url: URL;
   body: string;
   redirectLocations: string[];
@@ -462,6 +477,28 @@ export function createExecutor(options: ExecutorOptions): Executor {
     }
   }
 
+  function authenticationContext(ctx: RunContext): string {
+    return JSON.stringify([
+      ctx.jar
+        .filter(
+          (cookie) =>
+            isSessionCredentialCookie(cookie, {
+              ...credentialContext,
+              declaredNames: [
+                ...(credentialContext.declaredNames ?? []),
+                ...(ctx.credentialCookies ?? []),
+              ],
+            }) &&
+            (cookie.expires === undefined ||
+              cookie.expires < 0 ||
+              cookie.expires > now().getTime() / 1000),
+        )
+        .map((cookie) => [cookie.name, cookie.domain, cookie.path, cookie.value])
+        .sort(),
+      Object.entries(ctx.headers).sort(),
+    ]);
+  }
+
   async function storeCookies(
     ctx: RunContext,
     res: Response,
@@ -484,9 +521,12 @@ export function createExecutor(options: ExecutorOptions): Executor {
         ],
       });
     }
+    const authenticationBefore = authenticationContext(ctx);
     const { jar, changed } = applySetCookies(ctx.jar, setCookies, url, now());
     if (!changed && !loginResponse) return;
     ctx.jar = jar;
+    if (authenticationContext(ctx) !== authenticationBefore)
+      ctx.sessionEpoch = (ctx.sessionEpoch ?? 0) + 1;
     addSecrets(ctx);
     if (ctx.persistRejected) return;
     const bundle: SessionBundle = {
@@ -592,6 +632,8 @@ export function createExecutor(options: ExecutorOptions): Executor {
       }
       return {
         status: res.status,
+        requestContext: JSON.stringify([...h].sort(([a], [b]) => a.localeCompare(b))),
+        contentType: res.headers.get("content-type") ?? undefined,
         url,
         body: await readBody(ctx, res),
         requestBody: currentBody,
@@ -712,6 +754,175 @@ export function createExecutor(options: ExecutorOptions): Executor {
     }
   }
 
+  async function prepareEffectRead(
+    ctx: RunContext,
+    operation: Operation,
+    values: Record<string, string>,
+  ) {
+    ctx.baselineUnverified = false;
+    const declaration = writeResponses[operation.id]?.verification;
+    const read = declaration && operations.get(declaration.operation);
+    if (
+      !declaration ||
+      read?.effect !== "read" ||
+      read.request.method !== "GET" ||
+      !read.extraction
+    )
+      return;
+    ctx.baselineUnverified = true;
+    const materialize = (pattern: string) =>
+      pattern.replace(/\{([A-Za-z][\w]*)\}/g, (slot, name: string) => {
+        if (name === "id") return slot;
+        const value = sentInputValue(
+          operation,
+          values,
+          name.startsWith("context_") ? name.slice(8) : name,
+          origin,
+        );
+        if (value === undefined) throw new BindingError("unbound verification resource context");
+        return encodeURIComponent(value);
+      });
+    const resource = {
+      ...declaration,
+      identityPattern: materialize(declaration.identityPattern),
+      ...(declaration.identityAliases
+        ? { identityAliases: declaration.identityAliases.map(materialize) }
+        : {}),
+    };
+    const identity = selectionWitnesses(operation).some((p) => p.name === declaration.identityInput)
+      ? values[declaration.identityInput]
+      : sentInputValue(operation, values, declaration.identityInput, origin);
+    if (!identity || redactWith(ctx)(identity) !== identity) return;
+    const bindings: Record<string, string> = {};
+    for (const [name, binding] of Object.entries(declaration.bind)) {
+      if (!read.inputs.some((p) => p.name === name)) return;
+      const value = "input" in binding ? values[binding.input] : binding.value;
+      if (value === undefined) return;
+      bindings[name] = value;
+    }
+    const resolved = operationValues(read, bindings);
+    if (
+      !Object.entries(declaration.bind).some(
+        ([name, binding]) =>
+          "input" in binding &&
+          binding.input === declaration.identityInput &&
+          sentInputValue(read, resolved, name, origin) === identity,
+      ) ||
+      Object.values(resolved).some((v) => redactWith(ctx)(v) !== v)
+    )
+      return;
+    const compiledRead = compileOperation(read, resolved, origin);
+    const target: Target = {
+      kind: "operation",
+      id: read.id,
+      label: redactWith(ctx)(read.label),
+      actionType: read.actionType,
+    };
+    const run = async () => {
+      const decision = await budget(
+        ctx,
+        gate.authorize({
+          site: origin,
+          target,
+          effect: "read",
+          inputs: resolved,
+          summary: `Verify existing item on ${new URL(origin).host}`,
+          digest: approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target,
+            effect: "read",
+            inputs: resolved,
+            binding: { operation: read, url: compiledRead.url.href, verificationOf: operation.id },
+          }),
+        }),
+      );
+      if (decision.kind !== "allow") return;
+      return send(
+        ctx,
+        "GET",
+        compiledRead.url,
+        compiledRead.headers,
+        undefined,
+        read.extraction?.format === "json" ? "application/json" : "text/html",
+      );
+    };
+    await prepareCsrf(ctx, compiledRead, resolved);
+    const context = authenticationContext(ctx);
+    const epoch = ctx.sessionEpoch ?? 0;
+    const before = await run();
+    const stable = () =>
+      context === authenticationContext(ctx) && epoch === (ctx.sessionEpoch ?? 0);
+    // Verification never treats a redirect as absence or a changed request context.
+    if (
+      !before ||
+      !stable() ||
+      before.status < 200 ||
+      before.status >= 300 ||
+      before.redirectLocations.length
+    )
+      return;
+    const baseline = await effectSnapshot(
+      read.extraction,
+      before.body,
+      before.url.href,
+      identity,
+      resource,
+      redactWith(ctx),
+    );
+    if (!baseline) return;
+    ctx.baselineUnverified = false;
+    return async () => {
+      if (!stable()) return false;
+      const after = await run();
+      if (
+        !after ||
+        !stable() ||
+        after.redirectLocations.length ||
+        after.requestContext !== before.requestContext ||
+        [401, 403].includes(after.status)
+      )
+        return false;
+      if (operation.actionType === `${SCHEMA}DeleteAction`) {
+        if ([404, 410].includes(after.status)) {
+          // The expected missing-resource heading is compatible with absence; login,
+          // validation regions and JSON failure markers remain failures.
+          return !responsePageError(
+            after.body,
+            /^\s*</.test(after.body)
+              ? "text/html"
+              : /^\s*[[{]/.test(after.body)
+                ? "application/json"
+                : after.contentType,
+            false,
+            true,
+          );
+        }
+        return (
+          after.status >= 200 &&
+          after.status < 300 &&
+          !!read.extraction &&
+          emptyEffectCollection(read.extraction, after.body, baseline)
+        );
+      }
+      if (after.status < 200 || after.status >= 300 || !read.extraction) return false;
+      const snapshot = await effectSnapshot(
+        read.extraction,
+        after.body,
+        after.url.href,
+        identity,
+        resource,
+        redactWith(ctx),
+      );
+      return (
+        !!snapshot &&
+        effectChangesMatch(declaration, baseline, snapshot, (input) =>
+          sentInputValue(operation, values, input, origin),
+        )
+      );
+    };
+  }
+
   async function runOperation(
     ctx: RunContext,
     operation: Operation,
@@ -727,6 +938,11 @@ export function createExecutor(options: ExecutorOptions): Executor {
         : operation.extraction?.format === "html"
           ? "text/html"
           : undefined;
+    const verifiesEffect = requiresEffectVerification(operation);
+    const verifyEffect = verifiesEffect
+      ? await prepareEffectRead(ctx, operation, values)
+      : undefined;
+    if (ctx.baselineUnverified) throw new HttpError("baseline is not verified; write was not sent");
     const res = await send(
       ctx,
       compiled.method,
@@ -770,106 +986,114 @@ export function createExecutor(options: ExecutorOptions): Executor {
         throw new SessionError("The site requires sign-in again");
     }
     const redirectedWrite = operation.effect !== "read" && res.redirectLocations.length > 0;
-    const createdLocation = redirectedWrite
-      ? await verifiedCreatedLocation(
-          writeResponses[operation.id],
-          res.redirectLocations,
-          res.url,
-          res.body,
-          origin,
-          res.status,
-          operation,
-          values,
-          async (identity) => {
-            const policy = writeResponses[operation.id];
-            const declaration = policy?.readBack;
-            const read = declaration && operations.get(declaration.operation);
-            const evidence = policy?.inputEvidence;
-            if (
-              !declaration ||
-              read?.effect !== "read" ||
-              read.request.method !== "GET" ||
-              !read.extraction ||
-              read.extraction.itemType !== createdObjectType(operation) ||
-              !evidence
-            )
-              return false;
-            if (read.session === "signed-in" && !ctx.jar.length && !Object.keys(ctx.headers).length)
-              return false;
-            const bindings: Record<string, string> = {};
-            for (const [name, binding] of Object.entries(declaration.bind)) {
-              if (!read.inputs.some((p) => p.name === name)) return false;
-              const value =
-                "identity" in binding
-                  ? identity
-                  : "input" in binding
-                    ? values[binding.input]
-                    : binding.value;
-              if (value === undefined) return false;
-              bindings[name] = value;
-            }
-            const resolved = operationValues(read, bindings);
-            // Verify identity transmission after every required input has been supplied.
-            const identityBound = Object.entries(declaration.bind).some(
-              ([name, binding]) =>
-                "identity" in binding && sentInputValue(read, resolved, name, origin) === identity,
-            );
-            const submitted = sentInputValue(operation, values, evidence.input, origin);
-            if (
-              !identityBound ||
-              !submitted ||
-              Object.values(resolved).some((value) => redactWith(ctx)(value) !== value)
-            )
-              return false;
-            const compiledRead = compileOperation(read, resolved, origin);
-            const target: Target = {
-              kind: "operation",
-              id: read.id,
-              label: redactWith(ctx)(read.label),
-              actionType: read.actionType,
-            };
-            const decision = await budget(
-              ctx,
-              gate.authorize({
-                site: origin,
-                target,
-                effect: "read",
-                inputs: resolved,
-                summary: `Verify created item on ${new URL(origin).host}`,
-                digest: approvalDigest({
+    if (verifiesEffect && (!verifyEffect || !(await verifyEffect())))
+      throw new HttpError("write effect is not verified; outcome is uncertain");
+    const createdLocation =
+      redirectedWrite && !verifiesEffect
+        ? await verifiedCreatedLocation(
+            writeResponses[operation.id],
+            res.redirectLocations,
+            res.url,
+            res.body,
+            origin,
+            res.status,
+            operation,
+            values,
+            async (identity) => {
+              const policy = writeResponses[operation.id];
+              const declaration = policy?.readBack;
+              const read = declaration && operations.get(declaration.operation);
+              const evidence = policy?.inputEvidence;
+              if (
+                !declaration ||
+                read?.effect !== "read" ||
+                read.request.method !== "GET" ||
+                !read.extraction ||
+                read.extraction.itemType !== createdObjectType(operation) ||
+                !evidence
+              )
+                return false;
+              if (
+                read.session === "signed-in" &&
+                !ctx.jar.length &&
+                !Object.keys(ctx.headers).length
+              )
+                return false;
+              const bindings: Record<string, string> = {};
+              for (const [name, binding] of Object.entries(declaration.bind)) {
+                if (!read.inputs.some((p) => p.name === name)) return false;
+                const value =
+                  "identity" in binding
+                    ? identity
+                    : "input" in binding
+                      ? values[binding.input]
+                      : binding.value;
+                if (value === undefined) return false;
+                bindings[name] = value;
+              }
+              const resolved = operationValues(read, bindings);
+              // Verify identity transmission after every required input has been supplied.
+              const identityBound = Object.entries(declaration.bind).some(
+                ([name, binding]) =>
+                  "identity" in binding &&
+                  sentInputValue(read, resolved, name, origin) === identity,
+              );
+              const submitted = sentInputValue(operation, values, evidence.input, origin);
+              if (
+                !identityBound ||
+                !submitted ||
+                Object.values(resolved).some((value) => redactWith(ctx)(value) !== value)
+              )
+                return false;
+              const compiledRead = compileOperation(read, resolved, origin);
+              const target: Target = {
+                kind: "operation",
+                id: read.id,
+                label: redactWith(ctx)(read.label),
+                actionType: read.actionType,
+              };
+              const decision = await budget(
+                ctx,
+                gate.authorize({
                   site: origin,
-                  modelVersion: model.version,
                   target,
                   effect: "read",
                   inputs: resolved,
-                  binding: {
-                    operation: read,
-                    url: compiledRead.url.href,
-                    readBackOf: operation.id,
-                  },
+                  summary: `Verify created item on ${new URL(origin).host}`,
+                  digest: approvalDigest({
+                    site: origin,
+                    modelVersion: model.version,
+                    target,
+                    effect: "read",
+                    inputs: resolved,
+                    binding: {
+                      operation: read,
+                      url: compiledRead.url.href,
+                      readBackOf: operation.id,
+                    },
+                  }),
                 }),
-              }),
-            );
-            if (decision.kind !== "allow") return false;
-            const result = await runOperation(ctx, read, resolved, compiledRead);
-            return (
-              result.observation.status >= 200 &&
-              result.observation.status < 300 &&
-              (await verifiedReadBackItem(
-                read.extraction,
-                result.responseBody,
-                result.observation.url,
-                identity,
-                evidence.property,
-                submitted,
-                redactWith(ctx),
-                declaration,
-              ))
-            );
-          },
-        )
-      : undefined;
-    if (redirectedWrite && !createdLocation)
+              );
+              if (decision.kind !== "allow") return false;
+              const result = await runOperation(ctx, read, resolved, compiledRead);
+              return (
+                result.observation.status >= 200 &&
+                result.observation.status < 300 &&
+                (await verifiedReadBackItem(
+                  read.extraction,
+                  result.responseBody,
+                  result.observation.url,
+                  identity,
+                  evidence.property,
+                  submitted,
+                  redactWith(ctx),
+                  declaration,
+                ))
+              );
+            },
+          )
+        : undefined;
+    if (redirectedWrite && !verifiesEffect && !createdLocation)
       throw new HttpError("write redirect lacks required success evidence; outcome is uncertain");
     const identity =
       createdLocation && !writeResponses[operation.id]?.completionOnly
@@ -1182,7 +1406,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         ? receipt(
             result.status === "done"
               ? "completed"
-              : progress.committed.length
+              : progress.committed.length || ctx.baselineUnverified
                 ? "uncertain"
                 : "failed",
           )
@@ -1213,7 +1437,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
           ...(result.error ? { error: redactWith(ctx)(result.error) } : {}),
         };
       } catch {
-        const failed = receipt(progress.committed.length ? "uncertain" : "failed");
+        const failed = receipt(
+          progress.committed.length || ctx.baselineUnverified ? "uncertain" : "failed",
+        );
         return {
           status: "error",
           ...(target ? { target: safeTarget(target) } : {}),
