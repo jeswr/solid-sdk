@@ -4575,3 +4575,59 @@ failures, 213 allowances. No vocabulary term was added, so codegen was not run. 
 the legacy traces, so only `tsc -p tsconfig.build.json` and the per-configuration
 `run-scenarios.mjs` were run, and the files the build step had touched were restored from
 HEAD. No commit, network request or dependency was added.
+
+### Brief 31 item 4: `accountability-regulator-claim` (stays not run, measured)
+
+I built the configuration as the coordinator directed, ran it, and then withdrew it. The
+cell stays "not run", and its blocked reason now gives the measured obstacle.
+
+**What was built and ran.** The configuration required `identity-anonymous`. Its
+`profileChange` declared the forum, the redress purpose, and the claim kinds `fee.charged`,
+`register.dispute-route` and `forum.decision`. The world added a forum party, a
+lender-signed `fee.charged` statement (fee 995, not in the accepted apply terms), and a
+`register.dispute-route` answer from the lender register that names the forum. The added
+segment ran with every gate run passing, up to the forum claim:
+
+1. North's fee notice was admitted by Sam's agent.
+2. The register agent admitted the route statement.
+3. Sam's agent looked the route up anonymously, and the answer was admitted.
+4. Both sides exported record segments.
+
+The claim step chose its recipient from the admitted `register.dispute-route` statement
+about the respondent, not from the profile's forum. It refused when no admitted answer
+named a route, or when the named route was not a forum this world hosts. C3 was empty.
+
+Two generic gaps in `requires` turned up on the way:
+
+- `matrixWorld` read `party.configurations` on prerequisite parties that had not been
+  parsed yet.
+- `addedStepProblem` treated the prerequisite's own added segment as a baseline step
+  inside an added segment.
+
+With the prerequisite's segment declared first in `added`, C2 saw both segments.
+
+**Where it stops.** The forum claim cannot be carried. `exportRecord` exports the agent's
+whole hash-chained ledger, so that the forum can check the chain from its start. After
+the mortgage journey, Sam's record has 431 entries and its segment JWS is 1,233,371
+characters long. North's has 119 entries and is 583,645 characters. The limit is 1,048,576
+characters: `RECORD_LIMITS.maxStringLength`, which is the same bound `NamedValuesNode.from`
+applies when the claim intent is built. The run failed there with `BoundsError: string
+exceeds 1048576`. For comparison, the fee-dispute segments are 110,000 to 170,000
+characters, with 31 to 45 entries. Choosing a smaller conversation does not help, because
+the segment always carries the whole ledger.
+
+Running the cell needs one of two things:
+
+- a record-format change: a segment that proves a chain range against a commitment
+  without carrying the whole record;
+- a decision to raise the record string bound.
+
+Neither was made here, because the brief forbids relaxing a check. The `entry-withheld`
+branch was not measured, since the main path cannot reach the forum.
+
+**State of the tree.** All item 4 code and scenario changes were reverted. The only
+change kept is the blocked wording in `src/profile/configurations.ts`, together with the
+two regenerated `accountability-regulator-claim` rows in `scenario-runs.json`, which are
+in their original position. It still names the lender-register exchange and AC-7, so
+`test/regulator-claim-alternative.test.ts` is unchanged. Manifest counts are unchanged:
+282 paths, 241 runs, 15 disagree, 26 blocked. The `labels` counts are unchanged too.
