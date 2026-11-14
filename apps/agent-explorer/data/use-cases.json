@@ -752,7 +752,7 @@
      "label": "All fourteen steps (usage-control-solid-access-control)",
      "status": "blocked",
      "configuration": "usage-control-solid-access-control",
-     "reason": "The selected suite has no executable runtime configuration installed. Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy.",
      "mortgage": "mortgage-main"
     },
     {
@@ -760,7 +760,7 @@
      "label": "The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied. (usage-control-solid-access-control)",
      "status": "blocked",
      "configuration": "usage-control-solid-access-control",
-     "reason": "The selected suite has no executable runtime configuration installed. Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy.",
      "mortgage": "mortgage-main"
     },
     {
@@ -831,7 +831,7 @@
      "label": "All fourteen steps (meaning-plain-language-upgrade)",
      "status": "blocked",
      "configuration": "meaning-plain-language-upgrade",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane.",
      "mortgage": "mortgage-main"
     },
     {
@@ -839,7 +839,7 @@
      "label": "Prose income is offered where structured evidence is required. (meaning-plain-language-upgrade)",
      "status": "blocked",
      "configuration": "meaning-plain-language-upgrade",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane.",
      "mortgage": "mortgage-main"
     },
     {
@@ -1081,7 +1081,7 @@
      "label": "All fourteen steps (identity-email-endpoint)",
      "status": "blocked",
      "configuration": "identity-email-endpoint",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.4: the revised confinement rule admits the email exchange as an added segment. Not built: proof that the replier controls the payroll mailbox, namely a Paywell-signed statement naming its contact mailbox and a mailbox challenge in which Sam's agent sends a fresh nonce and accepts a reply only if it carries the nonce and arrives from the named address. The existing mailbox binding has no challenge-control proof. No prose is substituted for structured payroll evidence.",
      "mortgage": "mortgage-main"
     },
     {
@@ -1089,23 +1089,25 @@
      "label": "The core proposes relying on the payroll mailbox prose as income evidence. (identity-email-endpoint)",
      "status": "blocked",
      "configuration": "identity-email-endpoint",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.4: the revised confinement rule admits the email exchange as an added segment. Not built: proof that the replier controls the payroll mailbox, namely a Paywell-signed statement naming its contact mailbox and a mailbox challenge in which Sam's agent sends a fresh nonce and accepts a reply only if it carries the nonce and arrives from the named address. The existing mailbox binding has no challenge-control proof. No prose is substituted for structured payroll evidence.",
      "mortgage": "mortgage-main"
     },
     {
      "path": "main",
      "label": "All fourteen steps (identity-anonymous)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "identity-anonymous",
-     "reason": "The selected suite has no executable runtime configuration installed. The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6.",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--identity-anonymous.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "anonymous-asks-for-more",
      "label": "An unnamed requester asks the index for an operation restricted to named parties. (identity-anonymous)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "identity-anonymous",
-     "reason": "The selected suite has no executable runtime configuration installed. The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6.",
+     "scenario": "mortgage-main--anonymous-asks-for-more",
+     "traceFile": "mortgage-main--anonymous-asks-for-more--identity-anonymous.json",
      "mortgage": "mortgage-main"
     },
     {
@@ -1462,17 +1464,37 @@
     {
      "path": "main",
      "label": "All fourteen steps (usage-control-human-approval)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "usage-control-human-approval",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed.",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--usage-control-human-approval.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "approval-reused",
-     "label": "An approval of disclosure to the valuer is presented for a different recipient. (usage-control-human-approval)",
-     "status": "blocked",
+     "label": "After Sam approved release of the property access details to the valuer, a different valuation party asks for the same statement; the approval does not carry over and Sam is asked again. (usage-control-human-approval)",
+     "status": "runs",
      "configuration": "usage-control-human-approval",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed.",
+     "scenario": "mortgage-main--approval-reused",
+     "traceFile": "mortgage-main--approval-reused--usage-control-human-approval.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "supplier-terms-hold",
+     "label": "The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose. (usage-control-human-approval)",
+     "status": "disagrees",
+     "configuration": "usage-control-human-approval",
+     "scenario": "mortgage-main--supplier-terms-hold",
+     "traceFile": "mortgage-main--supplier-terms-hold--usage-control-human-approval.json",
+     "actual": {
+      "outcome": "stop",
+      "reason": "excessive-scope",
+      "check": "disclosure"
+     },
+     "expected": {
+      "outcome": "stop",
+      "reason": "prohibited"
+     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1496,17 +1518,28 @@
     {
      "path": "main",
      "label": "All fourteen steps (accountability-regulator-claim)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "accountability-regulator-claim",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery.",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--accountability-regulator-claim.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "entry-withheld",
-     "label": "The lender withholds a record entry; the claimant receipt commitment exposes the gap. (accountability-regulator-claim)",
-     "status": "blocked",
+     "label": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable. (accountability-regulator-claim)",
+     "status": "disagrees",
      "configuration": "accountability-regulator-claim",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery.",
+     "scenario": "mortgage-main--entry-withheld",
+     "traceFile": "mortgage-main--entry-withheld--accountability-regulator-claim.json",
+     "actual": {
+      "outcome": "refuse",
+      "reason": "record-unavailable",
+      "check": "fitness"
+     },
+     "expected": {
+      "outcome": "refuse",
+      "reason": "evidence-invalid"
+     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1532,7 +1565,7 @@
      "label": "All fourteen steps (accountability-vendor-fault)",
      "status": "blocked",
      "configuration": "accountability-vendor-fault",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.8: a main path may not run a faulty gate (confinement C3). Not built: a signed component statement naming who builds and who operates the gate and the core (CORE-L-13), the record audit that checks each released action again against the mandate, a gate-operator party with its own agent, and the onlyUnder branch in which brief 20's labelled fault stand-in releases one action outside the mandate. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run.",
      "mortgage": "mortgage-main"
     },
     {
@@ -1540,7 +1573,7 @@
      "label": "The action was inside the mandate; no supported claim against the gate vendor is produced. (accountability-vendor-fault)",
      "status": "blocked",
      "configuration": "accountability-vendor-fault",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.8: a main path may not run a faulty gate (confinement C3). Not built: a signed component statement naming who builds and who operates the gate and the core (CORE-L-13), the record audit that checks each released action again against the mandate, a gate-operator party with its own agent, and the onlyUnder branch in which brief 20's labelled fault stand-in releases one action outside the mandate. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run.",
      "mortgage": "mortgage-main"
     },
     {
@@ -1548,7 +1581,7 @@
      "label": "All fourteen steps (accountability-reputation-post)",
      "status": "blocked",
      "configuration": "accountability-reputation-post",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
      "mortgage": "mortgage-main"
     },
     {
@@ -1556,7 +1589,7 @@
      "label": "A proposed public post names an individual employee and is prohibited. (accountability-reputation-post)",
      "status": "blocked",
      "configuration": "accountability-reputation-post",
-     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published.",
+     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
      "mortgage": "mortgage-main"
     },
     {

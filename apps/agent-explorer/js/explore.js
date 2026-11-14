@@ -303,6 +303,7 @@
       b[layerId] = suiteId;
       t = AX.findTraceByLayers(sc, b);
     }
+    if (!t) t = AX.findTraceWithSuite(sc, layerId, suiteId);
     if (!t) { renderConfig(); return; }
     var cur = S.trace ? S.trace.events[S.idx] : {};
     E.apply({ scenario: sc, config: t.configuration.id, step: cur.step, level: S.level, focus: [cur.agent, cur.kind, cur.check || cur.part].join('.') });
@@ -314,7 +315,7 @@
     if (AX.findTraceByLayers(sc, a)) return true;
     var b = Object.assign({}, AX.baselineLayers);
     b[layerId] = suiteId;
-    return !!AX.findTraceByLayers(sc, b);
+    return !!AX.findTraceByLayers(sc, b) || !!AX.findTraceWithSuite(sc, layerId, suiteId);
   }
   function renderConfig() {
     var t = S.trace || S.target;

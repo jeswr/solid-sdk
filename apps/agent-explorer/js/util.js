@@ -292,6 +292,16 @@
   AX.findTraceByLayers = function (scenarioId, layers) {
     return AX.tracesFor(scenarioId).filter(function (t) { return AX.sameLayers(t.layersFull, layers); })[0] || null;
   };
+  // A run in this scenario with this layer set to this suite, when the suite needs another
+  // layer changed as well (a suite that requires another, such as a regulator claim that
+  // looks the forum up through an anonymous register query). Prefers the main path and the
+  // fewest other layers changed.
+  AX.findTraceWithSuite = function (scenarioId, layerId, suiteId) {
+    function changed(t) { return Object.keys(AX.baselineLayers).filter(function (k) { return t.layersFull[k] !== AX.baselineLayers[k]; }).length; }
+    function branch(t) { return t.path && t.path.index ? 1 : 0; }
+    return AX.tracesFor(scenarioId).filter(function (t) { return !t.isFixture && t.layersFull[layerId] === suiteId; })
+      .sort(function (a, b) { return branch(a) - branch(b) || changed(a) - changed(b); })[0] || null;
+  };
   AX.scenarioMeta = function (id) {
     return (D.scenarios && D.scenarios[id]) || {};
   };
