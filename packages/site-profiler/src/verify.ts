@@ -339,7 +339,10 @@ export function playwrightReplayer(
           status: res.status,
           bodySample: res.body,
         };
-        if (res.authenticationFailure) entry.responsePageFailure = true;
+        if (res.authenticationFailure) {
+          entry.responsePageFailure = true;
+          entry.authenticationChallenge = true;
+        }
         if (res.contentType) entry.contentType = res.contentType;
         if (res.location) entry.redirectedTo = new URL(res.location, url).toString();
         recorder.recordReplay(entry);

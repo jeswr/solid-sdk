@@ -7,7 +7,7 @@ import type { Operation } from "@jeswr/site-model";
 import { type Extraction, responseIdentity, SCHEMA } from "@jeswr/site-model";
 import { attribute, elementText, jsonPointer, parseHtml, selectElement } from "./dom.js";
 import { extract } from "./extract.js";
-import type { LivenessRead } from "./liveness.js";
+import { AUTHENTICATION_REFUSALS, type LivenessRead } from "./liveness.js";
 import { guardUrl } from "./origin.js";
 import {
   createdObjectType,
@@ -158,6 +158,31 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
       !/^[a-f0-9]{64}$/.test(liveness.signature.structure)
     )
       throw new BindingError("invalid liveness read");
+    // A legacy liveness read without anonymous evidence is accepted but never completes a
+    // deletion (Uncertain at runtime); a present declaration must be well formed.
+    const anonymous = (liveness as Partial<LivenessRead>).anonymous;
+    if (anonymous !== undefined) {
+      if (
+        !anonymous ||
+        typeof anonymous !== "object" ||
+        !AUTHENTICATION_REFUSALS.includes(anonymous.refusal) ||
+        !Array.isArray(anonymous.loginRoutes) ||
+        anonymous.loginRoutes.length > 16 ||
+        (anonymous.refusal === "login-redirect" && !anonymous.loginRoutes.length)
+      )
+        throw new BindingError("invalid liveness read");
+      for (const route of anonymous.loginRoutes) {
+        let url: URL;
+        try {
+          if (typeof route !== "string") throw new BindingError("invalid liveness read");
+          url = guardUrl(route, origin);
+        } catch {
+          throw new BindingError("invalid liveness read");
+        }
+        if (`${url.origin}${url.pathname}` !== route)
+          throw new BindingError("invalid liveness read");
+      }
+    }
   }
   if (policy.verification) {
     for (const pattern of [

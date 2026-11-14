@@ -433,18 +433,18 @@ export function learnEffectVerification(
             return item ? [{ record: r, item }] : [];
           });
         // Change evidence comes only from the immediate baseline: reads that started after
-        // the previous sent write of the session completed (or from its start) and before this
-        // write, oldest first. Without that write's recorded completion there is no baseline.
-        const previous = trace
-          .filter(
-            (r) =>
-              r.seq < write.seq && !r.blocked && !["GET", "HEAD", "OPTIONS"].includes(r.method),
-          )
-          .sort((a, b) => a.seq - b.seq)
-          .at(-1);
-        const baselineStart = previous
-          ? Math.max(previous.seq + 1, previous.completedAt ?? write.seq)
-          : Number.NEGATIVE_INFINITY;
+        // EVERY earlier sent write of the session completed (or from its start) and before
+        // this write, oldest first. A quick later write cannot hide an earlier one still in
+        // flight, and if any earlier write has no recorded completion there is no baseline.
+        const earlier = trace.filter(
+          (r) => r.seq < write.seq && !r.blocked && !["GET", "HEAD", "OPTIONS"].includes(r.method),
+        );
+        const baselineStart = earlier.some((r) => r.completedAt === undefined)
+          ? write.seq
+          : Math.max(
+              Number.NEGATIVE_INFINITY,
+              ...earlier.map((r) => Math.max(r.seq + 1, r.completedAt ?? write.seq)),
+            );
         const beforeItems = trace
           .filter((r) => r.seq >= baselineStart && r.seq < write.seq)
           .sort((a, b) => a.seq - b.seq)

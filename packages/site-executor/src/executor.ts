@@ -83,7 +83,7 @@ import {
   summarise,
 } from "./gate.js";
 import { isHtmlInputType } from "./html-controls.js";
-import { livenessSignature } from "./liveness.js";
+import { authenticationRefusal, type LivenessRead, matchesLivenessSignature } from "./liveness.js";
 import { effectiveEffect, matchRequest, maxEffect, normaliseEffect, type Target } from "./match.js";
 import {
   addAmounts,
@@ -294,7 +294,16 @@ interface RunContext {
   deadline: number;
 }
 
-type VerificationRead = { authorize: (url: URL) => Promise<boolean>; preparation?: boolean };
+type VerificationRead = {
+  authorize: (url: URL) => Promise<boolean>;
+  preparation?: boolean;
+  /**
+   * The anonymous liveness control: no session headers and no cookies are sent, nothing the
+   * response sets reaches the session, and an authentication challenge is reported rather
+   * than thrown, because a refusal is the expected answer.
+   */
+  anonymous?: boolean;
+};
 
 interface Response0 {
   stale: boolean;
@@ -306,6 +315,8 @@ interface Response0 {
   body: string;
   redirectLocations: string[];
   requestBody?: CompiledRequest["body"];
+  /** WWW-Authenticate or Proxy-Authenticate on the answer (anonymous control only). */
+  challenge?: boolean;
 }
 
 function describeRule(rule: NonNullable<Operation["csrf"]>[number]): string {
@@ -586,9 +597,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
       if (ctx.requests >= maxRequests)
         throw new LimitError(`request limit of ${maxRequests} reached`);
       ctx.requests++;
+      const anonymous = verification?.anonymous === true;
       const h = new Headers();
       for (const [k, v] of Object.entries(currentHeaders)) h.set(k, v);
-      for (const [k, v] of Object.entries(ctx.headers)) {
+      for (const [k, v] of anonymous ? [] : Object.entries(ctx.headers)) {
         const lower = k.toLowerCase();
         if (lower === "cookie" || lower === "host" || lower === "content-length") continue;
         h.set(k, v);
@@ -598,11 +610,11 @@ export function createExecutor(options: ExecutorOptions): Executor {
         h.set("cache-control", "no-cache");
         h.set("pragma", "no-cache");
       }
-      const cookies = cookiesFor(ctx.jar, url, now());
+      const cookies = anonymous ? [] : cookiesFor(ctx.jar, url, now());
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       // Fetch's Headers object is authoritative for trimming and header names.
       // Capture session values after the final header decoration on every hop.
-      for (const name of Object.keys(ctx.headers)) {
+      for (const name of anonymous ? [] : Object.keys(ctx.headers)) {
         const value = h.get(name);
         if (value) registerSecret(ctx.secrets, value);
       }
@@ -629,16 +641,17 @@ export function createExecutor(options: ExecutorOptions): Executor {
         committed();
         committed = undefined;
       }
-      await storeCookies(
-        ctx,
-        res,
-        url,
-        loginResponse && currentMethod !== "GET" && currentMethod !== "HEAD",
-      );
-      if (
-        verification &&
-        (res.headers.has("www-authenticate") || res.headers.has("proxy-authenticate"))
-      ) {
+      // The anonymous control never changes the session, whatever its answer sets.
+      if (!anonymous)
+        await storeCookies(
+          ctx,
+          res,
+          url,
+          loginResponse && currentMethod !== "GET" && currentMethod !== "HEAD",
+        );
+      const challenge =
+        res.headers.has("www-authenticate") || res.headers.has("proxy-authenticate");
+      if (verification && challenge && !anonymous) {
         if (res.body) await budget(ctx, res.body.cancel());
         throw new HttpError("verification requires authentication");
       }
@@ -696,6 +709,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
             : await readBody(ctx, res),
         requestBody: currentBody,
         redirectLocations,
+        ...(anonymous ? { challenge } : {}),
       };
     }
   }
@@ -1060,8 +1074,11 @@ export function createExecutor(options: ExecutorOptions): Executor {
 
   /**
    * Run the learned liveness read through the read gate, with the verification cache bypass
-   * and freshness rules, and require its learned success signature. A missing, unusable,
-   * denied, redirected, stale or different response proves nothing.
+   * and freshness rules, and require its learned success signature. Then send the same read
+   * once with no credentials and no cookies (read gate first, same cache bypass, no redirect
+   * followed): it must be an authentication refusal that does not reproduce the signature, so
+   * the proof depends on the credentials. A missing, unusable, denied, redirected, stale or
+   * different response, or an anonymous answer that is not a refusal, proves nothing.
    */
   async function sessionLive(
     ctx: RunContext,
@@ -1071,8 +1088,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
   ): Promise<boolean> {
     const liveness = declaration.liveness;
     const read = liveness && operations.get(liveness.operation);
+    const anonymous = (liveness as Partial<LivenessRead> | undefined)?.anonymous;
     if (
       !liveness ||
+      !anonymous ||
       !read ||
       read.effect !== "read" ||
       read.request.method !== "GET" ||
@@ -1080,6 +1099,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       !stable()
     )
       return false;
+    const extraction = read.extraction;
     const bindings: Record<string, string> = {};
     for (const [name, binding] of Object.entries(liveness.bind)) {
       if (!read.inputs.some((p) => p.name === name) || typeof binding?.value !== "string")
@@ -1099,60 +1119,109 @@ export function createExecutor(options: ExecutorOptions): Executor {
       if (error instanceof BindingError) return false;
       throw error;
     }
+    // A session token cannot be sent anonymously, and without it the anonymous control would
+    // not be the same read: a token-decorated read is no liveness proof.
+    if (compiled.csrf.length) return false;
     const target: Target = {
       kind: "operation",
       id: read.id,
       label: redactWith(ctx)(read.label),
       actionType: read.actionType,
     };
-    const authorize = async (url: URL) => {
-      const decision = await budget(
-        ctx,
-        gate.authorize({
-          site: origin,
-          target,
-          effect: "read",
-          inputs: resolved,
-          summary: `Confirm the session on ${new URL(origin).host}`,
-          digest: approvalDigest({
+    const authorizer =
+      (control: boolean) =>
+      async (url: URL): Promise<boolean> => {
+        const decision = await budget(
+          ctx,
+          gate.authorize({
             site: origin,
-            modelVersion: model.version,
             target,
             effect: "read",
             inputs: resolved,
-            binding: { operation: read, url: url.href, livenessOf: write.id },
+            summary: control
+              ? `Confirm ${new URL(origin).host} refuses the same read without the session`
+              : `Confirm the session on ${new URL(origin).host}`,
+            digest: approvalDigest({
+              site: origin,
+              modelVersion: model.version,
+              target,
+              effect: "read",
+              inputs: resolved,
+              binding: {
+                operation: read,
+                url: url.href,
+                livenessOf: write.id,
+                ...(control ? { anonymous: true } : {}),
+              },
+            }),
           }),
-        }),
-      );
-      return decision.kind === "allow";
-    };
-    const verification = { authorize };
-    if (!(await authorize(compiled.url))) return false;
-    await prepareCsrf(ctx, compiled, resolved, false, verification);
-    if (!stable()) return false;
+        );
+        return decision.kind === "allow";
+      };
+    const accept = extraction.format === "json" ? "application/json" : "text/html";
+    const signed = { authorize: authorizer(false) };
+    if (!(await signed.authorize(compiled.url))) return false;
     const res = await send(
       ctx,
       "GET",
       compiled.url,
       compiled.headers,
       undefined,
-      read.extraction.format === "json" ? "application/json" : "text/html",
+      accept,
       undefined,
       false,
-      verification,
+      signed,
     );
     if (
       res.stale ||
       !stable() ||
       res.redirectLocations.length ||
-      res.status !== liveness.signature.status
+      !matchesLivenessSignature(
+        liveness.signature,
+        res.status,
+        res.contentType,
+        res.body,
+        extraction,
+      )
     )
       return false;
-    const signature = livenessSignature(res.status, res.contentType, res.body, read.extraction);
+    // The anonymous control: the same read, without credentials, must be refused.
+    const control = { authorize: authorizer(true), anonymous: true };
+    if (!(await control.authorize(compiled.url))) return false;
+    const anon = await send(
+      ctx,
+      "GET",
+      compiled.url,
+      compiled.headers,
+      undefined,
+      accept,
+      undefined,
+      false,
+      control,
+    );
+    if (anon.stale || !stable() || anon.redirectLocations.length > 1) return false;
     return (
-      !!signature &&
-      signature.contentType === liveness.signature.contentType &&
-      signature.structure === liveness.signature.structure
+      authenticationRefusal(
+        {
+          url: compiled.url.href,
+          status: anon.status,
+          ...(anon.contentType !== undefined ? { contentType: anon.contentType } : {}),
+          body: anon.body,
+          ...(anon.redirectLocations[0] !== undefined
+            ? { location: anon.redirectLocations[0] }
+            : {}),
+          challenge: anon.challenge === true,
+        },
+        anonymous.loginRoutes,
+        origin,
+      ) !== undefined &&
+      !matchesLivenessSignature(
+        liveness.signature,
+        anon.status,
+        anon.contentType,
+        anon.body,
+        extraction,
+      )
     );
   }
 

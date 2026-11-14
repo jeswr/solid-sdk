@@ -22,11 +22,13 @@ const authenticationMarker = (value: string) =>
   );
 /**
  * The same tokens for prose (message-like values, element-less documents, main document text):
- * whole words, so "No such blog in this forum" is not "login". A single-token value such as
- * "AccessDenied" or "auth_required" also gets the separator-insensitive rule.
+ * whole words, so "No such blog in this forum" is not "login". Round 19 adds "logged in/out",
+ * "session expired/ended/timed out", "members only", "private", "sign up" and "register"
+ * (defence in depth: this list can never be complete, and it only ever rejects). A single-token
+ * value such as "AccessDenied" or "auth_required" also gets the separator-insensitive rule.
  */
 const AUTHENTICATION_WORDS =
-  /\b(?:auth|authentica\w*|authori[sz]\w*|unauthori[sz]\w*|unauthenticated|not[\s_-]*authenticated|log[\s_-]*(?:in|on)|sign[\s_-]*(?:in|on)|sso|credentials?|tokens?|forbidden|permissions?|denied|restricted|not[\s_-]*provided)\b/i;
+  /\b(?:auth|authentica\w*|authori[sz]\w*|unauthori[sz]\w*|unauthenticated|not[\s_-]*authenticated|log[\s_-]*(?:in|on)|logged[\s_-]*(?:in|on|out)|sign[\s_-]*(?:in|on|up)|sso|credentials?|tokens?|forbidden|permissions?|denied|restricted|not[\s_-]*provided|session[\s_-]+(?:has[\s_-]+)?(?:expired|ended|timed[\s_-]*out)|members?[\s_-]*only|private|register)\b/i;
 export function authenticationText(value: string): boolean {
   const text = value.trim();
   return AUTHENTICATION_WORDS.test(text) || (!/\s/.test(text) && authenticationMarker(text));
@@ -205,7 +207,7 @@ export function responsePageError(
 }
 
 /** True when the parsed document has an element (doctype, comments and text are not elements). */
-function elementChildren(doc: ReturnType<typeof parseHtml>): boolean {
+export function elementChildren(doc: ReturnType<typeof parseHtml>): boolean {
   return doc.children.some((node) => "name" in node && "attribs" in node);
 }
 
@@ -220,7 +222,7 @@ const NON_MAIN = new Set([
   "noscript",
 ]);
 /** Headings and body text, excluding navigation chrome and non-rendered content. */
-function mainDocumentText(doc: ReturnType<typeof parseHtml>): string {
+export function mainDocumentText(doc: ReturnType<typeof parseHtml>): string {
   const parts: string[] = [];
   const visit = (nodes: ReturnType<typeof parseHtml>["children"]) => {
     for (const node of nodes) {

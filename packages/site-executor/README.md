@@ -705,3 +705,21 @@ discriminator keys, and the tokens include "log in", "please log in", "access de
 "permission" and "not provided". These markers only reject; they never make a response verify.
 `test/review-r18.test.ts` and `site-profiler/test/runtime-effects.test.ts` cover every
 round-18 reproduction.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 19: the liveness proof must depend on the credentials. A liveness read carries learned
+`anonymous` evidence (`{ refusal, loginRoutes }`): the profiler saw an anonymous replay of its
+exact bound URL refused for lack of authentication. After the credentialed liveness read
+matches its signature, the executor sends the same read once with no session headers and no
+cookies, through the read gate first, with the same cache bypass and no redirect followed;
+nothing that answer sets reaches the session, and its challenge header is reported rather than
+thrown. The deletion completes only if that anonymous answer is an authentication refusal
+(`authenticationRefusal`: a redirect to a learned login route, a 401/403 carrying
+WWW-Authenticate or authentication wording or a login page, or a 2xx login page with a password
+control or a form posting to a learned login route) and does not reproduce the liveness
+signature. Timeouts, network errors, plain 403/5xx, other redirects and anything else leave it
+Uncertain, as do a legacy liveness read without `anonymous` evidence and a liveness read with
+CSRF rules (its token cannot be sent anonymously, so the control would not be the same read).
+The not-found phrases also cover "logged in/out", "session expired/ended/timed out", "members
+only", "private", "sign up" and "register" (whole words; they only reject).
+`test/review-r19.test.ts` and `site-profiler/test/review-r19.test.ts` cover the round-19 review.

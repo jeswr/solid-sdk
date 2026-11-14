@@ -72,6 +72,8 @@ export interface RecordedRequest {
   responsePageFailure?: boolean;
   /** Hashes of the complete response's flash regions, never executable text. */
   responseFlash?: string[];
+  /** The response carried WWW-Authenticate or Proxy-Authenticate (profiler replays). */
+  authenticationChallenge?: boolean;
   /** True when the profiler's guard refused to send it (a non-GET outside demonstrations and login). */
   blocked?: boolean;
 }

@@ -493,3 +493,22 @@ when a response (or failure) arrived, so a request with `seq >= completedAt` sta
 completed. Immediate-baseline change evidence uses only reads that started after the previous
 write completed; without that write's recorded completion there is no change evidence.
 Round-18 regressions are in `test/runtime-effects.test.ts` and `test/browser-steps.test.ts`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 19: a liveness candidate is learned only when the trace holds an anonymous replay
+(`resourceType: "replay-anonymous"`) of its exact compiled URL, and every such replay is an
+authentication refusal (the executor's `authenticationRefusal`) that fails the liveness
+signature. Login routes come from the sign-in session (`learnedLoginRoutes`: the login
+operation's endpoint, the sign-in form's post target and every sign-in page with a password
+control). A replay that timed out or failed records nothing, so it is no evidence, and neither
+is a plain 403/5xx, a non-login redirect, a page rendered for anonymous visitors, or a read
+restored as signed-in without anonymous evidence. After the deleted-resource probe,
+`probeLivenessReads` replays the best three candidates of each not-found deletion once without
+credentials or cookies, each URL authorized through the read gate first; a URL already replayed
+anonymously is not sent again. Reads with CSRF rules are never candidates. Replays record
+`authenticationChallenge` when the answer carried WWW-Authenticate.
+
+Immediate-baseline change evidence now needs every earlier sent write of the session to have
+completed before the read started; if any earlier write has no recorded completion there is no
+change evidence. Round-19 regressions are in `test/review-r19.test.ts` and
+`test/runtime-effects.test.ts`.

@@ -178,6 +178,63 @@ interface NotFoundBodies {
   runtimeContentType?: string;
 }
 
+/** A login page served during sign-in and the refused anonymous replay of the liveness URL. */
+function anonymousRefusalEvidence(
+  record: (seq: number, change: Partial<RecordedRequest>) => RecordedRequest,
+  urls = [`${origin}/stores/main/listing`],
+): RecordedRequest[] {
+  return [
+    record(-50, {
+      phase: "login",
+      demonstration: undefined,
+      url: `${origin}/login`,
+      resourceType: "document",
+      contentType: "text/html",
+      cookieNames: [],
+      bodySample: '<form method="post" action="/login"><input type="password" name="pw"></form>',
+    }),
+    ...urls.map((url, at) =>
+      record(200 + at, {
+        phase: "verify",
+        demonstration: undefined,
+        url,
+        resourceType: "replay-anonymous",
+        cookieNames: [],
+        authenticationContext: "anonymous-context",
+        status: 302,
+        redirectedTo: `${origin}/login`,
+        bodySample: "",
+      }),
+    ),
+  ];
+}
+
+/** The runtime answer to the anonymous liveness control. */
+function anonymousAnswer(mode: string, body: unknown): Response {
+  if (mode === "anonymous control succeeds") return Response.json(body);
+  if (mode === "anonymous control challenge")
+    return new Response("", {
+      status: 401,
+      headers: { "www-authenticate": 'Bearer realm="shop"' },
+    });
+  if (mode === "anonymous control bare 401") return new Response("", { status: 401 });
+  if (mode === "anonymous control blocked")
+    return new Response("<html><body><p>Request blocked.</p></body></html>", {
+      status: 403,
+      headers: { "content-type": "text/html" },
+    });
+  if (mode === "anonymous control other redirect")
+    return new Response(null, {
+      status: 302,
+      headers: { location: "/stores/main/listing?cookie_check=1" },
+    });
+  if (mode === "anonymous control login page")
+    return new Response('<form method="post" action="/login"><input type="password"></form>', {
+      headers: { "content-type": "text/html" },
+    });
+  return new Response(null, { status: 302, headers: { location: "/login" } });
+}
+
 async function replay(
   type = "DeleteAction",
   mode = "verified",
@@ -382,13 +439,17 @@ async function replay(
       ...(probe ? { contentType: probe.contentType, bodySample: probe.learned } : {}),
     });
   }
-  if (mode !== "no liveness")
+  if (mode !== "no liveness") {
     f.trace.push(
       f.record(100, {
         url: `${origin}/stores/main/listing`,
         bodySample: JSON.stringify(f.liveBody()),
       }),
     );
+    // Round 19: the anonymous replay of the exact liveness URL was refused with a redirect to
+    // the login page learned during sign-in.
+    f.trace.push(...anonymousRefusalEvidence(f.record));
+  }
   let policy = learnWriteResponses([f.write, f.read, f.live], f.trace, origin)[f.write.id];
   expect(policy?.successFlash).toBeUndefined();
   const unlearned =
@@ -496,6 +557,12 @@ async function replay(
         if (mode === "liveness denied" && request.target.id === f.live.id)
           return { kind: "deny", reason: "Fixture liveness denial" };
         if (
+          mode === "anonymous control denied" &&
+          request.target.id === f.live.id &&
+          request.summary.includes("without the session")
+        )
+          return { kind: "deny", reason: "Fixture anonymous control denial" };
+        if (
           (mode === "read denied" ||
             mode === "token source read denied" ||
             (mode === "token source denied" &&
@@ -544,6 +611,8 @@ async function replay(
         expect(init?.cache).toBe("no-store");
         expect(headers.get("cache-control")).toBe("no-cache");
         expect(headers.get("pragma")).toBe("no-cache");
+        // The anonymous control (round 19) carries no cookie; the site refuses it.
+        if (!headers.has("cookie")) return anonymousAnswer(mode, f.liveBody());
         if (mode === "liveness login")
           return new Response(
             '<main><h1>Sign in</h1><form action="/login"><input type="password" name="pw"></form></main>',
@@ -793,12 +862,17 @@ it.each([
   const { result, calls, policy } = await replay("DeleteAction", mode);
   expect(result.outcome?.status).toBe("completed");
   expect(policy?.verification?.liveness?.operation).toBe("urn:liveness");
-  expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "GET", "GET", "GET"]);
+  expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "GET", "GET", "GET", "GET"]);
   expect(calls[0]?.url).toBe(calls[3]?.url);
   expect([...required(calls[0]).headers]).toEqual([...required(calls[3]).headers]);
   // The liveness read follows the absence read, in the same session.
   expect(calls[4]?.url).toBe(`${origin}/stores/main/listing`);
   expect(calls[4]?.headers.get("cookie")).toBe(calls[3]?.headers.get("cookie"));
+  // Then the same read once without credentials or cookies, with the same cache bypass.
+  expect(calls[5]?.url).toBe(`${origin}/stores/main/listing`);
+  expect(calls[5]?.headers.has("cookie")).toBe(false);
+  expect(calls[5]?.cache).toBe("no-store");
+  expect(calls[5]?.headers.get("x-requested-with")).toBe("XMLHttpRequest");
 });
 it("verifies deletion with an explicitly empty identity-filtered list in the baseline success envelope", async () => {
   expect((await replay("DeleteAction", "verified", true)).result.outcome?.status).toBe("completed");
@@ -2243,6 +2317,36 @@ it.each([
   expect(listed).toBe(mode === "liveness denied" ? 0 : 1);
 });
 
+it.each([
+  ["verified", "completed"],
+  ["anonymous control challenge", "completed"],
+  ["anonymous control login page", "completed"],
+  ["anonymous control succeeds", "uncertain"],
+  ["anonymous control bare 401", "uncertain"],
+  ["anonymous control blocked", "uncertain"],
+  ["anonymous control other redirect", "uncertain"],
+])("r19 a deletion whose anonymous liveness control is %j ends %s", async (mode, outcome) => {
+  const { result, calls, policy } = await replay("DeleteAction", mode);
+  expect(policy?.verification?.liveness?.anonymous).toEqual({
+    refusal: "login-redirect",
+    loginRoutes: [`${origin}/login`],
+  });
+  expect(result.outcome?.status).toBe(outcome);
+  expect(result.committed).toHaveLength(1);
+  // The credentialed liveness read, then the same read once without cookies.
+  const listed = calls.filter((c) => c.url === `${origin}/stores/main/listing`);
+  expect(listed.map((c) => c.headers.has("cookie"))).toEqual([true, false]);
+  expect(listed.every((c) => c.cache === "no-store")).toBe(true);
+});
+
+it("r19 a denied anonymous liveness control is never transmitted and the deletion is Uncertain", async () => {
+  const { result, calls } = await replay("DeleteAction", "anonymous control denied");
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+  const listed = calls.filter((c) => c.url === `${origin}/stores/main/listing`);
+  expect(listed.map((c) => c.headers.has("cookie"))).toEqual([true]);
+});
+
 it("r18 a matching not-found deletion without a learned liveness read is Uncertain", async () => {
   const { result, policy, calls } = await replay("DeleteAction", "no liveness");
   expect(policy?.verification?.notFound).toBeDefined();
@@ -2279,6 +2383,13 @@ function livenessLearning(
   });
   change(sample, f.live);
   f.trace.push(sample);
+  // Every candidate URL was replayed anonymously and refused (round 19).
+  f.trace.push(
+    ...anonymousRefusalEvidence(
+      f.record,
+      f.trace.filter((r) => r.seq >= 50 && r.method === "GET").map((r) => r.url),
+    ),
+  );
   return learnWriteResponses([f.write, f.read, f.live], f.trace, origin)[f.write.id]?.verification;
 }
 
@@ -2424,6 +2535,52 @@ it("r18 without the previous write's completion order there is no change evidenc
   );
   // The same trace with completion recorded before the read started still pairs.
   const paired = baselinePairing(undefined, [3], true, -1);
+  expect(
+    learnWriteResponses([paired.write, paired.read], paired.trace, origin)[paired.write.id]
+      ?.verification?.changes,
+  ).toEqual([{ input: "quantity", property: paired.property }]);
+});
+
+/** The r18 trace plus an unrelated same-origin POST beacon at seq -3 with the given completion. */
+function withBeacon(writeCompletedAt: number | null, beaconCompletedAt: number | null) {
+  const f = baselinePairing(undefined, [3], true, writeCompletedAt);
+  const earlier = required(f.trace.find((r) => r.seq === -5));
+  f.trace.push({
+    ...earlier,
+    seq: -3,
+    ...(beaconCompletedAt === null
+      ? { completedAt: undefined }
+      : { completedAt: beaconCompletedAt }),
+    url: `${origin}/analytics/beacon`,
+    postData: "e=view",
+  });
+  f.trace.sort((a, b) => a.seq - b.seq);
+  return f;
+}
+
+it("r19 a later write that completes quickly cannot hide an earlier write still in flight", async () => {
+  // W1 (seq -5) completes only at 0, after the poll (seq -1) started; the beacon completed at -2.
+  const f = withBeacon(0, -2);
+  expect(learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification).toBe(
+    undefined,
+  );
+  const { result, posts } = await executeLearned(f);
+  expect(posts).toBe(1);
+  expect(result.outcome?.status).toBe("uncertain");
+});
+
+it("r19 any earlier write without a recorded completion removes the change evidence", () => {
+  // The latest earlier write completed before the poll, but an older one has no completion.
+  const f = withBeacon(null, -2);
+  expect(learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification).toBe(
+    undefined,
+  );
+  const g = withBeacon(-4, null);
+  expect(learnWriteResponses([g.write, g.read], g.trace, origin)[g.write.id]?.verification).toBe(
+    undefined,
+  );
+  // Every earlier write completed before the poll started: the change pairs.
+  const paired = withBeacon(-4, -2);
   expect(
     learnWriteResponses([paired.write, paired.read], paired.trace, origin)[paired.write.id]
       ?.verification?.changes,

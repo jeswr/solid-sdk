@@ -81,9 +81,14 @@ export {
   parseHtmlTag,
 } from "./html-controls.js";
 export {
+  type AnonymousAnswer,
+  AUTHENTICATION_REFUSALS,
+  type AuthenticationRefusal,
+  authenticationRefusal,
   type LivenessRead,
   type LivenessSignature,
   livenessSignature,
+  matchesLivenessSignature,
 } from "./liveness.js";
 export {
   effectiveEffect,

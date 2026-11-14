@@ -342,3 +342,9 @@ Round 18: a 404/410 not-found deletion also needs the learned `verification.live
 is Uncertain. Element-less HTML 404s are scalar text documents. In the not-found context,
 message-like values and main document text are checked with `authenticationText`; these
 markers only ever reject.
+Round 19: the liveness read must also be refused without credentials. After its credentialed
+match, send the same gated, cache-bypassed GET once with `anonymous: true` (no session headers,
+no cookies, no Set-Cookie applied, challenge reported, no redirect followed) and require
+`authenticationRefusal` plus a signature mismatch. Missing learned `anonymous` evidence or CSRF
+rules on the liveness read mean Uncertain. Never widen `authenticationRefusal` with
+"forbidden", "denied", "permission", "token" or "private": there a match helps completion.

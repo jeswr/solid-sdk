@@ -62,6 +62,7 @@ import {
 import { fetchVerificationEvidence } from "./verification-evidence.js";
 import { findProbeUrl, playwrightReplayer, verifyOperations } from "./verify.js";
 import { learnDemonstratedForm } from "./write-learning.js";
+import { probeLivenessReads } from "./write-liveness.js";
 import { probeDeletedResources } from "./write-not-found.js";
 import { learnWriteResponses } from "./write-responses.js";
 
@@ -644,7 +645,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     reregisterCookies();
     // Finish every request before collecting credentials or producing any output.
     // The final probe can introduce cookies and credential echoes of its own.
-    if (options.verify !== false)
+    if (options.verify !== false) {
       await probeDeletedResources(
         verifiedOps,
         recorder.trace,
@@ -652,6 +653,16 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         verifier,
         options.verificationGate,
       );
+      // A liveness read must be refused without credentials: replay the candidates anonymously.
+      await probeLivenessReads(
+        operations,
+        verifiedOps,
+        recorder.trace,
+        origin,
+        verifier,
+        options.verificationGate,
+      );
+    }
     await recorder.flush();
     const finalCookies = await readCookies();
     // Stop page/background traffic and settle recorder callbacks before freezing the union.
