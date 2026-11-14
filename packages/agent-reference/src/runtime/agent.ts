@@ -2565,15 +2565,87 @@ export class AgentRuntime {
       )
       .map((item) => copyData(item.statement!));
   }
-  recordDisclosures() {
-    return [...this.gateMemory.facts.values()].map((f) => f.id);
+  /**
+   * The facts a record release discloses: every fact this agent holds, or, for a range
+   * segment (brief 31 item 4), only the facts admitted after its anchor entry.
+   */
+  recordDisclosures(from?: number) {
+    const before = from === undefined ? undefined : this.anchoredFacts.get(from);
+    if (from !== undefined && !before) throw Error(`no record anchor at ${from}`);
+    return [...this.gateMemory.facts.values()].filter((f) => !before?.has(f.id)).map((f) => f.id);
+  }
+  /** The fact ids held at each witnessed record head, for range releases. */
+  private readonly anchoredFacts = new Map<number, ReadonlySet<string>>();
+
+  /**
+   * The agreement this agent formed in one conversation, named by its terms digest, with
+   * the two signed messages that formed it as this agent recorded them.
+   */
+  agreementProof(conversation: string): { digest: string; offer: string; acceptance: string } {
+    const agreement = Object.values(this.state.agreements).find(
+      (a) => a.conversation === conversation,
+    );
+    const offer = agreement && this.state.recordMessages[agreement.offer];
+    const acceptance = agreement && this.state.recordMessages[agreement.acceptance];
+    if (!agreement || !offer || !acceptance)
+      throw Error(`no recorded agreement in ${conversation}`);
+    return { digest: agreement.termsDigest, offer: offer.jws, acceptance: acceptance.jws };
   }
 
-  exportRecord(conversation: string): Promise<{ jws: string }> {
+  /** This agent's record head: the sequence and chain hash of its last entry. */
+  recordHead(): { seq: number; hash: string } {
+    const last = this.ledger.entries().at(-1);
+    if (!last) throw Error("this agent's record is empty");
+    this.anchoredFacts.set(last.seq, new Set(this.gateMemory.facts.keys()));
+    return { seq: last.seq, hash: last.hash };
+  }
+
+  /**
+   * Brief 31 item 4: sign a receipt for a peer's record head that this agent was shown, and
+   * keep it in this agent's own record. A forum accepts a range segment anchored there.
+   */
+  witnessRecordHead(head: {
+    actor: string;
+    party: string;
+    seq: number;
+    hash: string;
+  }): Promise<{ jws: string }> {
     return this.exclusive(async () => {
       const key = this.keysByAlg.get("EdDSA");
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
-      const entries = copyData(this.ledger.entries());
+      const at = this.now();
+      this.ledger.append({ type: "record-anchor-receipt", ...head }, at);
+      const receipt = {
+        type: "RecordAnchorReceipt",
+        actor: this.identity.actor,
+        party: this.identity.party,
+        subject: head.actor,
+        subjectParty: head.party,
+        seq: head.seq,
+        hash: head.hash,
+        at,
+      };
+      return { jws: await signCompact(key, "awp-record-anchor+jws", receipt) };
+    });
+  }
+
+  /**
+   * Export this agent's record for a forum. By default the segment carries the whole
+   * record. With an anchor (brief 31 item 4) it carries the entries after the anchor entry,
+   * the anchor's chain hash, and the peer's receipt for that anchor.
+   */
+  exportRecord(
+    conversation: string,
+    anchor?: { seq: number; hash: string; receipt: string },
+  ): Promise<{ jws: string }> {
+    return this.exclusive(async () => {
+      const key = this.keysByAlg.get("EdDSA");
+      if (!key || !this.identity.party) throw Error("record signing key unavailable");
+      const entries = copyData(
+        anchor
+          ? this.ledger.entries().filter((entry) => entry.seq > anchor.seq)
+          : this.ledger.entries(),
+      );
       const signed = await Promise.all(
         entries.map(async (entry) => ({
           entry,
@@ -2585,6 +2657,7 @@ export class AgentRuntime {
         actor: this.identity.actor,
         party: this.identity.party,
         conversation,
+        ...(anchor ? { anchor } : {}),
         entries: signed,
         messages: Object.values(this.state.recordMessages)
           .filter((m) => m.conversation === conversation)
@@ -5059,7 +5132,9 @@ export class AgentRuntime {
           this.record(verdict);
         return [];
       }
-      const evidence = this.recordDisclosures();
+      const evidence = this.recordDisclosures(
+        typeof plan.params.recordFrom === "number" ? plan.params.recordFrom : undefined,
+      );
       plan = {
         ...plan,
         params: { ...plan.params, evidence },

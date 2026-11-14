@@ -230,3 +230,33 @@ export function verifyLedger(entries: readonly LedgerEntry[]): LedgerCheck {
     scope,
   };
 }
+
+/**
+ * Brief 31 item 4: recompute a range of the chain that starts after an anchor entry. The
+ * first entry must follow the anchor's sequence and link to its hash; the rest must link
+ * through. Whether the anchor itself is attested is the caller's check.
+ */
+export function verifyLedgerRange(
+  entries: readonly LedgerEntry[],
+  anchor: { readonly seq: number; readonly hash: string },
+): LedgerCheck {
+  const scope =
+    "chain integrity of the entries after an attested anchor; does not establish entries before the anchor or after the last one";
+  const fail = (e: LedgerEntry, problem: string): LedgerCheck => ({
+    ok: false,
+    entries: entries.length,
+    firstBadSeq: e.seq,
+    problem,
+    scope,
+  });
+  let prev = anchor.hash;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e) break;
+    if (e.seq !== anchor.seq + 1 + i) return fail(e, "sequence gap");
+    if (e.prev !== prev) return fail(e, i === 0 ? "anchor link" : "broken link");
+    if (seal(e.seq, e.at, e.prev, e.record).hash !== e.hash) return fail(e, "hash mismatch");
+    prev = e.hash;
+  }
+  return { ok: true, entries: entries.length, scope };
+}

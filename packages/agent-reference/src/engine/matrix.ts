@@ -52,7 +52,8 @@ export function matrixWorld(scenario: Scenario, entry: ScenarioConfiguration): S
     ...reference,
     parties: reference.parties.map((party) => ({
       ...party,
-      configurations: party.configurations.map((id) =>
+      // A prerequisite's added parties are not yet parsed, so their default list is absent.
+      configurations: (party.configurations ?? []).map((id) =>
         id === "baseline" || id === prerequisite?.id ? entry.id : id,
       ),
     })),
@@ -65,7 +66,7 @@ export function matrixWorld(scenario: Scenario, entry: ScenarioConfiguration): S
 
 /** Where a patched script adds a step outside an added segment, or opens one wrongly. */
 export function addedStepProblem(
-  reference: readonly { readonly id: string }[],
+  reference: readonly Pick<Scenario["script"][number], "id" | "segment" | "segmentEnd">[],
   script: readonly Scenario["script"][number][],
   entry: Pick<ScenarioConfiguration, "id" | "change">,
 ): string | undefined {
@@ -73,6 +74,11 @@ export function addedStepProblem(
   const transport = "transport" in entry.change;
   let open: string | undefined;
   for (const step of script) {
+    // A reference step with unchanged marks, a prerequisite's own added segment included,
+    // is part of the reference.
+    const before = reference.find((candidate) => candidate.id === step.id);
+    if (before && !open && step.segment === before.segment && step.segmentEnd === before.segmentEnd)
+      continue;
     if (step.segment === "added") {
       if (transport) return `transport configurations may not add exchanges (step ${step.id})`;
       if (open) return `added segment ${open} is still open at step ${step.id}`;

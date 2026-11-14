@@ -9239,6 +9239,9 @@
                   "gap",
                   "tamper"
                 ]
+              },
+              "anchor": {
+                "$ref": "#/$defs/__schema0"
               }
             },
             "required": [
@@ -9246,6 +9249,53 @@
               "agent",
               "type",
               "conversation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "segmentEnd": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "const": "record-anchor"
+              },
+              "witness": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "witness"
             ],
             "additionalProperties": false
           },
@@ -9295,10 +9345,18 @@
                 "enum": [
                   "fee-not-agreed",
                   "onward-leak",
-                  "records-differ"
+                  "records-differ",
+                  "fee-not-in-terms"
                 ]
               },
               "observation": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "route": {
+                "type": "string",
+                "const": "register"
+              },
+              "agreement": {
                 "$ref": "#/$defs/__schema0"
               }
             },

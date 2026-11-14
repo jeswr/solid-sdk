@@ -354,9 +354,16 @@ export async function runScenario(
   const configured = alternative
     ? scenarioSchema.parse(matrixWorld(scenario, alternative))
     : scenario;
-  const configuredProfile = alternative?.profileChange
-    ? domainProfileSchema.parse(patch(profile, alternative.profileChange))
-    : profile;
+  // A prerequisite's profile entries apply first, then the configuration's own.
+  const prerequisiteProfile = alternative
+    ? matrixPrerequisite(scenario, alternative)?.profileChange
+    : undefined;
+  const configuredProfile =
+    alternative?.profileChange || prerequisiteProfile
+      ? domainProfileSchema.parse(
+          patch(patch(profile, prerequisiteProfile ?? {}), alternative?.profileChange ?? {}),
+        )
+      : profile;
   const paths = [
     {
       id: "main",
@@ -2931,8 +2938,26 @@ async function runPath(
         result = capabilityAnswers[presentation] ?? null;
         break;
       }
+      case "record-anchor": {
+        const witness = runtimes.get(step.witness);
+        if (!witness) throw new Error(`step ${step.id}: ${step.witness} does not run an agent`);
+        const actor = cast.get(step.agent).identity;
+        const head = runtime.recordHead();
+        const receipt = await witness.witnessRecordHead({
+          actor: actor.actor,
+          party: required(actor.party),
+          ...head,
+        });
+        result = { ...head, receipt: receipt.jws };
+        break;
+      }
       case "record-segment": {
-        const segment = await runtime.exportRecord(template<string>(step.conversation));
+        const segment = await runtime.exportRecord(
+          template<string>(step.conversation),
+          step.anchor
+            ? template<{ seq: number; hash: string; receipt: string }>(step.anchor)
+            : undefined,
+        );
         if (step.attack) {
           const payload = decodeCompactPayload(segment.jws) as unknown as {
             entries: { entry: { record: { type: string } } }[];
@@ -2989,6 +3014,9 @@ async function runPath(
                 segment: template<string>(step.segment),
                 allegation: step.allegation,
                 ...(step.observation ? { observation: template<string>(step.observation) } : {}),
+                ...(step.agreement
+                  ? { agreement: runtime.agreementProof(template<string>(step.agreement)) }
+                  : {}),
                 at: now().toISOString(),
               }
             : {
@@ -3000,8 +3028,14 @@ async function runPath(
                 segment: template<string>(step.segment),
                 at: now().toISOString(),
               };
+        // A range segment discloses only the facts admitted after its anchor.
+        const anchored = (
+          decodeCompactPayload(template<string>(step.segment)) as { anchor?: { seq?: unknown } }
+        ).anchor?.seq;
+        const recordFrom = typeof anchored === "number" ? anchored : undefined;
         const params = {
-          evidence: runtime.recordDisclosures(),
+          ...(recordFrom !== undefined ? { recordFrom } : {}),
+          evidence: runtime.recordDisclosures(recordFrom),
           operation: step.type === "forum-claim" ? "submit" : "answer",
           request: await signStatement(
             actor.actorKey,
@@ -3011,6 +3045,14 @@ async function runPath(
         };
         const operation =
           step.type === "forum-claim" ? "urn:op:forum-claim" : "urn:op:forum-answer";
+        const recipient =
+          step.type === "forum-claim" && step.route === "register"
+            ? registeredForum(
+                runtime.admittedStatements(),
+                required(parties.get(step.respondent)).identity,
+                service,
+              )
+            : service.identity;
         result = await runtime.runTask({
           taskId: `urn:scenario:${scenario.id}:${step.id}`,
           kind: "record-release",
@@ -3023,7 +3065,7 @@ async function runPath(
               action: "distribute",
               operation,
               target: operation,
-              recipient: service.identity,
+              recipient,
               purpose: "urn:purpose:redress",
               conversation: `urn:scenario:${scenario.id}:${step.id}`,
               parameters: params,
@@ -3717,4 +3759,27 @@ async function runPath(
       : {}),
     events: recorder.events(),
   };
+}
+
+/**
+ * Brief 31 §2.3: the forum named as the respondent's dispute route by a register answer the
+ * claimant's gate admitted. The claim goes only there; with no admitted route, or a route that
+ * is not the forum this engine hosts, nothing is sent.
+ */
+function registeredForum(
+  admitted: readonly JsonObject[],
+  respondent: string,
+  service: { readonly identity: string },
+): string {
+  const route = admitted.find(
+    (statement) =>
+      statement.claimType === "register.dispute-route" &&
+      statement.subject === respondent &&
+      typeof statement.forum === "string",
+  )?.forum as string | undefined;
+  if (!route)
+    throw new Error(`no admitted register answer names a dispute route for ${respondent}`);
+  if (route !== service.identity)
+    throw new Error(`the admitted dispute route ${route} is not a forum this world hosts`);
+  return route;
 }

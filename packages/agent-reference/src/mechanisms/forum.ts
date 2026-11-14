@@ -5,7 +5,12 @@ import { DEFAULT_LIMITS } from "../core/limits.js";
 import { id, iso, validateMessage } from "../core/schema.js";
 import type { AnyMessage, JsonObject, ReasonCode } from "../core/types.js";
 import { claimSchema as domainClaimSchema } from "../gates/inbound.js";
-import { type EvidenceLedger, type LedgerEntry, verifyLedger } from "../store/ledger.js";
+import {
+  type EvidenceLedger,
+  type LedgerEntry,
+  verifyLedger,
+  verifyLedgerRange,
+} from "../store/ledger.js";
 import type { StateStore } from "../store/state.js";
 import type { TraceEventInput } from "../trace/types.js";
 import { verifyRecordedMessage } from "../wire/recorded-message.js";
@@ -34,12 +39,26 @@ export const recordSegmentSchema = z.strictObject({
   actor: id,
   party: id,
   conversation: id,
+  // Brief 31 item 4: a range segment names the anchor entry and the peer's receipt for it.
+  anchor: z
+    .strictObject({ seq: z.number().int().positive(), hash: z.string(), receipt: z.string() })
+    .optional(),
   entries: z.array(z.strictObject({ entry: recordEntrySchema, proof: z.string() })).max(4096),
   messages: z
     .array(
       z.strictObject({ direction: z.enum(["in", "out"]), digest: z.string(), jws: z.string() }),
     )
     .max(512),
+});
+export const anchorReceiptSchema = z.strictObject({
+  type: z.literal("RecordAnchorReceipt"),
+  actor: id,
+  party: id,
+  subject: id,
+  subjectParty: id,
+  seq: z.number().int().positive(),
+  hash: z.string(),
+  at: iso,
 });
 const claimSchema = z.strictObject({
   type: z.literal("ForumClaim"),
@@ -49,8 +68,11 @@ const claimSchema = z.strictObject({
   respondent: id,
   conversation: id,
   segment: z.string(),
-  allegation: z.enum(["fee-not-agreed", "onward-leak", "records-differ"]),
+  allegation: z.enum(["fee-not-agreed", "onward-leak", "records-differ", "fee-not-in-terms"]),
   observation: z.string().optional(),
+  agreement: z
+    .strictObject({ digest: z.string(), offer: z.string(), acceptance: z.string() })
+    .optional(),
   at: iso,
 });
 const answerSchema = z.strictObject({
@@ -184,10 +206,42 @@ export class LocalForum {
     });
     return c.decision;
   }
+  /**
+   * Brief 31 item 4: a range segment's anchor counts only when the case's other party
+   * signed a receipt for exactly this actor's record at that sequence and hash.
+   */
+  private async anchorAttested(
+    anchor: { seq: number; hash: string; receipt: string },
+    segment: { actor: string; party: string },
+    peer: string,
+  ): Promise<boolean> {
+    const checked = await verifyStatement(anchor.receipt, {
+      trust: this.options.trust,
+      typ: "awp-record-anchor+jws",
+      role: "actor",
+      schema: anchorReceiptSchema,
+      limits: RECORD_LIMITS,
+      at: this.options.now(),
+      verifier: this.identity,
+    });
+    this.record(checked.verification as unknown as { type: string; [key: string]: unknown });
+    const receipt = checked.payload;
+    return (
+      !!receipt &&
+      checked.signer?.subject === receipt.actor &&
+      checked.signer.party === receipt.party &&
+      receipt.party === peer &&
+      receipt.subject === segment.actor &&
+      receipt.subjectParty === segment.party &&
+      receipt.seq === anchor.seq &&
+      receipt.hash === anchor.hash
+    );
+  }
   private async segment(
     jws: string,
     party: string,
     conversation: string,
+    peer: string,
   ): Promise<{ ok: true; value: Verified } | { ok: false; reason: ReasonCode; point: JsonObject }> {
     const checked = await verifyStatement(jws, {
       trust: this.options.trust,
@@ -213,7 +267,15 @@ export class LocalForum {
         point: { problem: "invalid-segment-signature" },
       };
     const entries = segment.entries.map((s) => s.entry) as LedgerEntry[];
-    const chain = verifyLedger(entries);
+    if (segment.anchor && !(await this.anchorAttested(segment.anchor, segment, peer)))
+      return {
+        ok: false,
+        reason: "evidence-invalid",
+        point: { problem: "anchor-not-attested", sequence: segment.anchor.seq },
+      };
+    const chain = segment.anchor
+      ? verifyLedgerRange(entries, segment.anchor)
+      : verifyLedger(entries);
     if (!chain.ok)
       return {
         ok: false,
@@ -383,7 +445,12 @@ export class LocalForum {
     };
     const current = this.cases()[c.id];
     if (current) return { ok: false, reason: "evidence-invalid" };
-    const segment = await this.segment(claim.segment, claim.party, claim.conversation);
+    const segment = await this.segment(
+      claim.segment,
+      claim.party,
+      claim.conversation,
+      claim.respondent,
+    );
     if (!segment.ok) {
       this.check("fitness", segment.reason);
       await this.decision(c, segment.reason, claim.party, segment.point);
@@ -453,8 +520,13 @@ export class LocalForum {
     this.check("source");
     this.check("authority");
     this.check("terms");
-    const a = await this.segment(c.claim.segment, c.claim.party, c.claim.conversation);
-    const b = await this.segment(answer.segment, answer.party, c.claim.conversation);
+    const a = await this.segment(
+      c.claim.segment,
+      c.claim.party,
+      c.claim.conversation,
+      c.claim.respondent,
+    );
+    const b = await this.segment(answer.segment, answer.party, c.claim.conversation, c.claim.party);
     if (!a.ok || !b.ok) {
       const failed = !a.ok ? a : !b.ok ? b : undefined;
       if (!failed) throw Error("unreachable");
@@ -578,6 +650,57 @@ export class LocalForum {
           observation: digestOf(o),
           acceptance: acceptance.id,
           recipient: o.subject,
+        });
+        return { ok: true };
+      }
+    }
+    if (c.claim.allegation === "fee-not-in-terms" && c.claim.observation && c.claim.agreement) {
+      // Brief 31 §2.3: a respondent-signed fee statement, delivered in the claimed
+      // conversation, checked against the terms the respondent accepted. The claim names
+      // that agreement by digest and carries its two signed messages.
+      const charge = await verifyStatement(c.claim.observation, {
+        trust: this.options.trust,
+        typ: TYP.statement,
+        role: "issuer",
+        schema: z
+          .object({
+            issuer: id,
+            claimType: z.literal("fee.charged"),
+            subject: id,
+            fee: z.number(),
+          })
+          .passthrough(),
+        limits: RECORD_LIMITS,
+        at: this.options.now(),
+        verifier: this.identity,
+      });
+      const f = charge.payload;
+      const offer = (await verifyRecordedMessage(c.claim.agreement.offer, this.options.trust))
+        ?.message as AnyMessage | undefined;
+      const read = await verifyRecordedMessage(c.claim.agreement.acceptance, this.options.trust);
+      const acceptance = read?.message as AnyMessage | undefined;
+      const delivered = messages.some((m) =>
+        (m.evidence ?? []).some((e) => e.value === c.claim.observation),
+      );
+      if (
+        f &&
+        delivered &&
+        charge.signer?.subject === f.issuer &&
+        f.issuer === c.claim.respondent &&
+        f.subject === c.claim.party &&
+        offer?.kind === "propose" &&
+        acceptance?.kind === "accept" &&
+        read?.pinned?.party === c.claim.respondent &&
+        acceptance.body.proposal === offer.id &&
+        acceptance.body.termsDigest === digestOf(offer.body.terms) &&
+        acceptance.body.termsDigest === c.claim.agreement.digest &&
+        offer.body.terms.fee !== f.fee
+      ) {
+        await this.decision(c, "not-authorised", c.claim.respondent, {
+          problem: "fee-not-in-terms",
+          agreement: c.claim.agreement.digest,
+          statement: digestOf(f),
+          billedFee: f.fee,
         });
         return { ok: true };
       }

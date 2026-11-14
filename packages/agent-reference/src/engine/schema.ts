@@ -427,6 +427,14 @@ const step = z.discriminatedUnion("type", [
     type: z.literal("record-segment"),
     conversation: json,
     attack: z.enum(["gap", "tamper"]).optional(),
+    // Brief 31 item 4: export only the entries after a witnessed anchor (a record-anchor step).
+    anchor: json.optional(),
+  }),
+  z.strictObject({
+    ...base,
+    type: z.literal("record-anchor"),
+    // The peer agent shown this agent's record head; it signs a receipt and records it.
+    witness: slug,
   }),
   z.strictObject({
     ...base,
@@ -435,8 +443,13 @@ const step = z.discriminatedUnion("type", [
     conversation: json,
     respondent: slug,
     segment: json,
-    allegation: z.enum(["fee-not-agreed", "onward-leak", "records-differ"]),
+    allegation: z.enum(["fee-not-agreed", "onward-leak", "records-differ", "fee-not-in-terms"]),
     observation: json.optional(),
+    // Brief 31 §2.3: address the claim to the dispute route the claimant's gate admitted from
+    // the respondent's register answer, not to the profile's forum.
+    route: z.literal("register").optional(),
+    // The conversation whose recorded agreement the claim names by digest.
+    agreement: json.optional(),
   }),
   z.strictObject({ ...base, type: z.literal("forum-answer"), case: iri, segment: json }),
   z.strictObject({ ...base, type: z.literal("forum-audit") }),

@@ -4631,3 +4631,80 @@ two regenerated `accountability-regulator-claim` rows in `scenario-runs.json`, w
 in their original position. It still names the lender-register exchange and AC-7, so
 `test/regulator-claim-alternative.test.ts` is unchanged. Manifest counts are unchanged:
 282 paths, 241 runs, 15 disagree, 26 blocked. The `labels` counts are unchanged too.
+
+### Brief 31 item 4, continued: range-proving record segments
+
+Following the decision not to raise the record bound, the engine now has range segments.
+`accountability-regulator-claim` is still "not run". The scenario wiring got as far as the
+forum decision, but three measured obstacles remain (listed below).
+
+**Range segment design.**
+
+- `AgentRuntime.exportRecord(conversation, anchor?)` behaves as before when given no
+  anchor: the segment carries the whole record. Fee-dispute and every existing trace are
+  unchanged; the oracle (164 paths) proves it.
+- With an anchor `{seq, hash, receipt}`, the segment carries only the entries after the
+  anchor entry, and the anchor itself goes in a new optional `anchor` field of the segment.
+- The anchor is a chain commitment the other side already holds. A new `record-anchor`
+  engine step shows an agent's record head (`recordHead()`) to the peer agent.
+  `witnessRecordHead()` then appends a `record-anchor-receipt` entry to the peer's own
+  record, and returns a receipt the peer signs with its actor key
+  (`awp-record-anchor+jws`, payload
+  `RecordAnchorReceipt {actor, party, subject, subjectParty, seq, hash, at}`).
+- `LocalForum` checks a range segment as follows. The receipt must verify under the
+  forum's trust as an actor key. It must be signed by the case's other party, name this
+  actor and party, and carry exactly the anchor's sequence and hash. Otherwise the forum
+  refuses with evidence-invalid `anchor-not-attested`.
+- `verifyLedgerRange` (in `src/store/ledger.ts`) then requires the first entry to follow
+  the anchor's sequence and link to its hash (failure: `anchor link`). The rest of the
+  chain must link through (`sequence gap`, `broken link`, `hash mismatch`); any of these
+  gives record-unavailable. The entry-signature, message-entry and check-citation checks
+  are unchanged.
+- A withheld entry inside the range is still detected, as a sequence gap.
+- A release of a range segment discloses only the facts admitted after the anchor.
+  `recordDisclosures(from)` uses the set of facts held when the head was witnessed, and
+  the release parameters carry `recordFrom`. The whole-record release is unchanged.
+- This is not exactly the brief's wording. The receipt is a signed statement made at an
+  engine step, because no message in the journey carries a chain commitment today.
+  Carrying the head in a message's receipt would change baseline messages.
+
+**Also added for the claim.**
+
+- A forum-claim step can set `route: "register"`: the recipient is then the forum that
+  the claimant's admitted `register.dispute-route` statement names for the respondent,
+  and nothing is sent without one.
+- A forum-claim step can set `agreement: <conversation>`: the claim then names that
+  conversation's agreement by terms digest and carries the two signed messages that
+  formed it (`agreementProof`).
+- New allegation `fee-not-in-terms`: a respondent-signed `fee.charged` statement,
+  delivered in the claimed conversation, whose fee is not the fee in the terms the
+  respondent accepted.
+- A prerequisite's `profileChange` now applies before the dependent's own.
+
+**`requires` fixes.**
+
+- `matrixWorld` read `party.configurations` on prerequisite parties that had not yet been
+  parsed.
+- `addedStepProblem` refused a prerequisite's own added segment. Reference steps with
+  unchanged segment marks are now part of the reference. A new opener on a reference step,
+  or a step added outside a segment, is still refused.
+- Tests: `test/matrix-prerequisite.test.ts` (2 tests) and `test/forum-range.test.ts`.
+  The second shows that a whole record and a valid range reach the same decision, and
+  that a wrong anchor, a forged anchor (receipt signed by the exporter itself), an
+  attested but unlinked anchor, and a gap are each refused with the reasons above.
+
+**Measured, and why the cell stays not run.** With range segments, Sam's and North's
+segments were small, and the claim was released to the ombudsman named in the admitted
+register answer. Sam's agent asked Sam's approval, received it, and the release passed.
+The forum then requested North's record, and North answered and was approved. C1 and C3
+were empty. C2 failed in two places:
+
+1. `LocalForum.submit` records an outbound recipient check for its record request with no
+   gate decision. Giving it a decision would change the fee-dispute traces.
+2. North's range release discloses no fact, so its gate records no data-terms check.
+
+The forum also decided `evidence-missing`, not `fee-not-in-terms`. I did not get to
+debugging why. The scenario wiring is kept out of the tree; the configuration stays
+unresolved, and its blocked reason now states these points. The blocked wording was
+regenerated in place for the two rows. Manifest and `labels` counts are unchanged:
+282 paths, 241 runs, 15 disagree, 26 blocked.
