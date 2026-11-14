@@ -11,7 +11,7 @@ import {
 } from "@jeswr/site-executor";
 import type { CsrfSource } from "@jeswr/site-model";
 import { isCsrfFieldName } from "./forms.js";
-import { attr, attrValue, descendants, parseHtml } from "./html.js";
+import { attr, attrValue, descendants, parseHtml, selectAll } from "./html.js";
 import { scriptCredentialSecrets } from "./scripts.js";
 import type { RecordedRequest } from "./types.js";
 
@@ -31,8 +31,39 @@ export function discoverCredentialSources(
   const secrets = new Set<string>();
   const credentialName = (name: string) =>
     isCsrfFieldName(name) || /token|secret|session|auth|password|api.?key/i.test(name);
+  const htmlPages = [
+    ...pages,
+    ...responses
+      .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
+      .map((r) => ({ url: r.url, html: r.bodySample ?? "" })),
+  ];
+  const selectorWitnesses = new Map<string, boolean>();
+  const witnessedCredentialSelector = (value: string): boolean => {
+    const previous = selectorWitnesses.get(value);
+    if (previous !== undefined) return previous;
+    let witnessed = false;
+    try {
+      witnessed = htmlPages.some((page) => {
+        const elements = selectAll(parseHtml(page.html), value);
+        return (
+          elements.length > 0 &&
+          elements.every(
+            (el) =>
+              credentialName(attr(el, "name") ?? "") &&
+              ((el.name === "input" && attr(el, "type") === "hidden" && !!attr(el, "value")) ||
+                (el.name === "meta" && !!attr(el, "content"))),
+          )
+        );
+      });
+    } catch {
+      /* An unproven selector remains a possible credential. */
+    }
+    selectorWitnesses.set(value, witnessed);
+    return witnessed;
+  };
   const scriptSecrets = (source: string) => {
-    for (const value of scriptCredentialSecrets(source)) registerSecret(secrets, value);
+    for (const value of scriptCredentialSecrets(source, witnessedCredentialSelector))
+      registerSecret(secrets, value);
   };
   const jsonSecrets = (value: unknown, credential = false): void => {
     if ((typeof value === "string" || typeof value === "number") && credential)
@@ -40,16 +71,22 @@ export function discoverCredentialSources(
     else if (Array.isArray(value)) {
       for (const item of value) jsonSecrets(item, credential);
     } else if (value && typeof value === "object")
-      for (const [key, item] of Object.entries(value))
+      for (const [key, item] of Object.entries(value)) {
+        if (
+          (credential || credentialName(key)) &&
+          /selector$/i.test(key) &&
+          typeof item === "string" &&
+          witnessedCredentialSelector(item)
+        )
+          continue;
         jsonSecrets(item, credential || credentialName(key));
+      }
   };
   // Callers supply only same-origin responses, including POST/error responses and scripts.
-  const htmlPages = [...pages];
   for (const response of responses) {
     if (!response.bodySample) continue;
-    if (/html/i.test(response.contentType ?? ""))
-      htmlPages.push({ url: response.url, html: response.bodySample });
-    else if (
+    if (/html/i.test(response.contentType ?? "")) continue;
+    if (
       response.resourceType === "script" ||
       /(?:java|ecma)script/i.test(response.contentType ?? "")
     )
@@ -145,14 +182,28 @@ export function redactTrace(
   requests: RecordedRequest[],
   tokens: Iterable<string>,
 ): RecordedRequest[] {
+  return redactOutput(requests, tokens);
+}
+
+/** Redact every output surface once the run has finished collecting credentials. */
+export function redactOutput<T>(output: T, tokens: Iterable<string>): T {
   const secrets = new Set(tokens);
   const redact = secretRedactor(secrets);
+  // Trace keys, URLs and headers repeat across requests. The final union is fixed.
+  const cache = new Map<string, string>();
+  const redactString = (value: string) => {
+    const cached = cache.get(value);
+    if (cached !== undefined) return cached;
+    const masked = redact(value);
+    cache.set(value, masked);
+    return masked;
+  };
   const walk = (value: unknown): unknown => {
-    if (typeof value === "string") return redact(value);
+    if (typeof value === "string") return redactString(value);
     if (Array.isArray(value)) return value.map(walk);
     if (value !== null && typeof value === "object")
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [redact(k), walk(v)]));
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [redactString(k), walk(v)]));
     return value;
   };
-  return walk(requests) as RecordedRequest[];
+  return walk(output) as T;
 }

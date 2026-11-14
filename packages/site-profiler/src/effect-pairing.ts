@@ -16,7 +16,7 @@ const pointerLeaf = (name: string) =>
   name.split("/").at(-1)?.replace(/~1/g, "/").replace(/~0/g, "~") ?? "";
 
 /** Wire leaves, not semantic terms: product[stock_data][qty] and /qty share a key. */
-function leafKey(name: string): string {
+export function leafKey(name: string): string {
   return normalizeKey(
     name
       .split(/[[\].]/)
@@ -62,6 +62,19 @@ export function pairSubmittedField(
   const submitted = sentInputValue(operation, values, input.name, origin);
   if (submitted === undefined) return;
   const leaves = inputLeaves(operation, values, input, origin);
+  const pairing = pairSubmittedValue(submitted, input.range, leaves, extraction, before, after);
+  return pairing ? { input: input.name, ...pairing } : undefined;
+}
+
+/** Literal and bound state fields use exactly the same witnessed pairing rule. */
+export function pairSubmittedValue(
+  submitted: string,
+  range: string | undefined,
+  leaves: ReadonlySet<string>,
+  extraction: Extraction,
+  before: readonly Item[],
+  after: readonly Item[],
+): { property: string; format?: EffectVerification["changes"][number]["format"] } | undefined {
   const candidates = extraction.fields
     .flatMap((field) => {
       // A private property pairing cannot address two separate rules sharing that property.
@@ -80,17 +93,17 @@ export function pairSubmittedField(
         const observed = item[field.property];
         if (observed?.length !== 1) return [];
         const value = observed[0] ?? "";
-        const format = /#(?:decimal|integer)$/.test(input.range)
+        const format = /#(?:decimal|integer)$/.test(range ?? "")
           ? learnEffectValueFormat(submitted, value)
           : undefined;
-        if (!effectValueEquals(submitted, value, input.range, format)) return [];
+        if (!effectValueEquals(submitted, value, range, format)) return [];
         const changed = before.some((item) => {
           const previous = item[field.property];
           if (previous?.length !== 1) return false;
-          const previousFormat = /#(?:decimal|integer)$/.test(input.range)
+          const previousFormat = /#(?:decimal|integer)$/.test(range ?? "")
             ? learnEffectValueFormat(submitted, previous[0] ?? "")
             : undefined;
-          return !effectValueEquals(submitted, previous[0] ?? "", input.range, previousFormat);
+          return !effectValueEquals(submitted, previous[0] ?? "", range, previousFormat);
         });
         return changed || leaf ? [{ strength: changed ? 2 : 1, format }] : [];
       });
@@ -101,7 +114,6 @@ export function pairSubmittedField(
   const best = candidates[0];
   if (!best || candidates[1]?.strength === best.strength) return;
   return {
-    input: input.name,
     property: best.property,
     ...(best.format ? { format: best.format } : {}),
   };

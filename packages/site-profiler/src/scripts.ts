@@ -461,18 +461,26 @@ function parseScript(source: string): N {
 }
 
 /** Credential literals are evidence only: the contract cannot replay script variables. */
-export function scriptCredentialSecrets(source: string): Set<string> {
+export function scriptCredentialSecrets(
+  source: string,
+  witnessedCredentialSelector: (value: string) => boolean = () => false,
+): Set<string> {
   const secrets = new Set<string>();
   const sensitive = /csrf|xsrf|token|secret|session|auth|password|api.?key|form.?key/i;
   try {
     if (Buffer.byteLength(source, "utf8") > SCRIPT_SIZE_LIMIT) throw new Error("large script");
     const program = parseScript(source);
     const env = collectEnv(program, credentialLiteral);
-    const remember = (node: N | undefined) => {
+    const remember = (node: N | undefined, name: string) => {
       if (!node) return;
       const parts = evalString(node, env, credentialLiteral);
-      if (parts?.every((p) => "lit" in p))
-        secrets.add(parts.map((p) => ("lit" in p ? p.lit : "")).join(""));
+      if (parts?.every((p) => "lit" in p)) {
+        const value = parts.map((p) => ("lit" in p ? p.lit : "")).join("");
+        // A selector declaration that actually locates a witnessed credential
+        // is configuration. Its input/meta value is registered independently.
+        if (/selector$/i.test(name) && witnessedCredentialSelector(value)) return;
+        secrets.add(value);
+      }
       // Only value fragments belong to this assignment. Literals inside arbitrary calls or
       // function bodies may be cookie names, selectors, HTTP methods or storage keys.
       for (const part of parts ?? []) if ("lit" in part && part.lit) secrets.add(part.lit);
@@ -482,7 +490,7 @@ export function scriptCredentialSecrets(source: string): Set<string> {
       const key = prop(node, "id") ?? prop(node, "key") ?? left;
       const name = ident(key) ?? memberName(key) ?? stringLiteral(key);
       if (name && sensitive.test(name))
-        remember(prop(node, "init") ?? prop(node, "right") ?? prop(node, "value"));
+        remember(prop(node, "init") ?? prop(node, "right") ?? prop(node, "value"), name);
     });
     // Retain source spellings too (hex, exponents, separators), including numeric aliases.
     walk(program, (node) => {
@@ -498,7 +506,11 @@ export function scriptCredentialSecrets(source: string): Set<string> {
   } catch {
     // Parse/size failures must not silently turn obvious credential assignments into constants.
     for (const match of source.matchAll(/([\w$]+)["']?\s*[:=]\s*["']([^"'\r\n]+)["']/g))
-      if (sensitive.test(match[1] ?? "")) secrets.add(match[2] ?? "");
+      if (
+        sensitive.test(match[1] ?? "") &&
+        !(/selector$/i.test(match[1] ?? "") && witnessedCredentialSelector(match[2] ?? ""))
+      )
+        secrets.add(match[2] ?? "");
     for (const match of source.matchAll(
       /([\w$]+)["']?\s*[:=]\s*([+-]?(?:0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?[\d_]+)?))(?![\w$.])/g,
     )) {

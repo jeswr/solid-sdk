@@ -648,3 +648,11 @@ CSRF sources pass the read gate before transmission. Reads use Fetch `cache: "no
 `Cache-Control: no-cache` and `Pragma: no-cache`; positive Age and cache-hit metadata invalidate
 both baseline and post-write evidence. These private artifacts leave the shared contract unchanged.
 `site-profiler/test/runtime-effects.test.ts` includes the round-14 adversarial reproductions.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Not-found signatures preserve exact scalar values for discriminator keys (status, code,
+error, error_code, type, reason and compound variants) at any depth, plus HTML titles
+and headings. The shared failure predicate rejects authentication markers in these fields
+case- and separator-insensitively, including `not_authenticated` and `forbidden`. These
+404 responses leave a deletion Uncertain; an honest matching not-found still verifies.
+`test/response-evidence.test.ts` covers discriminator and heading preservation.

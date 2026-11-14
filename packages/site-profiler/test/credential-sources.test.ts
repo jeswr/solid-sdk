@@ -1,8 +1,75 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
-import { discoverCredentialSources, discoverSessionTokens } from "../src/session-tokens.js";
+import {
+  discoverCredentialSources,
+  discoverSessionTokens,
+  redactOutput,
+} from "../src/session-tokens.js";
 
 const url = "https://shop.test/account";
+it("distinguishes witnessed credential selectors from values without suppressing explicit credentials", () => {
+  const selector = 'input[name="form_key"]';
+  const html = `<input type="hidden" name="form_key" value="actual-form-credential"><script>window.config={formKeyInputSelector:${JSON.stringify(selector)}};</script>`;
+  const pages = [{ url, html }];
+  const result = discoverCredentialSources(pages, []);
+  expect(result.secrets).toContain("actual-form-credential");
+  expect(result.secrets).not.toContain(selector);
+  expect(
+    discoverCredentialSources(
+      [
+        {
+          url,
+          html: `<script>window.config={formKeyInputSelector:${JSON.stringify(selector)}};</script>`,
+        },
+      ],
+      [],
+    ).secrets,
+  ).toContain(selector);
+  expect(
+    discoverCredentialSources(pages, [{ name: "session", value: selector }]).secrets,
+  ).toContain(selector);
+  expect(
+    discoverCredentialSources(
+      [{ url, html: `${html}<script>window.csrfToken=${JSON.stringify(selector)};</script>` }],
+      [],
+    ).secrets,
+  ).toContain(selector);
+  const response = {
+    seq: 0,
+    phase: "verify" as const,
+    method: "GET",
+    url,
+    resourceType: "xhr",
+    requestHeaders: {},
+    cookieNames: [],
+    contentType: "application/json",
+    bodySample: JSON.stringify({
+      formKeyInputSelector: selector,
+      csrfToken: "json-form-credential",
+    }),
+  };
+  const json = discoverCredentialSources(pages, [], [response]);
+  expect(json.secrets).toContain("json-form-credential");
+  expect(json.secrets).not.toContain(selector);
+});
+
+it("uses the final union for repeated output strings without sharing masks across runs", () => {
+  const original = {
+    model: { label: "late-probe-secret" },
+    trace: Array.from({ length: 100 }, () => ({
+      label: "late-probe-secret",
+      evidence: ["late-probe-secret"],
+    })),
+  };
+  const masked = redactOutput(original, ["late-probe-secret"]);
+  expect(masked.model.label).toBe("[redacted]");
+  expect(
+    masked.trace.every((r) => r.label === "[redacted]" && r.evidence[0] === "[redacted]"),
+  ).toBe(true);
+  expect(original.model.label).toBe("late-probe-secret");
+  expect(redactOutput(original, ["other-secret"])).toEqual(original);
+});
 describe("explicit credential sources", () => {
   it("registers eligible meta/hidden tokens and session cookies on first use without repetition", () => {
     const result = discoverCredentialSources(

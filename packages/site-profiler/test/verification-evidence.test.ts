@@ -185,6 +185,18 @@ it("does not read session cookies or send a request when the evidence read gate 
   expect(transport).not.toHaveBeenCalled();
   expect(f.context.cookies).not.toHaveBeenCalled();
 });
+
+it("retains credentials discovered beyond the sample limit in discarded evidence bodies", async () => {
+  const f = fixture();
+  const secret = "evidence-only-credential-secret";
+  vi.stubGlobal("fetch", async () =>
+    Response.json({ ...JSON.parse(body()), credentials: { access_token: secret } }),
+  );
+  await fetchVerificationEvidence([f.write, f.read], f.context, f.recorder);
+  expect(f.recorder.secrets).toContain(secret);
+  expect(f.recorder.trace.at(-1)?.bodySample).toBeUndefined();
+  expect(JSON.stringify(f.recorder.trace)).not.toContain(secret);
+});
 it.each([
   "oversized",
   "early",

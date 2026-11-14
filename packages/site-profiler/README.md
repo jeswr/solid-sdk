@@ -433,3 +433,20 @@ CSRF sources pass the read gate before transmission. Reads use Fetch `cache: "no
 `Cache-Control: no-cache` and `Pragma: no-cache`; positive Age and cache-hit metadata invalidate
 both baseline and post-write evidence. These private artifacts leave the shared contract unchanged.
 `site-profiler/test/runtime-effects.test.ts` includes the round-14 adversarial reproductions.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+All evidence fetches and deleted-resource probes finish before the final credential union
+is collected. The profiling context closes and recorder callbacks settle before one redaction
+pass covers the model, policies, trace, field evidence and warnings. A policy changed by
+redaction is discarded. Deleted-resource probes and their CSRF preparation use
+`verificationGate` before transmission; an approval request or denial sends no probe.
+
+Changed literal form fields use the same witnessed-change or normalized-wire-leaf pairing
+as bound inputs, including submitted-value equality and ambiguity refusal. Semantic label
+equality supplies no pairing evidence. Missing coverage leaves verification unavailable.
+Not-found signatures retain exact discriminator scalar values at every depth and HTML
+titles/headings. Authentication-shaped discriminators and headings cannot teach absence.
+Credential-selector declarations remain configuration only when their selector locates a
+witnessed credential input/meta source; that source's value is registered separately.
+Unproven selectors and explicit credential values retain ordinary registration.
+Round-15 regressions are in `test/runtime-effects.test.ts` and `test/generic-browser.test.ts`.

@@ -6,7 +6,12 @@
 // the browser. Blocked requests are kept in the trace as evidence of candidate writes.
 
 import { createHmac, randomBytes } from "node:crypto";
-import { parseSetCookie, type SecretCookie, staleVerificationResponse } from "@jeswr/site-executor";
+import {
+  parseSetCookie,
+  registerSecret,
+  type SecretCookie,
+  staleVerificationResponse,
+} from "@jeswr/site-executor";
 import type { BrowserContext, Request, Response } from "playwright";
 import { formFields } from "./form-body.js";
 import { isCsrfFieldName } from "./forms.js";
@@ -119,6 +124,8 @@ export class Recorder {
   loginTarget: string | undefined;
   demonstration: string | undefined;
   readonly trace: RecordedRequest[] = [];
+  /** Explicit credentials from evidence-only bodies and replay preparation; never returned. */
+  readonly secrets = new Set<string>();
   private seq = 0;
   private readonly contextKey = randomBytes(32);
   private readonly pending = new Set<Promise<void>>();
@@ -153,6 +160,10 @@ export class Recorder {
   /** Register raw cookie intake without retaining it in the returned trace. */
   rememberCookies(cookies: readonly SecretCookie[]): void {
     for (const cookie of cookies) this.onCookie?.(cookie, false);
+  }
+
+  rememberSecret(value: string): void {
+    registerSecret(this.secrets, value);
   }
 
   rememberSetCookies(lines: readonly string[], url: string, loginResponse = false): void {

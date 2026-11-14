@@ -276,14 +276,37 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
       required(f.trace[2]).postData = "product%5Binventory%5D=9";
     }
     if (!mode.includes("uncovered") && !mode.includes("unchanged")) {
-      f.read.extraction?.fields.push({ property: `${SCHEMA}inventoryLevel`, path: "/inventory" });
+      const key = mode.includes("coincidental") ? "stock" : "inventory";
+      f.read.extraction?.fields.push({ property: `${SCHEMA}inventoryLevel`, path: `/${key}` });
       const row = f.row;
       f.row = (...args: Parameters<typeof row>) => ({
         ...row(...args),
-        inventory: args[1] === "Edited widget" && !mode.includes("rejected") ? 9 : 3,
+        ...(mode.includes("coincidental") ? { sku: "EX-42" } : {}),
+        [key]:
+          mode.includes("coincidental") ||
+          (args[1] === "Edited widget" && !mode.includes("rejected"))
+            ? 9
+            : 3,
       });
       required(f.trace[1]).bodySample = JSON.stringify(f.envelope(f.row("42")));
       required(f.trace[4]).bodySample = JSON.stringify(f.envelope(f.row("42", "Edited widget")));
+    }
+    if (mode.includes("coincidental")) {
+      const { clusterRequests } = await import("../src/templates.js");
+      const { learnDemonstratedForm } = await import("../src/write-learning.js");
+      const { proposeJsonExtraction } = await import("../src/extraction.js");
+      const inferred = learnDemonstratedForm(
+        required(clusterRequests([required(f.trace[2])], origin)[0]),
+      );
+      expect(inferred.params.map((p) => p.name)).not.toContain("inventory");
+      expect(new URLSearchParams(inferred.bodyTemplate).get("product[inventory]")).toBe("9");
+      f.write.request.bodyTemplate = inferred.bodyTemplate;
+      f.read.extraction = required(
+        proposeJsonExtraction(required(f.trace[1]).bodySample ?? "", required(f.trace[1]).url),
+      );
+      expect(f.read.extraction.fields.find((field) => field.path === "/stock")?.property).toBe(
+        `${SCHEMA}inventoryLevel`,
+      );
     }
   }
   // The demonstration fetches its deleted target; a generic status is never absence evidence.
@@ -320,6 +343,8 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
     mode === "missing state coverage" ||
     mode.includes("never witnessed") ||
     mode === "input constant" ||
+    mode === "rejected carried field" ||
+    mode === "coincidental carried field" ||
     mode.includes("uncovered carried field") ||
     (mode.includes("scope") && !mode.startsWith("matching") && !mode.startsWith("runtime"));
   if (unlearned) expect(policy?.verification).toBeUndefined();
@@ -515,10 +540,18 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
               ? mode.includes("auth")
                 ? 401
                 : 404
+              : mode.includes("not_authenticated")
+                ? "not_authenticated"
+                : mode.includes("forbidden")
+                  ? "forbidden"
+                  : mode.includes("auth")
+                    ? "unauthenticated"
+                    : "not-found",
+            message: mode.includes("not_authenticated")
+              ? "Authentication credentials were not provided."
               : mode.includes("auth")
-                ? "unauthenticated"
-                : "not-found",
-            message: mode.includes("auth") ? "Please sign in" : "Missing widget",
+                ? "Please sign in"
+                : "Missing widget",
           },
           { status: 404 },
         );
@@ -1075,6 +1108,52 @@ it("fetches a witnessed deleted identity using the profiling session, including 
   ).toMatchObject({ status: 404, contentType: "application/json" });
 });
 
+it.each([
+  "deny",
+  "ask",
+])("sends no deleted-resource probe or preparation when reads %s", async (kind) => {
+  const { probeDeletedResources } = await import("../src/write-not-found.js");
+  const f = fixture();
+  let requests = 0;
+  f.read.csrf = [
+    {
+      source: { kind: "json", urlTemplate: `${origin}/csrf`, pointer: "/token" },
+      target: { kind: "query", name: "csrf" },
+    },
+  ];
+  await probeDeletedResources(
+    [f.write, f.read],
+    f.trace,
+    origin,
+    {
+      get: async () => {
+        requests++;
+        throw new Error("Must not reach replayer");
+      },
+    },
+    {
+      authorize: async (request) => {
+        expect(request.effect).toBe("read");
+        return kind === "deny"
+          ? { kind: "deny", reason: "Denied" }
+          : {
+              kind: "ask",
+              approval: {
+                id: "fixture",
+                site: origin,
+                target: request.target,
+                effect: "read",
+                inputs: {},
+                summary: "Read",
+                digest: request.digest,
+              },
+            };
+      },
+    },
+  );
+  expect(requests).toBe(0);
+});
+
 it("gates each CSRF acquisition redirect before sending its next request", async () => {
   const { result, calls } = await replay("UpdateAction", "token source redirect denied");
   expect(result.outcome?.status).toBe("uncertain");
@@ -1149,11 +1228,16 @@ it.each([
   "HTML signature",
   "JSON signature auth",
   "JSON signature numeric auth",
+  "JSON signature not_authenticated",
+  "JSON signature forbidden",
   "HTML signature auth",
 ])("checks a concrete learned not-found structure and authentication together: %s", async (mode) => {
   const { result, policy } = await replay("DeleteAction", mode);
   expect(policy?.verification?.notFound).toBeDefined();
-  expect(result.outcome?.status).toBe(mode.includes("auth") ? "uncertain" : "completed");
+  expect(result.outcome?.status).toBe(
+    mode.includes("auth") || mode.includes("forbidden") ? "uncertain" : "completed",
+  );
+  expect(result.committed).toHaveLength(1);
 });
 
 it.each([
@@ -1201,13 +1285,15 @@ it.each([
   "changed carried field",
   "rejected carried field",
   "uncovered carried field",
+  "coincidental carried field",
 ])("requires coverage and equality for demonstrated changes to literals: %s", async (mode) => {
   const { result, policy } = await replay("UpdateAction", mode);
   expect(result.outcome?.status).toBe(mode === "changed carried field" ? "completed" : "uncertain");
-  if (!mode.startsWith("uncovered"))
+  if (mode === "changed carried field")
     expect(policy?.verification?.constantChanges).toEqual([
       { name: "product[inventory]", value: "9", property: `${SCHEMA}inventoryLevel` },
     ]);
+  else expect(policy?.verification).toBeUndefined();
 });
 
 it("verifies complete fields beyond both BODY_LIMIT and the ordinary response cap", async () => {
@@ -1245,6 +1331,47 @@ it("does not invent an empty-body not-found signature for an evidence-only GET",
   expect(
     learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification?.notFound,
   ).toBeUndefined();
+});
+
+it.each([
+  "change",
+  "leaf",
+  "coincidence",
+  "ambiguous",
+])("pairs changed literals using witnessed values and wire leaves: %s", (mode) => {
+  const f = fixture("UpdateAction");
+  const before = required(f.trace[0]);
+  const write = required(f.trace[1]);
+  const after = required(f.trace[3]);
+  f.write.request.bodyTemplate = "name=%7Bname%7D&product%5Binventory%5D=9";
+  write.postData += "&product%5Binventory%5D=9";
+  f.trace.unshift({
+    ...before,
+    seq: 0,
+    contentType: "text/html",
+    bodySample: `<form method="POST" action="${write.url}"><input name="product[inventory]" value="3"></form>`,
+  });
+  const key = mode === "leaf" ? "inventory" : "stock";
+  // Deliberately unrelated semantic labels: labels cannot establish or prevent pairing.
+  const property = mode === "coincidence" ? `${SCHEMA}inventoryLevel` : `${SCHEMA}numberOfItems`;
+  f.read.extraction?.fields.push({ property, path: `/${key}` });
+  before.bodySample = JSON.stringify({
+    ...f.row("42"),
+    [key]: mode === "change" || mode === "ambiguous" ? 3 : 9,
+  });
+  after.bodySample = JSON.stringify({ ...f.row("42", "Edited widget"), [key]: 9 });
+  if (mode === "ambiguous") {
+    f.read.extraction?.fields.push({ property: `${SCHEMA}inventoryLevel`, path: "/other_stock" });
+    before.bodySample = JSON.stringify({ ...JSON.parse(before.bodySample), other_stock: 3 });
+    after.bodySample = JSON.stringify({ ...JSON.parse(after.bodySample), other_stock: 9 });
+  }
+  const verification = learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]
+    ?.verification;
+  if (mode === "coincidence" || mode === "ambiguous") expect(verification).toBeUndefined();
+  else
+    expect(verification?.constantChanges).toEqual([
+      { name: "product[inventory]", value: "9", property },
+    ]);
 });
 it("learns a body-free opaque signature from a complete evidence GET", async () => {
   const { captureVerificationEvidence } = await import("../src/verification-evidence.js");

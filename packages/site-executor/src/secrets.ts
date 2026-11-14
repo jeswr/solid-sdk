@@ -85,18 +85,24 @@ export function secretRedactor(secrets: ReadonlySet<string>): (text: string) => 
         if (eligible(form)) forms.add(form);
     }
   }
-  const ordered = [...forms].sort((a, b) => b.length - a.length);
+  // Compile once per credential union, rather than once per output value.
+  const ordered = [...forms]
+    .sort((a, b) => b.length - a.length)
+    .map((secret) => ({
+      secret,
+      boundary:
+        Array.from(secret).length >= 8
+          ? undefined
+          : new RegExp(
+              `(?<![\\p{L}\\p{N}])${secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`,
+              "gu",
+            ),
+    }));
   const replace = (text: string): string => {
     let out = text;
-    for (const secret of ordered) {
-      if (Array.from(secret).length >= 8) out = out.split(secret).join(REDACTED);
-      else {
-        const escaped = secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        out = out.replace(
-          new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "gu"),
-          REDACTED,
-        );
-      }
+    for (const { secret, boundary } of ordered) {
+      if (boundary) out = out.replace(boundary, REDACTED);
+      else if (out.includes(secret)) out = out.split(secret).join(REDACTED);
     }
     return out;
   };

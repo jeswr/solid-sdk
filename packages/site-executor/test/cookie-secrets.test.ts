@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import {
   isSessionCredentialCookie,
@@ -121,4 +122,19 @@ it("shares the four-character floor while retaining short boundaries and full lo
     expect(secretRedactor(secrets)(`(${value}) x${value}9`)).toBe(`([redacted]) x${value}9`);
   }
   expect(secretRedactor(new Set(["abcdefgh"]))("xabcdefgh9")).toBe("x[redacted]9");
+});
+
+it("preserves Unicode boundaries and repeated matches with a large credential union", () => {
+  const secrets = new Set(
+    Array.from({ length: 1000 }, (_, i) => `fictional-credential-${i}-secret`),
+  );
+  for (const value of ["Ab7x", "😀😀😀😀", "a+b?"]) secrets.add(value);
+  const redact = secretRedactor(secrets);
+  for (let i = 0; i < 10; i++) {
+    expect(redact("(Ab7x) xAb7xy (😀😀😀😀) x😀😀😀😀y (a+b?)")).toBe(
+      "([redacted]) xAb7xy ([redacted]) x😀😀😀😀y ([redacted])",
+    );
+    expect(redact(`prefixfictional-credential-${i}-secretsuffix`)).toBe("prefix[redacted]suffix");
+    expect(redact("%41b7x")).toBe("[redacted]");
+  }
 });

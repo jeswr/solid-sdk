@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { createApprovalGate, type Gate, guardUrl } from "@jeswr/site-executor";
 import { type Operation, SCHEMA } from "@jeswr/site-model";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
@@ -11,6 +13,7 @@ export async function probeDeletedResources(
   trace: readonly RecordedRequest[],
   origin: string,
   replayer: Replayer,
+  gate: Gate = createApprovalGate(),
 ): Promise<void> {
   for (const operation of operations) {
     if (operation.actionType !== `${SCHEMA}DeleteAction`) continue;
@@ -27,6 +30,29 @@ export async function probeDeletedResources(
     for (const before of witnesses) {
       const values = matchRequest(read.request, before);
       if (!values) continue;
+      const authorize = async (url: string) => {
+        const guarded = guardUrl(url, origin);
+        const decision = await gate.authorize({
+          site: origin,
+          target: {
+            kind: "operation",
+            id: read.id,
+            label: read.label,
+            actionType: read.actionType,
+          },
+          effect: "read",
+          inputs: values,
+          summary: `Verify demonstrated deletion on ${guarded.host}`,
+          digest: JSON.stringify([read.id, guarded.href, values]),
+        });
+        if (decision.kind !== "allow") throw new Error("Deleted-resource read denied");
+      };
+      // Denial must prevent even a preparatory request made by the replayer.
+      try {
+        await authorize(before.url);
+      } catch {
+        continue;
+      }
       await replayer
         .get(before.url, {
           signedIn: true,
@@ -34,6 +60,7 @@ export async function probeDeletedResources(
           request: read.request,
           csrf: read.csrf,
           values,
+          authorize,
         })
         .catch(() => undefined);
     }

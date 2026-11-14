@@ -5,7 +5,7 @@
 // session exists) signed in. Sets the session requirement and provenance counters, flags reads whose
 // extraction finds nothing, and drops reads that fail both ways. Never replays a write.
 
-import { jsonEnvelope, jsonFailure } from "@jeswr/site-executor";
+import { guardUrl, jsonEnvelope, jsonFailure } from "@jeswr/site-executor";
 import type { CsrfRule, Operation, RequestTemplate } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
 import { parseForms } from "./forms.js";
@@ -33,6 +33,8 @@ export interface Replayer {
       request?: RequestTemplate;
       csrf?: CsrfRule[];
       values?: Record<string, string>;
+      /** Authorize each actual URL, including preparatory CSRF requests, before transmission. */
+      authorize?: (url: string) => Promise<void>;
     },
   ): Promise<ReplayResponse>;
 }
@@ -207,10 +209,11 @@ export function playwrightReplayer(
   phase: "probe" | "verify",
 ): Replayer {
   return {
-    async get(url, { signedIn, headers: requestHeaders, request, csrf, values }) {
+    async get(url, { signedIn, headers: requestHeaders, request, csrf, values, authorize }) {
       const prev = recorder.phase;
       recorder.phase = phase;
       try {
+        url = guardUrl(url, recorder.siteOrigin).href;
         let res: ReplayResponse;
         let authenticationContext: string;
         if (signedIn) {
@@ -226,10 +229,15 @@ export function playwrightReplayer(
               recorder.rememberCookies(cookies);
               token = cookies.find((c) => c.name === source.name)?.value;
             } else {
-              const response = await context.request.get(
+              const sourceUrl = guardUrl(
                 expandTemplate(source.urlTemplate, bound),
-                { maxRedirects: 0, timeout: 5000 },
-              );
+                recorder.siteOrigin,
+              ).href;
+              await authorize?.(sourceUrl);
+              const response = await context.request.get(sourceUrl, {
+                maxRedirects: 0,
+                timeout: 5000,
+              });
               recorder.rememberSetCookies(
                 response
                   .headersArray()
@@ -250,6 +258,7 @@ export function playwrightReplayer(
               }
             }
             if (!token) throw new Error("Missing session token for replay");
+            recorder.rememberSecret(token);
             if (request?.urlTemplate.includes(`{${rule.target.name}}`))
               bound[rule.target.name] = token;
             else queryTokens.push([rule.target.name, token]);
@@ -258,10 +267,12 @@ export function playwrightReplayer(
           const decorated = new URL(url);
           for (const [name, token] of queryTokens) decorated.searchParams.set(name, token);
           url = decorated.href;
+          url = guardUrl(url, recorder.siteOrigin).href;
           authenticationContext = recorder.authenticationContext(
             requestHeaders ?? {},
             await context.cookies(url),
           );
+          await authorize?.(url);
           const r = await context.request.get(url, {
             headers: requestHeaders,
             maxRedirects: 0,
@@ -286,6 +297,7 @@ export function playwrightReplayer(
           if (headers.location) res.location = headers.location;
         } else {
           authenticationContext = recorder.authenticationContext(requestHeaders ?? {}, []);
+          await authorize?.(url);
           const r = await fetch(url, {
             headers: requestHeaders,
             redirect: "manual",

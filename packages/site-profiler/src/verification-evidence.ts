@@ -20,6 +20,7 @@ import type { BrowserContext } from "playwright";
 import { applyExtraction, proposeHtmlExtraction, proposeJsonExtraction } from "./extraction.js";
 import { isCsrfFieldName, parseForms } from "./forms.js";
 import type { Recorder } from "./recorder.js";
+import { discoverCredentialSources } from "./session-tokens.js";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
 import { isDangerousLink, jsonPointer } from "./util.js";
@@ -267,6 +268,10 @@ export async function fetchVerificationEvidence(
         if (res.headers.has("location"))
           entry.redirectedTo = new URL(res.headers.get("location") ?? "", url).href;
         const recorded = recorder.recordReplay(entry);
+        // Evidence bodies are discarded, so retain their credential discoveries separately.
+        for (const secret of discoverCredentialSources([], [], [{ ...recorded, bodySample: body }])
+          .secrets)
+          recorder.rememberSecret(secret);
         captureVerificationEvidence(recorded, body, read.extraction);
       } catch {
         // Missing, oversized, incomplete and denied evidence cannot teach verification.

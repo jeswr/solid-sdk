@@ -5,12 +5,15 @@ import type { AddressInfo } from "node:net";
 import { createExecutor, InMemorySessions } from "@jeswr/site-executor";
 import { type Operation, SCHEMA } from "@jeswr/site-model";
 import type { Browser } from "playwright";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { crawl } from "../src/crawl.js";
 import { formFields } from "../src/form-body.js";
 import { performLogin } from "../src/login.js";
 import { launchChromium, profileSite } from "../src/profile.js";
 import { BODY_LIMIT, Recorder } from "../src/recorder.js";
+import { playwrightReplayer } from "../src/verify.js";
+import * as deletedProbes from "../src/write-not-found.js";
+import * as responsePolicies from "../src/write-responses.js";
 
 let browser: Browser;
 let origin: string;
@@ -22,6 +25,31 @@ const site = createServer((req, res) => {
     res.setHeader("content-type", "text/html");
     res.end(body);
   };
+  if (path === "/final-probe-cookie") {
+    res.setHeader("set-cookie", "session=final-probe-credential-escaped; HttpOnly; Path=/");
+    res.statusCode = 404;
+    return html("<h1>Not found</h1><p>final-probe-credential-escaped</p>");
+  }
+  if (path === "/probe-csrf") {
+    res.setHeader("content-type", "application/json");
+    return res.end(JSON.stringify({ token: "fictional-csrf-secret" }));
+  }
+  if (path === "/locator-login" && req.method === "POST") {
+    res.writeHead(303, {
+      location: "/locator-home",
+      "set-cookie": "sid=locator-session-credential; HttpOnly; Path=/",
+    });
+    return res.end();
+  }
+  if (path === "/locator-login") {
+    return html(
+      `<form id="login-form" method="post"><input name="username"><input type="password" name="password"><input type="hidden" name="form_key" value="locator-form-credential"><button>Sign in</button></form><script>window.config={formKeyInputSelector:'input[name="form_key"]'};</script>`,
+    );
+  }
+  if (path === "/locator-home") {
+    if (!req.headers.cookie?.includes("sid=locator-session-credential")) res.statusCode = 401;
+    return html("<h1>Example</h1>");
+  }
   if (path.startsWith("/multi-cookies-")) {
     res.setHeader("set-cookie", [
       "sid=fictional-session-secret; Path=/",
@@ -139,6 +167,134 @@ afterAll(async () => {
   await browser?.close();
   site.closeAllConnections();
   await new Promise<void>((resolve) => site.close(() => resolve()));
+});
+
+it("uses the final probe credential union for model, policies, evidence, trace and warnings", async () => {
+  const secret = "final-probe-credential-escaped";
+  const probe = vi
+    .spyOn(deletedProbes, "probeDeletedResources")
+    .mockImplementation(async (operations, trace, siteOrigin, replayer) => {
+      expect(operations.length).toBeGreaterThan(0);
+      const op = operations[0];
+      if (!op) throw new Error("Missing learned operation");
+      op.label = `Example ${secret}`;
+      const sample = trace[0];
+      if (!sample) throw new Error("Missing earlier trace");
+      sample.formState = [
+        { action: siteOrigin, method: "POST", fields: [{ name: "example", value: secret }] },
+      ];
+      sample.verificationEvidence = {
+        extraction: {
+          format: "json",
+          itemType: `${SCHEMA}Product`,
+          fields: [{ property: `${SCHEMA}name`, path: "/echo" }],
+        },
+        items: [{ echo: [secret] }],
+        trustedItems: [{ echo: [secret] }],
+      };
+      await replayer.get(`${siteOrigin}/final-probe-cookie`, { signedIn: true });
+    });
+  const policies = vi.spyOn(responsePolicies, "learnWriteResponses").mockReturnValue({
+    "urn:secret-policy": { createdLocationPattern: `/products/${secret}` },
+    [`urn:${secret}`]: { createdLocationPattern: "/products/{id}" },
+  });
+  try {
+    const result = await profileSite({
+      startUrl: `${origin}/portal/search`,
+      browser,
+      maxPages: 1,
+      demonstrations: [
+        {
+          name: "warning",
+          run: async () => {
+            throw new Error(`Example ${secret}`);
+          },
+        },
+      ],
+    });
+    expect(probe).toHaveBeenCalledOnce();
+    expect(hits).toContain("GET /final-probe-cookie");
+    expect(result.model.operations.some((op) => op.label === "Example [redacted]")).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("[redacted]"))).toBe(true);
+    expect(result.trace[0]?.formState?.[0]?.fields[0]?.value).toBe("[redacted]");
+    expect(result.trace[0]?.verificationEvidence?.items).toEqual([{ echo: ["[redacted]"] }]);
+    expect(result.trace[0]?.verificationEvidence?.trustedItems).toEqual([{ echo: ["[redacted]"] }]);
+    expect(result.trace.find((r) => r.url.endsWith("/final-probe-cookie"))?.bodySample).toContain(
+      "[redacted]",
+    );
+    expect(result.writeResponses).toEqual({});
+    expect(JSON.stringify(result)).not.toContain(secret);
+  } finally {
+    probe.mockRestore();
+    policies.mockRestore();
+  }
+});
+
+it("retains a witnessed login CSRF locator while redacting its actual credential values", async () => {
+  const result = await profileSite({
+    startUrl: `${origin}/locator-login`,
+    browser,
+    maxPages: 1,
+    verify: false,
+    login: { username: "alex", password: "fictional-password" },
+  });
+  const login = result.model.operations.find((op) => op.actionType.endsWith("LoginAction"));
+  expect(login?.csrf?.[0]?.source).toMatchObject({
+    kind: "html",
+    selector: 'form#login-form input[name="form_key"]',
+  });
+  expect(result.model.login?.[0]?.probeUrl).toBe(`${origin}/locator-home`);
+  for (const secret of ["locator-form-credential", "locator-session-credential"])
+    expect(JSON.stringify(result)).not.toContain(secret);
+});
+
+it("authorizes deleted-resource CSRF preparation and the decorated read before sending", async () => {
+  const context = await browser.newContext();
+  const recorder = new Recorder(origin);
+  const replayer = playwrightReplayer(context, recorder, "verify");
+  const options = {
+    signedIn: true,
+    request: { method: "GET" as const, urlTemplate: `${origin}/probe-result` },
+    csrf: [
+      {
+        source: { kind: "json" as const, urlTemplate: `${origin}/probe-csrf`, pointer: "/token" },
+        target: { kind: "query" as const, name: "csrf" },
+      },
+    ],
+  };
+  try {
+    hits.length = 0;
+    await expect(
+      replayer.get(`${origin}/probe-result`, {
+        ...options,
+        authorize: async () => {
+          throw new Error("Denied preparation");
+        },
+      }),
+    ).rejects.toThrow("Denied preparation");
+    expect(hits).toEqual([]);
+    const allowed: string[] = [];
+    await expect(
+      replayer.get(`${origin}/probe-result`, {
+        ...options,
+        authorize: async (url) => {
+          allowed.push(url);
+          if (url.includes("/probe-result")) throw new Error("Denied read");
+        },
+      }),
+    ).rejects.toThrow("Denied read");
+    expect(hits).toEqual(["GET /probe-csrf"]);
+    expect(allowed).toEqual([
+      `${origin}/probe-csrf`,
+      `${origin}/probe-result?csrf=fictional-csrf-secret`,
+    ]);
+    hits.length = 0;
+    await replayer.get(`${origin}/probe-result`, { ...options, authorize: async () => {} });
+    expect(hits).toEqual(["GET /probe-csrf", "GET /probe-result"]);
+    expect(recorder.secrets).toContain("fictional-csrf-secret");
+  } finally {
+    await context.close();
+  }
 });
 
 it.each([

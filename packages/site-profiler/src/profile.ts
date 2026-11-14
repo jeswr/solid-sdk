@@ -7,7 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { registerCookieSecrets, type SecretCookie, secretRedactor } from "@jeswr/site-executor";
+import { registerCookieSecrets, type SecretCookie } from "@jeswr/site-executor";
 import type { Extraction, LearnMethod, LoginRoute, Operation, SiteModel } from "@jeswr/site-model";
 import type { Browser } from "playwright";
 import { crawl, navigationLinks } from "./crawl.js";
@@ -26,7 +26,11 @@ import { buildOperation } from "./operations.js";
 import { Recorder } from "./recorder.js";
 import { analyseScripts } from "./scripts.js";
 import { learnFilterSelections } from "./selection.js";
-import { discoverCredentialSources, discoverSessionTokens, redactTrace } from "./session-tokens.js";
+import {
+  discoverCredentialSources,
+  discoverSessionTokens,
+  redactOutput,
+} from "./session-tokens.js";
 import {
   candidateFromForm,
   candidateFromScriptCall,
@@ -638,6 +642,23 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     if (loginRoutes.length) model.login = loginRoutes;
     cookieModel = model;
     reregisterCookies();
+    // Finish every request before collecting credentials or producing any output.
+    // The final probe can introduce cookies and credential echoes of its own.
+    if (options.verify !== false)
+      await probeDeletedResources(
+        verifiedOps,
+        recorder.trace,
+        origin,
+        verifier,
+        options.verificationGate,
+      );
+    await recorder.flush();
+    const finalCookies = await readCookies();
+    // Stop page/background traffic and settle recorder callbacks before freezing the union.
+    await context.close();
+    await recorder.flush();
+    reregisterCookies();
+    const writeResponses = learnWriteResponses(operations, recorder.trace, origin, verifiedOps);
     if (!verifiedOps.some((op) => op.actionType === s("SearchAction")))
       warnings.push("no search operation learned");
     const tokenFields = [
@@ -648,9 +669,10 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     );
     const secrets = [
       ...tokens.keys(),
-      ...discoverCredentialSources(formPages, await readCookies(), recorder.trace, cookieContext())
+      ...discoverCredentialSources(formPages, finalCookies, recorder.trace, cookieContext())
         .secrets,
       ...cookieSecrets,
+      ...recorder.secrets,
       ...candidates.flatMap((candidate) =>
         candidate.csrf.flatMap(({ source }) => {
           if (source.kind !== "html" && source.kind !== "meta") return [];
@@ -668,22 +690,16 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       ...tokenFields,
       ...(options.login ? [options.login.password] : []),
     ];
-    // Demonstration cleanup can remove the landing resource before read verification.
-    // Its recorded response and learned read still supply the witnessed response policy.
-    if (options.verify !== false)
-      await probeDeletedResources(verifiedOps, recorder.trace, origin, verifier);
-    const writeResponses = learnWriteResponses(operations, recorder.trace, origin, verifiedOps);
-    const redact = secretRedactor(new Set(secrets));
-    for (const [id, policy] of Object.entries(writeResponses)) {
-      const encoded = JSON.stringify(policy);
-      if (redact(encoded) !== encoded) delete writeResponses[id];
+    const result = redactOutput(
+      { model, writeResponses, trace: recorder.trace, warnings },
+      secrets,
+    );
+    for (const [id, policy] of Object.entries(result.writeResponses)) {
+      // Credential-bearing policies cannot become executable redacted literals.
+      if (JSON.stringify(writeResponses[id]) !== JSON.stringify(policy))
+        delete result.writeResponses[id];
     }
-    return {
-      model,
-      writeResponses,
-      trace: redactTrace(recorder.trace, secrets),
-      warnings: redactTraceStrings(warnings, secrets),
-    };
+    return result;
   };
   try {
     return await Promise.race([learn(), timeout]);
@@ -692,8 +708,4 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     await context.close().catch(() => undefined);
     if (!options.browser) await browser.close().catch(() => undefined);
   }
-}
-
-function redactTraceStrings(values: string[], secrets: string[]): string[] {
-  return values.map(secretRedactor(new Set(secrets)));
 }

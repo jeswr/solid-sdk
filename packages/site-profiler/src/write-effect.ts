@@ -23,8 +23,7 @@ import {
   SCHEMA,
   selectionWitnesses,
 } from "@jeswr/site-model";
-import { pairSubmittedField } from "./effect-pairing.js";
-import { mapKey } from "./extraction.js";
+import { leafKey, pairSubmittedField, pairSubmittedValue } from "./effect-pairing.js";
 import { isCsrfFieldName, parseForms } from "./forms.js";
 import { readBackResource, safeUrl } from "./read-resource.js";
 import { matchRequest, requestValues } from "./templates.js";
@@ -525,19 +524,19 @@ export function learnEffectVerification(
             operation.request.bodyTemplate &&
             new URLSearchParams(operation.request.bodyTemplate).get(name);
           if (!literal || (templateValue && /\{[^}]+\}/.test(templateValue))) continue;
-          const leaf =
-            name
-              .split(/[[\].]/)
-              .filter(Boolean)
-              .at(-1) ?? name;
-          const property =
-            mapKey(leaf, value)?.property ??
-            `https://jeswr.org/ns/site-action#${encodeURIComponent(leaf)}`;
-          if (item[property]?.length !== 1) {
+          const pairing = pairSubmittedValue(
+            value,
+            undefined,
+            new Set([leafKey(name)]),
+            ex,
+            beforeItems,
+            afterReads.map((r) => r.item),
+          );
+          if (!pairing) {
             uncoveredConstant = true;
             break;
           }
-          constantChanges.push({ name, value, property });
+          constantChanges.push({ name, value, property: pairing.property });
         }
         if (uncoveredConstant) continue;
         if (

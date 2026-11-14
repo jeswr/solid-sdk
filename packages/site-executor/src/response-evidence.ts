@@ -8,6 +8,13 @@ import { compileOperation } from "./compile.js";
 import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "./dom.js";
 import { effectiveWireFields } from "./wire.js";
 
+/** Include compound keys such as http_status, errorCode and failureReason. */
+const discriminatorKey = (key: string) => /status|code|error|type|reason/i.test(key);
+const authenticationMarker = (value: string) =>
+  /auth|login|signin|credential|token|forbidden|permission|denied|unauthor|unauthenticated|notauthenticated/.test(
+    value.toLowerCase().replace(/[^a-z0-9]/g, ""),
+  );
+
 export function jsonFailure(value: unknown): boolean {
   return (
     value !== null &&
@@ -15,6 +22,9 @@ export function jsonFailure(value: unknown): boolean {
     !Array.isArray(value) &&
     Object.entries(value).some(
       ([key, member]) =>
+        (discriminatorKey(key) &&
+          ["string", "number"].includes(typeof member) &&
+          authenticationMarker(String(member))) ||
         (/^(?:errors?|validationErrors|exception|redirect|ajaxRedirect)$/i.test(key) &&
           member !== false &&
           member != null &&
@@ -98,6 +108,9 @@ export function responsePageError(
   if (!/html/i.test(contentType ?? "") && !/^\s*</.test(body)) return false;
   const doc = parseHtml(body);
   if (
+    selectElements("title, h1, h2, h3, h4, h5, h6, [role=heading]", doc).some((el) =>
+      authenticationMarker(elementText(el)),
+    ) ||
     selectElements('input[type="password"]', doc).length ||
     selectElements("form", doc).some((el) =>
       /(?:^|[/_-])(?:oauth2?|saml|openid|sso|login|signin|sign-in|auth|authenticate|authentication|signon|logon)(?:[/_?#-]|$)/i.test(
@@ -235,13 +248,16 @@ export function notFoundSignature(
   let structure: unknown;
   try {
     if (/json/i.test(detected)) {
-      const shape = (value: unknown): unknown => {
-        if (Array.isArray(value)) return ["array", value.map(shape)];
+      const shape = (value: unknown, discriminator = false): unknown => {
+        if (Array.isArray(value)) return ["array", value.map((v) => shape(v, discriminator))];
         if (value && typeof value === "object")
           return Object.keys(value)
             .sort()
-            .map((key) => [key, shape((value as Record<string, unknown>)[key])]);
-        return value === null ? "null" : typeof value;
+            .map((key) => [
+              key,
+              shape((value as Record<string, unknown>)[key], discriminatorKey(key)),
+            ]);
+        return discriminator ? [typeof value, value] : value === null ? "null" : typeof value;
       };
       structure = shape(JSON.parse(body));
     } else if (/html/i.test(detected)) {
@@ -251,7 +267,13 @@ export function notFoundSignature(
             ? [[node.name, Object.keys(node.attribs).sort(), shape(node.children)]]
             : [],
         );
-      structure = shape(parseHtml(body).children);
+      const doc = parseHtml(body);
+      structure = [
+        shape(doc.children),
+        selectElements("title, h1, h2, h3, h4, h5, h6, [role=heading]", doc).map((el) =>
+          elementText(el),
+        ),
+      ];
     } else structure = body.trim();
     return {
       status,
