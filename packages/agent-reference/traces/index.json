@@ -73,7 +73,7 @@
       }
     },
     "configuration": "baseline",
-    "events": 86
+    "events": 87
   },
   {
     "file": "benefit-claim--branch-1--baseline.json",
@@ -92,6 +92,27 @@
     },
     "configuration": "baseline",
     "events": 41
+  },
+  {
+    "file": "benefit-claim--needed-claim-left-out--baseline.json",
+    "scenario": {
+      "id": "benefit-claim--needed-claim-left-out",
+      "title": "Claiming a benefit: A needed statement is left out; the receiver requests it and the sender supplies it",
+      "steps": {
+        "1": "The sender checks and admits the signed source statements.",
+        "2": "The receiver requests the information needed for the operation.",
+        "3": "The sender checks the request for information.",
+        "4": "The sender submits a request with one needed statement left out.",
+        "5": "The receiver asks for the missing kind of evidence before acting.",
+        "6": "The sender receives the evidence challenge.",
+        "7": "The sender supplies the omitted evidence in a complete signed request.",
+        "8": "The receiver checks and admits the complete request.",
+        "9": "The sender checks the receiver’s reply.",
+        "10": "The receiver retains the operation record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 131
   },
   {
     "file": "cancel-subscription--baseline.json",
@@ -1626,7 +1647,7 @@
       }
     },
     "configuration": "insurance-claim-photos-local",
-    "events": 115
+    "events": 116
   },
   {
     "file": "insurance-claim-photos--branch-1--baseline.json",
@@ -1639,14 +1660,14 @@
         "3": "The policyholder’s agent checks the message and prepares a response.",
         "4": "The policyholder’s agent sends the signed request.",
         "5": "The policyholder’s agent completes the approve step.",
-        "6": "The insurer’s agent checks the message and prepares a response.",
+        "6": "The receiver requests the required garage estimate before content reading.",
         "7": "The insurer’s agent completes the read content step.",
         "8": "The insurer’s agent completes the read content step.",
         "9": "The insurer’s agent proposes the local action."
       }
     },
     "configuration": "insurance-claim-photos-local",
-    "events": 92
+    "events": 95
   },
   {
     "file": "insurance-claim-photos--branch-2--baseline.json",
@@ -1666,7 +1687,31 @@
       }
     },
     "configuration": "insurance-claim-photos-local",
-    "events": 110
+    "events": 112
+  },
+  {
+    "file": "insurance-claim-photos--needed-claim-left-out--baseline.json",
+    "scenario": {
+      "id": "insurance-claim-photos--needed-claim-left-out",
+      "title": "An insurance claim with photographs: A needed statement is left out; the receiver requests it and the sender supplies it",
+      "steps": {
+        "1": "The sender checks and admits the signed source statements.",
+        "2": "The receiver requests the information needed for the operation.",
+        "3": "The sender checks the request for information.",
+        "4": "The sender submits a request with one needed statement left out.",
+        "5": "The claimant approves the exact account and original image.",
+        "6": "The receiver asks for the missing kind of evidence before acting.",
+        "7": "The sender receives the evidence challenge.",
+        "8": "The sender supplies the omitted evidence in a complete signed request.",
+        "9": "The claimant approves the exact account and original image.",
+        "10": "The receiver checks and admits the complete request.",
+        "11": "The insurer inspects the admitted original content.",
+        "12": "The insurer inspects the admitted original content.",
+        "13": "The insurer requests the authorised human claim decision."
+      }
+    },
+    "configuration": "insurance-claim-photos-local",
+    "events": 191
   },
   {
     "file": "insurance-quote--branch-1--baseline.json",
@@ -4969,7 +5014,7 @@
       }
     },
     "configuration": "small-business-loan-local",
-    "events": 75
+    "events": 76
   },
   {
     "file": "small-business-loan--branch-1--baseline.json",
@@ -5002,6 +5047,26 @@
     },
     "configuration": "small-business-loan-local",
     "events": 24
+  },
+  {
+    "file": "small-business-loan--needed-claim-left-out--baseline.json",
+    "scenario": {
+      "id": "small-business-loan--needed-claim-left-out",
+      "title": "A loan for a small company: A needed statement is left out; the receiver requests it and the sender supplies it",
+      "steps": {
+        "1": "The sender checks and admits the signed source statements.",
+        "2": "The sender submits a request with one needed statement left out.",
+        "3": "The director approves this exact company request.",
+        "4": "The receiver asks for the missing kind of evidence before acting.",
+        "5": "The sender receives the evidence challenge.",
+        "6": "The sender supplies the omitted evidence in a complete signed request.",
+        "7": "The director approves this exact company request.",
+        "8": "The receiver checks and admits the complete request.",
+        "9": "The sender checks the receiver’s reply."
+      }
+    },
+    "configuration": "small-business-loan-local",
+    "events": 125
   },
   {
     "file": "subject-access-request--baseline.json",

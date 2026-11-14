@@ -79,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "b74337ffe6095203787e5422173c5580315b0087",
+    "commit": "b3ff96c245ce5b27256f74816881324a7b3b7ed4",
     "core": "scripted"
   },
   "standIns": [
@@ -3297,10 +3297,15 @@
           "layer": "data-access",
           "suite": "by-value",
           "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "No restricted item entered this task's context."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
     },
     {
       "seq": 102,
@@ -3318,10 +3323,51 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The context rule permits this text."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
     },
     {
       "seq": 103,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:owner"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
+    },
+    {
+      "seq": 104,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+    },
+    {
+      "seq": 105,
       "step": 6,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -3339,7 +3385,7 @@
       "caption": "The message release check is complete."
     },
     {
-      "seq": 104,
+      "seq": 106,
       "step": 6,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -3366,7 +3412,7 @@
       "caption": "Signed (JWS Ed DSA) with The insurer’s agent's pinned key, and written to the record."
     },
     {
-      "seq": 105,
+      "seq": 107,
       "step": 6,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -3376,7 +3422,7 @@
       "caption": "The challenge message goes to The policyholder’s agent."
     },
     {
-      "seq": 106,
+      "seq": 108,
       "step": 6,
       "agent": "receiver-agent",
       "part": "transport",
@@ -3488,7 +3534,7 @@
       "caption": "The insurer’s agent sends a challenge message to The policyholder’s agent."
     },
     {
-      "seq": 107,
+      "seq": 109,
       "step": 7,
       "agent": "receiver-agent",
       "part": "core",
@@ -3496,7 +3542,7 @@
       "caption": "The core proposes to take the next step in A person decides on the original content with The insurer."
     },
     {
-      "seq": 108,
+      "seq": 110,
       "step": 7,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -3519,7 +3565,7 @@
       "caption": "The insurer's mandate covers this action."
     },
     {
-      "seq": 109,
+      "seq": 111,
       "step": 7,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -3537,7 +3583,7 @@
       "caption": "Required repair estimate was refused: source-not-authoritative."
     },
     {
-      "seq": 110,
+      "seq": 112,
       "step": 7,
       "agent": "receiver-agent",
       "part": "outbound-gate",

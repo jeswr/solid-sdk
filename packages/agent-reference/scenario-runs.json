@@ -133,6 +133,56 @@
       "trace": "benefit-claim--branch-1--baseline.json"
     },
     {
+      "scenario": "benefit-claim",
+      "useCase": "benefit-claim",
+      "path": "needed-claim-left-out",
+      "settlement": "rdf-order",
+      "what": "A needed statement is left out; the receiver requests it and the sender supplies it",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing"
+      },
+      "consequences": [
+        {
+          "seq": 74,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 82,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 97,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 112,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 122,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 130,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "benefit-claim--needed-claim-left-out--baseline.json"
+    },
+    {
       "scenario": "cancel-subscription",
       "useCase": "cancel-subscription",
       "path": "main",
@@ -303,7 +353,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--baseline.json",
-      "traceSha256": "199ab3603f7659335f348f397766d3ab93ebcbebbe4202c697aecd7695170526",
+      "traceSha256": "cd9be8f8bf2593b640b45d5a4366acbe91e659e2e34459df570cbe5b5f249db1",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -341,7 +391,7 @@
         }
       ],
       "trace": "cohort-count--branch-1--baseline.json",
-      "traceSha256": "8fcb59c9632205c45bd97fb0e5097886942ad554fecf55c0d63df078106e3b7c",
+      "traceSha256": "000f5b0193c79638c250cf76d7f57bed55d4cca4c6f7ca16dc727ec47f183581",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -368,7 +418,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--branch-2--baseline.json",
-      "traceSha256": "00b656af6ad42b82fcea7e1333fdffb7c49a233924c0fa62ada7dd85e96e70fc",
+      "traceSha256": "252b0d4a414f436d8f1fc91714793a241c357a37b9a1035cebac9f93f30ea60c",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -1341,12 +1391,12 @@
           "outcome": "go"
         },
         {
-          "seq": 100,
+          "seq": 101,
           "agent": "receiver-agent",
           "outcome": "admit"
         },
         {
-          "seq": 114,
+          "seq": 115,
           "agent": "receiver-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
@@ -1360,17 +1410,23 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "ask-more",
-        "reason": "structured-form-required",
+        "reason": "evidence-missing",
         "check": "fitness"
       },
       "expected": {
         "outcome": "ask-more",
         "reason": "structured-form-required"
       },
-      "consequences": [],
+      "consequences": [
+        {
+          "seq": 94,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        }
+      ],
       "trace": "insurance-claim-photos--branch-1--baseline.json"
     },
     {
@@ -1391,18 +1447,70 @@
       },
       "consequences": [
         {
-          "seq": 105,
+          "seq": 107,
           "agent": "receiver-agent",
           "outcome": "go"
         },
         {
-          "seq": 110,
+          "seq": 112,
           "agent": "receiver-agent",
           "outcome": "stop",
           "reason": "source-not-authoritative"
         }
       ],
       "trace": "insurance-claim-photos--branch-2--baseline.json"
+    },
+    {
+      "scenario": "insurance-claim-photos",
+      "useCase": "insurance-claim-photos",
+      "path": "needed-claim-left-out",
+      "settlement": "rdf-order",
+      "what": "A needed statement is left out; the receiver requests it and the sender supplies it",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing"
+      },
+      "consequences": [
+        {
+          "seq": 105,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 113,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 135,
+          "agent": "owner-agent",
+          "outcome": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "seq": 161,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 176,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 190,
+          "agent": "receiver-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        }
+      ],
+      "trace": "insurance-claim-photos--needed-claim-left-out--baseline.json"
     },
     {
       "scenario": "insurance-quote",
@@ -6438,7 +6546,7 @@
       },
       "consequences": [],
       "trace": "platform-income--baseline.json",
-      "traceSha256": "115ff7d6261a5fe1b0dd070bd77cc1ec77203a43571395b37bf8bfbb8ed1a971",
+      "traceSha256": "612bffd6de2731e770df0505a239e56db5ed81f1ab52cb5eff2bc277e3e2cee4",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -7257,7 +7365,7 @@
       },
       "consequences": [],
       "trace": "salary-benchmark--baseline.json",
-      "traceSha256": "dec05ec7fdd02f8389230002c5cad2b13fc2cb1130cdb12516b83ce9ee0609ff",
+      "traceSha256": "f2ca89f4b2279c01a4933919bcee703340b36e7f9e83c63f10490962b225e8ea",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -7285,7 +7393,7 @@
       "consequences": [],
       "note": "branch does not diverge from the main path",
       "trace": "salary-benchmark--branch-1--baseline.json",
-      "traceSha256": "173f34d2bcbd7e65eb1f51147502be75b9b6e128ebd05c90496dc0be6c11330e",
+      "traceSha256": "090cd3f746ed993762daa382c7d091952aae49843b44348a48651e6918849f67",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -7418,17 +7526,17 @@
           "outcome": "go"
         },
         {
-          "seq": 58,
+          "seq": 59,
           "agent": "receiver-agent",
           "outcome": "admit"
         },
         {
-          "seq": 67,
+          "seq": 68,
           "agent": "receiver-agent",
           "outcome": "go"
         },
         {
-          "seq": 75,
+          "seq": 76,
           "agent": "owner-agent",
           "outcome": "admit"
         }
@@ -7495,6 +7603,62 @@
         }
       ],
       "trace": "small-business-loan--branch-2--baseline.json"
+    },
+    {
+      "scenario": "small-business-loan",
+      "useCase": "small-business-loan",
+      "path": "needed-claim-left-out",
+      "settlement": "rdf-order",
+      "what": "A needed statement is left out; the receiver requests it and the sender supplies it",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing"
+      },
+      "consequences": [
+        {
+          "seq": 62,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 70,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 77,
+          "agent": "owner-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 96,
+          "agent": "owner-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 108,
+          "agent": "receiver-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 117,
+          "agent": "receiver-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 125,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "small-business-loan--needed-claim-left-out--baseline.json"
     },
     {
       "scenario": "subject-access-request",

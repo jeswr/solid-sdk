@@ -9,7 +9,7 @@ import { runScenario } from "../src/engine/run.js";
 
 const root = join(import.meta.dirname, "..");
 
-it("preserves every pre-RDF decision, reason and check position in every executable path", async () => {
+it("preserves every recorded decision, reason and check position in every executable path", async () => {
   const saved = JSON.parse(readFileSync(join(root, "test/oracle/pre-rdf.json"), "utf8"));
   const actual: Record<string, unknown> = {};
   for (const file of readdirSync(join(root, "scenarios"))
@@ -30,6 +30,6 @@ it("preserves every pre-RDF decision, reason and check position in every executa
       }));
     }
   }
-  expect(Object.keys(actual)).toHaveLength(161);
+  expect(Object.keys(actual)).toHaveLength(164);
   expect(actual).toEqual(saved);
-}, 600_000);
+}, 900_000);

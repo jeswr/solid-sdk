@@ -722,6 +722,14 @@
     {
       "agent": "receiver-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },

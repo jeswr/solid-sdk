@@ -13,6 +13,7 @@
  */
 import { evaluate, type OdrlPolicy, type OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
+import { OUTSIDE_EFFECT_ACTIONS } from "./mandate.js";
 
 /** One concrete request against one policy. */
 export interface EngineRequest {
@@ -101,6 +102,18 @@ export const solidOdrlEngine: PolicyEngine = {
   module: SOLID_ODRL_MODULE,
   availability: () => ({ status: "ready" }),
   evaluate(policy, request) {
+    // Apply this before missing-context detection: an irrelevant general permission
+    // neither grants an outside effect nor makes its evaluation indeterminate.
+    if (OUTSIDE_EFFECT_ACTIONS.includes(request.action))
+      policy = {
+        ...policy,
+        permissions: (policy.permissions ?? []).filter((r) => String(r.action) === request.action),
+        // solid-odrl treats ownership transfer as top-level. The pilot's broad `use`
+        // prohibition must still prohibit every outside effect (CORE-OUT-2a).
+        prohibitions: (policy.prohibitions ?? []).map((r) =>
+          r.action === "use" ? { ...r, action: request.action as OdrlRule["action"] } : r,
+        ),
+      };
     // The payment extension is an exact mandate action. The ODRL library has compensate,
     // so normalize only explicit pay rules; a generic use/transfer grant never creates it.
     if (request.action === "pay") {

@@ -746,6 +746,22 @@
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
       "check": "limits-approval",
       "verdict": "not-applicable",
       "reason": "no-action"

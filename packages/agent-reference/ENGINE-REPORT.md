@@ -3043,3 +3043,244 @@ The isolated `test/codegen.test.ts` retry also times out at thirty seconds, with
 | Artifact audit and `git diff --check` | PASS: 201 rows, ten new traces, zero raw identifiers in their captions/rules/chat; immutable oracle, maintained outlines and protected lane files unchanged. |
 
 Logs are `/tmp/brief26e-{final-build,final-typecheck,final-lint,final-layers,tests-final-verified,final-scenarios,codegen-isolated,codegen-direct}.log`; the guard inventory, model corpus and artifact audit are `/tmp/brief26e-{final-pipeline,model-final,artifact-audit}.json`. No commit, dependency installation, network, personal-agent test, evaluation, coverage or full-workspace gate is used. All work remains in the requested branch and working tree.
+
+## Brief 27
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Offline implementation, uncommitted, Node 24 first on PATH. No evaluation, coverage or
+full-workspace gate is run. Payment protocol lane ownership is respected. The starting
+canonical oracle contains 161 paths; configuration rows are separate.
+
+**Part 1 — implementation checkpoint.** Message completion now checks operation claim
+coverage after checking attached statements. Missing kinds produce a message fitness
+`ask-more / evidence-missing`, references to the missing identifiers and a receiver-built
+request naming accepted sources and methods. Passing statements enter task memory even
+when more evidence is needed. Existing failed-required-statement reasons take precedence.
+Same-task held statements must match the subject and admitted digest, remain present and
+undisputed, pass current reliance fitness and permit the current use. Negotiation and
+closure messages do not acquire operation coverage requirements. Focused verification and
+three omitted-evidence branches are in progress.
+
+**Scenario mismatch found.** `profiles/small-business-loan.json` also declares
+`organization.role` required on its operation, while its main request only sends accounts
+and tax evidence. The signed role statement already exists and is admitted by the sender.
+Its subject is the director, not the company, so it cannot cover a company-subject
+requirement under CORE-IN-21. The operation declaration is corrected to the two company
+claims specified by this brief. Director-role evidence remains in the existing separate
+organisation approval check; its refusal branches are tested unchanged.
+
+**Part 3 — stopped: the required verified input count is unavailable.**
+`src/derive/adapters/sparq-aggregate.ts`'s strict contribution schema exposes session/index,
+Pedersen commitments, a range proof, encrypted shares and a signature. It exposes neither
+an input count nor a signed/proved nonzero-input assertion. `verifyOutcome` returns the
+entire roster as `contributors`; the installed package's `wire.d.ts` and README document
+zero-inclusive input ranges and that compute-only slots prove zero and count toward the
+package minimum. A non-compute-only slot can also commit zero. Its hiding commitment
+cannot establish the predicate “at least one input” without a further proof or attestation.
+Consequently `verifyOpaqueDerivation`, `verifyJointMessageOutcome` and the outbound
+minimum check cannot derive this count from verified contributions as specified. Reading
+`computeOnly` from the roster would violate DER-14b. No roster-role substitute, invented
+proof field, package modification or all-paths refusal is installed. The salary branch
+therefore retains its existing catalogue disagreement. This is a concrete protocol/API
+limit; Part 3's requested refusal/release branches are not claimed implemented or run.
+
+**Part 2 — implementation checkpoint.** Outside-effect actions are listed once beside
+`PILOT_ODRL_SUBSET` in `src/mechanisms/mandate.ts`. The default policy adapter considers
+only exact permissions for distribute/transfer/compensate/pay; item terms use that same
+adapter. The payment normalization remains exact. The library models transfer as a
+top-level action, so a general use prohibition is projected to the requested outside-effect
+action to preserve this brief's required deny-overrides behavior, with all target,
+assignee and constraint fields intact. Irrelevant generic permissions no longer introduce
+missing-context indeterminacy for an effect they cannot grant. Scenario/oracle audit is
+in progress; the baseline is not yet refreshed.
+
+**Part 1 focused results.** The four claim-gate tests and eleven exact-action tests pass.
+The three `needed-claim-left-out` paths run from source: benefit omits rent; insurance
+omits the garage estimate; the loan omits tax filing. Each receiver emits a fitness
+`ask-more / evidence-missing`, includes the kind identifier in `refs`, names accepted
+sources/methods, sends a challenge and admits the later complete request. No receiver
+core event occurs between the missing-evidence verdict and the successful retry. Valid
+claims from the incomplete request remain admitted. Unit coverage includes current-message
+coverage, missing evidence, fit held evidence, stale held evidence, another task, another
+subject, changed digest, partial retention and CORE-IN-20 stale-data precedence.
+`check:rdf-pipeline` passes with **0 hard failures** and its original **213 explicit
+remaining violations**; no allowance is added. TypeScript also passes at this checkpoint.
+
+**Existing insurance branch conflict.** `insurance-claim-photos/branch-1` already omits
+`repair.estimate` and then tries to read the rejected message's content. CORE-IN-21 must
+challenge before those reads, so the old script throws “content part is unavailable”.
+The branch now ends at the real inbound `ask-more / evidence-missing` challenge. Its
+original catalogue expectation **ask-more / structured-form-required** is retained,
+producing an explicit disagreement. Its runtime witness is updated to the earlier check.
+Keeping that branch's old later outcome would require bypassing the new mandatory claim
+check; adding a valid estimate instead also removes its original missing-structured-
+evidence condition. This is a necessary Part 1 baseline behavior change, beyond the
+brief's anticipated new branches, and will be listed separately in the final oracle audit.
+
+**Completed source oracle audit (before refreshing).** All 161 original canonical paths
+are accounted for, together with the three new omission branches. **Part 2 changes zero
+baseline rows**: no scenario in this checkout needs an added named permission or terms
+permission, and no scenario mandate/terms is widened for Part 2. The evaluation finding
+is fixed by the gate and exercised by the exact-action tests, rather than by rewriting
+scenario inputs. The only scenarios touched are benefit-claim, insurance-claim-photos and
+small-business-loan, all for Part 1 as described above.
+
+Exactly five existing oracle rows change: `benefit-claim/main`,
+`insurance-claim-photos/main`, `insurance-claim-photos/branch-1`,
+`insurance-claim-photos/branch-2`, and `small-business-loan/main`. Main paths gain a passing
+operation coverage check; benefit/loan acknowledgements also check their already held
+fit claims. Insurance branch 1 changes to the earlier mandatory missing-evidence challenge
+and ends before content reading. Insurance branch 2 retains its source-not-authoritative
+outcomes and gains two outbound disclosure/data-terms checks because the passing original
+statements now remain admitted while the failed estimate is challenged. The three added
+rows are `<each of those scenarios>/needed-claim-left-out`. The other 156 existing rows
+are byte-for-byte equal as decision projections. The original snapshot is retained at
+`/tmp/brief27-original-oracle.json` for the final post-build comparison.
+
+The reference oracle timeout is raised from 600 to 900 seconds: the complete offline
+source audit took 624 seconds while focused checks also ran. Its comparison still pins
+every event and the exact new total of 164 canonical executable paths. Item-term request
+actions now use the existing mandate action subset as their TypeScript union, so transfer,
+compensate/pay and read can be exercised through the same typed evaluator (no new action
+or evaluator semantics are introduced by that type correction).
+
+**Pre-build validation.** Catalogue tests pass **6/6** after updating the insurance
+assertion to the new earlier stop and explicitly checking that no receiver core event
+follows it. The focused claim, permission, omission-path and snapshot-tool checks pass
+**20/20**. Current typecheck passes. Package lint passes (zero errors; existing warnings
+and informational diagnostics remain). All new branch steps have readable labels for the
+omission, gate challenge, supplied evidence and completed request. The single full package
+build is running; no full-workspace gate, evaluation or coverage is invoked.
+
+**Default-terms closure.** The typed item-term interface previously exposed only use and
+distribute. After exposing the full existing action subset for the required transfer tests,
+the absent-terms fallback must also deny every outside-effect action. It now uses the same
+outside-effect list, rather than denying distribute alone. Explicit named permissions
+remain necessary; missing terms do not silently grant transfer, compensate or pay. The
+four outside-effect tests cover both generic-use terms and absent terms. No scenario uses
+these newly typed actions through that absent-terms path; decision projections are unchanged.
+
+**Mixed failure and omission.** A final unit case presents stale assessment evidence and
+omits a second required kind. One challenge names both; `stale-data` remains the overall
+reason, rather than being replaced by evidence-missing. This closes the overlap between
+CORE-IN-20 and CORE-IN-21 without changing the audited baseline rows. The final focused
+unit run passes **16/16**. A compile-only refresh after the running build will include this
+refactor and the absent-terms closure; selected scenario recordings will then be refreshed
+before the single oracle write.
+
+After supplying the omitted evidence, benefit and loan requests reach their ordinary
+acknowledgements. Insurance reaches its ordinary required human-decision gate, as its
+main path does; no automated insurance decision or invented principal approval is claimed.
+
+**Reference-run compatibility correction.** The first broad run exposed an existing
+CORE-IN-20 contract: its replacement challenge includes the exact claim identifier in
+wire text. `claimRequest` now preserves that default and offers explicit label rendering
+only for the new CORE-IN-21 requests. The unchanged person-reliance test and claim tests
+pass **13/13** after the correction. Early context retention is scoped to operations with
+declared claim requirements; unrelated message and payment receipt paths retain their
+existing runtime admission boundary. A temporary extra pair of checks in the configuration
+corroboration trace was caused by broader retention and will be removed by the final
+recording refresh. The captured canonical oracle is unaffected by either correction.
+
+**Built artifacts and manifest checkpoint.** The single package build passed, including
+TypeScript, generated-file copy, schema drift, reference traces and the complete
+configuration matrix. It ran **193 live paths**. Final manifest: **209 rows — 181 runs,
+12 disagrees, 16 blocked**. Canonical/default rows: **173 — 152 runs, 12 disagrees,
+9 blocked**, including **164 executable oracle paths**. Configuration rows: **36 —
+29 runs, 0 disagrees, 7 blocked**. The starting manifest was 206 rows (179 runs,
+11 disagrees, 16 blocked); the three omission branches add runs, and the earlier insurance
+stop moves one existing row from runs to disagrees. The salary disagreement remains.
+
+`node scripts/oracle-snapshot.mjs` was invoked **once** and captured all 164 executable
+canonical paths. The captured mapping was serialized in the original existing-row order,
+with the three new rows appended, without changing any captured value. Its final parsed
+mapping exactly matches the independent pre-refresh audit. Existing 156 unchanged rows
+remain equal. Metadata-only regeneration noise was removed from 178 recordings; meaningful
+recordings name existing HEAD `b3ff96c245ce5b27256f74816881324a7b3b7ed4`, not a commit
+containing these uncommitted changes. Full reference tests are still running; final command
+results below will supersede this checkpoint.
+
+**Additional regression findings and fixes.** The proof-seam tests deliberately unblock
+old toy-only worlds, whose production paths remain blocked. Eight fixed legacy outlines
+needed to allow the additional passing CORE-IN-21 check. These tests still compare every
+older check in order and separately require the new pass; only passing coverage events
+are projected out for that legacy comparison, and no refusal/ask-more is removed. The
+production canonical oracle remains exact. All nine toy proof cases now pass, and no toy
+trace or successful production capability is published.
+
+The recycled-content toy case also found a real subject-selection issue: its statement
+concerns a material lot, not its sender. Coverage now takes an explicit input/output
+subject first, or the unique subject of admitted items actually named in the message;
+otherwise it uses the represented party. Held references must be admitted for this task
+with matching digests. Multiple referenced subjects stay ambiguous. Tests cover a named
+lot, held evidence for it, wrong references, an overriding mismatched subject and implicit
+party scope. The held-fitness check also honors the admission's effective method label;
+a weakened method no longer covers a requirement. The combined focused run passed
+**12 tests**, including all nine proof-adapter cases. Typecheck and the RDF guard pass,
+still with **0 failures / 213 explicit remaining violations** and no new allowance.
+
+**Validation scope at close.** The complete reference Vitest run was interrupted with
+exit 130 after taking over 45 minutes, to leave time for the required dedicated oracle
+and artifact validation within the brief's 110-minute limit. It reported nine failures:
+the replacement-challenge compatibility test and eight legacy toy-outline comparisons
+above. Both affected files were then rerun **in full: 28/28 tests pass**. The interrupted
+broad command is not reported as a successful full-suite run. The dedicated 164-path
+oracle is running separately and is recorded below when complete. No E0 evaluation,
+coverage run or full-workspace gate was started.
+
+Item terms with a matching general use grant now report **not-authorised** when the
+requested outside-effect action lacks its own applicable grant, matching the mandate
+refusal code. A genuine purpose mismatch retains purpose-not-permitted; the same evaluator
+checks whether general use actually applies before choosing that reason. Policy and
+item-term regressions pass **17/17**, including use/read, all four effects, absent terms,
+named constrained grants, broad prohibitions and approval-bound effects. These cases are
+listed independently of the implementation's action list so deleting an action from that
+list cannot silently delete its tests.
+
+**Final result.** Part 1 and Part 2 are implemented and verified. Part 3 is stopped at the
+installed protocol boundary, not silently approximated. In particular:
+
+- `src/derive/adapters/sparq-aggregate.ts:verifyOutcome` and the native contribution
+  schema expose no verified nonzero-input predicate; the returned contributor IDs are
+  the complete roster.
+- `src/derive/verification.ts:verifyOpaqueDerivation` and `verifyJointMessageOutcome`
+  cannot obtain DER-14b's required count from that result or its hiding commitments.
+- `src/gates/outbound.ts:checkDerivationRelease` likewise has no verified count to apply.
+  Neither that function nor the derivation verifiers, native package, or salary scenario
+  was modified for Part 3. No minimum-contributor refusal/release test is claimed to pass.
+  Salary branch 1 still disagrees with the catalogue.
+
+The final staged recordings were installed after stopping the broad test pass. Both
+corroboration configuration recordings match their originals except commit metadata;
+the temporary extra checks were removed. **179** recordings whose differences were
+metadata only retain their original bytes. Eight changed/new claim recordings and six
+fresh real aggregation recordings remain; the six aggregation recordings have fresh
+cryptographic transcripts and unchanged canonical decisions, with their SHA-256 manifest
+bindings updated. The oracle was not regenerated again. The final live source oracle
+passed in **529 seconds**, comparing every recorded event for **164 paths** exactly.
+
+**Last commands and results (Node 24 first on PATH).**
+
+| Command | Result |
+|---|---|
+| `pnpm --filter @jeswr/agent-reference run build` | PASS, one full package build; 193 live paths; manifest 209 rows: 181 runs / 12 disagrees / 16 blocked. |
+| `pnpm --filter @jeswr/agent-reference exec tsc -p tsconfig.build.json` | PASS; compile-only refreshes include final gate changes without repeating the full build. |
+| Selected `scripts/run-scenarios.mjs --scenario=...` runs, then `node /tmp/brief27-refresh.mjs` | PASS; three claim scenarios and two corroboration paths, 13 final recordings; canonical projections unchanged from the captured oracle. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run` | INTERRUPTED, exit 130, after over 45 minutes; not a successful full-suite result. Nine reported failures were corrected and both affected files were rerun in full below. |
+| `vitest run test/seam-scenarios.test.ts test/person-reliance.test.ts` | PASS, 28/28, including every test in both previously failing files. |
+| `vitest run test/outside-effect-actions.test.ts test/terms-rulings.test.ts` | PASS, 17/17; includes the item-term not-authorised reason. |
+| Final focused `vitest run` over claim failures, outside effects, omitted-claim scenarios, labels, recorded joint evidence, catalogue and snapshot tool | PASS, 36/36 in seven files. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run test/oracle.test.ts` | PASS, 1/1; 164 executable canonical paths, 529 seconds. |
+| `pnpm --filter @jeswr/agent-reference run typecheck` | PASS, no errors. |
+| `pnpm --filter @jeswr/agent-reference run lint` | PASS, zero errors; 168 warnings and 470 informational diagnostics remain. |
+| `pnpm --filter @jeswr/agent-reference run check:rdf-pipeline` | PASS, 0 hard failures / 213 existing explicit violations; no allowance added. |
+| `pnpm run check:agent-layers` | PASS. |
+| Final artifact audit | PASS: all 164 canonical trace projections equal the captured oracle; index event counts and six native recording hashes match; 209 manifest rows. |
+| `git diff --check` and protected-path diff | PASS; no changes in settlement, payment gate/order path, bindings, suites, engine runner, runtime or trace recorder. |
+
+Logs are `/tmp/brief27-{build,compile-final,refresh-final,reference-tests,regression-rerun,terms-policy-final,final-focused,oracle-final,typecheck-final,lint-final,rdf-final,layers}.log`.
+Original and final oracle comparison data remain in `/tmp/brief27-original-oracle.json`,
+`/tmp/brief27-final-actual.json` and `/tmp/brief27-oracle-delta.json`. No network, dependency
+installation, commit, E0 evaluation, coverage or full-workspace gate was used. All work is
+uncommitted.

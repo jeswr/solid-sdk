@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import type { Iri } from "../core/types.js";
+import { OUTSIDE_EFFECT_ACTIONS, type PILOT_ODRL_SUBSET } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import type { QualityInput, StatementQualityNode } from "../model/quality.js";
 import type { Namer } from "../trace/packet.js";
@@ -230,7 +231,7 @@ export function evaluateItemTerms(
   need: {
     readonly name?: Namer;
     readonly agent: Iri;
-    readonly action: "use" | "distribute";
+    readonly action: (typeof PILOT_ODRL_SUBSET.actions)[number];
     readonly target: Iri;
     readonly purpose?: Iri;
     readonly recipient?: Iri;
@@ -253,7 +254,7 @@ export function evaluateItemTerms(
       reason: "unsupported-term",
       text: "An attached term, prohibition or duty has no supported rule.",
     };
-  if (!terms && need.action === "distribute")
+  if (!terms && OUTSIDE_EFFECT_ACTIONS.includes(need.action))
     return {
       verdict: "fail",
       reason: "purpose-not-permitted",
@@ -314,14 +315,15 @@ export function evaluateItemTerms(
   // The rules decide whether this use is allowed; the duties (deletion) are what the receiver
   // takes on, checked below against how long it would keep the data (CORE-IN-10).
   const { obligations: _duties, ...rules } = terms.policy;
-  const v = engine.evaluate(rules, {
+  const request = {
     agent: need.agent,
     action: need.action,
     target: need.target,
     ...(need.purpose ? { purpose: need.purpose } : {}),
     ...(need.recipient ? { recipient: need.recipient } : {}),
     at: need.at,
-  });
+  };
+  const v = engine.evaluate(rules, request);
   const summary = termsSummary(terms, need.name);
   if (v.effect === "indeterminate")
     return {
@@ -331,12 +333,18 @@ export function evaluateItemTerms(
     };
   if (v.effect === "prohibited")
     return { verdict: "fail", reason: "prohibited", text: `Its terms forbid this (${summary}).` };
-  if (v.effect !== "permit" && !(terms.inherited && !terms.policy.permissions?.length))
+  if (v.effect !== "permit" && !(terms.inherited && !terms.policy.permissions?.length)) {
+    const generalUseOnly =
+      OUTSIDE_EFFECT_ACTIONS.includes(need.action) &&
+      engine.evaluate(rules, { ...request, action: "use" }).effect === "permit";
     return {
       verdict: "fail",
-      reason: "purpose-not-permitted",
-      text: `Its terms do not allow this purpose (${summary}).`,
+      reason: generalUseOnly ? "not-authorised" : "purpose-not-permitted",
+      text: generalUseOnly
+        ? `Its terms permit use but do not name this outside-effect action (${summary}).`
+        : `Its terms do not allow this purpose (${summary}).`,
     };
+  }
   const keep = deletionDays(terms);
   if (keep !== undefined && (need.retentionDays ?? 0) > keep)
     return {

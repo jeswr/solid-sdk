@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import { verifierRegistry } from "../src/derive/verifiers.js";
 import { loadCase as loadActualCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import { outlineOf, type TraceEvent } from "../src/trace/types.js";
 import { ToyJointProtocol } from "./doubles/joint.js";
 import { ToyProofSystem } from "./doubles/proof.js";
 
@@ -43,6 +44,28 @@ const doubles = () =>
     new ToyProofSystem("sparq-noir-closed-world/0", ["rule", "issuers", "fresh", "complete"]),
     new ToyJointProtocol(),
   ]);
+
+/**
+ * These unpublishable toy fixtures retain their pre-coverage outlines. Compare every
+ * original check in order, while testing the added CORE-IN-21 passes separately. An
+ * ask-more/failure is never normalized away; the real canonical oracle stays exact.
+ */
+function beforeCoverage(events: readonly TraceEvent[]) {
+  const legacy: TraceEvent[] = [];
+  const fitness = new Set<string>();
+  for (const event of events) {
+    if (event.kind === "message-in") fitness.delete(event.agent);
+    if (event.rule?.id === "CORE-IN-21" && event.verdict === "pass") {
+      expect(event).toMatchObject({ check: "fitness", reason: "fit-for-use" });
+      if (!fitness.has(event.agent))
+        legacy.push({ ...event, verdict: "not-applicable", reason: "no-claims" });
+      continue;
+    }
+    if (event.part === "inbound-gate" && event.check === "fitness") fitness.add(event.agent);
+    legacy.push(event);
+  }
+  return outlineOf({ events: legacy });
+}
 it.each([
   "degree-recognition",
   "introduction",
@@ -58,14 +81,26 @@ it.each([
   const paths = await runScenario(profile, scenario, {
     registry: doubles(),
     testOnly: true,
-    compare: true,
+    compare: false,
     generateProofs: true,
   });
+  for (const result of paths) {
+    if (!result.trace) continue;
+    const expected =
+      result.path === "main"
+        ? scenario.expect
+        : scenario.branches.find((b) => b.id === result.path)!.outline;
+    expect(beforeCoverage(result.trace.events), `${id}/${result.path}`).toEqual(expected);
+  }
   const path = paths.find(
     (p) => p.path === (id === "right-to-work" ? "hidden-validity-proof" : "main"),
   );
   expect(path?.blocked).toBeUndefined();
   expect(path?.usedTestDouble).toBe(true);
+  if (id !== "insurance-quote")
+    expect(
+      path?.trace?.events.some((e) => e.rule?.id === "CORE-IN-21" && e.verdict === "pass"),
+    ).toBe(true);
   expect(
     path?.trace?.events.some(
       (e) => e.rule?.id === "DER-18" && e.verdict === (id === "insurance-quote" ? "fail" : "pass"),

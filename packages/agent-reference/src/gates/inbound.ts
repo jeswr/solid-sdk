@@ -1986,6 +1986,101 @@ export class Admission {
     };
   }
 
+  /** Current admissions or still-fit admitted support, scoped to this task and subject. */
+  private missingClaims(
+    required: readonly string[],
+    task: string,
+    subject: string | undefined,
+    purpose?: string,
+  ): string[] {
+    const covered = new Set(
+      this.admittedClaims
+        .filter((c) => subject !== undefined && c.subject === subject)
+        .map((c) => c.claimType),
+    );
+    for (const item of this.deps.memory.contexts[task] ?? []) {
+      const fact = this.deps.memory.facts.get(item.id);
+      if (
+        !subject ||
+        item.subject !== subject ||
+        !item.accepted ||
+        !fact?.statement ||
+        fact.supersededBy ||
+        fact.disputedWith?.length ||
+        item.digest !== fact.digest ||
+        fact.digest !== digestOf(fact.statement)
+      )
+        continue;
+      const quality = StatementQualityNode.from({
+        ...fact.statement,
+        method: fact.method ?? fact.statement.method,
+      } as Claim);
+      if (fitnessOf(quality, this.deps.gate.reliance, this.deps.now()).verdict !== "pass") continue;
+      if (
+        evaluateItemTerms(fact.terms, {
+          agent: this.deps.identity.actor,
+          action: "use",
+          target: fact.id,
+          purpose,
+          at: this.deps.now(),
+        }).verdict !== "pass"
+      )
+        continue;
+      covered.add(fact.claimType);
+    }
+    return required.filter((kind) => !covered.has(kind));
+  }
+
+  /** The operation may concern a referenced item (for example a material lot), not its sender. */
+  private operationSubject(
+    msg: AnyMessage,
+    required: readonly string[],
+    task: string,
+  ): string | undefined {
+    const input =
+      msg.kind === "invoke" ? msg.body.input : msg.kind === "deliver" ? msg.body.output : undefined;
+    if (typeof input?.subject === "string") return input.subject;
+    const items = Array.isArray(input?.items)
+      ? input.items.filter((id): id is string => typeof id === "string")
+      : [];
+    const subjects = new Set(
+      this.admittedClaims
+        .filter(
+          (claim) =>
+            required.includes(claim.claimType) && items.includes(claim.id ?? digestOf(claim)),
+        )
+        .map((claim) => claim.subject)
+        .filter((subject): subject is string => subject !== undefined),
+    );
+    for (const item of this.deps.memory.contexts[task] ?? []) {
+      const fact = this.deps.memory.facts.get(item.id);
+      if (
+        items.includes(item.id) &&
+        required.includes(item.claimType) &&
+        item.accepted &&
+        fact?.subject &&
+        fact.digest === item.digest &&
+        fact.statement &&
+        fact.digest === digestOf(fact.statement)
+      )
+        subjects.add(fact.subject);
+    }
+    if (subjects.size > 1) return undefined;
+    return (
+      subjects.values().next().value ??
+      (msg.kind === "deliver" ? this.deps.identity.party : msg.from.onBehalfOf)
+    );
+  }
+
+  private coverageRefs(kinds: readonly string[]): NonNullable<TraceEventInput["refs"]> {
+    return kinds.map((id) => ({
+      id,
+      layer: "reliance",
+      suite: refsFor(this.deps.gate, ["reliance"]).refs?.[0]?.suite ?? "precedence-rules",
+      clause: "CORE-IN-21",
+    }));
+  }
+
   /** Source: one event per relayed claim. */
   async source(msg: AnyMessage): Promise<void> {
     if (this.done.has("source")) return;
@@ -2227,7 +2322,16 @@ export class Admission {
     }
     this.done.add("terms");
     this.done.add("fitness");
-    if (claims.length === 0) {
+    const operation =
+      msg.kind === "invoke" || msg.kind === "deliver" ? msg.body.operation.id : undefined;
+    const required = [
+      ...new Set(
+        this.deps.gate.actionClaims
+          ?.filter((rule) => rule.action === operation)
+          .flatMap((rule) => rule.claims) ?? [],
+      ),
+    ];
+    if (claims.length === 0 && required.length === 0) {
       this.gate.verdictEvent(
         "fitness",
         "not-applicable",
@@ -2279,11 +2383,41 @@ export class Admission {
       }
       this.admittedClaims = admitted;
     }
+    // Operation support remains admitted when claim coverage needs more evidence.
+    // Other message paths keep their existing runtime admission boundary.
+    const task = this.deps.gate.taskId ?? conv.id;
+    const subject = this.operationSubject(msg, required, task);
+    if (required.length > 0)
+      for (const c of this.admittedClaims) {
+        const fact = this.deps.memory.facts.get(c.id ?? digestOf(c));
+        if (fact)
+          this.deps.memory.enter(task, {
+            ...fact,
+            kind: "statement",
+            accepted: true,
+            digest: digestOf(c),
+          });
+      }
     for (const r of this.claimCache.values()) {
       if (!r.claim || this.admittedClaims.includes(r.claim)) continue;
       const reason = this.deps.memory.refusals[`statement:${r.claim.id ?? digestOf(r.claim)}`];
-      const detail = reason && this.gate.requiredFailure(r.claim, reason, conv.operation?.id);
+      let detail = reason && this.gate.requiredFailure(r.claim, reason, operation);
       if (detail) {
+        // A failed kind keeps its CORE-IN-20 reason, while the same challenge also
+        // names every other uncovered kind rather than concealing omissions.
+        const missing = this.missingClaims(required, task, subject, need.purpose);
+        const other = missing.filter((kind) => kind !== r.claim!.claimType);
+        if (other.length) {
+          detail += ` ${other.map((kind) => claimRequest(this.deps.gate, kind, undefined, "label")).join(" ")}`;
+          this.gate.verdictEvent("fitness", "ask-more", detail, {
+            reason,
+            refs: this.coverageRefs(missing),
+            rule: {
+              id: "CORE-IN-21",
+              text: "Name every uncovered kind, preserving a present statement's more specific failure.",
+            },
+          });
+        }
         this.outcome = "ask-more";
         this.gate.decisionEvent("ask-more", detail, reason);
         return { ok: false, reason: reason as ReasonCode, detail, askMore: true };
@@ -2298,6 +2432,33 @@ export class Admission {
     this.admittedClaims = this.admittedClaims.filter((c) =>
       this.deps.memory.facts.has(c.id ?? digestOf(c)),
     );
+    if (required.length > 0) {
+      const missing = this.missingClaims(required, task, subject, need.purpose);
+      const detail = missing
+        .map((kind) => claimRequest(this.deps.gate, kind, undefined, "label"))
+        .join(" ");
+      this.gate.verdictEvent(
+        "fitness",
+        missing.length ? "ask-more" : "pass",
+        missing.length
+          ? detail
+          : "Every kind of claim required by this operation is covered by admitted, fit evidence.",
+        {
+          reason: missing.length ? "evidence-missing" : "fit-for-use",
+          rule: {
+            id: "CORE-IN-21",
+            text: "Each required claim kind must be covered for the same task and subject.",
+          },
+          refs: this.coverageRefs(missing),
+        },
+      );
+      if (missing.length) {
+        this.outcome = "ask-more";
+        for (const c of this.admittedClaims) this.gate.storeEvent(c);
+        this.gate.decisionEvent("ask-more", detail, "evidence-missing");
+        return { ok: false, reason: "evidence-missing", detail, askMore: true };
+      }
+    }
     for (const item of this.claims(msg)) {
       const checked = this.claimCache.get(item.value);
       if (checked?.claim?.claimType !== "payment-receipt") continue;

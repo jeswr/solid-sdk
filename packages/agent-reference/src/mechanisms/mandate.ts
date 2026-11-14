@@ -33,12 +33,7 @@ import type {
 import { EmbeddedCredentialNode } from "../model/evidence-item.js";
 import { scopedId } from "../model/named-values.js";
 import type { SigningKey } from "./jws.js";
-import {
-  type EngineRequest,
-  type PolicyEngine,
-  SOLID_ODRL_ENGINE_ID,
-  solidOdrlEngine,
-} from "./policy-engine.js";
+import { type EngineRequest, type PolicyEngine, solidOdrlEngine } from "./policy-engine.js";
 import {
   approvalSchema,
   type OwnerApproval,
@@ -49,7 +44,7 @@ import {
 import type { TrustStore } from "./trust.js";
 
 /** Identity of the default policy engine (kept for existing importers). */
-export const POLICY_EVALUATOR_ID = SOLID_ODRL_ENGINE_ID;
+export { SOLID_ODRL_ENGINE_ID as POLICY_EVALUATOR_ID } from "./policy-engine.js";
 
 /** The ODRL subset this pilot profile accepts. Anything else is `indeterminate`. */
 export const PILOT_ODRL_SUBSET = {
@@ -58,6 +53,19 @@ export const PILOT_ODRL_SUBSET = {
   operators: ["eq", "neq", "isAnyOf", "isNoneOf", "lt", "lteq", "gt", "gteq"],
   conflict: ["prohibit"],
 } as const;
+
+/**
+ * CORE-OUT-2a: these actions disclose data or move value outside the agent. Permissions
+ * must name them; a general permission cannot create an external effect. General
+ * prohibitions still apply to every action they include. Shared by mandates and item
+ * terms through the policy engine adapter. Extend this when the action subset grows.
+ */
+export const OUTSIDE_EFFECT_ACTIONS: readonly string[] = [
+  "distribute",
+  "transfer",
+  "compensate",
+  "pay",
+];
 
 const instant = z.string().max(64).refine(isIsoInstant);
 // Identifiers must be valid IRIs (profile 0.1.1): legacy `<iri#frag>#x` ids are rejected, so a
