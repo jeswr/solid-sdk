@@ -4869,10 +4869,17 @@ and `labels` counts are unchanged (242 runs, 16 disagree, 24 blocked).
      failing context verdict stops the release (`prohibited`).
    - The agent records the context verdicts after the release
      (`takeEmailContextVerdicts`).
-   - `no-agent-on-the-other-side` has an empty context, and the oracle stayed identical
-     (164 paths).
-   - One side effect: a prohibited email is now refused by the release, after the
-     effect is planned, not before planning.
+   - **Correction after ec06cae72.** The claim that this was baseline-neutral was wrong.
+     `oracle-snapshot.mjs` stayed at 164 equal paths, but the full gate failed 4 tests:
+     - `no-agent-on-the-other-side/branch-1`: the outline moved at event 17;
+     - `oracle.test`, `engine.test` and `email.test`;
+     - `recorded-joint`: `cohort-count/main` changed after the build regenerated it.
+   - **Narrowed (coordinator).** The ordered placement applies only while a mailbox
+     challenge is active, that is when the agent has sent a challenge nonce
+     (`emailChallenges` is non-empty). Only the `identity-email-endpoint` configuration
+     does this.
+   - Every other email send keeps the baseline: context checks run before the gate
+     decides, and a failing context verdict refuses the effect before planning.
 2. **Failure branch.** `mailbox-reply-as-evidence` is modelled as the core proposing to
    forward the mailbox reply to the lender as unsigned content beside an income request
    (a `start` step with a `content` part). The outbound evidence check measures it as

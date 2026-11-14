@@ -5191,9 +5191,19 @@ export class AgentRuntime {
         approval?.decision === "approve" &&
         Date.parse(approval.validUntil) > Date.parse(this.now()) &&
         !this.state.usedApprovals[approval.id];
-      // The context checks run inside the release, in the ordered position of disclosure
-      // and data terms (brief 31 §2.4), so an email records the same order as any release.
-      emailContext = { text: email.data.text, approved };
+      // Brief 31 §2.4: while a mailbox challenge is active, the context checks run inside
+      // the release, in the ordered position of disclosure and data terms. Every other email
+      // keeps the baseline order: context checks before the gate decides.
+      if (this.emailChallenges.size > 0) emailContext = { text: email.data.text, approved };
+      else {
+        const contextVerdicts = this.outbound.checkEmailContext(
+          plan.intent,
+          email.data.text,
+          approved,
+        );
+        for (const verdict of contextVerdicts) this.record(verdict);
+        if (contextVerdicts.some((verdict) => verdict.verdict === "fail")) return [];
+      }
     }
     if (this.effectAdapters.get(plan.adapter)?.releasesRecord) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
