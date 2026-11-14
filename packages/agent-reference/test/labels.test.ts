@@ -50,9 +50,9 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   }
   const baseline = manifest.paths.filter((path) => !path.configuration);
   const alternatives = manifest.paths.filter((path) => path.configuration);
-  expect(traces).toBe(161 + alternatives.filter((path) => path.trace).length);
-  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(150);
-  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(11);
+  expect(traces).toBe(164 + alternatives.filter((path) => path.trace).length);
+  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(152);
+  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(12);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
   // 26e's alternatives plus the four native settlement configurations (three rows each).
   expect(alternatives).toHaveLength(48);

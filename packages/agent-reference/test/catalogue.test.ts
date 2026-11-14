@@ -172,7 +172,7 @@ it("requires currently accepted completeness for the exact list, subject and per
   });
 });
 
-it("models an unregistered notice key, insufficient borrowing credentials, and a photograph-only damage reading", async () => {
+it("models an unregistered notice key, insufficient borrowing credentials, and missing structured evidence before a photograph reading", async () => {
   const recall = loadCase(root, "recall-notice");
   const recalls = await runScenario(recall.profile, recall.scenario);
   expect(recalls[1]?.actual).toMatchObject({ outcome: "refuse", reason: "source-unknown" });
@@ -209,22 +209,22 @@ it("models an unregistered notice key, insufficient borrowing credentials, and a
   expect(
     events.some(
       (e) =>
-        e.agent === "receiver-agent" &&
-        e.outcome === "ask-more" &&
-        e.reason === "structured-form-required",
+        e.agent === "receiver-agent" && e.outcome === "ask-more" && e.reason === "evidence-missing",
     ),
   ).toBe(true);
   const request = events.find(
-    (e) =>
-      e.agent === "receiver-agent" &&
-      e.check === "fitness" &&
-      e.reason === "structured-form-required",
+    (e) => e.agent === "receiver-agent" && e.check === "fitness" && e.reason === "evidence-missing",
   );
-  expect(request?.caption).toContain("request source The accepted repair garage");
+  expect(request?.caption).toContain("Accepted sources: The accepted repair garage");
   expect(
     request?.refs?.some((ref) => ref.id === "urn:fictional:insurance-claim-photos:garage"),
   ).toBe(true);
   expect(request?.caption).toContain("repair estimate");
+  expect(
+    events
+      .slice(events.indexOf(request!))
+      .some((e) => e.agent === "receiver-agent" && e.part === "core"),
+  ).toBe(false);
   expect(
     events.some((e) => e.agent === "receiver-agent" && e.fact?.claimType === "repair.estimate"),
   ).toBe(false);

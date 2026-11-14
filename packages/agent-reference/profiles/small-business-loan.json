@@ -136,8 +136,7 @@
       "action": "urn:op:small-business-loan",
       "claims": [
         "business.accounts",
-        "business.tax-filing",
-        "organization.role"
+        "business.tax-filing"
       ]
     }
   ],

@@ -78,7 +78,7 @@
     }
   ],
   "generated": {
-    "commit": "b74337ffe6095203787e5422173c5580315b0087",
+    "commit": "d9f22a1e179ed0084d6c351dacc3b377da688458",
     "core": "scripted"
   },
   "standIns": [
@@ -2404,13 +2404,29 @@
       "step": 5,
       "agent": "receiver-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "CORE-IN-21",
+        "text": "Each required claim kind must be covered for the same task and subject."
+      },
+      "caption": "Every kind of claim required by this operation is covered by admitted, fit evidence."
+    },
+    {
+      "seq": 68,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 68,
+      "seq": 69,
       "step": 5,
       "agent": "receiver-agent",
       "part": "memory",
@@ -2433,7 +2449,7 @@
       "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 69,
+      "seq": 70,
       "step": 5,
       "agent": "receiver-agent",
       "part": "memory",
@@ -2456,7 +2472,7 @@
       "caption": "The landlord's benefit rent statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 70,
+      "seq": 71,
       "step": 5,
       "agent": "receiver-agent",
       "part": "memory",
@@ -2479,7 +2495,7 @@
       "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 71,
+      "seq": 72,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2502,7 +2518,7 @@
       "caption": "This protocol message proposes no additional action."
     },
     {
-      "seq": 72,
+      "seq": 73,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2536,7 +2552,7 @@
       "caption": "The claimant: Accepted, for Claiming a benefit only."
     },
     {
-      "seq": 73,
+      "seq": 74,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2554,7 +2570,7 @@
       "caption": "The gate finds no personal data in this protocol message."
     },
     {
-      "seq": 74,
+      "seq": 75,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2572,7 +2588,7 @@
       "caption": "The gate finds no data terms to apply."
     },
     {
-      "seq": 75,
+      "seq": 76,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2590,7 +2606,7 @@
       "caption": "The message release check is complete."
     },
     {
-      "seq": 76,
+      "seq": 77,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2617,7 +2633,7 @@
       "caption": "Signed (JWS Ed DSA) with The benefits office’s agent's pinned key, and written to the record."
     },
     {
-      "seq": 77,
+      "seq": 78,
       "step": 5,
       "agent": "receiver-agent",
       "part": "outbound-gate",
@@ -2627,7 +2643,7 @@
       "caption": "The deliver message goes to The claimant’s agent."
     },
     {
-      "seq": 78,
+      "seq": 79,
       "step": 5,
       "agent": "receiver-agent",
       "part": "transport",
@@ -2737,7 +2753,7 @@
       "caption": "The benefits office’s agent sends a deliver message to The claimant’s agent."
     },
     {
-      "seq": 79,
+      "seq": 80,
       "step": 6,
       "agent": "owner-agent",
       "part": "transport",
@@ -2861,7 +2877,7 @@
       "caption": "A deliver message from The benefits office’s agent reaches the inbound gate."
     },
     {
-      "seq": 80,
+      "seq": 81,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2888,7 +2904,7 @@
       "caption": "The message is intact, signed with The benefits office’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
     },
     {
-      "seq": 81,
+      "seq": 82,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2911,7 +2927,7 @@
       "caption": "The message carries no statements from third parties."
     },
     {
-      "seq": 82,
+      "seq": 83,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2929,7 +2945,7 @@
       "caption": "This message asks for nothing, so there is no authority to check."
     },
     {
-      "seq": 83,
+      "seq": 84,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2952,25 +2968,23 @@
       "caption": "The message carries no data that needs terms."
     },
     {
-      "seq": 84,
+      "seq": 85,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
-      "verdict": "not-applicable",
-      "refs": [
-        {
-          "layer": "reliance",
-          "suite": "precedence-rules",
-          "clause": "CORE-IN-13"
-        }
-      ],
-      "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "verdict": "pass",
+      "refs": [],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "CORE-IN-21",
+        "text": "Each required claim kind must be covered for the same task and subject."
+      },
+      "caption": "Every kind of claim required by this operation is covered by admitted, fit evidence."
     },
     {
-      "seq": 85,
+      "seq": 86,
       "step": 6,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -2980,12 +2994,12 @@
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
     },
     {
-      "seq": 86,
+      "seq": 87,
       "step": 7,
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "42 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "43 entries in this agent's hash-chained record; the chain verifies."
     }
   ]
 }

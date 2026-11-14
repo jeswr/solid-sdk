@@ -41,7 +41,7 @@
       "3": "The policyholder’s agent checks the message and prepares a response.",
       "4": "The policyholder’s agent sends the signed request.",
       "5": "The policyholder’s agent completes the approve step.",
-      "6": "The insurer’s agent checks the message and prepares a response.",
+      "6": "The receiver requests the required garage estimate before content reading.",
       "7": "The insurer’s agent completes the read content step.",
       "8": "The insurer’s agent completes the read content step.",
       "9": "The insurer’s agent proposes the local action."
@@ -79,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "b74337ffe6095203787e5422173c5580315b0087",
+    "commit": "d9f22a1e179ed0084d6c351dacc3b377da688458",
     "core": "scripted"
   },
   "standIns": [
@@ -2731,10 +2731,33 @@
       "step": 6,
       "agent": "receiver-agent",
       "part": "inbound-gate",
-      "kind": "decision",
-      "verdict": "pass",
-      "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "refs": [
+        {
+          "id": "repair.estimate",
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-21"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
+        }
+      ],
+      "reason": "evidence-missing",
+      "rule": {
+        "id": "CORE-IN-21",
+        "text": "Each required claim kind must be covered for the same task and subject."
+      },
+      "caption": "Required claim: repair estimate. Accepted sources: The accepted repair garage, The unaccepted repair garage. Accepted methods: recorded-by-authority."
     },
     {
       "seq": 83,
@@ -2786,14 +2809,22 @@
       "seq": 85,
       "step": 6,
       "agent": "receiver-agent",
-      "part": "memory",
-      "kind": "store",
-      "caption": "Unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; not instructions; source The policyholder.",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "evidence-missing",
+      "caption": "Required claim: repair estimate. Accepted sources: The accepted repair garage, The unaccepted repair garage. Accepted methods: recorded-by-authority.",
       "refs": [
         {
           "layer": "meaning",
           "suite": "plain-language-upgrade",
-          "id": "urn:fictional:insurance-claim-photos:owner"
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ]
     },
@@ -2801,49 +2832,10 @@
       "seq": 86,
       "step": 6,
       "agent": "receiver-agent",
-      "part": "memory",
-      "kind": "store",
-      "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source The policyholder.",
-      "refs": [
-        {
-          "layer": "meaning",
-          "suite": "plain-language-upgrade",
-          "id": "urn:fictional:insurance-claim-photos:owner"
-        }
-      ]
-    },
-    {
-      "seq": 87,
-      "step": 7,
-      "agent": "receiver-agent",
-      "part": "memory",
-      "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; claim content opinion."
-    },
-    {
-      "seq": 88,
-      "step": 8,
-      "agent": "receiver-agent",
-      "part": "memory",
-      "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; claim damage severity."
-    },
-    {
-      "seq": 89,
-      "step": 9,
-      "agent": "receiver-agent",
-      "part": "core",
-      "kind": "propose",
-      "caption": "The core proposes to take the next step in A person decides on the original content with The insurer."
-    },
-    {
-      "seq": 90,
-      "step": 9,
-      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
-      "verdict": "pass",
+      "verdict": "not-applicable",
       "refs": [
         {
           "layer": "authority",
@@ -2856,49 +2848,291 @@
           "clause": "CORE-OUT-2"
         }
       ],
-      "reason": "within-mandate",
-      "caption": "The insurer's mandate covers this action."
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
     },
     {
-      "seq": 91,
-      "step": 9,
+      "seq": 87,
+      "step": 6,
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
-      "check": "fitness",
-      "verdict": "ask-more",
+      "check": "recipient",
+      "verdict": "pass",
       "refs": [
         {
-          "layer": "reliance",
-          "suite": "precedence-rules",
-          "clause": "CORE-IN-13"
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The policyholder a party I can send An insurance claim with photographs to?",
+        "path": [
+          {
+            "at": "The insurer's own list",
+            "kind": "own-list",
+            "says": "The policyholder is accepted for An insurance claim with photographs."
+          }
+        ],
+        "answer": "Accepted, for An insurance claim with photographs only."
+      },
+      "reason": "recipient-established",
+      "caption": "The policyholder: Accepted, for An insurance claim with photographs only."
+    },
+    {
+      "seq": 88,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
         },
         {
           "layer": "meaning",
           "suite": "plain-language-upgrade",
-          "id": "urn:fictional:insurance-claim-photos:garage"
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
       ],
-      "reason": "structured-form-required",
-      "caption": "Structured form required: repair estimate; request source The accepted repair garage; original sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2. Required claim: repair estimate. Accepted sources: The accepted repair garage. Accepted methods: recorded-by-authority."
+      "reason": "minimal-disclosure",
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
     },
     {
-      "seq": 92,
-      "step": 9,
+      "seq": 89,
+      "step": 6,
       "agent": "receiver-agent",
       "part": "outbound-gate",
-      "kind": "decision",
-      "verdict": "ask-more",
-      "outcome": "ask-more",
-      "reason": "structured-form-required",
-      "caption": "Ask source The accepted repair garage for repair estimate.",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
       "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+    },
+    {
+      "seq": 90,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        },
         {
           "layer": "meaning",
           "suite": "plain-language-upgrade",
-          "id": "urn:fictional:insurance-claim-photos:garage"
+          "id": "urn:fictional:insurance-claim-photos:owner"
         }
-      ]
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
+    },
+    {
+      "seq": 91,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+    },
+    {
+      "seq": 92,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 93,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS Ed DSA) with The insurer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 94,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The challenge message goes to The policyholder’s agent."
+    },
+    {
+      "seq": 95,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0005\",\"type\":[\"Message\",\"Challenge\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"challenge\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:WfGz-ZvJaFZvcl7BueRaKoy_nobLc7IkA_sJG7PE_OU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:receiver\"},\"to\":{\"id\":\"urn:awp:n:iH0igAkvcsWQFob3QR7BRAixVbO3kWF6xHqWwnybuUQ\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:owner\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002\",\"body\":{\"id\":\"urn:awp:n:ZBW4g5E1wMVGnzn3AbvcAwDn03pRmth_ovZCau0XUP4\",\"type\":\"ChallengeBody\",\"detail\":\"Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.\",\"needs\":{\"id\":\"urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0003\",\"type\":\"ChallengeNeeds\",\"expiresAt\":\"2026-11-13T09:05:00.000Z\",\"claim\":\"Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.\",\"nonce\":\"urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0004\"},\"reason\":\"evidence-missing\",\"ref\":\"urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002\"},\"authorship\":{\"id\":\"urn:awp:n:612_ugKq59ACsmKJXyFSgCjuxA-kLWDXVz3lImcqakw\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:receiver\"},\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOjYxMl91Z0txNTlBQ3NtS0pYeUZTZ0NqdXhBLWtMV0RYVnozbEltY3Fha3ciLCJtZXRob2QiOiJtb2RlbC1vdXRwdXQiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwidHlwZSI6Ik1lc3NhZ2VBdXRob3JzaGlwIn0sImJvZHkiOnsiZGV0YWlsIjoiUmVxdWlyZWQgY2xhaW06IHJlcGFpciBlc3RpbWF0ZS4gQWNjZXB0ZWQgc291cmNlczogdXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmdhcmFnZSwgdXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm90aGVyLWdhcmFnZS4gQWNjZXB0ZWQgbWV0aG9kczogcmVjb3JkZWQtYnktYXV0aG9yaXR5LiIsImlkIjoidXJuOmF3cDpuOlpCVzRnNUUxd01WR256bjNBYnZjQXdEbjAzcFJtdGhfb3ZaQ2F1MFhVUDQiLCJuZWVkcyI6eyJjbGFpbSI6IlJlcXVpcmVkIGNsYWltOiByZXBhaXIgZXN0aW1hdGUuIEFjY2VwdGVkIHNvdXJjZXM6IHVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UsIHVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvdGhlci1nYXJhZ2UuIEFjY2VwdGVkIG1ldGhvZHM6IHJlY29yZGVkLWJ5LWF1dGhvcml0eS4iLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDA5OjA1OjAwLjAwMFoiLCJpZCI6InVybjphd3A6ZW5naW5lLWluc3VyYW5jZS1jbGFpbS1waG90b3MtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMyIsIm5vbmNlIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDA0IiwidHlwZSI6IkNoYWxsZW5nZU5lZWRzIn0sInJlYXNvbiI6ImV2aWRlbmNlLW1pc3NpbmciLCJyZWYiOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJ0eXBlIjoiQ2hhbGxlbmdlQm9keSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpvd25lci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOldmR3otWnZKYUZadmNsN0J1ZVJhS295X25vYkxjN0lrQV9zSkc3UEVfT1UiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDA1IiwiaW5SZXBseVRvIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpvd25lci1hZ2VudDowMDAyIiwia2luZCI6ImNoYWxsZW5nZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46aUgwaWdBa3Zjc1dRRm9iM1FSN0JSQWl4VmJPM2tXRjZ4SHFXd255YnVVUSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0sInR5cGUiOlsiTWVzc2FnZSIsIkNoYWxsZW5nZSJdfQ.zDrRy9pkUWw42pwUxHXsOmWeugfShGHqUgdVyCZIAJH62jbLidKy2ymDhn8KA6q6fC2xNYDKNNiNEXT8WuAFBA\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0003> a awp:ChallengeNeeds;\n    awp:claimType \"Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.\";\n    awp:expiresAt \"2026-11-13T09:05:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:nonce <urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0004>.\n<urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0005> a awp:Challenge, awp:Message;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:authorship <urn:awp:n:612_ugKq59ACsmKJXyFSgCjuxA-kLWDXVz3lImcqakw>;\n    awp:body <urn:awp:n:ZBW4g5E1wMVGnzn3AbvcAwDn03pRmth_ovZCau0XUP4>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:WfGz-ZvJaFZvcl7BueRaKoy_nobLc7IkA_sJG7PE_OU>;\n    awp:inReplyTo <urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/challenge>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:iH0igAkvcsWQFob3QR7BRAixVbO3kWF6xHqWwnybuUQ>;\n    sec:proof _:awp0.\n<urn:awp:n:612_ugKq59ACsmKJXyFSgCjuxA-kLWDXVz3lImcqakw> a awp:MessageAuthorship;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:receiver>;\n    awp:method \"model-output\".\n<urn:awp:n:ZBW4g5E1wMVGnzn3AbvcAwDn03pRmth_ovZCau0XUP4> a awp:ChallengeBody;\n    awp:detail \"Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.\";\n    awp:needs <urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0003>;\n    awp:reason <https://w3id.org/jeswr/awp#reason/evidence-missing>;\n    awp:ref <urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002>.\n<urn:awp:n:WfGz-ZvJaFZvcl7BueRaKoy_nobLc7IkA_sJG7PE_OU> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:insurance-claim-photos:receiver>;\n    awp:actor <urn:fictional:insurance-claim-photos:receiver-agent:actor>.\n<urn:awp:n:iH0igAkvcsWQFob3QR7BRAixVbO3kWF6xHqWwnybuUQ> a awp:AudienceRef;\n    awp:actor <urn:fictional:insurance-claim-photos:owner-agent:actor>;\n    awp:party <urn:fictional:insurance-claim-photos:owner>.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOjYxMl91Z0txNTlBQ3NtS0pYeUZTZ0NqdXhBLWtMV0RYVnozbEltY3Fha3ciLCJtZXRob2QiOiJtb2RlbC1vdXRwdXQiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwidHlwZSI6Ik1lc3NhZ2VBdXRob3JzaGlwIn0sImJvZHkiOnsiZGV0YWlsIjoiUmVxdWlyZWQgY2xhaW06IHJlcGFpciBlc3RpbWF0ZS4gQWNjZXB0ZWQgc291cmNlczogdXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmdhcmFnZSwgdXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm90aGVyLWdhcmFnZS4gQWNjZXB0ZWQgbWV0aG9kczogcmVjb3JkZWQtYnktYXV0aG9yaXR5LiIsImlkIjoidXJuOmF3cDpuOlpCVzRnNUUxd01WR256bjNBYnZjQXdEbjAzcFJtdGhfb3ZaQ2F1MFhVUDQiLCJuZWVkcyI6eyJjbGFpbSI6IlJlcXVpcmVkIGNsYWltOiByZXBhaXIgZXN0aW1hdGUuIEFjY2VwdGVkIHNvdXJjZXM6IHVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UsIHVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvdGhlci1nYXJhZ2UuIEFjY2VwdGVkIG1ldGhvZHM6IHJlY29yZGVkLWJ5LWF1dGhvcml0eS4iLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDA5OjA1OjAwLjAwMFoiLCJpZCI6InVybjphd3A6ZW5naW5lLWluc3VyYW5jZS1jbGFpbS1waG90b3MtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMyIsIm5vbmNlIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDA0IiwidHlwZSI6IkNoYWxsZW5nZU5lZWRzIn0sInJlYXNvbiI6ImV2aWRlbmNlLW1pc3NpbmciLCJyZWYiOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJ0eXBlIjoiQ2hhbGxlbmdlQm9keSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpvd25lci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOldmR3otWnZKYUZadmNsN0J1ZVJhS295X25vYkxjN0lrQV9zSkc3UEVfT1UiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDA1IiwiaW5SZXBseVRvIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1icmFuY2gtMTpvd25lci1hZ2VudDowMDAyIiwia2luZCI6ImNoYWxsZW5nZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46aUgwaWdBa3Zjc1dRRm9iM1FSN0JSQWl4VmJPM2tXRjZ4SHFXd255YnVVUSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0sInR5cGUiOlsiTWVzc2FnZSIsIkNoYWxsZW5nZSJdfQ.zDrRy9pkUWw42pwUxHXsOmWeugfShGHqUgdVyCZIAJH62jbLidKy2ymDhn8KA6q6fC2xNYDKNNiNEXT8WuAFBA\"\n}\n",
+        "attachments": [],
+        "id": "urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0005",
+        "from": "The insurer’s agent",
+        "to": "The policyholder’s agent",
+        "kind": "challenge",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The insurer’s agent to The policyholder’s agent; challenge; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0005",
+              "conversation": "urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0001",
+              "kind": "challenge",
+              "from": {
+                "actor": "urn:fictional:insurance-claim-photos:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:insurance-claim-photos:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:insurance-claim-photos:owner-agent:actor",
+                "party": "urn:fictional:insurance-claim-photos:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002",
+              "proof": {
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
+              }
+            },
+            "digest": "sha-256:1f74fa3399e3ec54ecf634ade6fe6522e403f54358238472a802115066fcbe3d"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "A message. It also carries untrusted free text; the original is available separately as content.",
+            "raw": {
+              "ref": "urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002",
+              "reason": "evidence-missing",
+              "detail": "Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority.",
+              "needs": {
+                "id": "urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0003",
+                "nonce": "urn:awp:engine-insurance-claim-photos-branch-1:receiver-agent:0004",
+                "expiresAt": "2026-11-13T09:05:00.000Z",
+                "claim": "Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority."
+              }
+            },
+            "digest": "sha-256:0327a203601fe8f2ea66d61b9548f911f2c4361cd6c81d22bf70056661846632",
+            "untrusted": [
+              {
+                "path": "detail",
+                "text": "Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority."
+              },
+              {
+                "path": "needs.claim",
+                "text": "Required claim: repair estimate. Accepted sources: urn:fictional:insurance-claim-photos:garage, urn:fictional:insurance-claim-photos:other-garage. Accepted methods: recorded-by-authority."
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": false,
+            "summary": "No terms travel with this message."
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers the recorded earlier message.",
+            "raw": {
+              "conversation": "urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-insurance-claim-photos-branch-1:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The insurer’s agent sends a challenge message to The policyholder’s agent."
     }
   ]
 }

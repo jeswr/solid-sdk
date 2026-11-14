@@ -138,13 +138,15 @@ export function claimRequest(
   ctx: GateContext,
   claimType: string,
   sources = ctx.claimSources?.[claimType],
+  display: "identifier" | "label" = "identifier",
 ): string {
   const rule = ctx.reliance?.rules.find((r) =>
     r.claimType.endsWith(".*")
       ? claimType.startsWith(r.claimType.slice(0, -1))
       : r.claimType === claimType,
   );
-  return `Required claim: ${claimType}. Accepted sources: ${(sources ?? []).join(", ") || "a source accepted by the trust profile"}. Accepted methods: ${rule?.methods.join(", ") || "a method accepted by the reliance profile"}.`;
+  const label = display === "label" ? words(claimType, ctx.name).replace(/\./g, " ") : claimType;
+  return `Required claim: ${label}. Accepted sources: ${(sources ?? []).join(", ") || "a source accepted by the trust profile"}. Accepted methods: ${rule?.methods.join(", ") || "a method accepted by the reliance profile"}.`;
 }
 
 export const CURABLE_CLAIM_FAILURES = new Set([

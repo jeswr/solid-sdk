@@ -588,31 +588,92 @@
     {
       "agent": "receiver-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "reason": "evidence-missing"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "pass"
+      "verdict": "ask-more",
+      "reason": "evidence-missing"
     },
     {
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
-      "verdict": "pass",
-      "reason": "within-mandate"
+      "verdict": "not-applicable",
+      "reason": "no-action"
     },
     {
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
-      "check": "fitness",
-      "verdict": "ask-more",
-      "reason": "structured-form-required"
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
     },
     {
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "decision",
-      "verdict": "ask-more",
-      "reason": "structured-form-required"
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
     }
   ]
 }
