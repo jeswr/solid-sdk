@@ -54,6 +54,7 @@ import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import {
+  type AdmittedFact,
   alternativeInstalled,
   type CheckVerdict,
   checkRefs,
@@ -89,6 +90,11 @@ export interface ProposalOrigin {
   /** The free text the core read. */
   readonly text: string;
 }
+/** A data-terms verdict that may also hold an undecided use for the principal (brief 31). */
+type PrincipalUseVerdict = Omit<TermsVerdict, "verdict"> & {
+  readonly verdict: TermsVerdict["verdict"] | "ask-principal";
+};
+
 export interface OutboundDeps {
   readonly settlement?: SettlementSuite;
   readonly recordRelease?: (intent: ActionIntent) => boolean;
@@ -1675,10 +1681,83 @@ export class OutboundGate {
     return reviewed.terms;
   }
 
+  /**
+   * Brief 31 §2.1, usage-control human-approval only: the principal's own statement, with no
+   * terms of its own, is governed by the principal's mandate. A permit or a prohibition there
+   * decides; when no rule decides the purpose, the use is "not decided" and goes to the
+   * principal, whose approval binds the held message's digest, recipient, purpose and expiry.
+   * Items anyone else supplied keep the default terms (refused unless their terms allow it).
+   */
+  private principalUse(
+    fact: AdmittedFact | undefined,
+    scope: ReturnType<typeof IntentScopeNode.fromIntent>,
+    approved: boolean,
+  ): PrincipalUseVerdict | undefined {
+    const principal = this.deps.identity.party;
+    if (
+      this.deps.gate.configuration?.layers["usage-control"] !== "human-approval" ||
+      !principal ||
+      !fact ||
+      fact.terms ||
+      fact.source !== principal
+    )
+      return undefined;
+    const m = this.deps.mandate();
+    const now = Date.parse(this.deps.now());
+    if (!m || Date.parse(m.validFrom) > now || Date.parse(m.validUntil) <= now)
+      return {
+        verdict: "fail",
+        reason: "not-authorised",
+        text: `There is no current mandate from ${this.owner} to decide this use.`,
+      };
+    const engine = this.deps.policyEngine ?? solidOdrlEngine;
+    const request = {
+      agent: this.deps.identity.actor,
+      action: "distribute",
+      target: scope.target,
+      ...(scope.purpose ? { purpose: scope.purpose } : {}),
+      ...(scope.recipient ? { recipient: scope.recipient } : {}),
+      at: this.deps.now(),
+    };
+    const effects = [
+      engine.evaluate(m.autonomous, request),
+      engine.evaluate(m.withApproval, request),
+    ];
+    if (effects.some((v) => v.effect === "indeterminate"))
+      return {
+        verdict: "indeterminate",
+        reason: "indeterminate-policy",
+        text: `${this.owner}'s mandate cannot be decided for this use.`,
+      };
+    if (effects.some((v) => v.effect === "prohibited"))
+      return {
+        verdict: "fail",
+        reason: "prohibited",
+        text: `${this.owner}'s mandate forbids this use of ${this.owner}'s own statement.`,
+      };
+    if (effects[0]?.effect === "permit")
+      return {
+        verdict: "pass",
+        text: `${this.owner}'s mandate allows this use of ${this.owner}'s own statement.`,
+      };
+    return approved
+      ? {
+          verdict: "pass",
+          reason: "approval-given",
+          text: `${this.owner} approved this exact release of ${this.owner}'s own statement.`,
+        }
+      : {
+          verdict: "ask-principal",
+          reason: "approval-required",
+          text: `No rule in ${this.owner}'s mandate decides this use of ${this.owner}'s own statement, so ${this.owner} decides.`,
+        };
+  }
+
   private dataTerms(
     verdicts: CheckVerdict[],
     subject: string,
     intent: ActionIntent,
+    release?: { readonly approved: boolean; asked?: boolean },
   ): string | undefined {
     const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
@@ -1748,7 +1827,9 @@ export class OutboundGate {
     });
     const allRulesPermit = ruledItems.every(({ t }) => t.verdict === "pass");
     for (const { id, fact, terms, t: rules } of ruledItems) {
-      const t = allRulesPermit ? this.modelTerms(rules, intent, id) : rules;
+      const own = release ? this.principalUse(fact, scope, release.approved) : undefined;
+      const t: PrincipalUseVerdict =
+        own ?? (allRulesPermit ? this.modelTerms(rules, intent, id) : rules);
       let verdict = t.verdict;
       let text = t.text;
       let reason = t.reason;
@@ -1767,7 +1848,19 @@ export class OutboundGate {
           text = `${text} ${this.name(scope.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
         }
       }
-      if (verdict !== "pass") blocked ??= reason ?? "indeterminate-policy";
+      // An undecided own-statement use is held only when no other item already stops it.
+      if (verdict === "ask-principal") {
+        if (!blocked && release) {
+          blocked = "approval-required";
+          release.asked = true;
+        }
+      } else if (verdict !== "pass") {
+        if (release?.asked) {
+          blocked = undefined;
+          release.asked = false;
+        }
+        blocked ??= reason ?? "indeterminate-policy";
+      }
       this.verdict(
         verdicts,
         subject,
@@ -1886,6 +1979,8 @@ export class OutboundGate {
     reason?: string;
     digest: string;
     intent: ActionIntent;
+    /** Brief 31 §2.1: held because no mandate rule decides a use of the principal's own data. */
+    undecidedUse?: true;
   } {
     this.activePayment =
       opts.intent?.action === "pay"
@@ -1933,6 +2028,25 @@ export class OutboundGate {
       digest,
       intent,
     });
+    // Brief 31 §2.1: an undecided use of the principal's own statement is held for them.
+    const holdForPrincipal = (what: string) => {
+      this.decide(
+        "ask-principal",
+        `No rule decides this use, so the reply is held for ${this.owner}.`,
+        "approval-required",
+      );
+      this.emit({
+        part: "principal",
+        kind: "ask-principal",
+        reason: "approval-required",
+        chat: {
+          who: "agent",
+          text: `${this.name(intent.recipient)} asks for ${what} for ${purpose ? idWords(purpose, this.name) : "an undeclared purpose"}. No rule in your mandate decides this. May I send it? Message digest: ${digest}.`,
+        },
+        caption: `The reply is held before release; ${this.owner}'s approval will bind its digest, recipient, purpose and expiry.`,
+      });
+      return { ...finish("ask-principal", "approval-required"), undecidedUse: true as const };
+    };
     // Brief 26e seam: an agent agreement cannot substitute for approval of a novel term.
     if (
       this.deps.gate.negotiatedMeaning &&
@@ -2296,14 +2410,23 @@ export class OutboundGate {
             this.decide("stop", "The credential is not necessary for this purpose.", reason);
             return finish("stop", reason);
           }
-          const blocked = this.dataTerms(verdicts, digest, {
-            ...intent,
-            action: "distribute",
-            parameters: {
-              evidence: [fact.id],
-              ...(retentionDays === undefined ? {} : { retentionDays }),
+          const release: { approved: boolean; asked?: boolean } = {
+            approved: opts.approved === true,
+          };
+          const blocked = this.dataTerms(
+            verdicts,
+            digest,
+            {
+              ...intent,
+              action: "distribute",
+              parameters: {
+                evidence: [fact.id],
+                ...(retentionDays === undefined ? {} : { retentionDays }),
+              },
             },
-          });
+            release,
+          );
+          if (release.asked) return holdForPrincipal(fact.label);
           if (blocked) {
             this.decide("stop", "The actual credential's terms prohibit release.", blocked);
             return finish("stop", blocked);
@@ -2581,8 +2704,11 @@ export class OutboundGate {
         "The gate checks the carried statements against the conversation's purpose.",
         { reason: reason ?? "minimal-disclosure" },
       );
+      const release: { approved: boolean; asked?: boolean } = { approved: opts.approved === true };
       const termsReason =
-        reason ?? this.dataTerms(verdicts, digest, { ...intent, parameters: { evidence: ids } });
+        reason ??
+        this.dataTerms(verdicts, digest, { ...intent, parameters: { evidence: ids } }, release);
+      if (release.asked) return holdForPrincipal(listWords(carried));
       if (termsReason) {
         this.decide(
           "stop",

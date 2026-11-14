@@ -299,6 +299,8 @@ type Continuation =
   | { type: "effect"; plan: EffectPlan; basis?: Iri }
   | {
       type: "release-message";
+      /** Brief 31 §2.1: held because no mandate rule decides a use of the principal's own data. */
+      undecidedUse?: boolean;
       message: AnyMessage;
       document?: MessagePacket;
       intent?: ActionIntent;
@@ -598,6 +600,9 @@ export class AgentRuntime {
         )
           memory.facts.set(item.id, item);
       }
+    // Brief 31 §2.2: a register this agent reads from signed answers sees only the entries
+    // of answers its own inbound gate admitted (never a local table).
+    gate.resolver?.bindAnswers(() => registerAnswers(memory.facts.values()));
     this.inbound = new InboundGate({
       identity: this.identity,
       trust: this.trust,
@@ -3727,6 +3732,12 @@ export class AgentRuntime {
       );
     }
     const publicAccess = msg.body.basis.kind === "public";
+    // Brief 31 §2.2: the gate records the refusal as its authority check; the wire reason
+    // stays credentials-required, which tells the asker what it lacks.
+    if (!msg.from.actor && (handler.description.access !== "public" || !publicAccess))
+      this.admission?.failAuthority(
+        "An unnamed requester may ask only for public operations; this one is restricted to named parties.",
+      );
     if (publicAccess && handler.description.access !== "public") {
       return this.replyClose(
         conv,
@@ -6159,8 +6170,21 @@ export class AgentRuntime {
         this.persist();
         return this.result("rejected", { reason: "expired", outbound: [] });
       }
-      const currentDecision = this.authorise(pending.intent, true);
-      if (currentDecision.outcome !== "permit") {
+      // Brief 31 §2.1: an undecided use of the principal's own statement has no mandate rule
+      // to permit it; the digest-bound approval is its only basis, so the mandate is not
+      // re-evaluated as a grant. It must still be current and not withdrawn, and the resumed
+      // gate run below re-checks it for a prohibition.
+      const mandate = this.mandate;
+      const at = Date.parse(this.now());
+      const permitted =
+        cont.undecidedUse === true
+          ? !!mandate &&
+            !this.mandateFailure &&
+            !this.isRevoked(mandate) &&
+            Date.parse(mandate.mandate.validFrom) <= at &&
+            Date.parse(mandate.mandate.validUntil) > at
+          : this.authorise(pending.intent, true).outcome === "permit";
+      if (!permitted) {
         this.persist();
         return this.result("rejected", {
           reason: "not-authorised",
@@ -6818,6 +6842,7 @@ export class AgentRuntime {
         release.outcome === "ask-principal"
           ? this.park(conv.id, release.intent, {
               type: "release-message",
+              ...(release.undecidedUse ? { undecidedUse: true } : {}),
               message,
               document: {
                 format: "awp-jsonld/0.1",
@@ -7437,4 +7462,37 @@ export class AgentRuntime {
       publicJwk: k.publicJwk,
     }));
   }
+}
+
+/** Register entries carried by admitted `register.entry` statements; malformed ones are skipped. */
+function registerAnswers(
+  facts: Iterable<import("../gates/common.js").AdmittedFact>,
+): import("../trust/resolver.js").AnsweredEntry[] {
+  const out: import("../trust/resolver.js").AnsweredEntry[] = [];
+  for (const fact of facts) {
+    const s = fact.statement;
+    if (fact.claimType !== "register.entry" || !s || !fact.subject) continue;
+    const strings = (v: unknown) =>
+      Array.isArray(v) && v.every((x) => typeof x === "string") ? (v as string[]) : undefined;
+    const authorizedFor = strings(s.authorizedFor);
+    const claimTypes = s.claimTypes === undefined ? [] : strings(s.claimTypes);
+    const status = s.status;
+    if (
+      !authorizedFor ||
+      !claimTypes ||
+      (status !== "authorized" && status !== "suspended" && status !== "withdrawn")
+    )
+      continue;
+    out.push({
+      register: fact.source,
+      entry: {
+        party: fact.subject,
+        authorizedFor,
+        claimTypes,
+        status,
+        id: typeof s.entry === "string" ? s.entry : fact.id,
+      },
+    });
+  }
+  return out;
 }

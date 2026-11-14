@@ -4366,3 +4366,212 @@ blocked-cell regressions, `solid-reference-status`, `configuration-matrix`,
 `test/oracle/pre-rdf.json`. RDF guard: 0 failures, 213 allowances, unchanged.
 No vocabulary term was added, so codegen was not run. No commit, network request or
 dependency addition was made; the full suite and `generate-traces.mjs` were not run.
+
+### Brief 31 item 2: `usage-control-human-approval` (blocked to runs)
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+The orchestrator decided four questions for this item; they are recorded here as decided.
+(a) Build the ask-principal path. (b) Additive profile entries are acceptable while the
+oracle and the RDF guard stay unchanged. (c) Run `supplier-terms-hold`, record what the
+gate measures, and mark the branch "disagrees" with a one-line reason if it stops earlier
+than `data-terms`/`prohibited`, without reordering gate checks. (d) Add `other-valuer` as a
+new party with its own key and receiving agent, as an addition rather than a replaced
+baseline party.
+
+**Gate (`src/gates/outbound.ts`).** `principalUse` runs only when the configuration's
+usage-control layer is `human-approval`. It applies to an item with no terms of its own
+whose source is the agent's own principal. If the principal's mandate permits
+`distribute` for that target, purpose and recipient, the item passes. A prohibition fails
+it with `prohibited`; an invalid or out-of-date mandate gives `not-authorised`; an
+undecidable policy gives `indeterminate-policy`. If no rule decides the use, data-terms
+records `ask-principal`/`approval-required`. On the approved re-run it records
+`pass`/`approval-given`. Items supplied by anyone else keep the default terms, which refuse
+distribution unless their own terms allow it. A later failing item still overrides the
+question. `dataTerms` reports that it asked through a flag on its `release` argument, not
+through the reason string. A plain `approval-required` from other terms therefore never
+becomes a question. Both reply release paths in `checkMessage` (the attached-credential
+evidence loop and the carried-statements block) then hold the message through one helper,
+`holdForPrincipal`. It decides `ask-principal`, sends the principal a chat naming the
+recipient, the statement, the purpose and the message digest, and returns
+`undecidedUse: true`.
+
+**Runtime (`src/runtime/agent.ts`).** The parked `release-message` continuation carries
+`undecidedUse`. On resume, such a message is not re-authorised as a mandate grant, because
+no grant exists and the digest-bound approval is its only basis. It still requires a
+current, valid mandate that has not been withdrawn. The resumed gate run then repeats every
+check, including a possible prohibition. The existing approval binding is unchanged: the
+same approval record covers the digest, action digest, recipient, purpose and expiry. No
+second approval path was added.
+
+**`alternativeInstalled` (`src/gates/common.ts`).** Making the configuration executable
+first broke every other mortgage-main configuration (`application-arrives: no queued
+message`). Every agent began advertising it in its description, and the configuration
+negotiation picked it. Now an agent advertises it only when its own gate runs the
+`human-approval` usage-control layer. This matches the gating already used for the
+agreement-credential, model-tighten and authority configurations.
+
+**Configuration-scoped profile entries (`profileChange`).** Adding the new operations to
+the shared `mortgage-payment` profile kept the oracle identical but changed the baseline
+description packet. Every agent describes every profile operation, so all mortgage-main
+traces would have moved. A configuration entry may now carry `profileChange`, a keyed patch
+applied to the profile for that configuration's runs only. Branch `profileChange` patches
+apply on top of it. A keyed patch over the profile's `claims` list is keyed by `kind`. The
+profile file is unchanged. This configuration adds `urn:op:property-access` and
+`urn:op:balance-copy` (both invoke operations for the valuation purpose), a
+`property.access` claim rule (source Sam, method `self-reported`), `property.access` in
+`urn:purpose:valuation`, and the operation labels. Regenerated baseline mortgage-main traces
+(baseline and `settlement-x402`) compare equal to the stored files, apart from fields added
+at write time. C3 compares worlds only, so it does not inspect `profileChange`.
+
+**Scenario world (configuration patch only; C3 reports nothing).**
+- Statement `property-access`, issued by Sam about himself, with no terms.
+- Source rules accepting Sam for `property.access`, for Sam's agent and the valuer's agent.
+- Recipient entries: Sam's agent accepts the valuer and `other-valuer` for property access;
+  the valuer's agent and the new agent list Sam.
+- New party `other-valuer-agent` (`actsFor: other-valuer`, its own identity and key), its
+  introduction to Sam's agent, and its mandate.
+- The valuer's own mandate gains `urn:rule:use:property-access` for the valuation purpose.
+  This is not a rule in Sam's mandate: no rule there decides the use. The brief's "no new
+  mandate rule" is read as Sam's mandate, because the valuer's gate cannot send the request
+  without its own grant.
+
+C3 does not report the added party, statement or rules. It reports only edits to, and
+removals of, baseline items, so an addition is visible as an addition. Decision (d) needed
+no change to C3.
+
+**Added segment** (after `fee-acknowledged`, declared `added: [{ segment:
+"property-access-held", closes: { agent: valuer-agent, kind: deliver, outcome: admit } }]`):
+1. Sam's agent admits the statement.
+2. The valuer's agent invokes `urn:op:property-access`.
+3. Sam's gate passes recipient and disclosure, then holds data-terms with `ask-principal`
+   and `approval-required`, and asks Sam.
+4. Sam approves; the re-run passes with `approval-given`, and the deliver goes out.
+5. The valuer's inbound gate admits it.
+
+Departure: the segment closes on the admitted deliver, not on a receipt. Under the invoke
+pattern, a deliver completes the conversation, and the state machine refuses a receipt
+after it. `addedExchanges` is 2. C1 to C5 are empty, and the main outcome equals the
+baseline's.
+
+**Branches.**
+- `approval-reused`: after the main segment, `other-valuer-agent` asks for the same
+  statement. Its reply has a different recipient and digest, so Sam's earlier approval does
+  not match it. Sam's gate asks again: `data-terms`, `approval-required`, `ask-principal`,
+  as registered. **runs.**
+- `supplier-terms-hold` (new): the valuer asks for a copy of the balance statement
+  (`urn:op:balance-copy`), and Sam's reply carries Harbour's deposit credential. Measured:
+  `disclosure`, `excessive-scope`, stop, and Sam is never asked. **disagrees** with the
+  brief's `data-terms`/`prohibited`, because the earlier disclosure check stops it: a bank
+  balance is not needed for the valuation purpose. Gate order is unchanged. The registered
+  expectation is kept in `catalogueExpected`, and the reason is in the branch's `what`.
+  Sam's agent offers no `balance-statement` handler, because that operation is Harbour's.
+  This is why the request uses a new valuation-purpose operation.
+
+**Manifest and traces.** The three rows were regenerated with
+`--scenario=mortgage-main --configuration=usage-control-human-approval` and merged in the
+original row and index order. Three traces and three outlines were added; no other trace
+changed. Counts: **282 paths, 239 runs, 15 disagree, 28 blocked**, up from 281 / 237 / 14 /
+30. `test/labels.test.ts` alternative counts: 108→109 rows, runs 85→87, disagrees 2→3,
+blocked 21→19. `test/usage-human-alternative.test.ts` is now a passing-run test of the
+main path, the approval binding and both branches.
+
+### Brief 31 item 3: lender register exchange and `identity-anonymous` (blocked to runs)
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+**Register read from admitted answers.** `src/trust/resolver.ts` gains the option
+`answeredRegisters` (register ids) and `bindAnswers(read)`. For a listed register, the
+resolver's root view holds only the entries of signed register answers the agent has
+admitted, never the local table. Registers that are not listed, and agents that list
+none, keep their present tables, so their traces do not move.
+`AgentRuntime` binds the reader to its own gate memory. It reads admitted facts of claim
+type `register.entry` (subject = the listed party; `authorizedFor`, `claimTypes`, `status`,
+`entry` id from the statement) and skips malformed ones (fail closed). The scenario field
+`trust.answeredRegisters: { <agent>: [<register id>] }` is new in the schema. The JSON
+Schema is regenerated.
+
+**`identity-anonymous` world** (configuration patch; C3 reports nothing):
+- `lender-register` (identity = the sector register id the trust root already
+  delegates to) and `lender-register-agent`, with its own key, advertising
+  `public-read` only, an empty mandate, and a source rule for its own entries.
+- Two register-signed `register.entry` statements carrying exactly the table's North Bank
+  and Harbour Bank entries (same entry ids).
+- Sam's agent gains a source rule for the register, a recipient entry, a mandate rule
+  `urn:rule:use:lender-lookup`, an introduction and `answeredRegisters` for the sector
+  register.
+- `profileChange` adds `urn:op:lender-lookup` (public, product-search purpose), a
+  `register.entry` claim rule and `register.entry` in the product-search purpose.
+
+**Added segment** (closes on Sam's admitted `deliver`; `addedExchanges` 2):
+1. The register's agent holds the two entries.
+2. Sam's agent sends the lookup under the public-readonly configuration, unsigned and with
+   no requester actor or party (the test checks the wire). The register's gate records
+   `authority not-applicable (no-principal)`.
+3. The register returns both signed entries; Sam's gate admits them through all five
+   checks.
+
+Departure: the brief places the segment before `apply`. It is placed earlier, right after
+`instruction` and before the baseline product query, because Sam's source checks on the
+index's product records already consult the sector register. With the table no longer
+read, the answer must be held before then. The product query is unchanged and stays a
+baseline exchange.
+
+C1 (the lender's source and recipient verdicts unchanged), C2 and C5 are empty. If the
+North Bank entry is removed from the answer, Sam's agent no longer reaches the lender
+(`describe-lender`: recipient `not-authorised`), which shows the verdicts come from the
+admitted answer.
+
+**Failure `anonymous-asks-for-more`.** The branch adds, for the branch only, a mandate rule
+and a recipient entry so that Sam's own gate lets the request out. Sam's agent then sends
+the index an unnamed `public-read` request for `balance-statement`, an operation
+restricted to named parties. The runtime already refused such a request before the core
+(`credentials-required`), but the refusal recorded no check. The inbound admission now
+first records `authority fail (not-authorised)` and the gate decision `refuse
+(not-authorised)`; the wire reason stays `credentials-required`, which tells the asker what
+it lacks. This happens only for requests without an actor. No existing trace contains
+`credentials-required`, and the oracle is unchanged. Result: `authority`, `not-authorised`,
+refuse, as registered. **runs.**
+
+**Advertising.** `alternativeInstalled` advertises `identity-anonymous` only when the
+agent's configuration is `identity-anonymous` itself. Every `public-read` client also has
+identity `anonymous`, and keying on the layer would have changed baseline descriptions.
+
+**Manifest.** The two rows were regenerated with `--configuration=identity-anonymous` and
+merged in order. Counts: **282 paths, 241 runs, 15 disagree, 26 blocked**. In
+`test/labels.test.ts`, alternative runs went from 87 to 89 and blocked from 19 to 17.
+`test/anonymous-alternative.test.ts` is now a passing-run test (wire anonymity, confinement,
+the negative answer, the failure branch).
+
+**Item 4 (`accountability-regulator-claim`) not built.** What it needs: this configuration
+can declare `requires: "identity-anonymous"` (the item 1 mechanism) to obtain the register
+exchange; `profileChange` can add the `forum` declaration that `LocalForum` reads. Still
+missing:
+- a register answer field naming the forum as the lender's dispute route;
+- a code change so that `forum-claim` addresses the forum named in that admitted answer
+  (today the claim's recipient is the `LocalForum`'s own identity, from the profile);
+- the forum party's agent;
+- the lender-signed fee statement exchange;
+- the claim segment with both sides' record exports, approvals and the decision admitted
+  by both agents.
+
+The blocked reason now says the register exchange exists and lists only these. The
+`entry-withheld` failure would reuse `record-segment` with `attack: "gap"`.
+
+**Validation (items 2 and 3).** `test/confinement.test.ts` 7/7 pass after item 2 (9 min 21 s)
+and again after item 3 (9 min 44 s). Every scenario was run under the baseline and every
+one of its configurations, from the built engine, with no error. Regenerated baseline
+mortgage-main traces (baseline, `settlement-x402`), `no-agent-on-the-other-side`, and both
+new configurations compare equal to the stored files, apart from fields added at write
+time. 19 focused test files pass, 62 tests: the alternative tests, `labels`, `traces`,
+`oracle-snapshot`, `oracle`, `recorded-joint`, `meaning-reliance-alternatives`,
+`solid-reference-status`, `configuration-matrix`, `approval-release`, `trust-pinned-mortgage`
+and `trust-federation-proofs`. `tsc --noEmit` passes; biome is clean on the changed source
+and tests (`scenarios/mortgage-main.json` was not biome-formatted at HEAD either).
+`export-schemas --check` passes. Oracle: 164 paths, parsed JSON equal. RDF guard: 0
+failures, 213 allowances. No vocabulary term was added, so codegen was not run. The
+`accountability-regulator-claim` rows were regenerated for their new blocked wording.
+`pnpm run build` was not used for regeneration: its `generate-traces.mjs` step rewrites
+the legacy traces, so only `tsc -p tsconfig.build.json` and the per-configuration
+`run-scenarios.mjs` were run, and the files the build step had touched were restored from
+HEAD. No commit, network request or dependency was added.

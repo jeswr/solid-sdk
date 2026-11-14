@@ -450,6 +450,12 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
   if (id === alternativeWireId("commitments-agreement-credential"))
     return !!ctx.agreementCredential;
   if (id === alternativeWireId("usage-control-odrl-model-tighten")) return !!ctx.usageModel;
+  // Brief 31 §2.1: advertised only by an agent whose gate holds undecided own-statement uses.
+  if (id === alternativeWireId("usage-control-human-approval"))
+    return ctx.configuration?.layers["usage-control"] === "human-approval";
+  // Brief 31 §2.2: only the configured agents, not every public-read client.
+  if (id === alternativeWireId("identity-anonymous"))
+    return ctx.configuration?.id === "identity-anonymous";
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

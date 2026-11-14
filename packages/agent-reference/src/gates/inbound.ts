@@ -2127,6 +2127,17 @@ export class Admission {
   }
 
   /** Integrity failed: one check event, then the refusal. */
+  /**
+   * Brief 31 §2.2: an unnamed requester asking for an operation restricted to named parties
+   * fails the authority check; the gate refuses before the core sees the request.
+   */
+  failAuthority(caption: string): void {
+    if (this.done.has("authority")) return;
+    this.done.add("authority");
+    this.gate.verdictEvent("authority", "fail", caption, { reason: "not-authorised" });
+    this.refuse("not-authorised", caption);
+  }
+
   failIntegrity(reason: string, detail: string): void {
     this.done.add("integrity");
     this.gate.verdictEvent("integrity", "fail", `Integrity fails: ${detail}.`, { reason });

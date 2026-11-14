@@ -54,12 +54,12 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "runs")).toHaveLength(152);
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(12);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
-  // 26e, settlement, 26c, 26d and 26f rows.
-  expect(alternatives).toHaveLength(108);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(85);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(2);
+  // 26e, settlement, 26c, 26d and 26f rows; brief 31 adds supplier-terms-hold.
+  expect(alternatives).toHaveLength(109);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(89);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(3);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(21);
+  expect(blocked).toHaveLength(17);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,

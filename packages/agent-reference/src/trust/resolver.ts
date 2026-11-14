@@ -79,10 +79,47 @@ export interface TrustResolverOptions {
   readonly root?: TrustRoot;
   readonly name: (iri: string | undefined) => string;
   readonly ownListOnly?: boolean;
+  /**
+   * Brief 31 §2.2: registers the root delegates to whose entries this agent takes only from
+   * signed register answers it has admitted, never from a local table.
+   */
+  readonly answeredRegisters?: readonly Iri[];
+}
+
+/** One entry read from an admitted, signed register answer. */
+export interface AnsweredEntry {
+  readonly register: Iri;
+  readonly entry: RegisterEntry;
 }
 
 export class TrustResolver {
+  private answers: () => readonly AnsweredEntry[] = () => [];
   constructor(private readonly opts: TrustResolverOptions) {}
+
+  /** The agent's runtime supplies the entries of the register answers its gate admitted. */
+  bindAnswers(read: () => readonly AnsweredEntry[]): void {
+    this.answers = read;
+  }
+
+  /** True when this agent reads at least one register from admitted answers. */
+  get readsAnswers(): boolean {
+    return (this.opts.answeredRegisters?.length ?? 0) > 0;
+  }
+
+  /** The root as this agent sees it: answered registers hold only admitted entries. */
+  private delegates(root: TrustRoot): readonly Register[] {
+    const answered = this.opts.answeredRegisters ?? [];
+    if (!answered.length) return root.delegates;
+    const entries = this.answers();
+    return root.delegates.map((register) =>
+      answered.includes(register.id)
+        ? {
+            ...register,
+            entries: entries.filter((a) => a.register === register.id).map((a) => a.entry),
+          }
+        : register,
+    );
+  }
   get pinnedOnly(): boolean {
     return this.opts.ownListOnly === true;
   }
@@ -164,7 +201,9 @@ export class TrustResolver {
       (types ?? []).some((t) =>
         t.endsWith(".*") ? input.claimType.startsWith(t.slice(0, -1)) : t === input.claimType,
       );
-    const register = root.delegates.find((r) => r.entries.some((e) => e.party === input.source));
+    const register = this.delegates(root).find((r) =>
+      r.entries.some((e) => e.party === input.source),
+    );
     const entry = register?.entries.find((e) => e.party === input.source);
     if (!register || !entry) {
       path.push({
@@ -254,7 +293,9 @@ export class TrustResolver {
         checkedAt: input.at,
       };
     }
-    const register = root.delegates.find((r) => r.entries.some((e) => e.party === input.party));
+    const register = this.delegates(root).find((r) =>
+      r.entries.some((e) => e.party === input.party),
+    );
     if (!register) {
       path.push({
         at: root.name,

@@ -659,6 +659,9 @@ const configurationOptions = LAYER_IDS.flatMap((layer) =>
         added: z.array(addedSegment).optional(),
         // Brief 31 §1: the one admitted combination, a prerequisite configuration.
         requires: slug.optional(),
+        // Brief 31 §2.1: profile entries only this configuration uses (keyed additions), so
+        // baseline descriptions and traces stay unchanged.
+        profileChange: object.optional(),
       }),
     ),
 );
@@ -817,6 +820,8 @@ export const scenarioSchema = z.strictObject({
     sources: z.record(slug, z.array(sourceRule)),
     root: root.optional(),
     controllers: z.record(z.string(), z.string()).default({}),
+    // Brief 31 §2.2: per agent, root registers read only from admitted signed answers.
+    answeredRegisters: z.record(slug, z.array(iri)).optional(),
   }),
   statements: z.array(
     z.strictObject({

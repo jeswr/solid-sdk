@@ -191,7 +191,12 @@ export function patch<T>(original: T, change: unknown, listKey = "id"): T {
   for (const [key, value] of Object.entries(change)) {
     if (["__proto__", "prototype", "constructor"].includes(key))
       throw new Error("unsafe patch key");
-    out[key] = patch(out[key], value, key === "mandates" ? "agent" : "id");
+    // Profile claim rules are keyed by their claim kind.
+    out[key] = patch(
+      out[key],
+      value,
+      key === "mandates" ? "agent" : key === "claims" ? "kind" : "id",
+    );
   }
   return out as T;
 }
@@ -349,6 +354,9 @@ export async function runScenario(
   const configured = alternative
     ? scenarioSchema.parse(matrixWorld(scenario, alternative))
     : scenario;
+  const configuredProfile = alternative?.profileChange
+    ? domainProfileSchema.parse(patch(profile, alternative.profileChange))
+    : profile;
   const paths = [
     {
       id: "main",
@@ -364,10 +372,13 @@ export async function runScenario(
   const exercisedStress = new Set<Scenario["stress"][number]>();
   for (const path of paths) {
     const world = scenarioSchema.parse(patch(configured, path.change));
-    if (profile.id !== world.profile) throw new Error("branch profile mismatch");
-    validateReferences(profile, world);
+    if (configuredProfile.id !== world.profile) throw new Error("branch profile mismatch");
+    validateReferences(configuredProfile, world);
     const pathProfile = domainProfileSchema.parse(
-      patch(profile, "profileChange" in path && path.profileChange ? path.profileChange : {}),
+      patch(
+        configuredProfile,
+        "profileChange" in path && path.profileChange ? path.profileChange : {},
+      ),
     );
     if (alternative?.change.settlement)
       settlementWorld(world, pathProfile, alternative.change.settlement);
@@ -2029,6 +2040,9 @@ async function runPath(
         root: scenario.trust.root,
         ownListOnly: configuration.id === "trust-pinned-list",
         name,
+        ...(scenario.trust.answeredRegisters?.[agent.id]
+          ? { answeredRegisters: scenario.trust.answeredRegisters[agent.id] }
+          : {}),
       }),
       ...(mandate.limits
         ? {

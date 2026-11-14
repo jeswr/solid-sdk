@@ -8272,8 +8272,265 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "identity-anonymous",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.2: not a confinement problem. The cell needs the lender-register exchange: a separately keyed lender-register agent that answers an unsigned public-read lookup with a signed statement, admitted through the five inbound checks, from which the trust resolver takes the lender's entry. Today that lookup is a synchronous TrustResolver over local unsigned register tables, not a signed register exchange; merely relabelling the current public-read configuration would not meet design 26 section 6. The product query is already anonymous and stays a baseline exchange."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 193,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 201,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 208,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 215,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 227,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 235,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 245,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 253,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 260,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 268,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 276,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 286,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 300,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 308,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 318,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 327,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 335,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 344,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 352,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 361,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 369,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 377,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 385,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 395,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 405,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 413,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 422,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 430,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 437,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 444,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 454,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 462,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 469,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 478,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 486,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 493,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 501,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 511,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 519,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 528,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 560,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 568,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 576,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 584,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 593,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 603,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 612,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 620,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 628,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 2,
+      "trace": "mortgage-main--identity-anonymous.json"
     },
     {
       "scenario": "mortgage-main",
@@ -8282,8 +8539,25 @@
       "settlement": "rdf-order",
       "configuration": "identity-anonymous",
       "what": "An unnamed requester asks the index for an operation restricted to named parties.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.2: not a confinement problem. The cell needs the lender-register exchange: a separately keyed lender-register agent that answers an unsigned public-read lookup with a signed statement, admitted through the five inbound checks, from which the trust resolver takes the lender's entry. Today that lookup is a synchronous TrustResolver over local unsigned register tables, not a signed register exchange; merely relabelling the current public-read configuration would not meet design 26 section 6. The product query is already anonymous and stays a baseline exchange."
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "not-authorised",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "refuse",
+        "reason": "not-authorised"
+      },
+      "consequences": [
+        {
+          "seq": 649,
+          "agent": "index",
+          "outcome": "go"
+        }
+      ],
+      "addedExchanges": 2,
+      "trace": "mortgage-main--anonymous-asks-for-more--identity-anonymous.json"
     },
     {
       "scenario": "mortgage-main",
@@ -11250,8 +11524,296 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "usage-control-human-approval",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.1: the revised confinement rule admits the valuer's request as an added exchange. Harbour's signed terms require a regulated lender and Sam's approval cannot waive that supplier restriction (UC-9), so the valuer must instead ask for the property access details, a statement Sam issues himself, whose undecided data-terms use goes to Sam bound to digest, recipient, purpose and expiry. Not built: that statement and its operation, and the human-approval data-terms path that asks Sam about an undecided use of his own data. The existing digest-bound approval and release checks are retained; no second approval path is installed."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 212,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 220,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 230,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 244,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 252,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 262,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 288,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 296,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 305,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 313,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 321,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 329,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 339,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 349,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 357,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 366,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 374,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 381,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 388,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 398,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 406,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 413,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 422,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 430,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 437,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 445,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 455,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 463,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 472,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 504,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 512,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 520,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 528,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 537,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 547,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 556,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 564,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 572,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 578,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 588,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 596,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 601,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 612,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 620,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 2,
+      "trace": "mortgage-main--usage-control-human-approval.json"
     },
     {
       "scenario": "mortgage-main",
@@ -11259,9 +11821,41 @@
       "path": "approval-reused",
       "settlement": "rdf-order",
       "configuration": "usage-control-human-approval",
-      "what": "An approval of disclosure to the valuer is presented for a different recipient.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.1: the revised confinement rule admits the valuer's request as an added exchange. Harbour's signed terms require a regulated lender and Sam's approval cannot waive that supplier restriction (UC-9), so the valuer must instead ask for the property access details, a statement Sam issues himself, whose undecided data-terms use goes to Sam bound to digest, recipient, purpose and expiry. Not built: that statement and its operation, and the human-approval data-terms path that asks Sam about an undecided use of his own data. The existing digest-bound approval and release checks are retained; no second approval path is installed."
+      "what": "After Sam approved release of the property access details to the valuer, a different valuation party asks for the same statement; the approval does not carry over and Sam is asked again.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "addedExchanges": 2,
+      "trace": "mortgage-main--approval-reused--usage-control-human-approval.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "supplier-terms-hold",
+      "settlement": "rdf-order",
+      "configuration": "usage-control-human-approval",
+      "what": "The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose.",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "addedExchanges": 2,
+      "trace": "mortgage-main--supplier-terms-hold--usage-control-human-approval.json"
     },
     {
       "scenario": "mortgage-main",
@@ -11563,7 +12157,7 @@
       "settlement": "rdf-order",
       "configuration": "accountability-regulator-claim",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, so the cell is unblocked once the lender-register exchange exists. Not built: that signed register exchange naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7). No hard-coded forum is relabelled as register discovery."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment. The signed lender-register exchange now exists (identity-anonymous: an anonymous public-read lookup whose admitted register.entry answers the resolver reads), and this cell could require that configuration as its prerequisite. Not built: a register answer naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7); today a forum claim is addressed to the LocalForum's own identity. No hard-coded forum is relabelled as register discovery."
     },
     {
       "scenario": "mortgage-main",
@@ -11573,7 +12167,7 @@
       "configuration": "accountability-regulator-claim",
       "what": "The lender withholds a record entry; the claimant receipt commitment exposes the gap.",
       "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, so the cell is unblocked once the lender-register exchange exists. Not built: that signed register exchange naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7). No hard-coded forum is relabelled as register discovery."
+      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment. The signed lender-register exchange now exists (identity-anonymous: an anonymous public-read lookup whose admitted register.entry answers the resolver reads), and this cell could require that configuration as its prerequisite. Not built: a register answer naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7); today a forum claim is addressed to the LocalForum's own identity. No hard-coded forum is relabelled as register discovery."
     },
     {
       "scenario": "mortgage-main",

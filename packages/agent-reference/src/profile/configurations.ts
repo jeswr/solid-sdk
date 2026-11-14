@@ -193,23 +193,17 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ),
     status: "unresolved",
     unresolved: [
-      "Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, so the cell is unblocked once the lender-register exchange exists. Not built: that signed register exchange naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7). No hard-coded forum is relabelled as register discovery.",
+      "Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment. The signed lender-register exchange now exists (identity-anonymous: an anonymous public-read lookup whose admitted register.entry answers the resolver reads), and this cell could require that configuration as its prerequisite. Not built: a register answer naming a forum as the lender's dispute route, a forum party with its own key and agent, a lender-signed fee statement whose fee is not in the approved terms, and the claim segment reusing the fee-dispute step types and LocalForum with the endpoint taken from the register answer rather than the profile (AC-7); today a forum claim is addressed to the LocalForum's own identity. No hard-coded forum is relabelled as register discovery.",
     ],
   },
   [alternativeWireId("commitments-agreement-credential")]: localDefinition(
     alternativeWireId("commitments-agreement-credential"),
     "Native two-proof Data Integrity valuation credential inside signed messages",
   ),
-  [alternativeWireId("usage-control-human-approval")]: {
-    ...localDefinition(
-      alternativeWireId("usage-control-human-approval"),
-      "Approval of an undecided use — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.1: the revised confinement rule admits the valuer's request as an added exchange. Harbour's signed terms require a regulated lender and Sam's approval cannot waive that supplier restriction (UC-9), so the valuer must instead ask for the property access details, a statement Sam issues himself, whose undecided data-terms use goes to Sam bound to digest, recipient, purpose and expiry. Not built: that statement and its operation, and the human-approval data-terms path that asks Sam about an undecided use of his own data. The existing digest-bound approval and release checks are retained; no second approval path is installed.",
-    ],
-  },
+  [alternativeWireId("usage-control-human-approval")]: localDefinition(
+    alternativeWireId("usage-control-human-approval"),
+    "Principal approval of an undecided use of the principal's own statement",
+  ),
   [alternativeWireId("meaning-negotiated")]: localDefinition(
     alternativeWireId("meaning-negotiated"),
     "Exact-exchange principal approval of a recorded term proposal",
@@ -248,16 +242,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("authority-authorization-server"),
     "Principal-approved key-bound authorization grant",
   ),
-  [alternativeWireId("identity-anonymous")]: {
-    ...localDefinition(
-      alternativeWireId("identity-anonymous"),
-      "Anonymous public discovery — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.2: not a confinement problem. The cell needs the lender-register exchange: a separately keyed lender-register agent that answers an unsigned public-read lookup with a signed statement, admitted through the five inbound checks, from which the trust resolver takes the lender's entry. Today that lookup is a synchronous TrustResolver over local unsigned register tables, not a signed register exchange; merely relabelling the current public-read configuration would not meet design 26 section 6. The product query is already anonymous and stays a baseline exchange.",
-    ],
-  },
+  [alternativeWireId("identity-anonymous")]: localDefinition(
+    alternativeWireId("identity-anonymous"),
+    "Anonymous lender lookup in the sector register, answered by signed register entries",
+  ),
   [alternativeWireId("identity-email-endpoint")]: {
     ...localDefinition(
       alternativeWireId("identity-email-endpoint"),
