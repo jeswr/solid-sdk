@@ -21,6 +21,7 @@ import { DataFactory, Store } from "n3";
 import { MESSAGE_KINDS, type MessageKind } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
 import { attachmentTerm } from "./attachments.js";
+import { objectsAt } from "./indexed-store.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const XSD = "http://www.w3.org/2001/XMLSchema#";
@@ -36,12 +37,16 @@ export class RdfNode extends TermWrapper {
   get id(): string {
     return this.value;
   }
+  /** Read the store's subject/predicate index without allocating wrapper sets.
+   * Keep one term per quad, including repetitions in different named graphs.
+   */
+  protected objects(predicate: string): Term[] {
+    return objectsAt(this.dataset, this as never, predicate);
+  }
   protected one(predicate: string): Term | undefined {
-    const values = [...objectTerms(this, predicate)];
+    const values = this.objects(predicate);
     if (values.length > 1) throw new TypeError(`Ambiguous singleton at ${predicate}`);
-    return values[0] === undefined
-      ? undefined
-      : attachmentTerm(this.dataset, TermAs.term(values[0]));
+    return values[0] === undefined ? undefined : attachmentTerm(this.dataset, values[0]);
   }
   protected iri(predicate: string): string | undefined {
     const value = this.one(predicate);

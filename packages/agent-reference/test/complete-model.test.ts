@@ -6,13 +6,14 @@ import { readFileSync, writeFileSync } from "fs";
 import { expect, it } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
 import { BoundsError, resolveLimits } from "../src/core/limits.js";
+import { MESSAGE_KINDS } from "../src/core/types.js";
 import { materializeAttachments } from "../src/model/attachments.js";
 import { ActionIntentNode, AgreementNode, MessageNode } from "../src/model/message-nodes.js";
 import { readAttachmentDocument, writeAttachmentDocument } from "../src/wire/attachments.js";
 import { readDocument, writeDocument } from "../src/wire/document.js";
 import { captureModelCorpus } from "./helpers/model-corpus.js";
 
-it("round-trips every executable trace packet, action intent and agreement through RDF and shapes", async () => {
+async function roundTripCorpus(): Promise<void> {
   const corpus = await captureModelCorpus();
   const failures: { type: string; field: string; error: string }[] = [];
   let messages = 0,
@@ -112,6 +113,27 @@ it("round-trips every executable trace packet, action intent and agreement throu
     );
     messages++;
   }
+  // The live scenarios currently emit ten kinds. Pin the remaining wire kind
+  // explicitly so neither sampling nor the full corpus leaves it untested.
+  const kinds = new Set(corpus.messages.map((item) => item.message.kind));
+  if (!kinds.has("indeterminate")) {
+    const message = {
+      profile: "urn:test:profile",
+      configuration: "urn:test:configuration",
+      id: "urn:test:corpus-indeterminate",
+      conversation: "urn:test:conversation",
+      kind: "indeterminate" as const,
+      from: { actor: "urn:test:sender" },
+      to: { actor: "urn:test:receiver" },
+      createdAt: "2026-11-13T09:00:00.000Z",
+      expiresAt: "2026-11-13T10:00:00.000Z",
+      body: { ref: "urn:test:prior", reason: "unsupported-term" as const },
+    };
+    await check("Message/indeterminate", message.id, message, MessageNode.toNode);
+    kinds.add("indeterminate");
+    messages++;
+  }
+  expect([...kinds].sort()).toEqual([...MESSAGE_KINDS].sort());
   for (const intent of corpus.intents) {
     await check("ActionIntent", intent.operation, intent, ActionIntentNode.toNode);
     intents++;
@@ -123,7 +145,9 @@ it("round-trips every executable trace packet, action intent and agreement throu
   const report = {
     packets: corpus.packets,
     paths: corpus.paths,
+    coverage: corpus.coverage,
     messages,
+    kinds: [...kinds].sort(),
     intents,
     agreements,
     expandedLimits,
@@ -133,11 +157,25 @@ it("round-trips every executable trace packet, action intent and agreement throu
   if (process.env.BRIEF22C_MODEL_REPORT)
     writeFileSync(process.env.BRIEF22C_MODEL_REPORT, JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify(report, null, 2));
-  expect(corpus.paths).toBeGreaterThanOrEqual(165);
-  expect(messages).toBeGreaterThan(500);
-  expect(intents).toBeGreaterThan(100);
-  expect(agreements).toBeGreaterThan(10);
+  expect(corpus.coverage.actual).toEqual(corpus.coverage.expected);
+  if (process.env.FULL_CORPUS === "1") {
+    expect(corpus.paths).toBeGreaterThanOrEqual(165);
+    expect(messages).toBeGreaterThan(500);
+    expect(intents).toBeGreaterThan(100);
+    expect(agreements).toBeGreaterThan(10);
+  } else {
+    expect(corpus.paths).toBeGreaterThan(0);
+    expect(messages).toBeGreaterThan(0);
+    expect(intents).toBeGreaterThan(0);
+    expect(agreements).toBeGreaterThan(0);
+  }
   expect(failures).toEqual([]);
   for (const [key, count] of requiredCounts)
     expect(carriageCounts.get(key) ?? 0, key).toBeGreaterThanOrEqual(count);
-}, 2_700_000);
+}
+
+it(
+  "round-trips all model kinds and configurations (FULL_CORPUS=1 for every path)",
+  roundTripCorpus,
+  process.env.FULL_CORPUS === "1" ? 1_800_000 : 900_000,
+);

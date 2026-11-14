@@ -5,11 +5,12 @@ import { digestQuads } from "@jeswr/solid-vc";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
 import jsonld from "jsonld";
-import { DataFactory, Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
 import { digestBytes } from "../core/canonical.js";
 import { BoundsError, DEFAULT_LIMITS, type PilotLimits, parseBoundedJson } from "../core/limits.js";
 import { MESSAGE_KINDS } from "../core/types.js";
+import { IndexedStore } from "../model/indexed-store.js";
 import { AWP } from "../profile/vocabulary.js";
 import {
   ANSWERABLE_CONTEXT,
@@ -37,6 +38,9 @@ const { namedNode } = DataFactory;
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const messageTypes = MESSAGE_KINDS.map((kind) => AWP + kind[0]?.toUpperCase() + kind.slice(1));
 let shapesPromise: Promise<Store> | undefined;
+// Shapes and compiled constraints are immutable. Data, reports and node-check
+// counters belong to one admission; never share those between concurrent calls.
+const validators: SHACLValidator[] = [];
 function shapes(): Promise<Store> {
   shapesPromise ??= parseRdf(
     readFileSync(new URL("../../vocab/answerable.shacl.ttl", import.meta.url), "utf8"),
@@ -107,11 +111,18 @@ export function assertBlankNodeLimit(dataset: Store): void {
     }
 }
 
+// Pure conversion only: never cache signature/key attribution or a mutable graph.
+// The exact JSON bytes and all expansion/parser limits form the cache key.
+const convertedDocuments = new Map<string, Store>();
 export async function documentDataset(
   document: JsonLdDocument,
   limits: PilotLimits = DEFAULT_LIMITS,
 ): Promise<Store> {
-  document = readJson(JSON.stringify(document), limits);
+  const bytes = JSON.stringify(document);
+  document = readJson(bytes, limits);
+  const key = digestBytes(bytes) + JSON.stringify(limits);
+  const cached = convertedDocuments.get(key);
+  if (cached) return new IndexedStore([...cached]);
   // The workspace streaming parser incorrectly treats repeated protected type-scoped
   // contexts as redefinitions when inherited at nested nodes. Expand with the standard
   // JSON-LD processor. The streaming JSON-LD reader also splits a nested ODRL
@@ -142,11 +153,15 @@ export async function documentDataset(
     }
     return replacement as unknown as T;
   };
-  return new Store(
+  const dataset = new IndexedStore(
     [...parsed].map((q) =>
       DataFactory.quad(term(q.subject), q.predicate, term(q.object), term(q.graph)),
     ),
   );
+  if (convertedDocuments.size >= 16)
+    convertedDocuments.delete(convertedDocuments.keys().next().value!);
+  convertedDocuments.set(key, new IndexedStore([...dataset]));
+  return dataset;
 }
 
 export async function validateRoot(dataset: Store, root: string): Promise<void> {
@@ -168,20 +183,28 @@ export async function validateRoot(dataset: Store, root: string): Promise<void> 
       ? [AWP + "Message", ...kinds]
       : types.filter((type) => modeledTypes.has(type) && type !== AWP + "Message");
   if (required.length === 0) throw new DocumentError(`shape=${AWP}MessageShape;path=${RDF_TYPE}`);
-  const validator = new SHACLValidator(shapeGraph, { maxErrors: 8 });
-  for (const type of required) {
-    const targets = shapeGraph.getSubjects(
-      namedNode("http://www.w3.org/ns/shacl#targetClass"),
-      namedNode(type),
-      null,
-    );
-    for (const shape of targets) {
-      const report = await validator.validateNode(dataset, namedNode(root), shape);
-      if (!report.conforms) {
-        const result = report.results[0];
-        throw new DocumentError(`shape=${shape.value};path=${result?.path?.value ?? RDF_TYPE}`);
+  const validator = validators.pop() ?? new SHACLValidator(shapeGraph, { maxErrors: 8 });
+  try {
+    for (const type of required) {
+      const targets = shapeGraph.getSubjects(
+        namedNode("http://www.w3.org/ns/shacl#targetClass"),
+        namedNode(type),
+        null,
+      );
+      for (const shape of targets) {
+        const report = await validator.validateNode(dataset, namedNode(root), shape);
+        if (!report.conforms) {
+          const result = report.results[0];
+          throw new DocumentError(`shape=${shape.value};path=${result?.path?.value ?? RDF_TYPE}`);
+        }
       }
     }
+  } finally {
+    // validateNode does not reset its engine. clone resets all report, error,
+    // recursion and maxNodeChecks state while retaining the same limits.
+    validator.validationEngine = validator.validationEngine.clone();
+    validator.$data = validator.factory.clownface();
+    if (validators.length < 2) validators.push(validator);
   }
 }
 
@@ -200,7 +223,8 @@ export async function readDocument(
     if (format !== "application/ld+json") throw new DocumentError("unsupported-media-type");
     const key = digestBytes(bytes) + JSON.stringify(limits) + (options.suite ?? "jws");
     const cached = admittedDocuments.get(key);
-    if (cached) return { ok: true, root: cached.root, dataset: new Store([...cached.dataset]) };
+    if (cached)
+      return { ok: true, root: cached.root, dataset: new IndexedStore([...cached.dataset]) };
     const document = readJson(bytes, limits);
     const id = document.id ?? document["@id"];
     if (
@@ -215,7 +239,7 @@ export async function readDocument(
     await validateRoot(dataset, id);
     if (admittedDocuments.size >= 32)
       admittedDocuments.delete(admittedDocuments.keys().next().value!);
-    admittedDocuments.set(key, { dataset: new Store([...dataset]), root: id });
+    admittedDocuments.set(key, { dataset: new IndexedStore([...dataset]), root: id });
     return { ok: true, dataset, root: id };
   } catch (error) {
     return refusal(error);
@@ -268,7 +292,7 @@ export async function writeDocument(
     id.startsWith("_:")
   )
     throw new DocumentError("invalid-root-iri");
-  const dataset = new Store([...node.dataset]);
+  const dataset = new IndexedStore([...node.dataset]);
   const expanded = JSON.parse(await serialize([...dataset], { format: "application/ld+json" }));
   const compacted = await jsonld.compact(
     expanded,

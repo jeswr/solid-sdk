@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 /** Complete wrappers for classes rejected by closed generator admission. No cached objects. */
 import type { Term } from "@jeswr/fetch-rdf";
-import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import { RequiredAs, TermAs, TermFrom } from "@rdfjs/wrapper";
-import { DataFactory, Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import { digestOf } from "../core/canonical.js";
 import type { Json, JsonObject } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
+import { IndexedStore } from "./indexed-store.js";
 import { NamedValuesNode, readValue, SCHEMA, scopedId, writeValue, XSD } from "./named-values.js";
 import { RdfNode } from "./nodes.js";
 
@@ -50,7 +50,7 @@ export function makeNode<T>(
   name: string,
   object: T,
   id?: string,
-  dataset = new Store(),
+  dataset: Store = new IndexedStore(),
 ): CoreNode<T> {
   const model = models.get(name);
   if (!model) throw new TypeError(`Unknown core model ${name}`);
@@ -112,16 +112,14 @@ export abstract class CoreNode<T> extends RdfNode {
     if (field.kind === "id") return this.id;
     if (field.kind === "constant") return field.constant;
     if (field.kind === "nodes") {
-      const nodes = [...objectTerms(this, field.term)].map((t) =>
-        this.view(this.linkModel(field), TermAs.term(t)),
-      );
+      const nodes = this.objects(field.term).map((t) => this.view(this.linkModel(field), t));
       nodes.sort((a, b) => a.position - b.position);
       for (let i = 0; i < nodes.length; i++)
         if (nodes[i]?.position !== i) throw new TypeError("Invalid collection position");
       return nodes.length || this.present(field.term) ? nodes : undefined;
     }
     if (field.kind === "strings") {
-      const terms = [...objectTerms(this, field.term)];
+      const terms = this.objects(field.term);
       if (terms.length && terms.every((term) => term.termType === "Literal")) {
         if (terms.some((term) => term.datatype.value !== XSD + "string" || term.language))
           throw new TypeError("Expected string list");
@@ -141,8 +139,7 @@ export abstract class CoreNode<T> extends RdfNode {
       case "value":
         return readValue(term, this.dataset);
       case "strings": {
-        if (term.termType === "Literal")
-          return [...objectTerms(this, field.term)].map((t) => t.value);
+        if (term.termType === "Literal") return this.objects(field.term).map((t) => t.value);
         const value = new NamedValuesNode(term, this.dataset).toValue();
         if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
           throw new TypeError("Expected string list");
@@ -292,7 +289,7 @@ export abstract class CoreNode<T> extends RdfNode {
     return new model.View(term, this.dataset);
   }
   private present(term: string): boolean {
-    return [...objectTerms(this, AWP + "presentFields")].some((t) => t.value === term);
+    return this.objects(AWP + "presentFields").some((t) => t.value === term);
   }
   private markPresent(term: string): void {
     this.dataset.addQuad(

@@ -55,7 +55,10 @@ it("detects a deliberately wrong transport configuration that changes a mandate 
   const original = scenario.configurations.find((entry) => entry.id === "transport-email");
   if (!original) throw new Error("Missing email configuration");
   const bad = patch(original, fixture.configuration);
-  scenario.configurations = [bad];
+  // Keep declarations required by the other configuration-scoped branches.
+  scenario.configurations = scenario.configurations.map((entry) =>
+    entry.id === bad.id ? bad : entry,
+  );
   const baseline = (await runScenario(profile, scenario))[0]?.trace;
   const changed = (await runScenario(profile, scenario, { configuration: bad.id }))[0]?.trace;
   if (!baseline || !changed) throw new Error("The fixture must exercise real gates");

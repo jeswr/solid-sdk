@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-
 import { RequiredAs, TermFrom } from "@rdfjs/wrapper";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { EmbeddedCredentialNode, EvidenceItemNode } from "../src/model/evidence-item.js";
