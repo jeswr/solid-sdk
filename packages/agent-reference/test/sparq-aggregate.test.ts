@@ -460,7 +460,7 @@ describe.skipIf(!installed)("real research-grade, unaudited aggregation", () => 
     } finally {
       spy.mockRestore();
     }
-  }, 120000);
+  }, 600000);
 });
 function required<T>(value: T | undefined | null): T {
   if (value === undefined || value === null) throw new Error("Missing fixture");

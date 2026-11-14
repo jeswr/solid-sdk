@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -110,7 +110,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional university's education.degree statement is intact and signed with The fictional university's pinned key."
+      "caption": "The fictional university's education degree statement is intact and signed with The fictional university's pinned key."
     },
     {
       "seq": 2,
@@ -149,7 +149,7 @@
         ],
         "answer": "No register answers for this source."
       },
-      "caption": "The fictional university's education.degree statement: The fictional university is not accepted as a source for this kind of claim."
+      "caption": "The fictional university's education degree statement: The fictional university is not accepted as a source for this kind of claim."
     },
     {
       "seq": 3,
@@ -167,7 +167,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional university's education.degree statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional university's education degree statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -178,7 +178,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "source-unknown",
-      "caption": "Required claim: education.degree. Accepted sources: The fictional university. Accepted methods: recorded-by-authority.",
+      "caption": "Required claim: education degree. Accepted sources: The fictional university. Accepted methods: recorded-by-authority.",
       "refs": [
         {
           "layer": "meaning",

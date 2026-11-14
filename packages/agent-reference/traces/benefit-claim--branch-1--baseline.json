@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -116,7 +116,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The employer's benefit.income statement is intact and signed with The employer's pinned key."
+      "caption": "The employer's benefit income statement is intact and signed with The employer's pinned key."
     },
     {
       "seq": 2,
@@ -141,7 +141,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:benefit-claim:benefit.income",
-        "text": "The employer is accepted for benefit.income claims."
+        "text": "The employer is accepted for benefit income claims."
       },
       "resolution": {
         "question": "Is The employer an authority for benefit.income claims about The claimant?",
@@ -154,7 +154,7 @@
         ],
         "answer": "Accepted, for benefit.income claims only."
       },
-      "caption": "The employer's benefit.income statement: The employer is an accepted source for this kind of claim."
+      "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -172,7 +172,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The employer's benefit.income statement asks for nothing, so there is no authority to check."
+      "caption": "The employer's benefit income statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -199,7 +199,7 @@
         "id": "urn:terms:benefit-claim:income",
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The employer's benefit.income statement: its terms allow this: use for Benefit claim; share for Benefit claim."
+      "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim."
     },
     {
       "seq": 5,
@@ -229,9 +229,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:benefit-claim:benefit.income",
-        "text": "Accept benefit.income from The employer by recorded-by-authority, at most 30 days old."
+        "text": "Accept benefit income from The employer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The employer's benefit.income statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
+      "caption": "The employer's benefit income statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -241,7 +241,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The employer's benefit.income statement is admitted."
+      "caption": "The employer's benefit income statement is admitted."
     },
     {
       "seq": 7,
@@ -251,7 +251,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:benefit-claim:income",
-        "label": "The employer's benefit.income statement",
+        "label": "The employer's benefit income statement",
         "claimType": "benefit.income",
         "subject": "urn:fictional:benefit-claim:owner",
         "value": null,
@@ -264,7 +264,7 @@
         },
         "provenance": "signed by The employer"
       },
-      "caption": "The employer's benefit.income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -287,7 +287,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The landlord's benefit.rent statement is intact and signed with The landlord's pinned key."
+      "caption": "The landlord's benefit rent statement is intact and signed with The landlord's pinned key."
     },
     {
       "seq": 9,
@@ -312,7 +312,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:benefit-claim:benefit.rent",
-        "text": "The landlord is accepted for benefit.rent claims."
+        "text": "The landlord is accepted for benefit rent claims."
       },
       "resolution": {
         "question": "Is The landlord an authority for benefit.rent claims about The claimant?",
@@ -325,7 +325,7 @@
         ],
         "answer": "Accepted, for benefit.rent claims only."
       },
-      "caption": "The landlord's benefit.rent statement: The landlord is an accepted source for this kind of claim."
+      "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -343,7 +343,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The landlord's benefit.rent statement asks for nothing, so there is no authority to check."
+      "caption": "The landlord's benefit rent statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -370,7 +370,7 @@
         "id": "urn:terms:benefit-claim:rent",
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The landlord's benefit.rent statement: its terms allow this: use for Benefit claim; share for Benefit claim."
+      "caption": "The landlord's benefit rent statement: its terms allow this: use for Benefit claim; share for Benefit claim."
     },
     {
       "seq": 12,
@@ -400,9 +400,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:benefit-claim:benefit.rent",
-        "text": "Accept benefit.rent from The landlord by recorded-by-authority, at most 30 days old."
+        "text": "Accept benefit rent from The landlord by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The landlord's benefit.rent statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
+      "caption": "The landlord's benefit rent statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -412,7 +412,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The landlord's benefit.rent statement is admitted."
+      "caption": "The landlord's benefit rent statement is admitted."
     },
     {
       "seq": 14,
@@ -422,7 +422,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:benefit-claim:rent",
-        "label": "The landlord's benefit.rent statement",
+        "label": "The landlord's benefit rent statement",
         "claimType": "benefit.rent",
         "subject": "urn:fictional:benefit-claim:owner",
         "value": null,
@@ -435,7 +435,7 @@
         },
         "provenance": "signed by The landlord"
       },
-      "caption": "The landlord's benefit.rent statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The landlord's benefit rent statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -458,7 +458,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The household register's benefit.household statement is intact and signed with The household register's pinned key."
+      "caption": "The household register's benefit household statement is intact and signed with The household register's pinned key."
     },
     {
       "seq": 16,
@@ -483,7 +483,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:benefit-claim:benefit.household",
-        "text": "The household register is accepted for benefit.household claims."
+        "text": "The household register is accepted for benefit household claims."
       },
       "resolution": {
         "question": "Is The household register an authority for benefit.household claims about The claimant?",
@@ -496,7 +496,7 @@
         ],
         "answer": "Accepted, for benefit.household claims only."
       },
-      "caption": "The household register's benefit.household statement: The household register is an accepted source for this kind of claim."
+      "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim."
     },
     {
       "seq": 17,
@@ -514,7 +514,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The household register's benefit.household statement asks for nothing, so there is no authority to check."
+      "caption": "The household register's benefit household statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 18,
@@ -541,7 +541,7 @@
         "id": "urn:terms:benefit-claim:household",
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The household register's benefit.household statement: its terms allow this: use for Benefit claim; share for Benefit claim."
+      "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim."
     },
     {
       "seq": 19,
@@ -571,9 +571,9 @@
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:benefit-claim:benefit.household",
-        "text": "Accept benefit.household from The household register by recorded-by-authority, at most 30 days old."
+        "text": "Accept benefit household from The household register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The household register's benefit.household statement was not produced in a way Claiming a benefit accepts."
+      "caption": "The household register's benefit household statement was not produced in a way Claiming a benefit accepts."
     },
     {
       "seq": 20,
@@ -584,7 +584,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: benefit.household. Accepted sources: The household register. Accepted methods: recorded-by-authority.",
+      "caption": "Required claim: benefit household. Accepted sources: The household register. Accepted methods: recorded-by-authority.",
       "refs": [
         {
           "layer": "meaning",
@@ -755,7 +755,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with The benefits office’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The benefits office’s agent's pinned key, and written to the record."
     },
     {
       "seq": 29,
@@ -774,6 +774,16 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\"},\"to\":{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\"},\"evidence\":{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\"},\"@included\":[{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:benefit-claim:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:benefit-claim:receiver\"},{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:benefit-claim:owner-agent:actor\",\"party\":\"urn:fictional:benefit-claim:owner\"},{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\"},\"input\":{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\"},\"operation\":{\"id\":\"urn:op:benefit-claim:request\"},\"purpose\":\"urn:purpose:benefit-claim\"},{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:benefit-claim:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\"}]},{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:benefit-claim:receiver\",\"proofGraph\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\",\"type\":\"PropertyValue\",\"domainValue\":\"benefit.income\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\"}},{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9\",\"byteLength\":\"8723\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"@graph\":[{\"id\":\"urn:awp:n:89U_ruJDXqM9FQP7N7k24tzxiWPA6_g8T4YebvyTMw4\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YWYzODA5NGZkZTQxMzEwNzZmNjZmYTg4Y2MzNTc1Mzk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpiZW5lZml0LWNsYWltIiwidXJuOm9wOmJlbmVmaXQtY2xhaW06cmVxdWVzdCJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.M_gAqi-H8ODTX9SNWJlbrjOfpbCewxhgZHsQskLidpKc_be0s9U_VMX84uOfjEKUdT3Rh5aOmw3foUWJIdQCDQ\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46UGJpWVBMeVBjM2ExQzczUG1JYm10OUtSdGhLTXpIaWQ0dXdHNVNvQWh2VSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIn0sImlkIjoidXJuOmF3cDpuOm50RjVPU3B6Q21sRTYta1otMDJnRnRPRVAzV2t6a2JOdFBPVVh5OUJwWjgiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUTGxoaEJ3QlV1bzRQVV9ndmptUDhJYzh0dm5MMm02NUN1emJkUXFqZHo0In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpiZW5lZml0LWNsYWltOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmJlbmVmaXQtY2xhaW0iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpOcDlHN19xNEF1QXJzdjNkZ0dYM2hfOG1HZHFNVmFRYlZiNHJOeHctOHZvIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YmVuZWZpdC1jbGFpbTpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRMbGhoQndCVXVvNFBVX2d2am1QOEljOHR2bkwybTY1Q3V6YmRRcWpkejQiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlJsY25ucEJJVVVBb3FNazFvbVR5em1LVTV1SjdFNlVsVnBZSjBtd0I5WDQifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46S2VRSlNpT21KdjA2NmY4T0QwSDh1YVdkaHpOOGxkdHFQNi1CdHdkc1U0dyIsImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YmVuZWZpdC1jbGFpbTpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiYmVuZWZpdC5pbmNvbWUiLCJpZCI6InVybjphd3A6bjpSbGNubnBCSVVVQW9xTWsxb21UeXptS1U1dUo3RTZVbFZwWUowbXdCOVg0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpLZVFKU2lPbUp2MDY2ZjhPRDBIOHVhV2Roek44bGR0cVA2LUJ0d2RzVTR3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpZTDNLTUFrY1ZEZExPT0dYdEFRNXlCT3BSbERvd3U2NUdOeVZvYU5xbXZVIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YjkzOWU5ZmY0ZmM0NDEwZjVjZjgyZTUxYmFiZTUyYzAwM2I0MjJkNWMzYmI5NzUyOGEyMjg3ZjY1MjRlNTdjOSIsImJ5dGVMZW5ndGgiOiI4NzIzIiwiaWQiOiJ1cm46YXdwOm46WUwzS01Ba2NWRGRMT09HWHRBUTV5Qk9wUmxEb3d1NjVHTnlWb2FOcW12VSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46ODlVX3J1SkRYcU05RlFQN043azI0dHp4aVdQQTZfZzhUNFllYnZ5VE13NCIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NllXWXpPREE1Tkdaa1pUUXhNekV3TnpabU5qWm1ZVGc0WTJNek5UYzFNems2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaVpXNWxabWwwTFdOc1lXbHRPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tSmxibVZtYVhRdFkyeGhhVzA2Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwaVpXNWxabWwwTFdOc1lXbHRJaXdpZFhKdU9tOXdPbUpsYm1WbWFYUXRZMnhoYVcwNmNtVnhkV1Z6ZENKZExDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aWFYTnpkV1ZrUVhRaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaWZRLk1fZ0FxaS1IOE9EVFg5U05XSmxicmpPZnBiQ2V3eGhnWkhzUXNrTGlkcEtjX2JlMHM5VV9WTVg4NHVPZmpFS1VkVDNSaDVhT213M2ZvVVdKSWRRQ0RRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpudEY1T1NwekNtbEU2LWtaLTAyZ0Z0T0VQM1dremtiTnRQT1VYeTlCcFo4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYmVuZWZpdC1jbGFpbS1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46TnA5RzdfcTRBdUFyc3YzZGdHWDNoXzhtR2RxTVZhUWJWYjRyTnh3LTh2byJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlBiaVlQTHlQYzNhMUM3M1BtSWJtdDlLUnRoS016SGlkNHV3RzVTb0FodlUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1iZW5lZml0LWNsYWltLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.vkwu7dpvok03xMbf8o8At22NMUU-MoEODFheG3CH-dGZRkTcfj-oYYKCrfLba9u5XARopL6NAicC7jLN2Dp4Ag\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/signed-ed25519/0.1>;\n    awp:conversation <urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I>;\n    sec:proof _:awp0.\n<urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:benefit-claim>;\n    awp:basis <urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A>;\n    awp:input <urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4>;\n    awp:operation <urn:op:benefit-claim:request>.\n<urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8>.\n<urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:benefit-claim:receiver>;\n    awp:actor <urn:fictional:benefit-claim:receiver-agent:actor>.\n<urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I> a awp:AudienceRef;\n    awp:actor <urn:fictional:benefit-claim:owner-agent:actor>;\n    awp:party <urn:fictional:benefit-claim:owner>.\n<urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4>.\n<urn:op:benefit-claim:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w>;\n    vc:issuer <urn:fictional:benefit-claim:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU>.\n<urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9\";\n    awp:byteLength 8723.\n<urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"benefit.income\".\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46UGJpWVBMeVBjM2ExQzczUG1JYm10OUtSdGhLTXpIaWQ0dXdHNVNvQWh2VSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIn0sImlkIjoidXJuOmF3cDpuOm50RjVPU3B6Q21sRTYta1otMDJnRnRPRVAzV2t6a2JOdFBPVVh5OUJwWjgiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUTGxoaEJ3QlV1bzRQVV9ndmptUDhJYzh0dm5MMm02NUN1emJkUXFqZHo0In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpiZW5lZml0LWNsYWltOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmJlbmVmaXQtY2xhaW0iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpOcDlHN19xNEF1QXJzdjNkZ0dYM2hfOG1HZHFNVmFRYlZiNHJOeHctOHZvIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YmVuZWZpdC1jbGFpbTpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRMbGhoQndCVXVvNFBVX2d2am1QOEljOHR2bkwybTY1Q3V6YmRRcWpkejQiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlJsY25ucEJJVVVBb3FNazFvbVR5em1LVTV1SjdFNlVsVnBZSjBtd0I5WDQifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46S2VRSlNpT21KdjA2NmY4T0QwSDh1YVdkaHpOOGxkdHFQNi1CdHdkc1U0dyIsImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YmVuZWZpdC1jbGFpbTpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiYmVuZWZpdC5pbmNvbWUiLCJpZCI6InVybjphd3A6bjpSbGNubnBCSVVVQW9xTWsxb21UeXptS1U1dUo3RTZVbFZwWUowbXdCOVg0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpLZVFKU2lPbUp2MDY2ZjhPRDBIOHVhV2Roek44bGR0cVA2LUJ0d2RzVTR3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpZTDNLTUFrY1ZEZExPT0dYdEFRNXlCT3BSbERvd3U2NUdOeVZvYU5xbXZVIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YjkzOWU5ZmY0ZmM0NDEwZjVjZjgyZTUxYmFiZTUyYzAwM2I0MjJkNWMzYmI5NzUyOGEyMjg3ZjY1MjRlNTdjOSIsImJ5dGVMZW5ndGgiOiI4NzIzIiwiaWQiOiJ1cm46YXdwOm46WUwzS01Ba2NWRGRMT09HWHRBUTV5Qk9wUmxEb3d1NjVHTnlWb2FOcW12VSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46ODlVX3J1SkRYcU05RlFQN043azI0dHp4aVdQQTZfZzhUNFllYnZ5VE13NCIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NllXWXpPREE1Tkdaa1pUUXhNekV3TnpabU5qWm1ZVGc0WTJNek5UYzFNems2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaVpXNWxabWwwTFdOc1lXbHRPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tSmxibVZtYVhRdFkyeGhhVzA2Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwaVpXNWxabWwwTFdOc1lXbHRJaXdpZFhKdU9tOXdPbUpsYm1WbWFYUXRZMnhoYVcwNmNtVnhkV1Z6ZENKZExDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aWFYTnpkV1ZrUVhRaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaWZRLk1fZ0FxaS1IOE9EVFg5U05XSmxicmpPZnBiQ2V3eGhnWkhzUXNrTGlkcEtjX2JlMHM5VV9WTVg4NHVPZmpFS1VkVDNSaDVhT213M2ZvVVdKSWRRQ0RRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpudEY1T1NwekNtbEU2LWtaLTAyZ0Z0T0VQM1dremtiTnRQT1VYeTlCcFo4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYmVuZWZpdC1jbGFpbS1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46TnA5RzdfcTRBdUFyc3YzZGdHWDNoXzhtR2RxTVZhUWJWYjRyTnh3LTh2byJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlBiaVlQTHlQYzNhMUM3M1BtSWJtdDlLUnRoS016SGlkNHV3RzVTb0FodlUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1iZW5lZml0LWNsYWltLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.vkwu7dpvok03xMbf8o8At22NMUU-MoEODFheG3CH-dGZRkTcfj-oYYKCrfLba9u5XARopL6NAicC7jLN2Dp4Ag\"\n}\n<urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8> {\n<urn:awp:n:89U_ruJDXqM9FQP7N7k24tzxiWPA6_g8T4YebvyTMw4> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YWYzODA5NGZkZTQxMzEwNzZmNjZmYTg4Y2MzNTc1Mzk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpiZW5lZml0LWNsYWltIiwidXJuOm9wOmJlbmVmaXQtY2xhaW06cmVxdWVzdCJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.M_gAqi-H8ODTX9SNWJlbrjOfpbCewxhgZHsQskLidpKc_be0s9U_VMX84uOfjEKUdT3Rh5aOmw3foUWJIdQCDQ\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9",
+            "mediaType": "application/n-quads",
+            "byteLength": 8723
+          }
+        ],
         "id": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
         "from": "The benefits office’s agent",
         "to": "The claimant’s agent",
@@ -803,9 +813,9 @@
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
-                "alg": "EdDSA",
                 "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
-                "typ": "awp-message+jws"
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
               }
             },
             "digest": "sha-256:48a66aa026225e4295d309e4747715c2b4dabdd2f77c2f26b59683d9e4a7b02b"
@@ -893,6 +903,16 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\"},\"to\":{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\"},\"evidence\":{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\"},\"@included\":[{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:benefit-claim:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:benefit-claim:receiver\"},{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:benefit-claim:owner-agent:actor\",\"party\":\"urn:fictional:benefit-claim:owner\"},{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\"},\"input\":{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\"},\"operation\":{\"id\":\"urn:op:benefit-claim:request\"},\"purpose\":\"urn:purpose:benefit-claim\"},{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:benefit-claim:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\"}]},{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:benefit-claim:receiver\",\"proofGraph\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\",\"type\":\"PropertyValue\",\"domainValue\":\"benefit.income\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\"}},{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9\",\"byteLength\":\"8723\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"@graph\":[{\"id\":\"urn:awp:n:89U_ruJDXqM9FQP7N7k24tzxiWPA6_g8T4YebvyTMw4\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YWYzODA5NGZkZTQxMzEwNzZmNjZmYTg4Y2MzNTc1Mzk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpiZW5lZml0LWNsYWltIiwidXJuOm9wOmJlbmVmaXQtY2xhaW06cmVxdWVzdCJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.M_gAqi-H8ODTX9SNWJlbrjOfpbCewxhgZHsQskLidpKc_be0s9U_VMX84uOfjEKUdT3Rh5aOmw3foUWJIdQCDQ\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46UGJpWVBMeVBjM2ExQzczUG1JYm10OUtSdGhLTXpIaWQ0dXdHNVNvQWh2VSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIn0sImlkIjoidXJuOmF3cDpuOm50RjVPU3B6Q21sRTYta1otMDJnRnRPRVAzV2t6a2JOdFBPVVh5OUJwWjgiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUTGxoaEJ3QlV1bzRQVV9ndmptUDhJYzh0dm5MMm02NUN1emJkUXFqZHo0In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpiZW5lZml0LWNsYWltOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmJlbmVmaXQtY2xhaW0iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpOcDlHN19xNEF1QXJzdjNkZ0dYM2hfOG1HZHFNVmFRYlZiNHJOeHctOHZvIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YmVuZWZpdC1jbGFpbTpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRMbGhoQndCVXVvNFBVX2d2am1QOEljOHR2bkwybTY1Q3V6YmRRcWpkejQiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlJsY25ucEJJVVVBb3FNazFvbVR5em1LVTV1SjdFNlVsVnBZSjBtd0I5WDQifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46S2VRSlNpT21KdjA2NmY4T0QwSDh1YVdkaHpOOGxkdHFQNi1CdHdkc1U0dyIsImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YmVuZWZpdC1jbGFpbTpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiYmVuZWZpdC5pbmNvbWUiLCJpZCI6InVybjphd3A6bjpSbGNubnBCSVVVQW9xTWsxb21UeXptS1U1dUo3RTZVbFZwWUowbXdCOVg0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpLZVFKU2lPbUp2MDY2ZjhPRDBIOHVhV2Roek44bGR0cVA2LUJ0d2RzVTR3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpZTDNLTUFrY1ZEZExPT0dYdEFRNXlCT3BSbERvd3U2NUdOeVZvYU5xbXZVIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YjkzOWU5ZmY0ZmM0NDEwZjVjZjgyZTUxYmFiZTUyYzAwM2I0MjJkNWMzYmI5NzUyOGEyMjg3ZjY1MjRlNTdjOSIsImJ5dGVMZW5ndGgiOiI4NzIzIiwiaWQiOiJ1cm46YXdwOm46WUwzS01Ba2NWRGRMT09HWHRBUTV5Qk9wUmxEb3d1NjVHTnlWb2FOcW12VSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46ODlVX3J1SkRYcU05RlFQN043azI0dHp4aVdQQTZfZzhUNFllYnZ5VE13NCIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NllXWXpPREE1Tkdaa1pUUXhNekV3TnpabU5qWm1ZVGc0WTJNek5UYzFNems2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaVpXNWxabWwwTFdOc1lXbHRPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tSmxibVZtYVhRdFkyeGhhVzA2Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwaVpXNWxabWwwTFdOc1lXbHRJaXdpZFhKdU9tOXdPbUpsYm1WbWFYUXRZMnhoYVcwNmNtVnhkV1Z6ZENKZExDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aWFYTnpkV1ZrUVhRaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaWZRLk1fZ0FxaS1IOE9EVFg5U05XSmxicmpPZnBiQ2V3eGhnWkhzUXNrTGlkcEtjX2JlMHM5VV9WTVg4NHVPZmpFS1VkVDNSaDVhT213M2ZvVVdKSWRRQ0RRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpudEY1T1NwekNtbEU2LWtaLTAyZ0Z0T0VQM1dremtiTnRQT1VYeTlCcFo4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYmVuZWZpdC1jbGFpbS1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46TnA5RzdfcTRBdUFyc3YzZGdHWDNoXzhtR2RxTVZhUWJWYjRyTnh3LTh2byJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlBiaVlQTHlQYzNhMUM3M1BtSWJtdDlLUnRoS016SGlkNHV3RzVTb0FodlUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1iZW5lZml0LWNsYWltLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.vkwu7dpvok03xMbf8o8At22NMUU-MoEODFheG3CH-dGZRkTcfj-oYYKCrfLba9u5XARopL6NAicC7jLN2Dp4Ag\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/signed-ed25519/0.1>;\n    awp:conversation <urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I>;\n    sec:proof _:awp0.\n<urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:benefit-claim>;\n    awp:basis <urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A>;\n    awp:input <urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4>;\n    awp:operation <urn:op:benefit-claim:request>.\n<urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8>.\n<urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:benefit-claim:receiver>;\n    awp:actor <urn:fictional:benefit-claim:receiver-agent:actor>.\n<urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I> a awp:AudienceRef;\n    awp:actor <urn:fictional:benefit-claim:owner-agent:actor>;\n    awp:party <urn:fictional:benefit-claim:owner>.\n<urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4>.\n<urn:op:benefit-claim:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w>;\n    vc:issuer <urn:fictional:benefit-claim:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"benefit.income\".\n<urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU>.\n<urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9\";\n    awp:byteLength 8723.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46UGJpWVBMeVBjM2ExQzczUG1JYm10OUtSdGhLTXpIaWQ0dXdHNVNvQWh2VSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIn0sImlkIjoidXJuOmF3cDpuOm50RjVPU3B6Q21sRTYta1otMDJnRnRPRVAzV2t6a2JOdFBPVVh5OUJwWjgiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUTGxoaEJ3QlV1bzRQVV9ndmptUDhJYzh0dm5MMm02NUN1emJkUXFqZHo0In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpiZW5lZml0LWNsYWltOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmJlbmVmaXQtY2xhaW0iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpOcDlHN19xNEF1QXJzdjNkZ0dYM2hfOG1HZHFNVmFRYlZiNHJOeHctOHZvIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YmVuZWZpdC1jbGFpbTpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRMbGhoQndCVXVvNFBVX2d2am1QOEljOHR2bkwybTY1Q3V6YmRRcWpkejQiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlJsY25ucEJJVVVBb3FNazFvbVR5em1LVTV1SjdFNlVsVnBZSjBtd0I5WDQifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46S2VRSlNpT21KdjA2NmY4T0QwSDh1YVdkaHpOOGxkdHFQNi1CdHdkc1U0dyIsImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YmVuZWZpdC1jbGFpbTpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiYmVuZWZpdC5pbmNvbWUiLCJpZCI6InVybjphd3A6bjpSbGNubnBCSVVVQW9xTWsxb21UeXptS1U1dUo3RTZVbFZwWUowbXdCOVg0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpLZVFKU2lPbUp2MDY2ZjhPRDBIOHVhV2Roek44bGR0cVA2LUJ0d2RzVTR3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpZTDNLTUFrY1ZEZExPT0dYdEFRNXlCT3BSbERvd3U2NUdOeVZvYU5xbXZVIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YjkzOWU5ZmY0ZmM0NDEwZjVjZjgyZTUxYmFiZTUyYzAwM2I0MjJkNWMzYmI5NzUyOGEyMjg3ZjY1MjRlNTdjOSIsImJ5dGVMZW5ndGgiOiI4NzIzIiwiaWQiOiJ1cm46YXdwOm46WUwzS01Ba2NWRGRMT09HWHRBUTV5Qk9wUmxEb3d1NjVHTnlWb2FOcW12VSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46ODlVX3J1SkRYcU05RlFQN043azI0dHp4aVdQQTZfZzhUNFllYnZ5VE13NCIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NllXWXpPREE1Tkdaa1pUUXhNekV3TnpabU5qWm1ZVGc0WTJNek5UYzFNems2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaVpXNWxabWwwTFdOc1lXbHRPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tSmxibVZtYVhRdFkyeGhhVzA2Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwaVpXNWxabWwwTFdOc1lXbHRJaXdpZFhKdU9tOXdPbUpsYm1WbWFYUXRZMnhoYVcwNmNtVnhkV1Z6ZENKZExDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aWFYTnpkV1ZrUVhRaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaWZRLk1fZ0FxaS1IOE9EVFg5U05XSmxicmpPZnBiQ2V3eGhnWkhzUXNrTGlkcEtjX2JlMHM5VV9WTVg4NHVPZmpFS1VkVDNSaDVhT213M2ZvVVdKSWRRQ0RRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpudEY1T1NwekNtbEU2LWtaLTAyZ0Z0T0VQM1dremtiTnRQT1VYeTlCcFo4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYmVuZWZpdC1jbGFpbS1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46TnA5RzdfcTRBdUFyc3YzZGdHWDNoXzhtR2RxTVZhUWJWYjRyTnh3LTh2byJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlBiaVlQTHlQYzNhMUM3M1BtSWJtdDlLUnRoS016SGlkNHV3RzVTb0FodlUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1iZW5lZml0LWNsYWltLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.vkwu7dpvok03xMbf8o8At22NMUU-MoEODFheG3CH-dGZRkTcfj-oYYKCrfLba9u5XARopL6NAicC7jLN2Dp4Ag\"\n}\n<urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8> {\n<urn:awp:n:89U_ruJDXqM9FQP7N7k24tzxiWPA6_g8T4YebvyTMw4> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YWYzODA5NGZkZTQxMzEwNzZmNjZmYTg4Y2MzNTc1Mzk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpiZW5lZml0LWNsYWltIiwidXJuOm9wOmJlbmVmaXQtY2xhaW06cmVxdWVzdCJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.M_gAqi-H8ODTX9SNWJlbrjOfpbCewxhgZHsQskLidpKc_be0s9U_VMX84uOfjEKUdT3Rh5aOmw3foUWJIdQCDQ\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9",
+            "mediaType": "application/n-quads",
+            "byteLength": 8723
+          }
+        ],
         "id": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
         "from": "The benefits office’s agent",
         "to": "The claimant’s agent",
@@ -922,9 +942,9 @@
               "createdAt": "2026-11-13T09:00:00.000Z",
               "expiresAt": "2026-11-13T15:00:00.000Z",
               "proof": {
-                "alg": "EdDSA",
                 "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
-                "typ": "awp-message+jws"
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
               }
             },
             "digest": "sha-256:48a66aa026225e4295d309e4747715c2b4dabdd2f77c2f26b59683d9e4a7b02b"
@@ -1040,7 +1060,7 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The benefits office’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The benefits office’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 33,
@@ -1185,7 +1205,7 @@
         }
       ],
       "reason": "method-not-accepted",
-      "caption": "Required benefit.household was refused: method-not-accepted."
+      "caption": "Required benefit household was refused: method-not-accepted."
     },
     {
       "seq": 41,

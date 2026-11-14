@@ -8,6 +8,7 @@ import { claimSchema as domainClaimSchema } from "../gates/inbound.js";
 import { type EvidenceLedger, type LedgerEntry, verifyLedger } from "../store/ledger.js";
 import type { StateStore } from "../store/state.js";
 import type { TraceEventInput } from "../trace/types.js";
+import { verifyRecordedMessage } from "../wire/recorded-message.js";
 import type { SigningKey } from "./jws.js";
 import { representationSchema, signStatement, TYP, verifyStatement } from "./statements.js";
 import type { TrustStore } from "./trust.js";
@@ -269,20 +270,12 @@ export class LocalForum {
     const messages: AnyMessage[] = [];
     const directions = new Map<string, "in" | "out">();
     for (const archived of segment.messages) {
-      const message = await verifyStatement(archived.jws, {
-        trust: this.options.trust,
-        typ: TYP.message,
-        role: "actor",
-        schema: messageSchema,
-        limits: RECORD_LIMITS,
-        at: this.options.now(),
-        verifier: this.identity,
-      });
+      const read = await verifyRecordedMessage(archived.jws, this.options.trust);
+      const message = { payload: read?.message, signer: read?.pinned };
       if (
         !message.payload ||
-        !validateMessage(message.payload).ok ||
         message.signer?.subject !== message.payload.from.actor ||
-        message.signer.party !== message.payload.from.onBehalfOf ||
+        message.signer?.party !== message.payload.from.onBehalfOf ||
         digestOf(message.payload) !== archived.digest ||
         message.payload.conversation !== conversation
       )

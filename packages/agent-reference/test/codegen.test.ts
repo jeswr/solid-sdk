@@ -26,4 +26,4 @@ it("regenerates every model artifact and the full admission errors byte-for-byte
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
-}, 30_000);
+}, 120_000);

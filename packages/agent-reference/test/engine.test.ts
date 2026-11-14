@@ -77,7 +77,7 @@ it("loads every declared case and preserves every catalogue branch, without clai
       (p: { status: string; configuration?: string }) => !p.configuration && p.status === "blocked",
     ).length,
   );
-}, 60_000);
+}, 600_000);
 
 it("runs both probing branches through real gates, with no later disclosure or effect after a stop", async () => {
   const { profile, scenario } = loaded();

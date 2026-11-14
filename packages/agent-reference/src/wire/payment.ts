@@ -1,10 +1,29 @@
 // AUTHORED-BY Codex GPT-6
 /** The only boundary at which foreign RDF settlement objects are parsed. */
+
+import { BoundsError } from "../core/limits.js";
 import { ODRL, PaymentFacts, SCHEMA } from "../model/payment.js";
 import type { ProtocolObjects, SettlementTrace } from "../settlement/types.js";
+import { readAttachmentDocument, writeAttachmentDocument } from "./attachments.js";
 import { readDocument, writeDocument } from "./document.js";
+
+async function paymentDocument(
+  facts: PaymentFacts,
+): Promise<import("./document.js").JsonLdDocument> {
+  try {
+    return await writeDocument(facts);
+  } catch (error) {
+    if (!(error instanceof BoundsError)) throw error;
+    const packet = await writeAttachmentDocument(facts);
+    return {
+      format: "awp-rdf-packet/0.1",
+      jsonld: JSON.stringify(packet.document),
+      attachments: packet.attachments,
+    };
+  }
+}
 export async function paymentObjects(facts: PaymentFacts, name: string): Promise<ProtocolObjects> {
-  const document = await writeDocument(facts);
+  const document = await paymentDocument(facts);
   return {
     suite: "rdf-order",
     objects: [{ name, form: "application/ld+json", shown: document }],
@@ -12,7 +31,17 @@ export async function paymentObjects(facts: PaymentFacts, name: string): Promise
   };
 }
 export async function readPaymentObjects(value: unknown): Promise<ProtocolObjects> {
-  const result = await readDocument(JSON.stringify(value), "application/ld+json");
+  const packet = value as {
+    format?: string;
+    jsonld?: string;
+    attachments?: import("./attachments.js").DocumentAttachment[];
+  };
+  const result =
+    packet?.format === "awp-rdf-packet/0.1" &&
+    typeof packet.jsonld === "string" &&
+    Array.isArray(packet.attachments)
+      ? await readAttachmentDocument(packet.jsonld, packet.attachments)
+      : await readDocument(JSON.stringify(value), "application/ld+json");
   if (!result.ok) throw new TypeError(`Payment RDF refused: ${result.detail}`);
   return {
     suite: "rdf-order",
@@ -34,7 +63,7 @@ export async function paymentTrace(facts: PaymentFacts): Promise<SettlementTrace
   return {
     suite: "rdf-order",
     objects: [{ name, form: "application/ld+json", shown: "Same document as facts." }],
-    facts: await writeDocument(facts),
+    facts: await paymentDocument(facts),
     sameDocument: "The protocol object and lifted facts are the same RDF document.",
   };
 }
@@ -51,6 +80,7 @@ import { approvalSchema, TYP } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { PaymentAgreementNode, PaymentOfferNode } from "../model/payment.js";
 import { verifyCompact } from "./jws-compact.js";
+import { verifyRecordedMessage } from "./recorded-message.js";
 /** Independently check both carried message proofs and the acceptance's mandate/approval. */
 export async function verifyPaymentProofs(
   facts: PaymentFacts,
@@ -59,23 +89,20 @@ export async function verifyPaymentProofs(
 ): Promise<boolean> {
   const agreement = facts.heldAgreement;
   if (!agreement?.offerProof || !agreement.acceptanceProof) return false;
-  const verified = await Promise.all(
+  const [offered, accepted] = await Promise.all(
     [agreement.offerProof, agreement.acceptanceProof].map((proof) =>
-      verifyCompact(proof, {
-        resolve: trust.resolver("actor"),
-        typ: TYP.message,
-        allowedAlgs: ["EdDSA", "ES256"],
-        limits: DEFAULT_LIMITS,
-      }),
+      verifyRecordedMessage(proof, trust),
     ),
   );
-  const [offered, accepted] = verified;
-  if (offered?.outcome !== "valid" || accepted?.outcome !== "valid") return false;
-  const o = validateMessage(offered.payload),
-    a = validateMessage(accepted.payload);
-  if (!o.ok || !a.ok || o.message.kind !== "propose" || a.message.kind !== "accept") return false;
-  const offer = o.message,
-    acceptance = a.message;
+  if (
+    !offered ||
+    !accepted ||
+    offered.message.kind !== "propose" ||
+    accepted.message.kind !== "accept"
+  )
+    return false;
+  const offer = offered.message,
+    acceptance = accepted.message;
   if (
     offered.pinned.subject !== offer.from.actor ||
     offered.pinned.party !== offer.from.onBehalfOf ||

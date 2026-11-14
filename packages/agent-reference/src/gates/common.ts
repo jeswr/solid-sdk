@@ -219,6 +219,11 @@ export interface GateContext {
         }
       | undefined
     >;
+    /** The same check on the document path: a declared configuration and kid hint. */
+    readonly resolveDeclared?: (
+      configuration: string,
+      kid: string,
+    ) => ReturnType<NonNullable<GateContext["webId"]>["resolve"]>;
     readonly recipient: (
       actor: string | undefined,
       configuration: string,

@@ -1,0 +1,665 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent-trace/0.1"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "packet": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "carriage": {
+                    "type": "object",
+                    "properties": {
+                      "suite": {
+                        "type": "string"
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "suite",
+                      "summary"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "layers": {
+                    "type": "object",
+                    "properties": {
+                      "header": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "authority": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "content": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "evidence": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "terms": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "provenance": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "header",
+                      "authority",
+                      "content",
+                      "evidence",
+                      "terms",
+                      "provenance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "jsonld": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "context": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    ]
+                  },
+                  "rdf": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha-256:[a-f0-9]{64}$"
+                        },
+                        "mediaType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "byteLength": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "digest",
+                        "mediaType",
+                        "byteLength"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "from",
+                  "to",
+                  "kind",
+                  "carriage",
+                  "layers",
+                  "jsonld",
+                  "context",
+                  "rdf",
+                  "attachments"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "carriage": {
+                    "type": "object",
+                    "properties": {
+                      "suite": {
+                        "type": "string"
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "suite",
+                      "summary"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "layers": {
+                    "type": "object",
+                    "properties": {
+                      "header": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "authority": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "content": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "evidence": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "terms": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "provenance": {
+                        "type": "object",
+                        "properties": {
+                          "present": {
+                            "type": "boolean"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "raw": {},
+                          "digest": {
+                            "type": "string"
+                          },
+                          "untrusted": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "present",
+                          "summary"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "header",
+                      "authority",
+                      "content",
+                      "evidence",
+                      "terms",
+                      "provenance"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "id",
+                  "from",
+                  "to",
+                  "kind",
+                  "carriage",
+                  "layers"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "events"
+  ],
+  "additionalProperties": {},
+  "x-authored-by": "Codex GPT-6",
+  "$id": "urn:agent-reference:schema:agent-trace:0.1"
+}

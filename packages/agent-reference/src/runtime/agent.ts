@@ -86,6 +86,8 @@ import {
 import { singleUseStatusSchema } from "../mechanisms/single-use.js";
 import { TYP, verifyStatement } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
+import { copyData } from "../model/copy.js";
+import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
 import { PaymentAgreementNode, PaymentFacts, type PaymentOfferNode } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
 import { CONFIGURATIONS, configurationById, POLICY_PROFILE } from "../profile/configurations.js";
@@ -125,7 +127,20 @@ import type {
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
 import { peekWire } from "../trace/packet.js";
+import { readAttachmentDocument, writeAttachmentDocument } from "../wire/attachments.js";
+import { digest as documentDigest, sign as signDocument } from "../wire/authenticity.js";
 import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
+import {
+  documentConfiguration,
+  inspectMessagePacket,
+  isMessagePacket,
+  type MessagePacket,
+  nativeDocumentLimits,
+  packetDocumentDigest,
+  readHeldMessagePacket,
+  rememberMessagePacket,
+  verifyMessagePacket,
+} from "../wire/message-packet.js";
 import {
   liftPaymentObjects,
   readPaymentObjects,
@@ -133,6 +148,7 @@ import {
   verifyPaymentProofs,
   withPaymentOffer,
 } from "../wire/payment.js";
+import { encodeMessageProof, verifyRecordedMessage } from "../wire/recorded-message.js";
 import { receiveCarriage } from "./carriage-gate.js";
 
 import { DutyExecutor, type DutyRule, deadlineMissed, dutyRuleSchema } from "./duties.js";
@@ -272,6 +288,7 @@ type Continuation =
   | {
       type: "release-message";
       message: AnyMessage;
+      document?: MessagePacket;
       intent?: ActionIntent;
       force?: boolean;
       conditions?: readonly DisclosureCondition[];
@@ -357,6 +374,7 @@ export class AgentRuntime {
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
   private recordReleaseDigest?: string;
+  private readonly retainedMessageViews = new Map<string, AnyMessage>();
   private readonly paymentOffers = new Map<string, PaymentOfferNode>();
   /** The admission of the inbound message being processed now (serial executor). */
   private admission: Admission | undefined;
@@ -377,23 +395,23 @@ export class AgentRuntime {
       ...options,
       gates: {
         ...options.gates,
-        vocabulary: structuredClone(options.gates?.vocabulary),
-        identifiers: structuredClone(options.gates?.identifiers),
-        purposes: structuredClone(options.gates?.purposes),
-        claimSources: structuredClone(options.gates?.claimSources),
-        ...(options.gates?.reliance ? { reliance: structuredClone(options.gates.reliance) } : {}),
-        principalLimits: structuredClone(options.gates?.principalLimits),
-        rules: structuredClone(options.gates?.rules ?? []),
-        sourceAliases: structuredClone(options.gates?.sourceAliases ?? {}),
-        assessments: structuredClone(options.gates?.assessments ?? []),
-        personDecisions: structuredClone(options.gates?.personDecisions ?? []),
-        readings: structuredClone(options.gates?.readings ?? []),
-        actionClaims: structuredClone(options.gates?.actionClaims ?? []),
-        notificationRecipients: structuredClone(options.gates?.notificationRecipients ?? {}),
+        vocabulary: copyData(options.gates?.vocabulary),
+        identifiers: copyData(options.gates?.identifiers),
+        purposes: copyData(options.gates?.purposes),
+        claimSources: copyData(options.gates?.claimSources),
+        ...(options.gates?.reliance ? { reliance: copyData(options.gates.reliance) } : {}),
+        principalLimits: copyData(options.gates?.principalLimits),
+        rules: copyData(options.gates?.rules ?? []),
+        sourceAliases: copyData(options.gates?.sourceAliases ?? {}),
+        assessments: copyData(options.gates?.assessments ?? []),
+        personDecisions: copyData(options.gates?.personDecisions ?? []),
+        readings: copyData(options.gates?.readings ?? []),
+        actionClaims: copyData(options.gates?.actionClaims ?? []),
+        notificationRecipients: copyData(options.gates?.notificationRecipients ?? {}),
         ...(options.gates?.singleUse
           ? {
               singleUse: {
-                actions: structuredClone(options.gates.singleUse.actions),
+                actions: copyData(options.gates.singleUse.actions),
                 registers: { ...options.gates.singleUse.registers },
                 evidence: [...options.gates.singleUse.evidence],
                 acceptances: [...options.gates.singleUse.acceptances],
@@ -403,7 +421,7 @@ export class AgentRuntime {
         ...(options.gates?.authorityChains
           ? {
               authorityChains: {
-                policy: structuredClone(options.gates.authorityChains.policy),
+                policy: copyData(options.gates.authorityChains.policy),
                 resolver: options.gates.authorityChains.resolver,
               },
             }
@@ -411,13 +429,13 @@ export class AgentRuntime {
         ...(options.gates?.organizations
           ? {
               organizations: {
-                policy: structuredClone(options.gates.organizations.policy),
+                policy: copyData(options.gates.organizations.policy),
                 resolver: options.gates.organizations.resolver,
               },
             }
           : {}),
-        trust: structuredClone(options.gates?.trust),
-        pins: structuredClone(options.gates?.pins ?? []),
+        trust: copyData(options.gates?.trust),
+        pins: copyData(options.gates?.pins ?? []),
       },
     };
     this.options = options;
@@ -436,10 +454,10 @@ export class AgentRuntime {
       const profile = h.contentProfile;
       if (profile)
         this.contentProfiles.set(key, {
-          vocabulary: structuredClone(profile.vocabulary),
+          vocabulary: copyData(profile.vocabulary),
           ...(profile.identifiers ? { identifiers: [...profile.identifiers] } : {}),
-          ...(profile.purposes ? { purposes: structuredClone(profile.purposes) } : {}),
-          ...(profile.reliance ? { reliance: structuredClone(profile.reliance) } : {}),
+          ...(profile.purposes ? { purposes: copyData(profile.purposes) } : {}),
+          ...(profile.reliance ? { reliance: copyData(profile.reliance) } : {}),
           ...(profile.protectedTerms
             ? {
                 protectedTerms: Object.fromEntries(
@@ -447,7 +465,7 @@ export class AgentRuntime {
                     path,
                     {
                       ...term,
-                      vocabulary: structuredClone(term.vocabulary),
+                      vocabulary: copyData(term.vocabulary),
                       schema: term.schema.clone(),
                     },
                   ]),
@@ -693,7 +711,11 @@ export class AgentRuntime {
           (agreement.offeror.actor === this.identity.actor ||
             Object.values(this.state.recordMessages).some((r) => {
               if (r.direction !== "in" || r.conversation !== agreement.conversation) return false;
-              const m = peekWire({ format: "awp-jws-compact/0.1", jws: r.jws });
+              const m =
+                this.retainedMessageViews.get(
+                  Object.entries(this.state.recordMessages).find(([, value]) => value === r)?.[0] ??
+                    "",
+                ) ?? peekWire({ format: "awp-jws-compact/0.1", jws: r.jws });
               return (
                 m?.kind === "receipt" &&
                 m.from.onBehalfOf === agreement.offeror.onBehalfOf &&
@@ -871,12 +893,24 @@ export class AgentRuntime {
       : options.trust;
     const rt = new AgentRuntime({ ...options, trust });
     await rt.loadMandateInto();
+    for (const entry of Object.values(rt.state.outbox))
+      if (isMessagePacket(entry.wire)) {
+        const message = await inspectMessagePacket(entry.wire);
+        if (message) rt.inbound.rememberCredentials(message);
+      }
     for (const agreement of Object.values(rt.state.agreements)) {
       if (!agreement.terms.compensation) continue;
       try {
         rt.paymentOffers.set(agreement.termsDigest, await readPaymentOffer(agreement.terms));
       } catch {
         /* Without its admitted RDF offer this record cannot authorize a payment. */
+      }
+    }
+    for (const [id, record] of Object.entries(rt.state.recordMessages)) {
+      const read = await verifyRecordedMessage(record.jws, rt.trust);
+      if (read) {
+        rt.retainedMessageViews.set(id, read.message);
+        rt.inbound.rememberCredentials(read.message);
       }
     }
     rt.notificationDuties();
@@ -1115,7 +1149,7 @@ export class AgentRuntime {
     const retained = this.state.recordMessages[id];
     if (!retained || retained.direction !== "in" || this.state.seen[id]?.disposition !== "accepted")
       throw new TypeError("No admitted provider order");
-    const message = peekWire({ format: "awp-jws-compact/0.1", jws: retained.jws });
+    const message = (await verifyRecordedMessage(retained.jws, this.trust))?.message;
     if (
       message?.kind !== "invoke" ||
       message.body.operation.id !== "urn:op:payment" ||
@@ -1152,7 +1186,7 @@ export class AgentRuntime {
   }> {
     return Object.values(this.state.pending).map((p) => ({
       actionDigest: p.actionDigest,
-      intent: structuredClone(p.intent),
+      intent: copyData(p.intent),
       conversation: p.conversation,
     }));
   }
@@ -1172,7 +1206,7 @@ export class AgentRuntime {
       });
       this.persist();
     }
-    return structuredClone(value);
+    return copyData(value);
   }
 
   /** Receive a signed compound term through a verifier installed by this operation's profile.
@@ -1204,7 +1238,7 @@ export class AgentRuntime {
         subject: this.identity.party ?? "unknown",
       });
       this.persist();
-      return structuredClone(check.payload) as Json;
+      return copyData(check.payload) as Json;
     });
   }
 
@@ -1231,6 +1265,23 @@ export class AgentRuntime {
 
   /** Verify one of this agent's own outbound envelopes (pre-send self-check). */
   async selfCheck(wire: WireMessage): Promise<{ ok: boolean; detail: string }> {
+    if (isMessagePacket(wire)) {
+      const declared = documentConfiguration(wire);
+      const cfg = configurationById(declared.configuration);
+      const suite =
+        cfg?.integrity.status === "selected" && cfg.integrity.mechanism === "data-integrity"
+          ? "data-integrity"
+          : "jws";
+      const checked = await verifyMessagePacket(wire, {
+        suite,
+        unsigned: !declared.signed,
+        resolve: (id) =>
+          [...this.keysByAlg.values()].find((key) => key.kid === id.replace(/^urn:awp:key:/, "")),
+      });
+      return checked.ok
+        ? { ok: true, detail: "complete document checked with own key" }
+        : { ok: false, detail: checked.detail };
+    }
     if (wire.format !== "awp-jws-compact/0.1")
       return { ok: true, detail: "unsigned anonymous request" };
     const own = [...this.keysByAlg.values()];
@@ -1254,7 +1305,7 @@ export class AgentRuntime {
    */
   outboundVerifier(): {
     verifyOwnEnvelope(
-      jws: string,
+      jws: string | WireMessage,
     ): Promise<{ ok: boolean; audienceActor?: Iri; messageId?: Iri; detail: string }>;
     endpointsFor(actor: Iri): readonly string[];
     transmit(req: TransmitRequest, io: TransmissionIo): Promise<TransmitResult>;
@@ -1263,6 +1314,28 @@ export class AgentRuntime {
     const own = [...this.keysByAlg.values()];
     return {
       verifyOwnEnvelope: async (jws) => {
+        if (isMessagePacket(jws)) {
+          const cfg = configurationById(documentConfiguration(jws).configuration);
+          const suite =
+            cfg?.integrity.status === "selected" && cfg.integrity.mechanism === "data-integrity"
+              ? "data-integrity"
+              : "jws";
+          const checked = await verifyMessagePacket(jws, {
+            suite,
+            resolve: (id) => own.find((key) => key.kid === id.replace(/^urn:awp:key:/, "")),
+          });
+          if (!checked.ok) return { ok: false, detail: checked.detail };
+          const message = new MessageNode(checked.root, checked.dataset);
+          return message.to?.actor
+            ? {
+                ok: true,
+                audienceActor: message.to.actor,
+                messageId: message.id,
+                detail: "complete document signed by own key",
+              }
+            : { ok: false, detail: "message has no audience actor" };
+        }
+        if (typeof jws !== "string") return { ok: false, detail: "unsupported envelope" };
         const v = await verifyCompact(jws, {
           resolve: (kid) => {
             const k = own.find((x) => x.kid === kid);
@@ -1530,7 +1603,7 @@ export class AgentRuntime {
     );
   }
   pendingTrustRequests() {
-    return structuredClone(this.state.trustHolds);
+    return copyData(this.state.trustHolds);
   }
   submitTrustDecision(requestId: string, approvalJws: string): Promise<StepResult> {
     return this.exclusive(async () => {
@@ -1622,9 +1695,9 @@ export class AgentRuntime {
     };
     (this.state.domain.derivedRequests as unknown as Record<string, DerivedRequest>)[
       request.nonce
-    ] = structuredClone(request);
+    ] = copyData(request);
     this.persist(); // Before the caller can send this nonce.
-    return structuredClone(request);
+    return copyData(request);
   }
   async protocolStatement(
     claimType: "derivation.request" | "joint.message",
@@ -1692,7 +1765,7 @@ export class AgentRuntime {
     const id = String(fixed.session.sessionId);
     if (sessions[id] && digestOf(sessions[id]) !== digestOf(fixed))
       throw new Error("replay-conflict");
-    sessions[id] = structuredClone(fixed);
+    sessions[id] = copyData(fixed);
     this.persist();
   }
   async jointResult(ruleId: string, joint: JsonObject) {
@@ -2199,7 +2272,7 @@ export class AgentRuntime {
       .context(task)
       .find((item) => item.kind === "content" && item.id === partId);
     if (!item?.statement) throw new RejectError("missing-context", "content part is unavailable");
-    const originalPart = structuredClone(
+    const originalPart = copyData(
       item.statement,
     ) as unknown as import("../core/types.js").ContentPart;
     const part = Object.freeze({
@@ -2341,7 +2414,7 @@ export class AgentRuntime {
           this.gateMemory.facts.get(item.id)?.digest === item.digest &&
           !!item.statement,
       )
-      .map((item) => structuredClone(item.statement!));
+      .map((item) => copyData(item.statement!));
   }
   recordDisclosures() {
     return [...this.gateMemory.facts.values()].map((f) => f.id);
@@ -2351,7 +2424,7 @@ export class AgentRuntime {
     return this.exclusive(async () => {
       const key = this.keysByAlg.get("EdDSA");
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
-      const entries = structuredClone(this.ledger.entries());
+      const entries = copyData(this.ledger.entries());
       const signed = await Promise.all(
         entries.map(async (entry) => ({
           entry,
@@ -2782,12 +2855,21 @@ export class AgentRuntime {
 
   private async receiveInner(wire: unknown, meta: { binding?: string }): Promise<StepResult> {
     const at = this.now();
-    this.carriage = peekWire(wire)?.configuration;
-    const admission = this.inbound.arrive(wire, meta.binding, peekWire(wire));
-    this.admission = admission;
+    try {
+      this.carriage = isMessagePacket(wire)
+        ? documentConfiguration(wire).configuration
+        : peekWire(wire)?.configuration;
+    } catch {
+      this.carriage = undefined;
+    }
+    // Verification records do not emit trace events. Admit once, then render the
+    // arrival from that very dataset before recording the integrity verdict.
     const checked = await this.inbound.verifyIntegrity(wire, meta, (id) =>
       Boolean(this.state.outbox[id]),
     );
+    const inspected = checked.message ?? (await inspectMessagePacket(wire)) ?? peekWire(wire);
+    const admission = this.inbound.arrive(wire, meta.binding, inspected);
+    this.admission = admission;
     if (!checked.ok) {
       if (checked.message)
         this.current = { id: checked.message.id, ...(checked.kid ? { kid: checked.kid } : {}) };
@@ -2796,13 +2878,26 @@ export class AgentRuntime {
     }
     const msg = checked.message;
     const msgDigest = digestOf(msg);
+    const documentConfig = configurationById(msg.configuration);
+    const admittedDocumentDigest = isMessagePacket(wire)
+      ? await packetDocumentDigest(
+          wire,
+          documentConfig?.integrity.status === "selected" &&
+            documentConfig.integrity.mechanism === "data-integrity"
+            ? "data-integrity"
+            : "jws",
+        )
+      : undefined;
     this.current = { id: msg.id, ...(checked.signedBy ? { kid: checked.signedBy.kid } : {}) };
 
     // Replay / idempotency.
     this.pruneSeen(Date.parse(at));
     const seen = this.state.seen[msg.id];
     if (seen) {
-      if (seen.digest !== msgDigest) {
+      if (
+        seen.digest !== msgDigest ||
+        (seen.documentDigest && seen.documentDigest !== admittedDocumentDigest)
+      ) {
         admission.failIntegrity("replay-conflict", "message id reused with different content");
         this.reject("replay-conflict", "message id reused with different content");
       }
@@ -2863,7 +2958,7 @@ export class AgentRuntime {
           (hold) => hold.message.id === msg.id,
         );
         if (prior) {
-          if (digestOf(prior.message) !== msgDigest)
+          if (digestOf(prior.message) !== digestOf(msg))
             this.reject("replay-conflict", "held message id reused with different bytes");
           return this.result("pending-approval", { reason: "source-unknown", outbound: [] });
         }
@@ -2883,8 +2978,8 @@ export class AgentRuntime {
             party,
             purpose,
           }),
-          message: structuredClone(msg),
-          wire: structuredClone(wire) as WireMessage,
+          message: copyData(msg!),
+          wire: copyData(wire) as WireMessage,
           binding: meta.binding ?? "unknown",
           kid: checked.signedBy.kid,
           party,
@@ -2930,6 +3025,7 @@ export class AgentRuntime {
     this.gateMemory.rememberIdentifiers(msg.conversation, msg);
     this.state.seen[msg.id] = {
       digest: msgDigest,
+      ...(admittedDocumentDigest ? { documentDigest: admittedDocumentDigest } : {}),
       expiresAt: msg.expiresAt,
       disposition: "processing",
       responses: [],
@@ -2947,18 +3043,24 @@ export class AgentRuntime {
       at,
     });
 
-    if (wire && typeof wire === "object" && (wire as WireMessage).format === "awp-jws-compact/0.1")
+    if (
+      wire &&
+      typeof wire === "object" &&
+      ((wire as WireMessage).format === "awp-jws-compact/0.1" || isMessagePacket(wire))
+    )
       this.state.recordMessages[msg.id] = {
         direction: "in",
         conversation: msg.conversation,
         digest: msgDigest,
-        jws: (wire as { jws: string }).jws,
+        jws: isMessagePacket(wire) ? encodeMessageProof(wire) : (wire as { jws: string }).jws,
       };
+    this.retainedMessageViews.set(msg.id, msg);
     const outbound = await this.dispatch(msg);
     const conv = this.state.conversations[msg.conversation];
     const recorded = this.state.seen[msg.id]?.responses ?? [];
     this.state.seen[msg.id] = {
       digest: msgDigest,
+      ...(admittedDocumentDigest ? { documentDigest: admittedDocumentDigest } : {}),
       expiresAt: msg.expiresAt,
       disposition: outbound.disposition,
       responses: [...new Set([...recorded, ...outbound.outbound.map((o) => o.id)])],
@@ -3051,7 +3153,7 @@ export class AgentRuntime {
       {
         type: "message",
         direction: "in",
-        message: msg,
+        message: copyData(msg!),
         at: this.now(),
         agreementDelivery: conv.operation
           ? this.handlers.get(operationKey(conv.operation))?.agreementDelivery
@@ -3935,7 +4037,7 @@ export class AgentRuntime {
           if (pending && continuation?.type === "release-message")
             this.state.pending[pending.actionDigest] = {
               ...pending,
-              continuation: structuredClone({
+              continuation: copyData({
                 ...continuation,
                 after: {
                   agreement,
@@ -4007,6 +4109,8 @@ export class AgentRuntime {
    * at transmission or reconciliation without showing a new release.
    */
   private authorise(intent: ActionIntent, quiet = false): AuthorisationDecision {
+    // Invalid core proposals retain the existing fail-closed scope checks.
+    if (intent.target && intent.conversation) intent = ActionIntentNode.toNode(intent).live;
     const at = this.now();
     const approvals = new Map<string, { id: Iri; decision: "approve" | "deny" }>();
     for (const [digest, a] of Object.entries(this.state.approvals)) {
@@ -4413,10 +4517,15 @@ export class AgentRuntime {
     this.options.gates?.sink?.emit({
       part: "record",
       kind: "record",
-      caption: `Duty audit: ${JSON.stringify(Object.values(this.state.duties.work))}`,
+      caption: `Duty audit: ${Object.values(this.state.duties.work)
+        .map(
+          (duty) =>
+            `${duty.kind === "notify" ? "Notification" : "Deletion"} ${duty.status}${"acknowledgedAt" in duty && duty.acknowledgedAt ? "; acknowledged by its recipient" : ""}`,
+        )
+        .join(". ")}.`,
     });
     this.persist();
-    return structuredClone(Object.values(this.state.duties.work));
+    return copyData(Object.values(this.state.duties.work));
   }
 
   dischargeDuties(): Promise<StepResult> {
@@ -4515,7 +4624,7 @@ export class AgentRuntime {
       }
     }
     if (changed) this.persist();
-    return structuredClone(Object.values(this.state.notificationDuties));
+    return copyData(Object.values(this.state.notificationDuties));
   }
 
   dischargeNotifications(): Promise<StepResult> {
@@ -5488,7 +5597,7 @@ export class AgentRuntime {
     decisions: readonly AuthorisationDecision[];
     pendingApproval?: string;
   }> {
-    input = structuredClone(input);
+    input = copyData(input);
     return this.exclusive(async () => {
       const at = this.now();
       let task = this.state.tasks[input.taskId];
@@ -5548,9 +5657,9 @@ export class AgentRuntime {
     const digest = actionDigest(intent);
     this.state.pending[digest] = {
       actionDigest: digest,
-      intent: structuredClone(intent),
+      intent: copyData(intent),
       conversation: ownerId,
-      continuation: structuredClone(continuation) as unknown as Json,
+      continuation: copyData(continuation) as unknown as Json,
       createdAt: this.now(),
     };
     if (continuation.type === "effect")
@@ -5787,8 +5896,33 @@ export class AgentRuntime {
       });
     }
     if (cont.type === "release-message") {
+      let prepared: import("../wire/attachments.js").AttachmentDocument;
+      try {
+        prepared = cont.document
+          ? await readHeldMessagePacket(cont.document, nativeDocumentLimits(this.limits))
+          : await writeAttachmentDocument(MessageNode.toNode(cont.message), {
+              limits: nativeDocumentLimits(this.limits),
+            });
+      } catch {
+        this.persist();
+        return this.result("rejected", {
+          reason: "approval-denied",
+          detail: "held document is no longer intact",
+          outbound: [],
+        });
+      }
+      const root = cont.document
+        ? String(prepared.document.id ?? prepared.document["@id"])
+        : cont.message.id;
+      const message = new MessageNode(root, prepared.dataset).live;
+      const config = configurationById(message.configuration);
+      const suite =
+        config?.integrity.status === "selected" && config.integrity.mechanism === "data-integrity"
+          ? "data-integrity"
+          : "jws";
+      const resumedDigest = await documentDigest(prepared.document, suite);
       if (
-        digestOf(cont.message) !== pending.intent.parameters.messageDigest ||
+        resumedDigest !== pending.intent.parameters.messageDigest ||
         actionDigest(pending.intent) !== a.actionDigest
       ) {
         this.persist();
@@ -5803,7 +5937,7 @@ export class AgentRuntime {
         this.persist();
         return this.result("local", { reason: "approval-denied", outbound: [] });
       }
-      if (Date.parse(cont.message.expiresAt) <= Date.parse(this.now())) {
+      if (Date.parse(message.expiresAt) <= Date.parse(this.now())) {
         this.persist();
         return this.result("rejected", { reason: "expired", outbound: [] });
       }
@@ -5816,17 +5950,18 @@ export class AgentRuntime {
           outbound: [],
         });
       }
-      const out = await this.emit(conv.id, cont.message.kind, cont.message.body, {
-        resume: cont.message,
+      const out = await this.emit(conv.id, message.kind, message.body, {
+        resume: message,
+        ...(cont.document ? { resumePacket: cont.document } : {}),
         approved: true,
         ...(cont.intent ? { intent: cont.intent } : {}),
         ...(cont.force ? { force: true } : {}),
         ...(cont.conditions ? { conditions: cont.conditions } : {}),
       });
       this.state.usedApprovals[a.id] = true;
-      if (cont.message.kind === "receipt")
+      if (message.kind === "receipt")
         for (const [key, effect] of Object.entries(this.state.effects)) {
-          if (effect.activity === cont.message.body.activity)
+          if (effect.activity === message.body.activity)
             this.state.effects[key] = { ...effect, receiptSent: true };
         }
       this.persist();
@@ -5959,6 +6094,7 @@ export class AgentRuntime {
       /** Authorisation basis of a protected disclosure; re-checked at every transmission. */
       conditions?: readonly DisclosureCondition[];
       resume?: AnyMessage;
+      resumePacket?: MessagePacket;
       approved?: boolean;
     },
   ): Promise<OutboundMessage> {
@@ -6186,14 +6322,12 @@ export class AgentRuntime {
         createdAt: at.toISOString(),
         expiresAt: new Date(at.getTime() + lifetime).toISOString(),
         ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
-        body: structuredClone(body),
-        ...(opts.content ? { content: structuredClone(opts.content) } : {}),
+        body: copyData(body),
+        ...(opts.content ? { content: copyData(opts.content) } : {}),
         ...(free.length > 0 && this.identity.party
           ? { authorship: { method: "model-output", onBehalfOf: this.identity.party } }
           : {}),
-        ...(opts.evidence && opts.evidence.length > 0
-          ? { evidence: structuredClone(opts.evidence) }
-          : {}),
+        ...(opts.evidence && opts.evidence.length > 0 ? { evidence: copyData(opts.evidence) } : {}),
       } as unknown as AnyMessage);
     if (
       !opts.resume &&
@@ -6223,8 +6357,12 @@ export class AgentRuntime {
         );
       }
     }
-    const checked = validateMessage(message);
-    if (!checked.ok) throw new Error(`internal: outbound ${kind} invalid: ${checked.detail}`);
+    // Resumed native views already passed full wire/shape admission. Zod's record
+    // projection is only the construction boundary for a core's object proposal.
+    if (!(message instanceof MessageNode)) {
+      const checked = validateMessage(message);
+      if (!checked.ok) throw new Error(`internal: outbound ${kind} invalid: ${checked.detail}`);
+    }
     for (const evidence of message.evidence ?? []) {
       if (!isClaimEvidence(evidence)) continue;
       const checkedEvidence = await this.inbound.assessClaim(evidence, this.identity.party);
@@ -6338,7 +6476,15 @@ export class AgentRuntime {
         );
       }
     }
+    const prepared = opts.resumePacket
+      ? await readHeldMessagePacket(opts.resumePacket, nativeDocumentLimits(this.limits))
+      : await writeAttachmentDocument(MessageNode.toNode(message), {
+          limits: nativeDocumentLimits(this.limits),
+        });
+    message = new MessageNode(message.id, prepared.dataset).live;
+    const suite = cfg.integrity.mechanism === "data-integrity" ? "data-integrity" : "jws";
     const release = this.outbound.checkMessage(message, {
+      documentDigest: await documentDigest(prepared.document, suite),
       content: { ...content, vocabulary },
       knownTerms: known.terms,
       ...(opts.intent ? { intent: opts.intent } : {}),
@@ -6351,6 +6497,11 @@ export class AgentRuntime {
           ? this.park(conv.id, release.intent, {
               type: "release-message",
               message,
+              document: {
+                format: "awp-jsonld/0.1",
+                jsonld: JSON.stringify(prepared.document),
+                attachments: prepared.attachments,
+              },
               ...(opts.intent ? { intent: opts.intent } : {}),
               ...(opts.force ? { force: true } : {}),
               ...(opts.conditions ? { conditions: opts.conditions } : {}),
@@ -6418,11 +6569,34 @@ export class AgentRuntime {
     if (anonymousRequester) {
       if (!cfg.unsignedRequestKinds.includes(kind))
         throw new Error(`internal: anonymous requester cannot send ${kind}`);
-      wire = { format: "awp-unsigned-json/0.1", payload: JSON.stringify(message) };
+      wire = {
+        format: "awp-jsonld/0.1",
+        jsonld: JSON.stringify(prepared.document),
+        attachments: prepared.attachments,
+      };
     } else {
       const key = this.keysByAlg.get(cfg.integrity.alg);
       if (!key) throw new Error(`no actor key for ${cfg.integrity.alg}`);
-      wire = { format: "awp-jws-compact/0.1", jws: await signCompact(key, TYP.message, message) };
+      const signed = await signDocument(prepared.document, {
+        suite,
+        key,
+        verificationMethod: "urn:awp:key:" + key.kid,
+        created: message.createdAt,
+        limits: nativeDocumentLimits(this.limits),
+      });
+      wire = {
+        format: "awp-jsonld/0.1",
+        jsonld: JSON.stringify(signed),
+        attachments: prepared.attachments,
+      };
+    }
+    if (isMessagePacket(wire)) {
+      const read = await readAttachmentDocument(wire.jsonld, wire.attachments, {
+        suite,
+        limits: nativeDocumentLimits(this.limits),
+      });
+      if (!read.ok) throw new Error(`internal: signed document refused: ${read.detail}`);
+      await rememberMessagePacket(wire, new MessageNode(read.root, read.dataset));
     }
     if (kind === "propose")
       this.setDomain(`_offer:${message.id}`, (body as JsonObject).terms as Json, conversationId);
@@ -6432,6 +6606,7 @@ export class AgentRuntime {
       kind,
       ...(conv.peer.actor ? { toActor: conv.peer.actor } : {}),
       wire,
+      message: copyData(message),
       createdAt: message.createdAt,
       ...(opts.intent ? { intent: opts.intent } : {}),
       ...(opts.conditions ? { conditions: opts.conditions } : {}),
@@ -6477,13 +6652,14 @@ export class AgentRuntime {
             }
           }
     }
-    if (wire.format === "awp-jws-compact/0.1")
+    if (isMessagePacket(wire))
       this.state.recordMessages[message.id] = {
         direction: "out",
         conversation: message.conversation,
         digest: digestOf(message),
-        jws: wire.jws,
+        jws: encodeMessageProof(wire),
       };
+    this.retainedMessageViews.set(message.id, message);
     this.recordItemTransfer(message, conv, false);
     // Mirror the seal, decision and transfer entries before exposing the message to carriage.
     if (!(await this.outbound.ensureRecord(message.id)))
@@ -6520,12 +6696,16 @@ export class AgentRuntime {
   }
 
   private outboundFromEntry(entry: OutboxEntry, message?: AnyMessage): OutboundMessage {
-    let msg = message;
+    let msg = message ?? peekWire(entry.wire) ?? entry.message;
+    if (!msg && isMessagePacket(entry.wire)) throw new Error("Missing retained document rendering");
     if (!msg) {
       const text =
         entry.wire.format === "awp-unsigned-json/0.1"
           ? entry.wire.payload
-          : Buffer.from(entry.wire.jws.split(".")[1] ?? "", "base64url").toString("utf8");
+          : Buffer.from(
+              (entry.wire as { jws: string }).jws.split(".")[1] ?? "",
+              "base64url",
+            ).toString("utf8");
       msg = decodeAdapterJson(text) as AnyMessage;
     }
     return {
@@ -6535,7 +6715,7 @@ export class AgentRuntime {
       ...(entry.toActor ? { toActor: entry.toActor } : {}),
       endpoints: entry.toActor ? this.trust.actorEndpoints(entry.toActor) : [],
       wire: entry.wire,
-      message: msg,
+      message: copyData(msg!),
     };
   }
 
@@ -6775,7 +6955,7 @@ export class AgentRuntime {
             source: this.identity.actor,
             subject: this.identity.party ?? "unknown",
           });
-        return structuredClone(value) as T | undefined;
+        return copyData(value) as T | undefined;
       },
       setState: (key: string, value: Json, owner?: Iri | null) =>
         this.setDomain(`${opKey}:${key}`, value, owner === null ? undefined : (owner ?? conv.id)),
@@ -6900,7 +7080,7 @@ export class AgentRuntime {
   }
 
   private persist(): void {
-    this.store.save(this.state);
+    this.store.save(copyData(this.state));
   }
 
   private result(

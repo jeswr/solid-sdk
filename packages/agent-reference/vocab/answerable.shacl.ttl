@@ -2438,3 +2438,15 @@ awp:ByteListShape a sh:NodeShape; sh:node awp:ItemListShape;
 
 # Brief 22c: basis kind individuals (AUTHORED-BY Codex GPT-6)
 awp:BasisKindShape a sh:NodeShape; sh:targetClass awp:BasisKind.
+
+# Brief 22d attachments (AUTHORED-BY Codex GPT-6)
+awp:AttachmentShape a sh:NodeShape; sh:targetClass awp:Attachment;
+  sh:property [ sh:path awp:attachmentDigest; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string; sh:pattern "^sha-256:[a-f0-9]{64}$" ],
+    [ sh:path awp:byteLength; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:integer; sh:minInclusive 0; sh:maxInclusive 2097152 ],
+    [ sh:path <https://schema.org/encodingFormat>; sh:minCount 1; sh:maxCount 1; sh:datatype xsd:string ],
+    [ sh:path awp:attachmentDatatype; sh:maxCount 1; sh:nodeKind sh:IRI ].
+# A collection reference retains its class; its checked payload supplies its entries.
+awp:ItemListShape sh:property
+    [ sh:path awp:attachmentDigest; sh:maxCount 1; sh:datatype xsd:string ],
+    [ sh:path awp:byteLength; sh:maxCount 1; sh:datatype xsd:integer ],
+    [ sh:path <https://schema.org/encodingFormat>; sh:maxCount 1; sh:datatype xsd:string ].

@@ -27,11 +27,12 @@ export function inspectEvidenceJws(jws: string): { header: JsonObject; payload: 
 export function inspectEvidenceEnvelope(
   value: string,
   format: string,
+  options: { allowEmpty?: boolean } = {},
 ): {
   payload: import("../core/types.js").JsonObject | import("../core/types.js").Json[];
   credentials: readonly string[];
 } {
-  if (!["selective-disclosure+jws", "mandate-chain+jws"].includes(format))
+  if (!["selective-disclosure+jws", "mandate-chain+jws", "awp-action-intent/0.1"].includes(format))
     throw new TypeError("Unsupported evidence envelope");
   assertUniqueKeys(value);
   const payload = parseBoundedJson(value);
@@ -45,6 +46,7 @@ export function inspectEvidenceEnvelope(
     else if (item && typeof item === "object") for (const child of Object.values(item)) walk(child);
   }
   walk(payload);
-  if (!credentials.length) throw new TypeError("Envelope contains no signed credential");
+  if (!credentials.length && format !== "awp-action-intent/0.1" && !options.allowEmpty)
+    throw new TypeError("Envelope contains no signed credential");
   return { payload: payload as JsonObject | import("../core/types.js").Json[], credentials };
 }

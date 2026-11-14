@@ -62,7 +62,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -372,7 +372,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "A data holder's research.count statement is intact and signed with A data holder's pinned key."
+      "caption": "A data holder's research count statement is intact and signed with A data holder's pinned key."
     },
     {
       "seq": 21,
@@ -431,7 +431,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:fictional:research-data-access:holder-source",
-        "text": "A data holder is accepted for research.count claims."
+        "text": "A data holder is accepted for research count claims."
       },
       "resolution": {
         "question": "Is A data holder an authority for research.count claims about the unlabelled resource?",
@@ -444,7 +444,7 @@
         ],
         "answer": "Accepted, for research.count claims only."
       },
-      "caption": "A data holder's research.count statement: A data holder is an accepted source for this kind of claim."
+      "caption": "A data holder's research count statement: A data holder is an accepted source for this kind of claim."
     },
     {
       "seq": 23,
@@ -462,7 +462,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "A data holder's research.count statement asks for nothing, so there is no authority to check."
+      "caption": "A data holder's research count statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 24,
@@ -489,7 +489,7 @@
         "id": "urn:query-terms:1a3183768809967dd8a8cedf89ffd0d016d300d1ac426f5932898f5d0f20e351",
         "text": "Its terms allow this: use for Approved research; share for Approved research."
       },
-      "caption": "A data holder's research.count statement: its terms allow this: use for Approved research; share for Approved research."
+      "caption": "A data holder's research count statement: its terms allow this: use for Approved research; share for Approved research."
     },
     {
       "seq": 25,
@@ -519,9 +519,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:research-data-access:research.count",
-        "text": "Accept research.count from A data holder by derived, at most 1 days old."
+        "text": "Accept research count from A data holder by derived, at most 1 days old."
       },
-      "caption": "A data holder's research.count statement is fit for A researcher queries sensitive data: derived, 0 days old."
+      "caption": "A data holder's research count statement is fit for A researcher queries sensitive data: derived, 0 days old."
     },
     {
       "seq": 26,
@@ -531,7 +531,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "A data holder's research.count statement is admitted."
+      "caption": "A data holder's research count statement is admitted."
     },
     {
       "seq": 27,
@@ -541,7 +541,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:query-answer:d036e77105b0ce6c2daa4745d18096b1fb5e061b0c1bfdafab77c922f132cbe6",
-        "label": "A data holder's research.count statement",
+        "label": "A data holder's research count statement",
         "claimType": "research.count",
         "subject": "urn:fictional:research-data-access:dataset",
         "value": null,
@@ -554,7 +554,7 @@
         },
         "provenance": "signed by A data holder"
       },
-      "caption": "A data holder's research.count statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "A data holder's research count statement is stored with its source, how it was produced, its date and its terms."
     }
   ]
 }

@@ -5,6 +5,7 @@ import { digestOf } from "../core/canonical.js";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import { id, iso } from "../core/schema.js";
 import type { JsonObject, ReasonCode, VerificationResult } from "../core/types.js";
+import { copyData } from "../model/copy.js";
 import { currentStatus } from "./current-status.js";
 import type { DocumentResolver } from "./organizations.js";
 import { verifyStatement } from "./statements.js";
@@ -121,7 +122,7 @@ export async function mapCodeClaim(
   if (entries.length !== 1) return fail("unsupported-term", "ask-more");
   const entry = required(entries[0]);
   const statement: JsonObject = {
-    ...structuredClone(original),
+    ...copyData(original),
     codeList: table.toList,
     code: entry.to,
     method: "derived",

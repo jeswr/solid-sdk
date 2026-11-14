@@ -45,8 +45,16 @@ export class LabelIndex {
         identifiers.add(iri);
         return this.name(iri) + punctuation;
       });
-    const caption = render(event.caption);
-    const rule = event.rule ? { ...event.rule, text: render(event.rule.text) } : undefined;
+    const plainWords = (text: string) =>
+      text
+        .replace(/\b[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+\b/g, (token) =>
+          token.replace(/[._-]/g, " "),
+        )
+        .replace(/([a-z])([A-Z])/g, "$1 $2");
+    const caption = plainWords(render(event.caption));
+    const rule = event.rule
+      ? { ...event.rule, text: plainWords(render(event.rule.text)) }
+      : undefined;
     const refs: TraceRef[] = [...(event.refs ?? [])];
     for (const id of identifiers)
       if (!refs.some((ref) => ref.id === id))

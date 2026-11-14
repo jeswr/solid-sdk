@@ -3,16 +3,17 @@
 
 # @jeswr/agent-reference
 
-Brief 22 R1 / 22b is **partly implemented**. The published RDF model is in `vocab/`;
-`@jeswr/agent-reference/wire` provides pinned JSON-LD reading, SHACL validation,
-stable writing, JCS/JWS and RDFC/Data Integrity primitives. Envelope/action scope and
-fitness checks read live RDF views. Runtime bodies, evidence, policies, core proposals
-and stored messages still use legacy objects. `check:rdf-pipeline` still fails on **15 unmigrated core model declarations**.
-Another **213 violations in 79 scopes** are bounded, reasoned exceptions in
-`scripts/rdf-pipeline-allowlist.json`. Core model declarations and direct triple
-construction cannot be exempted. The recorded per-scope ceiling cannot grow, and stale
-allowances fail. `--write-status` records only a passing reduction. No Data Integrity scenario or full-graph packet recording is claimed.
-See `ENGINE-REPORT.md` and `RDF-PIPELINE-STATUS.json` for the exact remaining work.
+Brief 22d runs complete pinned JSON-LD messages, with content-addressed attachments,
+JCS/JWS or RDFC/Data Integrity authenticity, live message/intent views and full-document
+packet inspection. The two mortgage journeys also run under Data Integrity. Core model
+types alias their wrappers' live surfaces; `check:rdf-pipeline` reports **0 hard failures**
+and **213 existing function/signature allowances**. This is still a partial migration:
+legacy input compatibility and remaining policy/store adapters are visible in those allowances;
+action approvals that precede message construction retain their original intent bindings.
+Message-release approvals retain the document and attachment bytes and bind the selected
+suite's full document digest, including after restart. Every scenario packet includes
+the document and its RDF graph. See `ENGINE-REPORT.md` and `RDF-PIPELINE-STATUS.json` for exact limits, completed
+parts, remaining boundaries and validation results.
 
 The reference agent runtime of the accountable agent architecture. It began as the September
 pilot runtime lifted from `@jeswr/personal-agent/pilot`, and now executes profile/scenario

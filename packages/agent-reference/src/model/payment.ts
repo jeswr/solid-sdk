@@ -1,3 +1,4 @@
+import { cloneAttachmentDataset } from "./attachments.js";
 // AUTHORED-BY Codex GPT-6
 /** Live RDF views. Protocol adapters construct these; gates never inspect protocol JSON. */
 
@@ -343,7 +344,7 @@ export class PaymentFacts extends PaymentNode {
     );
   }
   snapshot(): PaymentFacts {
-    return new PaymentFacts(this.id, new Store([...this.dataset]));
+    return new PaymentFacts(this.id, cloneAttachmentDataset(this.dataset));
   }
   data(): PaymentData {
     const {

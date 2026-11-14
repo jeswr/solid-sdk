@@ -75,7 +75,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -118,7 +118,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The supplying tier's material.recycled-fraction statement is intact and signed with The supplying tier's pinned key."
+      "caption": "The supplying tier's material recycled fraction statement is intact and signed with The supplying tier's pinned key."
     },
     {
       "seq": 2,
@@ -143,7 +143,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:recycled-content:material.recycled-fraction",
-        "text": "The supplying tier is accepted for material.recycled-fraction claims."
+        "text": "The supplying tier is accepted for material recycled fraction claims."
       },
       "resolution": {
         "question": "Is The supplying tier an authority for material.recycled-fraction claims about The brand?",
@@ -156,7 +156,7 @@
         ],
         "answer": "Accepted, for material.recycled-fraction claims only."
       },
-      "caption": "The supplying tier's material.recycled-fraction statement: The supplying tier is an accepted source for this kind of claim."
+      "caption": "The supplying tier's material recycled fraction statement: The supplying tier is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -174,7 +174,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The supplying tier's material.recycled-fraction statement asks for nothing, so there is no authority to check."
+      "caption": "The supplying tier's material recycled fraction statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -201,7 +201,7 @@
         "id": "urn:terms:recycled-content:self-declared-tier",
         "text": "Its terms allow this: use for Recycled content; share for Recycled content."
       },
-      "caption": "The supplying tier's material.recycled-fraction statement: its terms allow this: use for Recycled content; share for Recycled content."
+      "caption": "The supplying tier's material recycled fraction statement: its terms allow this: use for Recycled content; share for Recycled content."
     },
     {
       "seq": 5,
@@ -241,9 +241,9 @@
       "reason": "method-not-accepted",
       "rule": {
         "id": "urn:profile:recycled-content:material.recycled-fraction",
-        "text": "Accept material.recycled-fraction from The supplying tier, Fictional independently keyed audited supply tier 2, Fictional independently keyed audited supply tier 3 by audited-by-certifier, at most 30 days old."
+        "text": "Accept material recycled fraction from The supplying tier, Fictional independently keyed audited supply tier 2, Fictional independently keyed audited supply tier 3 by audited-by-certifier, at most 30 days old."
       },
-      "caption": "The supplying tier's material.recycled-fraction statement was not produced in a way Proving recycled content along a supply chain accepts."
+      "caption": "The supplying tier's material recycled fraction statement was not produced in a way Proving recycled content along a supply chain accepts."
     },
     {
       "seq": 6,
@@ -254,7 +254,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "method-not-accepted",
-      "caption": "Required claim: material.recycled-fraction. Accepted sources: The supplying tier, Fictional independently keyed audited supply tier 2, Fictional independently keyed audited supply tier 3. Accepted methods: audited-by-certifier.",
+      "caption": "Required claim: material recycled fraction. Accepted sources: The supplying tier, Fictional independently keyed audited supply tier 2, Fictional independently keyed audited supply tier 3. Accepted methods: audited-by-certifier.",
       "refs": [
         {
           "layer": "meaning",

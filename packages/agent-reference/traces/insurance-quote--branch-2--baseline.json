@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -110,7 +110,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The claims register's claims.completeness statement is intact and signed with The claims register's pinned key."
+      "caption": "The claims register's claims completeness statement is intact and signed with The claims register's pinned key."
     },
     {
       "seq": 2,
@@ -135,7 +135,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:insurance-quote:claims.completeness",
-        "text": "The claims register is accepted for claims.completeness claims."
+        "text": "The claims register is accepted for claims completeness claims."
       },
       "resolution": {
         "question": "Is The claims register an authority for claims.completeness claims about The driver?",
@@ -148,7 +148,7 @@
         ],
         "answer": "Accepted, for claims.completeness claims only."
       },
-      "caption": "The claims register's claims.completeness statement: The claims register is an accepted source for this kind of claim."
+      "caption": "The claims register's claims completeness statement: The claims register is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -166,7 +166,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The claims register's claims.completeness statement asks for nothing, so there is no authority to check."
+      "caption": "The claims register's claims completeness statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -193,7 +193,7 @@
         "id": "urn:terms:insurance-quote:complete",
         "text": "Its terms allow this: use for Insurance quote; share for Insurance quote."
       },
-      "caption": "The claims register's claims.completeness statement: its terms allow this: use for Insurance quote; share for Insurance quote."
+      "caption": "The claims register's claims completeness statement: its terms allow this: use for Insurance quote; share for Insurance quote."
     },
     {
       "seq": 5,
@@ -223,9 +223,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-quote:claims.completeness",
-        "text": "Accept claims.completeness from The claims register by recorded-by-authority, at most 30 days old."
+        "text": "Accept claims completeness from The claims register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The claims register's claims.completeness statement is fit for An insurance quote with the least disclosure: recorded-by-authority, 0 days old."
+      "caption": "The claims register's claims completeness statement is fit for An insurance quote with the least disclosure: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -235,7 +235,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The claims register's claims.completeness statement is admitted."
+      "caption": "The claims register's claims completeness statement is admitted."
     },
     {
       "seq": 7,
@@ -245,7 +245,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:insurance-quote:complete",
-        "label": "The claims register's claims.completeness statement",
+        "label": "The claims register's claims completeness statement",
         "claimType": "claims.completeness",
         "subject": "urn:fictional:insurance-quote:owner",
         "value": null,
@@ -262,7 +262,7 @@
         },
         "provenance": "signed by The claims register"
       },
-      "caption": "The claims register's claims.completeness statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The claims register's claims completeness statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -285,7 +285,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The claims register's claims.list statement is intact and signed with The claims register's pinned key."
+      "caption": "The claims register's claims list statement is intact and signed with The claims register's pinned key."
     },
     {
       "seq": 9,
@@ -310,7 +310,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:insurance-quote:claims.list",
-        "text": "The claims register is accepted for claims.list claims."
+        "text": "The claims register is accepted for claims list claims."
       },
       "resolution": {
         "question": "Is The claims register an authority for claims.list claims about The driver?",
@@ -323,7 +323,7 @@
         ],
         "answer": "Accepted, for claims.list claims only."
       },
-      "caption": "The claims register's claims.list statement: The claims register is an accepted source for this kind of claim."
+      "caption": "The claims register's claims list statement: The claims register is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -341,7 +341,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The claims register's claims.list statement asks for nothing, so there is no authority to check."
+      "caption": "The claims register's claims list statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -368,7 +368,7 @@
         "id": "urn:terms:insurance-quote:claims",
         "text": "Its terms allow this: use for Insurance quote; share for Insurance quote."
       },
-      "caption": "The claims register's claims.list statement: its terms allow this: use for Insurance quote; share for Insurance quote."
+      "caption": "The claims register's claims list statement: its terms allow this: use for Insurance quote; share for Insurance quote."
     },
     {
       "seq": 12,
@@ -398,9 +398,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-quote:claims.list",
-        "text": "Accept claims.list from The claims register by recorded-by-authority, at most 30 days old."
+        "text": "Accept claims list from The claims register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The claims register's claims.list statement is fit for An insurance quote with the least disclosure: recorded-by-authority, 0 days old."
+      "caption": "The claims register's claims list statement is fit for An insurance quote with the least disclosure: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -418,7 +418,7 @@
         }
       ],
       "reason": "completeness-not-established",
-      "caption": "An accepted completeness statement for claims.list, its subject and period is required."
+      "caption": "An accepted completeness statement for claims list, its subject and period is required."
     },
     {
       "seq": 14,
@@ -429,7 +429,7 @@
       "verdict": "ask-more",
       "outcome": "ask-more",
       "reason": "completeness-not-established",
-      "caption": "The claims register's claims.list statement is refused and kept out of memory."
+      "caption": "The claims register's claims list statement is refused and kept out of memory."
     }
   ]
 }

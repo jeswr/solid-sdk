@@ -18754,6 +18754,13 @@
           }
         ]
       }
+    },
+    {
+      "id": "authenticity-data-integrity",
+      "change": {
+        "authenticity": "data-integrity"
+      },
+      "world": {}
     }
   ],
   "paymentProviders": [

@@ -47,6 +47,7 @@ export class ScenarioCarriage {
     private readonly sink?: (party: string) => TraceSink,
   ) {}
   advertisements(agent: string): { id: string; endpoint?: string }[] {
+    if (this.suite === "direct-http") return [{ id: "direct-local/0.1" }];
     const scope =
       this.scenario.carriage?.parties ??
       this.scenario.parties.filter((party) => party.runs === "agent").map((party) => party.id);

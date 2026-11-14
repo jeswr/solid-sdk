@@ -98,7 +98,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -137,7 +137,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The supplier’s bank's bank.account-owner statement is intact and signed with The supplier’s bank's pinned key."
+      "caption": "The supplier’s bank's bank account owner statement is intact and signed with The supplier’s bank's pinned key."
     },
     {
       "seq": 2,
@@ -162,7 +162,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:supplier-bank",
-        "text": "The supplier’s bank is accepted for bank.account-owner claims."
+        "text": "The supplier’s bank is accepted for bank account owner claims."
       },
       "resolution": {
         "question": "Is The supplier’s bank an authority for bank.account-owner claims about the unlabelled resource?",
@@ -175,7 +175,7 @@
         ],
         "answer": "Accepted, for bank.account-owner claims only."
       },
-      "caption": "The supplier’s bank's bank.account-owner statement: The supplier’s bank is an accepted source for this kind of claim."
+      "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -193,7 +193,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The supplier’s bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier’s bank's bank account owner statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -220,7 +220,7 @@
         "id": "urn:terms:account-confirmation",
         "text": "Its terms allow this: ."
       },
-      "caption": "The supplier’s bank's bank.account-owner statement: its terms allow this: ."
+      "caption": "The supplier’s bank's bank account owner statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -250,9 +250,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:bank.account-owner",
-        "text": "Accept bank.account-owner from The supplier’s bank by recorded-by-authority, at most 30 days old."
+        "text": "Accept bank account owner from The supplier’s bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The supplier’s bank's bank.account-owner statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The supplier’s bank's bank account owner statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -262,7 +262,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The supplier’s bank's bank.account-owner statement is admitted."
+      "caption": "The supplier’s bank's bank account owner statement is admitted."
     },
     {
       "seq": 7,
@@ -272,7 +272,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:account",
-        "label": "The supplier’s bank's bank.account-owner statement",
+        "label": "The supplier’s bank's bank account owner statement",
         "claimType": "bank.account-owner",
         "subject": "urn:fictional:supplier",
         "value": null,
@@ -285,7 +285,7 @@
         },
         "provenance": "signed by The supplier’s bank"
       },
-      "caption": "The supplier’s bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier’s bank's bank account owner statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -308,7 +308,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
+      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key."
     },
     {
       "seq": 9,
@@ -333,7 +333,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:directory",
-        "text": "The staff directory is accepted for organization.role claims."
+        "text": "The staff directory is accepted for organization role claims."
       },
       "resolution": {
         "question": "Is The staff directory an authority for organization.role claims about The first financial controller?",
@@ -346,7 +346,7 @@
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -364,7 +364,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -391,7 +391,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 12,
@@ -421,9 +421,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:organization.role",
-        "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -433,7 +433,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The staff directory's organization.role statement is admitted."
+      "caption": "The staff directory's organization role statement is admitted."
     },
     {
       "seq": 14,
@@ -443,7 +443,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:role-controller-one",
-        "label": "The staff directory's organization.role statement",
+        "label": "The staff directory's organization role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:controller-one",
         "value": null,
@@ -452,7 +452,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The staff directory"
       },
-      "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -475,7 +475,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
+      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key."
     },
     {
       "seq": 16,
@@ -500,7 +500,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:directory",
-        "text": "The staff directory is accepted for organization.role claims."
+        "text": "The staff directory is accepted for organization role claims."
       },
       "resolution": {
         "question": "Is The staff directory an authority for organization.role claims about The second financial controller?",
@@ -513,7 +513,7 @@
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
     },
     {
       "seq": 17,
@@ -531,7 +531,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 18,
@@ -558,7 +558,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 19,
@@ -588,9 +588,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:organization.role",
-        "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 20,
@@ -600,7 +600,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The staff directory's organization.role statement is admitted."
+      "caption": "The staff directory's organization role statement is admitted."
     },
     {
       "seq": 21,
@@ -610,7 +610,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:role-controller-two",
-        "label": "The staff directory's organization.role statement",
+        "label": "The staff directory's organization role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:controller-two",
         "value": null,
@@ -619,7 +619,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The staff directory"
       },
-      "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 22,
@@ -642,7 +642,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
+      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key."
     },
     {
       "seq": 23,
@@ -667,7 +667,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:directory",
-        "text": "The staff directory is accepted for organization.role claims."
+        "text": "The staff directory is accepted for organization role claims."
       },
       "resolution": {
         "question": "Is The staff directory an authority for organization.role claims about The requesting staff member?",
@@ -680,7 +680,7 @@
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
     },
     {
       "seq": 24,
@@ -698,7 +698,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 25,
@@ -725,7 +725,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 26,
@@ -755,9 +755,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:master-data-change:organization.role",
-        "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
+        "text": "Accept organization role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
     },
     {
       "seq": 27,
@@ -767,7 +767,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The staff directory's organization.role statement is admitted."
+      "caption": "The staff directory's organization role statement is admitted."
     },
     {
       "seq": 28,
@@ -777,7 +777,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:role-requester",
-        "label": "The staff directory's organization.role statement",
+        "label": "The staff directory's organization role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:requester",
         "value": null,
@@ -786,7 +786,7 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The staff directory"
       },
-      "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 29,

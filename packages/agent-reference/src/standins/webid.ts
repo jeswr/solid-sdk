@@ -164,6 +164,11 @@ export class FictionalWebIdDirectory {
     }
     return typeof kid === "string" ? this.resolveKid(kid) : { ok: false, reason: "unknown-key" };
   }
+  /** Document carriage: the declared configuration and kid are routing hints only. */
+  async resolveDeclared(configuration: string, kid: string): Promise<WebIdResolution | undefined> {
+    if (configuration !== WIRE_ID) return undefined;
+    return this.resolveKid(kid);
+  }
   async recipient(actor: string | undefined, configuration: string): Promise<string | undefined> {
     if (configuration !== WIRE_ID) return undefined;
     const kid = actor ? this.actors.get(actor) : undefined;

@@ -1675,3 +1675,9 @@ awp:IntentEvidenceRef a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Inten
 # Brief 22c: separate a request basis from its discriminant (AUTHORED-BY Codex GPT-6)
 awp:BasisKind a <http://www.w3.org/2002/07/owl#Class>; rdfs:label "Kind of request basis";
     rdfs:comment "The agreement, public, represented, grant or invocation discriminant. A kind individual is distinct from a request's basis node and its particular reference.".
+
+# Brief 22d attachments (AUTHORED-BY Codex GPT-6)
+awp:Attachment a rdfs:Class; rdfs:label "Content attachment"; rdfs:comment "A bounded content-addressed payload carried beside its signed document.".
+awp:attachmentDigest a rdf:Property; rdfs:label "Attachment digest"; rdfs:comment "SHA-256 of the exact attachment bytes, with the sha-256: prefix."; rdfs:domain awp:Attachment; rdfs:range xsd:string.
+awp:byteLength a rdf:Property; rdfs:label "Byte length"; rdfs:comment "The length in bytes of the exact attachment payload."; rdfs:domain awp:Attachment; rdfs:range xsd:integer.
+awp:attachmentDatatype a rdf:Property; rdfs:label "Attached literal datatype"; rdfs:comment "The RDF datatype of an attached literal's exact UTF-8 lexical value."; rdfs:domain awp:Attachment; rdfs:range rdfs:Datatype.

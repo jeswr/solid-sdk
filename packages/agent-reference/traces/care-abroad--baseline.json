@@ -61,7 +61,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -104,7 +104,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "A home practice's medicine.code statement is intact and signed with A home practice's pinned key."
+      "caption": "A home practice's medicine code statement is intact and signed with A home practice's pinned key."
     },
     {
       "seq": 2,
@@ -129,7 +129,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:fictional:care-abroad:clinical-source",
-        "text": "A home practice is accepted for medicine.code claims."
+        "text": "A home practice is accepted for medicine code claims."
       },
       "resolution": {
         "question": "Is A home practice an authority for medicine.code claims about A traveller?",
@@ -142,7 +142,7 @@
         ],
         "answer": "Accepted, for medicine.code claims only."
       },
-      "caption": "A home practice's medicine.code statement: A home practice is an accepted source for this kind of claim."
+      "caption": "A home practice's medicine code statement: A home practice is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -160,7 +160,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "A home practice's medicine.code statement asks for nothing, so there is no authority to check."
+      "caption": "A home practice's medicine code statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -187,7 +187,7 @@
         "id": "urn:fictional:care-abroad:medicine-terms",
         "text": "Its terms allow this: use for Care abroad; share for Care abroad."
       },
-      "caption": "A home practice's medicine.code statement: its terms allow this: use for Care abroad; share for Care abroad."
+      "caption": "A home practice's medicine code statement: its terms allow this: use for Care abroad; share for Care abroad."
     },
     {
       "seq": 5,
@@ -217,9 +217,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:care-abroad:medicine.code",
-        "text": "Accept medicine.code from A home practice by recorded-by-authority, derived, at most 30 days old."
+        "text": "Accept medicine code from A home practice by recorded-by-authority, derived, at most 30 days old."
       },
-      "caption": "A home practice's medicine.code statement is fit for Health data across a border: recorded-by-authority, 0 days old."
+      "caption": "A home practice's medicine code statement is fit for Health data across a border: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -247,7 +247,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "A home practice's medicine.code statement is admitted."
+      "caption": "A home practice's medicine code statement is admitted."
     },
     {
       "seq": 8,
@@ -257,7 +257,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:mapped:45c14be1034c9b68c3ef7fc5edcad42a6f87c6df2fe20234f2aaaa40f75f3300",
-        "label": "A home practice's medicine.code statement",
+        "label": "A home practice's medicine code statement",
         "claimType": "medicine.code",
         "subject": "urn:fictional:care-abroad:party-1",
         "value": {
@@ -311,7 +311,7 @@
         },
         "provenance": "Locally mapped; original signed by A home practice"
       },
-      "caption": "A home practice's medicine.code statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "A home practice's medicine code statement is stored with its source, how it was produced, its date and its terms."
     }
   ]
 }

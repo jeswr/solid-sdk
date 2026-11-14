@@ -108,7 +108,8 @@ export async function sign(
   options: SignOptions,
 ): Promise<JsonLdDocument> {
   assertSuite(options.suite);
-  if (options.key.alg !== "EdDSA") throw new DocumentError("configuration-mismatch");
+  if (options.suite === "data-integrity" && options.key.alg !== "EdDSA")
+    throw new DocumentError("configuration-mismatch");
   if (
     !isSafeAbsoluteIri(options.verificationMethod) ||
     !isIri(options.verificationMethod) ||
@@ -131,6 +132,16 @@ export async function sign(
       ...document,
       proof: { type: "JwsProof", jws: await signCompact(options.key, TYP, JSON.parse(canonical)) },
     };
+    const limits = options.limits ?? DEFAULT_LIMITS;
+    // Detach the redundant JCS payload when its encoded copy would exceed the
+    // document's existing string/envelope bounds. The exact document is carried once.
+    if (
+      signed.proof.jws.length > limits.maxStringLength ||
+      Buffer.byteLength(JSON.stringify(signed)) > limits.maxEnvelopeBytes
+    ) {
+      const [header, , signature] = signed.proof.jws.split(".");
+      signed.proof.jws = `${header}..${signature}`;
+    }
     readJson(JSON.stringify(signed), options.limits);
     return signed;
   }
@@ -176,11 +187,20 @@ export async function verify(
         throw new DocumentError("malformed-proof");
       if (Object.keys(proof).some((key) => key !== "type" && key !== "jws"))
         throw new DocumentError("malformed-proof");
-      const checked = await verifyCompact(proof.jws, {
+      const parts = proof.jws.split(".");
+      const detached = parts.length === 3 && parts[1] === "";
+      const canonical = canonicalJson(unsigned);
+      const compact = detached
+        ? `${parts[0]}.${Buffer.from(canonical, "utf8").toString("base64url")}.${parts[2]}`
+        : proof.jws;
+      const checked = await verifyCompact(compact, {
         resolve: options.resolve,
         typ: TYP,
-        allowedAlgs: ["EdDSA"],
-        limits,
+        allowedAlgs: ["EdDSA", "ES256"],
+        // Only base64 expansion of the already default-bounded document is allowed.
+        limits: detached
+          ? { ...limits, maxEnvelopeBytes: Math.ceil((limits.maxEnvelopeBytes * 4) / 3) + 2048 }
+          : limits,
       });
       if (checked.outcome !== "valid")
         return {
@@ -193,8 +213,7 @@ export async function verify(
                 : "bad-signature",
           detail: checked.reason,
         };
-      const canonical = canonicalJson(unsigned);
-      const payload = Buffer.from(proof.jws.split(".")[1] ?? "", "base64url").toString("utf8");
+      const payload = Buffer.from(compact.split(".")[1] ?? "", "base64url").toString("utf8");
       if (payload !== canonical || canonicalJson(checked.payload) !== canonical)
         return {
           ok: false,

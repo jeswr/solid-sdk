@@ -60,7 +60,8 @@ export const BASELINE_SUITES = {
     layer: "authenticity",
     id: "jws",
     name: "Signed statement (JWS)",
-    summary: "Every message and every relayed statement is a compact JWS (EdDSA) over its bytes.",
+    summary:
+      "Every message is a complete pinned JSON-LD document protected by a JCS/EdDSA JWS proof. Relayed issuer statements retain their original signed bytes and checked RDF projections.",
     mechanism: MECHANISM_ID,
     algs: ["EdDSA"],
   },

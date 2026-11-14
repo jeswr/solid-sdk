@@ -408,7 +408,7 @@
     }
   ],
   "generated": {
-    "commit": "f46f2b02e4c1318a8b953ed12f39f9665fe0583b",
+    "commit": "ea95557f7122c627ce5b12de2fcb3ba84f9e5acb",
     "core": "scripted"
   },
   "standIns": [
@@ -439,7 +439,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional address register's contact.address statement is intact and signed with The fictional address register's pinned key."
+      "caption": "The fictional address register's contact address statement is intact and signed with The fictional address register's pinned key."
     },
     {
       "seq": 2,
@@ -464,7 +464,7 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:change-of-address:contact.address",
-        "text": "The fictional address register is accepted for contact.address claims."
+        "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
         "question": "Is The fictional address register an authority for contact.address claims about The person?",
@@ -477,7 +477,7 @@
         ],
         "answer": "Accepted, for contact.address claims only."
       },
-      "caption": "The fictional address register's contact.address statement: The fictional address register is an accepted source for this kind of claim."
+      "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -495,7 +495,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional address register's contact.address statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional address register's contact address statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -522,7 +522,7 @@
         "id": "urn:terms:change-of-address:new-address",
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
-      "caption": "The fictional address register's contact.address statement: its terms allow this: use for Change of address; share for Change of address."
+      "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address."
     },
     {
       "seq": 5,
@@ -552,9 +552,9 @@
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:change-of-address:contact.address",
-        "text": "Accept contact.address from The fictional address register by recorded-by-authority, at most 30 days old."
+        "text": "Accept contact address from The fictional address register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional address register's contact.address statement is fit for Telling everyone about a new address: recorded-by-authority, 0 days old."
+      "caption": "The fictional address register's contact address statement is fit for Telling everyone about a new address: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -564,7 +564,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional address register's contact.address statement is admitted."
+      "caption": "The fictional address register's contact address statement is admitted."
     },
     {
       "seq": 7,
@@ -574,7 +574,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:change-of-address:new-address",
-        "label": "The fictional address register's contact.address statement",
+        "label": "The fictional address register's contact address statement",
         "claimType": "contact.address",
         "subject": "urn:fictional:change-of-address:owner",
         "value": null,
@@ -587,7 +587,7 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact.address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,

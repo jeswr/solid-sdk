@@ -19,6 +19,7 @@
  * SPARQ; see docs/PILOT-PROFILE.md "SPARQ integration gaps".
  */
 import type { OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
+import { Store } from "n3";
 import { z } from "zod";
 import { digestOf, isIri } from "../core/canonical.js";
 import type { PilotLimits } from "../core/limits.js";
@@ -29,6 +30,8 @@ import type {
   Iri,
   VerificationResult,
 } from "../core/types.js";
+import { EmbeddedCredentialNode } from "../model/evidence-item.js";
+import { scopedId } from "../model/named-values.js";
 import type { SigningKey } from "./jws.js";
 import {
   type EngineRequest,
@@ -152,6 +155,7 @@ export type OwnerMandate = Omit<z.infer<typeof mandateSchema>, "autonomous" | "w
 
 export interface LoadedMandate {
   readonly mandate: OwnerMandate;
+  readonly credential?: EmbeddedCredentialNode;
   readonly digest: string;
   readonly verification: VerificationResult;
 }
@@ -187,7 +191,12 @@ export async function loadMandate(
       verification: check.verification,
     };
   }
-  const mandate = check.payload as unknown as OwnerMandate;
+  const credential = EmbeddedCredentialNode.fromJws(
+    jws,
+    scopedId("urn:awp:mandate", digestOf(check.payload)),
+    new Store(),
+  );
+  const mandate = credential.payload as unknown as OwnerMandate;
   if (
     check.signer?.subject !== options.trust.data.owner ||
     mandate.issuer !== options.trust.data.owner
@@ -207,7 +216,7 @@ export async function loadMandate(
   }
   return {
     ok: true,
-    loaded: { mandate, digest: digestOf(mandate), verification: check.verification },
+    loaded: { mandate, credential, digest: digestOf(mandate), verification: check.verification },
   };
 }
 

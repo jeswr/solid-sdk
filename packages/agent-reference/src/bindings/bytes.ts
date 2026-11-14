@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 /** Carriage is opaque bytes plus a media type; envelopes never inspect the signed document. */
 import { z } from "zod";
-import { DEFAULT_LIMITS, parseBoundedJson } from "../core/limits.js";
-import { assertUniqueKeys } from "../wire/document.js";
+import { DEFAULT_LIMITS } from "../core/limits.js";
+import { DOCUMENT_MEDIA_TYPE } from "../wire/carriage.js";
+import { MAX_DOCUMENT_COPY_BASE64, readCarrierEnvelope } from "../wire/carrier-envelope.js";
 
 export interface ByteMessage {
   readonly bytes: Uint8Array;
@@ -29,13 +30,23 @@ export class CarriageError extends Error {
     super(detail);
   }
 }
-export const byteCopySchema = z.strictObject({
+const legacyByteCopySchema = z.strictObject({
   bytes: z
     .string()
     .max(DEFAULT_LIMITS.maxEnvelopeBytes * 2)
     .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
   mediaType: z.string().min(1).max(128),
 });
+export const byteCopySchema = z.union([
+  legacyByteCopySchema,
+  z.strictObject({
+    bytes: z
+      .string()
+      .max(MAX_DOCUMENT_COPY_BASE64)
+      .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+    mediaType: z.literal(DOCUMENT_MEDIA_TYPE),
+  }),
+]);
 export function copyOf(message: ByteMessage) {
   return { bytes: Buffer.from(message.bytes).toString("base64"), mediaType: message.mediaType };
 }
@@ -47,10 +58,7 @@ export function envelopeBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
 }
 export function envelopeJson(bytes: Uint8Array): unknown {
-  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  const value = parseBoundedJson(text, DEFAULT_LIMITS);
-  assertUniqueKeys(text);
-  return value;
+  return readCarrierEnvelope(bytes);
 }
 export function oneCopy(copies: readonly ByteMessage[]): ByteMessage {
   const first = copies[0];

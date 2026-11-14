@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 /** The scalar scope of ActionIntentShape; consequential parameters remain a migration boundary. */
+
 import { Store } from "n3";
 import type { ActionIntent } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
+import { ActionIntentNode } from "./message-nodes.js";
 import { RdfNode } from "./nodes.js";
 
 const ODRL = "http://www.w3.org/ns/odrl/2/";
@@ -32,7 +34,8 @@ export class IntentScopeNode extends RdfNode {
     if (value === undefined) throw new TypeError("Missing action scope");
     return value;
   }
-  static fromIntent(intent: ActionIntent): IntentScopeNode {
+  static fromIntent(intent: ActionIntent): IntentScopeNode | ActionIntentNode {
+    if (intent instanceof ActionIntentNode) return intent;
     const node = new IntentScopeNode("urn:awp:intent-scope", new Store());
     node.types.add(AWP + "ActionIntent");
     node.setIri(AWP + "operation", intent.operation);

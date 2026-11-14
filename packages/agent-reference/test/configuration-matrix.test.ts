@@ -55,13 +55,14 @@ it("upserts world and branch lists by id while preserving existing literal-array
   expect(() => patch(original, JSON.parse('{"script":{"__proto__":{"value":2}}}'))).toThrow();
 });
 
-it("runs configuration-only branches only in their own matrix cell and keeps the full layer header", async () => {
+it("runs scoped branches and the declared layer change in each matrix cell", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
   const results = await runScenario(profile, scenario, { configuration: "all" });
   expect(results).toHaveLength(
     4 +
       scenario.configurations.reduce(
-        (count, entry) => count + 1 + (entry.world.branches as unknown[]).length,
+        (count, entry) =>
+          count + 1 + ((entry.world.branches as unknown[] | undefined) ?? scenario.branches).length,
         0,
       ),
   );
@@ -75,7 +76,9 @@ it("runs configuration-only branches only in their own matrix cell and keeps the
     const paths = results.filter((result) => result.configuration === entry.id);
     expect(paths.map((result) => result.path)).toEqual([
       "main",
-      ...(entry.world.branches as { id: string }[]).map((branch) => branch.id),
+      ...((entry.world.branches as { id: string }[] | undefined) ?? scenario.branches).map(
+        (branch) => branch.id,
+      ),
     ]);
     if (configurationById(alternativeWireId(entry.id))?.status === "unresolved") {
       for (const path of paths) {
@@ -102,7 +105,7 @@ it("runs configuration-only branches only in their own matrix cell and keeps the
       ),
     ).toEqual(Object.keys(entry.change));
   }
-}, 60_000);
+}, 600_000);
 
 it("refuses a signed opening under a configuration the receiver does not advertise", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-core");

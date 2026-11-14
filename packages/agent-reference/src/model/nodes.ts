@@ -20,6 +20,7 @@ import {
 import { DataFactory, Store } from "n3";
 import { MESSAGE_KINDS, type MessageKind } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
+import { attachmentTerm } from "./attachments.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const XSD = "http://www.w3.org/2001/XMLSchema#";
@@ -38,7 +39,9 @@ export class RdfNode extends TermWrapper {
   protected one(predicate: string): Term | undefined {
     const values = [...objectTerms(this, predicate)];
     if (values.length > 1) throw new TypeError(`Ambiguous singleton at ${predicate}`);
-    return values[0] === undefined ? undefined : TermAs.term(values[0]);
+    return values[0] === undefined
+      ? undefined
+      : attachmentTerm(this.dataset, TermAs.term(values[0]));
   }
   protected iri(predicate: string): string | undefined {
     const value = this.one(predicate);

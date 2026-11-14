@@ -1677,7 +1677,17 @@
         "@type": "@id"
       },
       "intentEvidence": "https://w3id.org/jeswr/awp#evidence",
-      "BasisKind": "https://w3id.org/jeswr/awp#BasisKind"
+      "BasisKind": "https://w3id.org/jeswr/awp#BasisKind",
+      "Attachment": "https://w3id.org/jeswr/awp#Attachment",
+      "attachmentDigest": "https://w3id.org/jeswr/awp#attachmentDigest",
+      "byteLength": {
+        "@id": "https://w3id.org/jeswr/awp#byteLength",
+        "@type": "http://www.w3.org/2001/XMLSchema#integer"
+      },
+      "attachmentDatatype": {
+        "@id": "https://w3id.org/jeswr/awp#attachmentDatatype",
+        "@type": "@id"
+      }
     }
   ],
   "x-authored-by": "Codex GPT-6"

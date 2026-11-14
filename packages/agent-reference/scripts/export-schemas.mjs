@@ -4,10 +4,12 @@
 import { readFileSync, writeFileSync } from "fs";
 import { z } from "zod";
 import { domainProfileSchema, scenarioSchema } from "../dist/engine/schema.js";
+import { traceFileSchema } from "../dist/trace/schema.js";
 
 for (const [name, schema] of [
   ["domain-profile", domainProfileSchema],
   ["agent-scenario", scenarioSchema],
+  ["agent-trace", traceFileSchema],
 ]) {
   const path = new URL(`../schemas/${name}.schema.json`, import.meta.url);
   const value = {
