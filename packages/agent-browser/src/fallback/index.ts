@@ -5,7 +5,7 @@ import { type CredentialContext, createTaskExecutor } from "../session.js";
 import type { Approver, TaskExecutor, TraceStep } from "../types.js";
 import { BrowserDriver, BrowserDriverError, type BrowserDriverOptions } from "./driver.js";
 import { type LearnFallbackOptions, type LearningResult, learnFallback } from "./learn.js";
-import type { FallbackHistory, FallbackPlanner } from "./planner.js";
+import { type FallbackHistory, type FallbackPlanner, maskedBrowserAction } from "./planner.js";
 import { fallbackReceipt } from "./receipt.js";
 
 export {
@@ -111,17 +111,9 @@ export function createFallback(options: FallbackOptions): Fallback {
           if (count === maxSteps)
             throw new BrowserDriverError("limit", "Fallback step limit reached.");
           await driver.act(next.action);
-          // Fill/type values are always masked. The driver refuses type and every printable/
-          // editing press on protected controls before dispatch and before history storage.
+          // Mask independently of the focus guard, including physical-key and modifier aliases.
           history.push({
-            action:
-              next.action.kind === "fill" || next.action.kind === "type"
-                ? { ...next.action, text: "[redacted]" }
-                : next.action.kind === "select"
-                  ? { ...next.action, value: "[redacted]" }
-                  : next.action.kind === "goto"
-                    ? { ...next.action, url: "[same-origin page]" }
-                    : { ...next.action },
+            action: maskedBrowserAction(next.action),
             status: "done",
           });
         }

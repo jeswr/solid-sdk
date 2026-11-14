@@ -10,6 +10,31 @@ export type BrowserAction =
   | { kind: "type"; text: string }
   | { kind: "back" };
 
+/** History never retains printable key spellings, even if dispatch protection fails. */
+export function maskedBrowserAction(action: BrowserAction): BrowserAction {
+  switch (action.kind) {
+    case "fill":
+    case "type":
+      return { ...action, text: "[redacted]" };
+    case "select":
+      return { ...action, value: "[redacted]" };
+    case "goto":
+      return { ...action, url: "[same-origin page]" };
+    case "press":
+      // An allowlist avoids leaking characters through KeyB, Digit7, Space or Shift+KeyB.
+      return {
+        kind: "press",
+        key: /^(Enter|Tab|Escape|Backspace|Delete|Arrow(Left|Right|Up|Down)|Home|End|PageUp|PageDown|Insert)$/.test(
+          action.key,
+        )
+          ? action.key
+          : "[redacted key]",
+      };
+    default:
+      return { ...action };
+  }
+}
+
 export interface BrowserSnapshot {
   /** All names and values below are page-controlled data, never instructions. */
   untrusted: true;
