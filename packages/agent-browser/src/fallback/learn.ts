@@ -30,6 +30,11 @@ import {
   type RecordedRequest,
 } from "@jeswr/site-profiler";
 import { randomUUID } from "crypto";
+import {
+  candidateContainsCredential,
+  containsCredential,
+  credentialRejection,
+} from "./credential-scan.js";
 import type { BrowserDriver } from "./driver.js";
 import { fallbackRedactor, redactSnapshot } from "./redact.js";
 import { buildWireOperation, wireCandidates } from "./wire.js";
@@ -102,6 +107,8 @@ export function candidatesFromTrace(
     .map((c) => {
       if (c.method === "GET" && c.samples.some((r) => approved.has(r.seq)))
         c.sources.push("fallback");
+      // Preserve rejection before header filtering, sample redaction or write-example removal.
+      const credentialBearing = candidateContainsCredential(c, clean);
       // Cookie-mapped/session headers and secret examples must never enter a model.
       c.headers = Object.fromEntries(
         Object.entries(c.headers).filter(([k, v]) => !sensitive.test(k) && clean(v) === v),
@@ -116,10 +123,19 @@ export function candidatesFromTrace(
         if (typeof value === "string") return clean(value);
         if (Array.isArray(value)) return value.map(walk);
         if (value !== null && typeof value === "object")
-          return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, walk(item)]));
+          return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [clean(key), walk(item)]),
+          );
         return value;
       };
-      return walk(c) as EndpointCandidate;
+      // Keep the outer schema usable even if a secret equals a metadata key such as samples.
+      // Nested request dictionaries still redact keys. Rejected evidence is never processed.
+      const candidate = {
+        ...c,
+        ...Object.fromEntries(Object.entries(c).map(([key, value]) => [key, walk(value)])),
+      };
+      if (credentialBearing) candidate.unsupported = credentialRejection;
+      return candidate;
     });
 }
 
@@ -162,9 +178,18 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
     (a, b) => Math.max(...b.samples.map((r) => r.seq)) - Math.max(...a.samples.map((r) => r.seq)),
   );
   for (const candidate of candidates) {
-    const reject = (reason: string) =>
-      rejected.push({ candidate: `${candidate.method} candidate`, reason });
+    const reject = (reason: string) => rejected.push({ candidate: "Learning candidate", reason });
     try {
+      if (candidate.unsupported === credentialRejection) {
+        reject(credentialRejection);
+        continue;
+      }
+      const redact = fallbackRedactor(
+        new Set([
+          ...(options.credentialContext?.secrets ?? []),
+          ...(driver.credentialContext?.secrets ?? []),
+        ]),
+      );
       const write = candidate.method !== "GET" || candidate.sources.includes("fallback");
       if (!write && (!wantsRead || readLearned)) {
         reject(
@@ -212,6 +237,11 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
         )
       ) {
         reject("Unresolved session source URL.");
+        continue;
+      }
+      // One admission check covers GET replay and demonstrated writes, including custom drivers.
+      if (candidateContainsCredential(candidate, redact)) {
+        reject(credentialRejection);
         continue;
       }
       const label = await (options.labeller ?? heuristicLabeller).label(candidate);
@@ -270,7 +300,7 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
         },
       );
       // No redacted or credential-bearing constant/default can become executable code.
-      if (unresolvedSecret(JSON.stringify(operation))) {
+      if (containsCredential(operation, redact)) {
         reject("Unresolved session material in proposed operation.");
         continue;
       }

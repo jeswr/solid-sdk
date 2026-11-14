@@ -198,3 +198,11 @@ shadow-piercing traversal and isolated native accessors for live values in close
 Bound credential collection with `timeoutMs`; failures/timeouts withhold snapshots with a safe reason. Close-time cookie
 persistence must run even when credential collection or page evaluation fails, keep the original
 revision and one-update contract, and share pending persistence across concurrent/repeated closes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Learning uses one recursive credential scan for GET replay and approved-write admission.
+Check every request string position, including object/JSON keys, header/query/form names and
+values, paths, fragments and methods, against all forms covered by the executor's shared
+registration/redactor. Reject the entire candidate with a reason that quotes no request text;
+preserve that rejection before filtering headers or removing examples. Redact object keys
+as well as values before returning candidate evidence. Verified CSRF slots retain no constants.
