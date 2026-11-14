@@ -818,6 +818,15 @@
      "mortgage": "mortgage-main"
     },
     {
+     "path": "graph-reordered",
+     "label": "A different serialization of the same graph verifies; changing one protected statement is refused. (authenticity-data-integrity)",
+     "status": "runs",
+     "configuration": "authenticity-data-integrity",
+     "scenario": "mortgage-main--graph-reordered",
+     "traceFile": "mortgage-main--graph-reordered--authenticity-data-integrity.json",
+     "mortgage": "mortgage-main"
+    },
+    {
      "path": "main",
      "label": "All fourteen steps (meaning-plain-language-upgrade)",
      "status": "blocked",
@@ -1029,6 +1038,541 @@
      "configuration": "settlement-acp",
      "scenario": "mortgage-main--acp-fee-amount-differs",
      "traceFile": "mortgage-main--acp-fee-amount-differs--settlement-acp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (authority-mandate-credential)",
+     "status": "runs",
+     "configuration": "authority-mandate-credential",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--authority-mandate-credential.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mandate-suspended",
+     "label": "Sam suspends the mandate after evidence is requested. Its own gate stops first; the lender then rejects an authentic application packet already in transit. (authority-mandate-credential)",
+     "status": "runs",
+     "configuration": "authority-mandate-credential",
+     "scenario": "mortgage-main--mandate-suspended",
+     "traceFile": "mortgage-main--mandate-suspended--authority-mandate-credential.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (identity-did)",
+     "status": "runs",
+     "configuration": "identity-did",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--identity-did.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "did-method-not-listed",
+     "label": "An agent signs the application under a method not accepted by the configuration. (identity-did)",
+     "status": "runs",
+     "configuration": "identity-did",
+     "scenario": "mortgage-main--did-method-not-listed",
+     "traceFile": "mortgage-main--did-method-not-listed--identity-did.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (identity-email-endpoint)",
+     "status": "blocked",
+     "configuration": "identity-email-endpoint",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mailbox-reply-as-evidence",
+     "label": "The core proposes relying on the payroll mailbox prose as income evidence. (identity-email-endpoint)",
+     "status": "blocked",
+     "configuration": "identity-email-endpoint",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 6 adds an exact-text-approved email action and mailbox challenge. Those extra real outbound mandate/disclosure/approval/evidence checks are outside specification 12 identity feeds, so the ordered confinement rule in section 2 cannot hold. The existing mailbox binding also has no challenge-control proof. No prose is substituted for structured payroll evidence.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (identity-anonymous)",
+     "status": "blocked",
+     "configuration": "identity-anonymous",
+     "reason": "The selected suite has no executable runtime configuration installed. The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "anonymous-asks-for-more",
+     "label": "An unnamed requester asks the index for an operation restricted to named parties. (identity-anonymous)",
+     "status": "blocked",
+     "configuration": "identity-anonymous",
+     "reason": "The selected suite has no executable runtime configuration installed. The existing product query already sends an unsigned anonymous RDF request and receives a signed answer, but the lender-register lookup is a synchronous TrustResolver over local unsigned register tables, not a separately keyed signed register exchange. A complete anonymous mortgage cell must replace that missing exchange; merely relabelling the current public-read configuration would not meet design 26 section 6.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (authority-authorization-server)",
+     "status": "runs",
+     "configuration": "authority-authorization-server",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--authority-authorization-server.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "token-as-the-person",
+     "label": "The server issues a key-bound grant with no actor; the lender refuses to treat the agent as the principal. (authority-authorization-server)",
+     "status": "runs",
+     "configuration": "authority-authorization-server",
+     "scenario": "mortgage-main--token-as-the-person",
+     "traceFile": "mortgage-main--token-as-the-person--authority-authorization-server.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (authority-agent-registry)",
+     "status": "runs",
+     "configuration": "authority-agent-registry",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--authority-agent-registry.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "registered-for-something-else",
+     "label": "The current registry entry covers product search only; the lender refuses the application. (authority-agent-registry)",
+     "status": "runs",
+     "configuration": "authority-agent-registry",
+     "scenario": "mortgage-main--registered-for-something-else",
+     "traceFile": "mortgage-main--registered-for-something-else--authority-agent-registry.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (trust-pinned-list)",
+     "status": "runs",
+     "configuration": "trust-pinned-list",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--trust-pinned-list.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (trust-pinned-list)",
+     "status": "runs",
+     "configuration": "trust-pinned-list",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--trust-pinned-list.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (trust-pinned-list)",
+     "status": "runs",
+     "configuration": "trust-pinned-list",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--trust-pinned-list.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (trust-pinned-list)",
+     "status": "runs",
+     "configuration": "trust-pinned-list",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--trust-pinned-list.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "stranger",
+     "label": "The product index returns a lender outside Sam's own list; its record is refused and Sam is asked whether to add the source. (trust-pinned-list)",
+     "status": "runs",
+     "configuration": "trust-pinned-list",
+     "scenario": "mortgage-main--stranger",
+     "traceFile": "mortgage-main--stranger--trust-pinned-list.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (authenticity-selective-disclosure)",
+     "status": "runs",
+     "configuration": "authenticity-selective-disclosure",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--authenticity-selective-disclosure.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (authenticity-selective-disclosure)",
+     "status": "runs",
+     "configuration": "authenticity-selective-disclosure",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--authenticity-selective-disclosure.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (authenticity-selective-disclosure)",
+     "status": "runs",
+     "configuration": "authenticity-selective-disclosure",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--authenticity-selective-disclosure.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (authenticity-selective-disclosure)",
+     "status": "runs",
+     "configuration": "authenticity-selective-disclosure",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--authenticity-selective-disclosure.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "withheld-claim-asked-for",
+     "label": "The lender asks optionally for the private national insurance number; the gate stops that extra disclosure and the lender proceeds on the allowed projection. (authenticity-selective-disclosure)",
+     "status": "disagrees",
+     "configuration": "authenticity-selective-disclosure",
+     "scenario": "mortgage-main--withheld-claim-asked-for",
+     "traceFile": "mortgage-main--withheld-claim-asked-for--authenticity-selective-disclosure.json",
+     "actual": {
+      "outcome": "stop",
+      "reason": "excessive-scope",
+      "check": "disclosure"
+     },
+     "expected": {
+      "outcome": "go",
+      "reason": "excessive-scope"
+     },
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "disclosure-not-in-signed-set",
+     "label": "A hostile holder changes the revealed disclosure salt and signs its outer message; the issuer's commitment does not match. (authenticity-selective-disclosure)",
+     "status": "runs",
+     "configuration": "authenticity-selective-disclosure",
+     "scenario": "mortgage-main--disclosure-not-in-signed-set",
+     "traceFile": "mortgage-main--disclosure-not-in-signed-set--authenticity-selective-disclosure.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (authenticity-origin-hosted)",
+     "status": "runs",
+     "configuration": "authenticity-origin-hosted",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--authenticity-origin-hosted.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (authenticity-origin-hosted)",
+     "status": "runs",
+     "configuration": "authenticity-origin-hosted",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--authenticity-origin-hosted.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (authenticity-origin-hosted)",
+     "status": "runs",
+     "configuration": "authenticity-origin-hosted",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--authenticity-origin-hosted.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (authenticity-origin-hosted)",
+     "status": "runs",
+     "configuration": "authenticity-origin-hosted",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--authenticity-origin-hosted.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "address-from-the-message",
+     "label": "The index offers a look-alike address; the verifier ignores it and fetches only the address from the signed register answer. (authenticity-origin-hosted)",
+     "status": "runs",
+     "configuration": "authenticity-origin-hosted",
+     "scenario": "mortgage-main--address-from-the-message",
+     "traceFile": "mortgage-main--address-from-the-message--authenticity-origin-hosted.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "origin-record-forwarded",
+     "label": "The core proposes forwarding its unsigned source observation to the valuer as evidence. (authenticity-origin-hosted)",
+     "status": "disagrees",
+     "configuration": "authenticity-origin-hosted",
+     "scenario": "mortgage-main--origin-record-forwarded",
+     "traceFile": "mortgage-main--origin-record-forwarded--authenticity-origin-hosted.json",
+     "actual": {
+      "outcome": "stop",
+      "reason": "not-authorised",
+      "check": "mandate"
+     },
+     "expected": {
+      "outcome": "stop",
+      "reason": "evidence-invalid"
+     },
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (trust-trusted-index)",
+     "status": "runs",
+     "configuration": "trust-trusted-index",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--trust-trusted-index.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (trust-trusted-index)",
+     "status": "runs",
+     "configuration": "trust-trusted-index",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--trust-trusted-index.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (trust-trusted-index)",
+     "status": "runs",
+     "configuration": "trust-trusted-index",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--trust-trusted-index.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (trust-trusted-index)",
+     "status": "runs",
+     "configuration": "trust-trusted-index",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--trust-trusted-index.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "index-shows-two-histories",
+     "label": "The index supplies individually valid inclusion receipts for a history that does not extend the signed head already held by Sam's agent. (trust-trusted-index)",
+     "status": "runs",
+     "configuration": "trust-trusted-index",
+     "scenario": "mortgage-main--index-shows-two-histories",
+     "traceFile": "mortgage-main--index-shows-two-histories--trust-trusted-index.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (trust-federation)",
+     "status": "runs",
+     "configuration": "trust-federation",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--trust-federation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (trust-federation)",
+     "status": "runs",
+     "configuration": "trust-federation",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--trust-federation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (trust-federation)",
+     "status": "runs",
+     "configuration": "trust-federation",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--trust-federation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (trust-federation)",
+     "status": "runs",
+     "configuration": "trust-federation",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--trust-federation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "chain-with-a-gap",
+     "label": "An intermediate entity statement has expired. (trust-federation)",
+     "status": "runs",
+     "configuration": "trust-federation",
+     "scenario": "mortgage-main--chain-with-a-gap",
+     "traceFile": "mortgage-main--chain-with-a-gap--trust-federation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "federation-business-only",
+     "label": "The presented federation policy covers business lending rather than this residential mortgage. (trust-federation)",
+     "status": "runs",
+     "configuration": "trust-federation",
+     "scenario": "mortgage-main--federation-business-only",
+     "traceFile": "mortgage-main--federation-business-only--trust-federation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (trust-reputation)",
+     "status": "runs",
+     "configuration": "trust-reputation",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--trust-reputation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (trust-reputation)",
+     "status": "runs",
+     "configuration": "trust-reputation",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--trust-reputation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (trust-reputation)",
+     "status": "runs",
+     "configuration": "trust-reputation",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--trust-reputation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (trust-reputation)",
+     "status": "runs",
+     "configuration": "trust-reputation",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--trust-reputation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "high-score-not-registered",
+     "label": "A second lender has a high signed agent score and no entry on Sam's accepted register. (trust-reputation)",
+     "status": "runs",
+     "configuration": "trust-reputation",
+     "scenario": "mortgage-main--high-score-not-registered",
+     "traceFile": "mortgage-main--high-score-not-registered--trust-reputation.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (usage-control-human-approval)",
+     "status": "blocked",
+     "configuration": "usage-control-human-approval",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "approval-reused",
+     "label": "An approval of disclosure to the valuer is presented for a different recipient. (usage-control-human-approval)",
+     "status": "blocked",
+     "configuration": "usage-control-human-approval",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (commitments-agreement-credential)",
+     "status": "runs",
+     "configuration": "commitments-agreement-credential",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--commitments-agreement-credential.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "one-proof-missing",
+     "label": "The valuation credential carries only the valuer proof and remains an offer. (commitments-agreement-credential)",
+     "status": "runs",
+     "configuration": "commitments-agreement-credential",
+     "scenario": "mortgage-main--one-proof-missing",
+     "traceFile": "mortgage-main--one-proof-missing--commitments-agreement-credential.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (accountability-regulator-claim)",
+     "status": "blocked",
+     "configuration": "accountability-regulator-claim",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "entry-withheld",
+     "label": "The lender withholds a record entry; the claimant receipt commitment exposes the gap. (accountability-regulator-claim)",
+     "status": "blocked",
+     "configuration": "accountability-regulator-claim",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (usage-control-odrl-model-tighten)",
+     "status": "runs",
+     "configuration": "usage-control-odrl-model-tighten",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--usage-control-odrl-model-tighten.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "model-says-yes-to-a-no",
+     "label": "The bank prohibits disclosure; the fixed model would say permit, but is never consulted on that prohibition. (usage-control-odrl-model-tighten)",
+     "status": "runs",
+     "configuration": "usage-control-odrl-model-tighten",
+     "scenario": "mortgage-main--model-says-yes-to-a-no",
+     "traceFile": "mortgage-main--model-says-yes-to-a-no--usage-control-odrl-model-tighten.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (accountability-vendor-fault)",
+     "status": "blocked",
+     "configuration": "accountability-vendor-fault",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fault-was-the-principals",
+     "label": "The action was inside the mandate; no supported claim against the gate vendor is produced. (accountability-vendor-fault)",
+     "status": "blocked",
+     "configuration": "accountability-vendor-fault",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (accountability-reputation-post)",
+     "status": "blocked",
+     "configuration": "accountability-reputation-post",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "post-about-a-person",
+     "label": "A proposed public post names an individual employee and is prohibited. (accountability-reputation-post)",
+     "status": "blocked",
+     "configuration": "accountability-reputation-post",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (accountability-reputation-score)",
+     "status": "blocked",
+     "configuration": "accountability-reputation-score",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "score-without-evidence",
+     "label": "A rating submission without checkable evidence produces no score change. (accountability-reputation-score)",
+     "status": "blocked",
+     "configuration": "accountability-reputation-score",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement.",
      "mortgage": "mortgage-main"
     },
     {
