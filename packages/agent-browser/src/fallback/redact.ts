@@ -14,6 +14,21 @@ export function isCredentialKey(name: string): boolean {
   );
 }
 
+/** Keep live credential discovery and snapshot masking on the same control policy. */
+export function isPasswordLikeControl(attrs: Record<string, string>): boolean {
+  return (
+    attrs.type?.toLowerCase() === "password" ||
+    /(?:^|\s)(?:current-password|new-password|one-time-code)(?:\s|$)/i.test(
+      attrs.autocomplete ?? "",
+    ) ||
+    ["name", "id", "autocomplete", "aria-label"].some((name) =>
+      /pass(word|wd)?|pwd|secret|token|csrf|xsrf|authenticity|antiforgery|nonce|requestverification|authorization|session|api.?key|cvv|card.?number|form.?key/i.test(
+        attrs[name] ?? "",
+      ),
+    )
+  );
+}
+
 /** Render page-controlled formatting as text, including bidi and zero-width controls. */
 export function escapeControls(text: string): string {
   return text.replace(/[\p{Cc}\p{Cf}\u2028\u2029\u2060-\u2069]/gu, (c) =>

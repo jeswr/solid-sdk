@@ -172,3 +172,9 @@ executor rebuilds, including custom factories/hooks. Forward it to the executor 
 rendering; post-render string redaction cannot replace extraction redaction. Render manually
 checked redirected documents at the final URL before site scripts run, without repeating site
 requests. Query and fragment URL scrubbing share `isCredentialKey` and cookie/session aliases.
+Register query/fragment credential values with the executor's `registerSecret` when first
+observed in a navigation, redirect, form action, link or recorded request, using that same
+classifier. Before snapshots and request recording, collect live password-like `.value`
+properties, including current/new-password, one-time-code and all controls snapshot masking
+covers. Input/submit capture must retain values across navigation and work for fill, keypress,
+paste and script entry. Keep the shared registration floor and encoding-aware redactor.

@@ -27,11 +27,13 @@ import {
   type FormInfo,
   launchChromium,
   parseForms,
+  parseHtml,
   type RecordedRequest,
   Recorder,
   redactBody,
   redactTrace,
   sanitiseHeaders,
+  selectAll,
 } from "@jeswr/site-profiler";
 import { createHash } from "crypto";
 import type {
@@ -52,12 +54,12 @@ import type { BrowserAction, BrowserSnapshot } from "./planner.js";
 import {
   escapeControls,
   fallbackRedactor,
+  isCredentialKey,
+  isPasswordLikeControl,
   redactSnapshot,
   rememberSessionHeader,
 } from "./redact.js";
 
-const sensitive =
-  /pass(word|wd)?|pwd|secret|token|csrf|xsrf|authenticity|antiforgery|nonce|requestverification|authorization|session|api.?key|cvv|card.?number|form.?key/i;
 const interactive = new Set([
   "button",
   "link",
@@ -72,6 +74,33 @@ const interactive = new Set([
   "menuitem",
   "switch",
 ]);
+
+/** Runs only in the page; properties include values absent from serialized HTML. */
+function readLiveCredentials() {
+  const roots: ParentNode[] = [document];
+  for (let i = 0; i < roots.length; i++)
+    for (const el of roots[i]?.querySelectorAll("*") ?? [])
+      if (el.shadowRoot) roots.push(el.shadowRoot);
+  return {
+    base: document.baseURI,
+    urls: roots.flatMap((root) =>
+      [...root.querySelectorAll("[href], [action], [formaction]")].flatMap((el) =>
+        ["href", "action", "formaction"].flatMap((attr) => {
+          const value = el.getAttribute(attr);
+          return value === null ? [] : [value];
+        }),
+      ),
+    ),
+    controls: roots.flatMap((root) =>
+      [
+        ...root.querySelectorAll('input, textarea, select, [role="textbox"], [role="searchbox"]'),
+      ].map((el) => ({
+        attrs: Object.fromEntries([...el.attributes].map((attr) => [attr.name, attr.value])),
+        value: "value" in el && typeof el.value === "string" ? el.value : "",
+      })),
+    ),
+  };
+}
 
 export interface DriverClock {
   now(): number;
@@ -224,17 +253,7 @@ export class BrowserDriver {
       for (const changed of this.activity) changed();
       if (this.pendingRequest && req !== this.pendingRequest && req.isNavigationRequest())
         this.epoch++;
-      if (new URL(req.url()).origin !== this.origin) return;
-      // This navigation only renders a response already checked and recorded by route().
-      if (this.isDocumentResponse(req)) return;
-      const entry = this.recorder.recordReplay({
-        method: req.method(),
-        url: req.url(),
-        resourceType: req.resourceType(),
-        ...sanitiseHeaders(req.headers()),
-        postData: redactBody(req.postData() ?? undefined, req.headers()["content-type"]),
-      });
-      this.entries.set(req, entry);
+      this.rememberUrlSecrets(req.url());
     });
     // Every request, including every redirect hop, is sent by the driver.
     await this.context.route("**/*", async (route) => {
@@ -252,6 +271,18 @@ export class BrowserDriver {
     });
     await this.context.routeWebSocket("**/*", (socket) => socket.close());
     this.page = await this.context.newPage();
+    await this.page.exposeBinding("__sabRememberCredentials", (source, live) => {
+      if (source.frame === this.page.mainFrame()) this.rememberLiveState(live);
+    });
+    await this.page.addInitScript(`(() => {
+      const read = (${readLiveCredentials.toString()});
+      const remember = () => { void window.__sabRememberCredentials(read()).catch(() => {}); };
+      // Capture before input listeners can clear values, and after handlers that populate them.
+      for (const event of ['input', 'change', 'submit', 'click', 'keydown', 'paste']) {
+        document.addEventListener(event, remember, true);
+        document.addEventListener(event, remember);
+      }
+    })()`);
     this.context.on("page", (page) => {
       if (page !== this.page) {
         this.fail("guard", "New windows are blocked.");
@@ -273,6 +304,7 @@ export class BrowserDriver {
     });
     this.page.on("framenavigated", (frame) => {
       this.epoch++;
+      this.rememberUrlSecrets(frame.url());
       if (frame === this.page.mainFrame()) {
         if (frame.url() !== "about:blank") {
           try {
@@ -340,6 +372,14 @@ export class BrowserDriver {
     const req = route.request();
     let entry = this.entries.get(req);
     const stop = async (kind: BrowserDriverError["kind"], message: string) => {
+      if (!entry && new URL(req.url()).origin === this.origin) {
+        entry = this.recorder.recordReplay({
+          method: req.method(),
+          url: req.url(),
+          resourceType: req.resourceType(),
+        });
+        this.entries.set(req, entry);
+      }
       if (entry) entry.blocked = true;
       this.fail(kind, message);
       // No redirect Location or session-bearing headers reach Chromium on a refused hop.
@@ -378,6 +418,17 @@ export class BrowserDriver {
       }
       return;
     }
+    // Navigations suspend the old execution context; submit/input listeners capture its values
+    // before that happens. Other requests can still read the live document at this boundary.
+    if (!req.isNavigationRequest()) await this.rememberLiveSecrets();
+    entry = this.recorder.recordReplay({
+      method: req.method(),
+      url: req.url(),
+      resourceType: req.resourceType(),
+      ...sanitiseHeaders(req.headers()),
+      postData: redactBody(req.postData() ?? undefined, req.headers()["content-type"]),
+    });
+    this.entries.set(req, entry);
     let url = req.url();
     let method = req.method();
     let raw = req.postData() ?? "";
@@ -387,6 +438,7 @@ export class BrowserDriver {
     let redirected = false;
     for (let hop = 0; hop <= 5; hop++) {
       guardUrl(url, this.origin);
+      this.rememberUrlSecrets(url);
       const generation = this.epoch;
       const headers: Record<string, string> = Object.fromEntries(
         Object.entries(baseHeaders).filter(
@@ -452,11 +504,12 @@ export class BrowserDriver {
         const privateNames = new Set(
           this.forms.flatMap((f) =>
             f.fields
-              .filter((field) => sensitive.test(field.name) || field.type === "password")
+              .filter((field) => isPasswordLikeControl({ name: field.name, type: field.type }))
               .map((f) => f.name),
           ),
         );
-        const privateField = (name: string) => sensitive.test(name) || privateNames.has(name);
+        const privateField = (name: string) =>
+          isCredentialKey(name) || isPasswordLikeControl({ name }) || privateNames.has(name);
         const names = [...requestedUrl.searchParams.keys()];
         for (const [name, value] of requestedUrl.searchParams)
           if (privateField(name)) registerSecret(this.secrets, value);
@@ -634,12 +687,15 @@ export class BrowserDriver {
         ],
       );
       for (const value of credentials.secrets) registerSecret(this.secrets, value);
+      if (/html/i.test(responseHeaders["content-type"] ?? ""))
+        this.rememberHtmlUrls(body.toString("utf8"), url);
       if (entry && /text\/|json|javascript|xml/i.test(entry.contentType ?? "")) {
         entry.bodySample = body.toString("utf8", 0, BODY_LIMIT);
         if (body.length > BODY_LIMIT) entry.bodyTruncated = true;
       }
       if (status >= 300 && status < 400 && responseHeaders.location) {
         let next: string;
+        this.rememberUrlSecrets(responseHeaders.location, url);
         try {
           next = guardUrl(new URL(responseHeaders.location, url).href, this.origin).href;
         } catch {
@@ -688,6 +744,45 @@ export class BrowserDriver {
     }
   }
 
+  private rememberUrlSecrets(value: string, base = this.origin): void {
+    let url: URL;
+    try {
+      url = new URL(value, base);
+    } catch {
+      return;
+    }
+    for (const params of [url.searchParams, new URLSearchParams(url.hash.slice(1))])
+      for (const [name, value] of params)
+        if (isCredentialKey(name)) registerSecret(this.secrets, value);
+  }
+
+  private rememberHtmlUrls(html: string, url: string): void {
+    const document = parseHtml(html);
+    const base = selectAll(document, "base[href]")[0]?.attribs.href;
+    let resolvedBase = url;
+    try {
+      if (base) resolvedBase = new URL(base, url).href;
+    } catch {
+      // Invalid bases do not change how relative links resolve.
+    }
+    for (const el of selectAll(document, "[href], [action], [formaction]"))
+      for (const attr of ["href", "action", "formaction"])
+        if (el.attribs[attr]) this.rememberUrlSecrets(el.attribs[attr], resolvedBase);
+  }
+
+  /** Page properties, including script/paste/key entry, share the executor's registration. */
+  private async rememberLiveSecrets(): Promise<void> {
+    this.rememberUrlSecrets(this.page.url());
+    this.rememberLiveState(await this.page.evaluate(readLiveCredentials));
+  }
+
+  private rememberLiveState(live: ReturnType<typeof readLiveCredentials>): void {
+    for (const url of live.urls) this.rememberUrlSecrets(url, live.base);
+    for (const control of live.controls)
+      if (control.value && isPasswordLikeControl(control.attrs))
+        registerSecret(this.secrets, control.value);
+  }
+
   private rememberPageSecrets(): void {
     const pages = this.recorder.trace
       .filter((r) => r.bodySample && /html/i.test(r.contentType ?? ""))
@@ -695,12 +790,13 @@ export class BrowserDriver {
     for (const value of discoverCredentialSources(pages, [], this.recorder.trace).secrets)
       registerSecret(this.secrets, value);
     for (const entry of this.recorder.trace) {
-      for (const [name, value] of new URL(entry.url).searchParams)
-        if (sensitive.test(name)) registerSecret(this.secrets, value);
+      this.rememberUrlSecrets(entry.url);
+      if (entry.redirectedTo) this.rememberUrlSecrets(entry.redirectedTo, entry.url);
       if (!entry.bodySample || !/html/i.test(entry.contentType ?? "")) continue;
+      this.rememberHtmlUrls(entry.bodySample, entry.url);
       for (const form of parseForms(entry.bodySample, entry.url))
         for (const field of form.fields)
-          if ((sensitive.test(field.name) || field.type === "password") && field.value)
+          if (isPasswordLikeControl({ name: field.name, type: field.type }) && field.value)
             registerSecret(this.secrets, field.value);
     }
   }
@@ -732,6 +828,7 @@ export class BrowserDriver {
 
   async snapshot(): Promise<BrowserSnapshot> {
     await this.recorder.flush();
+    await this.rememberLiveSecrets();
     for (const cookie of await this.context.cookies()) this.rememberCookie(cookie);
     const live = discoverCredentialSources(
       [{ url: this.page.url(), html: await this.page.content() }],
@@ -768,13 +865,11 @@ export class BrowserDriver {
         });
         const attrs = dom.attributes ?? [];
         if (
-          attrs.some(
-            (name, i) =>
-              i % 2 === 0 &&
-              ["name", "id", "autocomplete", "aria-label"].includes(name) &&
-              sensitive.test(attrs[i + 1] ?? ""),
-          ) ||
-          attrs.some((name, i) => i % 2 === 0 && name === "type" && attrs[i + 1] === "password")
+          isPasswordLikeControl(
+            Object.fromEntries(
+              attrs.flatMap((name, i) => (i % 2 === 0 ? [[name, attrs[i + 1] ?? ""]] : [])),
+            ),
+          )
         )
           value = "[redacted]";
       }
@@ -858,6 +953,7 @@ export class BrowserDriver {
     if (wait > 0) await this.clock.sleep(wait);
     this.lastAction = this.clock.now();
     try {
+      await this.rememberLiveSecrets();
       const html = await this.page.content();
       for (const value of discoverCredentialSources([{ url: this.page.url(), html }], []).secrets)
         registerSecret(this.secrets, value);
@@ -871,6 +967,7 @@ export class BrowserDriver {
         } catch {
           throw new BrowserDriverError("origin", "Off-origin navigation blocked.");
         }
+        this.rememberUrlSecrets(url.href);
         await this.page.goto(url.href);
       } else if (action.kind === "back") await this.page.goBack();
       else if (action.kind === "press") {
@@ -884,6 +981,7 @@ export class BrowserDriver {
             await this.captureSubmitter(action.ref);
             const href = await element.getAttribute("href");
             if (href) {
+              this.rememberUrlSecrets(href, this.page.url());
               try {
                 guardUrl(new URL(href, this.page.url()).href, this.origin);
               } catch {
@@ -895,11 +993,10 @@ export class BrowserDriver {
             const info = await this.cdp.send("Runtime.callFunctionOn", {
               objectId,
               functionDeclaration:
-                "function() { return [this.type, this.name, this.autocomplete].join(' '); }",
+                "function() { return Object.fromEntries([...this.attributes].map(a => [a.name, a.value])); }",
               returnByValue: true,
             });
-            if (sensitive.test(String(info.result.value)))
-              registerSecret(this.secrets, action.text);
+            if (isPasswordLikeControl(info.result.value)) registerSecret(this.secrets, action.text);
             await element.fill(action.text);
           } else await element.selectOption(action.value);
         } finally {
@@ -918,6 +1015,7 @@ export class BrowserDriver {
         ]);
       }
       await this.recorder.flush();
+      await this.rememberLiveSecrets();
       if (this.failure) throw this.failure;
     } catch (error) {
       if (this.failure) throw this.failure;
@@ -965,6 +1063,7 @@ export class BrowserDriver {
       );
     if (this.closed) throw new Error("Learning evidence was not finalized before closing.");
     await this.recorder.flush();
+    await this.rememberLiveSecrets();
     const credentials = discoverCredentialSources(
       [{ url: this.page.url(), html: await this.page.content() }],
       [],
@@ -987,6 +1086,7 @@ export class BrowserDriver {
     this.closed = true;
     if (this.context) {
       try {
+        if (this.page && !this.page.isClosed()) await this.rememberLiveSecrets();
         const cookies = await this.context.cookies();
         this.learningCookies = cookies;
         for (const c of cookies) this.rememberCookie(c);

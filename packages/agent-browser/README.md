@@ -332,3 +332,15 @@ six-character cookie echoes, profiler-registered secrets, replay observations an
 planner input across learning/rebuilds (including a raw executor returned by a host factory).
 It also checks final document URLs, approved/denied relative forms, relative links/scripts,
 queued navigation/back history and query/fragment aliases in both snapshot forms and trace.
+
+Credential query and fragment values enter the shared context through the executor's
+`registerSecret`, using the same `isCredentialKey` policy as URL scrubbing. Intake covers
+navigations, redirect hops, form actions, links and recorded requests. Before snapshot rendering,
+the driver reads live password-like `.value` properties, including `current-password`,
+`new-password`, `one-time-code` and every control covered by snapshot masking. Input and submit
+listeners also capture values before navigation can remove the document; fill, keypress,
+paste and script entry use the same registration path.
+
+`test/fallback-review-r6.test.ts` checks the `sid` name echo across both snapshot forms,
+driver/task traces, replay RDF and subsequent planner input, plus keypress passwords,
+script-set live values, one-time codes, credential fragments and URL intake boundaries.
