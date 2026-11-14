@@ -464,8 +464,10 @@ function parseScript(source: string): N {
 export function scriptCredentialSecrets(
   source: string,
   witnessedCredentialSelector: (value: string) => boolean = () => false,
+  deferSelectorSecret?: (value: string, sourceSpelling?: string) => void,
 ): Set<string> {
   const secrets = new Set<string>();
+  const deferred = new Set<string>();
   const sensitive = /csrf|xsrf|token|secret|session|auth|password|api.?key|form.?key/i;
   try {
     if (Buffer.byteLength(source, "utf8") > SCRIPT_SIZE_LIMIT) throw new Error("large script");
@@ -478,7 +480,14 @@ export function scriptCredentialSecrets(
         const value = parts.map((p) => ("lit" in p ? p.lit : "")).join("");
         // A selector declaration that actually locates a witnessed credential
         // is configuration. Its input/meta value is registered independently.
-        if (/selector$/i.test(name) && witnessedCredentialSelector(value)) return;
+        if (/selector$/i.test(name)) {
+          if (witnessedCredentialSelector(value)) return;
+          if (deferSelectorSecret) {
+            deferred.add(value);
+            deferSelectorSecret(value);
+            return;
+          }
+        }
         secrets.add(value);
       }
       // Only value fragments belong to this assignment. Literals inside arbitrary calls or
@@ -498,21 +507,43 @@ export function scriptCredentialSecrets(
       if (
         (node.type === "UnaryExpression" || typeof node.value === "number") &&
         value !== undefined &&
-        secrets.has(value) &&
+        (secrets.has(value) || deferred.has(value)) &&
         typeof node.start === "number"
-      )
-        secrets.add(source.slice(node.start, node.end as number));
+      ) {
+        const raw = source.slice(node.start, node.end as number);
+        if (secrets.has(value)) secrets.add(raw);
+        else deferSelectorSecret?.(raw);
+      }
     });
   } catch {
     // Parse/size failures must not silently turn obvious credential assignments into constants.
-    for (const match of source.matchAll(/([\w$]+)["']?\s*[:=]\s*["']([^"'\r\n]+)["']/g))
-      if (
-        sensitive.test(match[1] ?? "") &&
-        !(/selector$/i.test(match[1] ?? "") && witnessedCredentialSelector(match[2] ?? ""))
-      )
-        secrets.add(match[2] ?? "");
+    // Require a key boundary so a long truncated value is scanned in linear time.
     for (const match of source.matchAll(
-      /([\w$]+)["']?\s*[:=]\s*([+-]?(?:0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?[\d_]+)?))(?![\w$.])/g,
+      /(?<![\w$])([\w$]+)["']?\s*[:=]\s*("(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*')/g,
+    )) {
+      const name = match[1] ?? "";
+      if (!sensitive.test(name)) continue;
+      const literal = match[2] ?? '""';
+      const rawValue = literal.slice(1, -1);
+      let value = rawValue;
+      try {
+        const statement = list(parseScript(`(${literal})`), "body")[0];
+        value = stringLiteral(statement && prop(statement, "expression")) ?? rawValue;
+      } catch {
+        // Malformed literals still retain their source spelling as a possible secret.
+      }
+      if (/selector$/i.test(name)) {
+        if (witnessedCredentialSelector(value)) continue;
+        if (deferSelectorSecret) {
+          deferSelectorSecret(value, rawValue);
+          continue;
+        }
+      }
+      secrets.add(value);
+      secrets.add(rawValue);
+    }
+    for (const match of source.matchAll(
+      /(?<![\w$])([\w$]+)["']?\s*[:=]\s*([+-]?(?:0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?[\d_]+)?))(?![\w$.])/g,
     )) {
       const raw = match[2] ?? "";
       const value = Number(raw.replaceAll("_", ""));

@@ -652,7 +652,10 @@ both baseline and post-write evidence. These private artifacts leave the shared 
 <!-- AUTHORED-BY Codex GPT-6 -->
 Not-found signatures preserve exact scalar values for discriminator keys (status, code,
 error, error_code, type, reason and compound variants) at any depth, plus HTML titles
-and headings. The shared failure predicate rejects authentication markers in these fields
-case- and separator-insensitively, including `not_authenticated` and `forbidden`. These
+and headings. The shared failure predicate and signature generator use the exported
+`isDiscriminatorKey` predicate, including `HTTP_Status`, `error_code`, `statusCode` and
+`errorType` without case or separator distinctions. Authentication markers include
+`not_authenticated`, `forbidden` and `restricted`, plus numeric or numeric-string values
+401, 403, 407, 419 and 440 under every discriminator key. These
 404 responses leave a deletion Uncertain; an honest matching not-found still verifies.
 `test/response-evidence.test.ts` covers discriminator and heading preservation.

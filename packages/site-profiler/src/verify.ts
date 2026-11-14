@@ -245,7 +245,11 @@ export function playwrightReplayer(
                   .map((h) => h.value),
                 response.url(),
               );
-              const body = await response.text();
+              const body = await recorder.readResponseBody(response, {
+                url: sourceUrl,
+                contentType: response.headers()["content-type"],
+                resourceType: "csrf-preparation",
+              });
               if (source.kind === "json") {
                 const v = jsonPointer(JSON.parse(body), source.pointer);
                 if (typeof v === "string") token = v;
@@ -287,7 +291,14 @@ export function playwrightReplayer(
             url,
           );
           const headers = r.headers();
-          res = { status: r.status(), body: await r.text() };
+          res = {
+            status: r.status(),
+            body: await recorder.readResponseBody(r, {
+              url,
+              contentType: headers["content-type"],
+              resourceType: "replay",
+            }),
+          };
           if (
             headers["www-authenticate"] !== undefined ||
             headers["proxy-authenticate"] !== undefined
@@ -304,7 +315,14 @@ export function playwrightReplayer(
             signal: AbortSignal.timeout(5000),
           });
           recorder.rememberSetCookies(r.headers.getSetCookie(), url);
-          res = { status: r.status, body: await r.text() };
+          res = {
+            status: r.status,
+            body: await recorder.readResponseBody(r, {
+              url,
+              contentType: r.headers.get("content-type") ?? undefined,
+              resourceType: "replay-anonymous",
+            }),
+          };
           if (r.headers.has("www-authenticate") || r.headers.has("proxy-authenticate"))
             res.authenticationFailure = true;
           const ct = r.headers.get("content-type");

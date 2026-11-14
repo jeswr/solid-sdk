@@ -83,6 +83,7 @@ export {
 export { describeUrl, guardUrl, isLoopbackHost, OriginError, siteOrigin } from "./origin.js";
 export {
   createdObjectType,
+  isDiscriminatorKey,
   jsonEnvelope,
   jsonFailure,
   landingItemValues,

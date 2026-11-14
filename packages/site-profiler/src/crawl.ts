@@ -128,7 +128,17 @@ export async function crawl(
         warnings.push(`crawl: ${url} left the site (${new URL(finalUrl).origin})`);
         continue;
       }
-      const html = await page.content();
+      let html: string;
+      try {
+        html = recorder.responseBody(await page.content(), {
+          url: finalUrl,
+          contentType: "text/html",
+          resourceType: "document",
+        });
+      } catch {
+        warnings.push("crawl: omitted page exceeding the response limit");
+        continue;
+      }
       sampleWord = sampleWord ?? chooseSampleWord(html);
       const forms = parseForms(html, finalUrl);
       const snapshot: PageSnapshot = { url, finalUrl, html, forms };

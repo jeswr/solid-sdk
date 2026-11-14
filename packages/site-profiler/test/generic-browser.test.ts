@@ -11,6 +11,7 @@ import { formFields } from "../src/form-body.js";
 import { performLogin } from "../src/login.js";
 import { launchChromium, profileSite } from "../src/profile.js";
 import { BODY_LIMIT, Recorder } from "../src/recorder.js";
+import { redactOutput } from "../src/session-tokens.js";
 import { playwrightReplayer } from "../src/verify.js";
 import * as deletedProbes from "../src/write-not-found.js";
 import * as responsePolicies from "../src/write-responses.js";
@@ -30,6 +31,13 @@ const site = createServer((req, res) => {
     res.statusCode = 404;
     return html("<h1>Not found</h1><p>final-probe-credential-escaped</p>");
   }
+  if (path === "/final-probe-hidden" || path === "/final-probe-oversized") {
+    const secret = "final-probe-credential-escaped";
+    res.statusCode = 404;
+    return html(
+      `<h1>Not found</h1><p>${secret}</p>${" ".repeat(BODY_LIMIT + 1024)}<input type="hidden" name="csrf_token" value="${secret}">${path.endsWith("oversized") ? " ".repeat(8 * 1024 * 1024) : ""}`,
+    );
+  }
   if (path === "/probe-csrf") {
     res.setHeader("content-type", "application/json");
     return res.end(JSON.stringify({ token: "fictional-csrf-secret" }));
@@ -43,8 +51,12 @@ const site = createServer((req, res) => {
   }
   if (path === "/locator-login") {
     return html(
-      `<form id="login-form" method="post"><input name="username"><input type="password" name="password"><input type="hidden" name="form_key" value="locator-form-credential"><button>Sign in</button></form><script>window.config={formKeyInputSelector:'input[name="form_key"]'};</script>`,
+      `<form id="login-form" method="post"><input name="username"><input type="password" name="password"><input type="hidden" name="form_key" value="locator-form-credential"><button>Sign in</button></form><script src="/locator-config.js"></script>`,
     );
+  }
+  if (path === "/locator-config.js") {
+    res.setHeader("content-type", "application/javascript");
+    return res.end(`window.config={formKeyInputSelector:'input[name="form_key"]'};`);
   }
   if (path === "/locator-home") {
     if (!req.headers.cookie?.includes("sid=locator-session-credential")) res.statusCode = 401;
@@ -169,7 +181,55 @@ afterAll(async () => {
   await new Promise<void>((resolve) => site.close(() => resolve()));
 });
 
-it("uses the final probe credential union for model, policies, evidence, trace and warnings", async () => {
+it.each([
+  "hidden",
+  "oversized",
+])("discovers credentials in complete recorded browser traffic before sampling: %s", async (source) => {
+  const context = await browser.newContext();
+  const recorder = new Recorder(origin);
+  recorder.phase = "demonstration";
+  await recorder.attach(context);
+  try {
+    const page = await context.newPage();
+    await page.goto(`${origin}/final-probe-${source}`);
+    await recorder.flush();
+    const entry = recorder.trace.find((r) => r.url.endsWith(`/final-probe-${source}`));
+    expect(recorder.secrets).toContain("final-probe-credential-escaped");
+    if (source === "oversized") {
+      expect(entry?.bodySample).toBeUndefined();
+      expect(entry?.responsePageFailure).toBe(true);
+      expect(entry?.verificationEvidence).toBeUndefined();
+      expect(entry?.notFoundEvidence).toBeUndefined();
+    } else {
+      expect(entry?.bodyTruncated).toBe(true);
+      expect(entry?.bodySample).not.toContain("csrf_token");
+    }
+    expect(JSON.stringify(redactOutput(recorder.trace, recorder.secrets))).not.toContain(
+      "final-probe-credential-escaped",
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+it("does not learn from oversized rendered crawl pages", async () => {
+  const result = await profileSite({
+    startUrl: `${origin}/final-probe-oversized`,
+    browser,
+    maxPages: 1,
+    verify: false,
+  });
+  expect(result.model.operations).toEqual([]);
+  expect(result.warnings).toContain("crawl: omitted page exceeding the response limit");
+  expect(result.trace.every((r) => r.bodySample === undefined)).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("final-probe-credential-escaped");
+});
+
+it.each([
+  "cookie",
+  "hidden",
+  "oversized",
+])("uses the final probe %s credential union for every output", async (source) => {
   const secret = "final-probe-credential-escaped";
   const probe = vi
     .spyOn(deletedProbes, "probeDeletedResources")
@@ -192,7 +252,12 @@ it("uses the final probe credential union for model, policies, evidence, trace a
         items: [{ echo: [secret] }],
         trustedItems: [{ echo: [secret] }],
       };
-      await replayer.get(`${siteOrigin}/final-probe-cookie`, { signedIn: true });
+      await replayer
+        .get(`${siteOrigin}/final-probe-${source}`, { signedIn: true })
+        .catch((error) => {
+          if (source !== "oversized") throw error;
+          expect(error.message).toContain("byte limit");
+        });
     });
   const policies = vi.spyOn(responsePolicies, "learnWriteResponses").mockReturnValue({
     "urn:secret-policy": { createdLocationPattern: `/products/${secret}` },
@@ -213,15 +278,15 @@ it("uses the final probe credential union for model, policies, evidence, trace a
       ],
     });
     expect(probe).toHaveBeenCalledOnce();
-    expect(hits).toContain("GET /final-probe-cookie");
+    expect(hits).toContain(`GET /final-probe-${source}`);
     expect(result.model.operations.some((op) => op.label === "Example [redacted]")).toBe(true);
     expect(result.warnings.some((warning) => warning.includes("[redacted]"))).toBe(true);
     expect(result.trace[0]?.formState?.[0]?.fields[0]?.value).toBe("[redacted]");
     expect(result.trace[0]?.verificationEvidence?.items).toEqual([{ echo: ["[redacted]"] }]);
     expect(result.trace[0]?.verificationEvidence?.trustedItems).toEqual([{ echo: ["[redacted]"] }]);
-    expect(result.trace.find((r) => r.url.endsWith("/final-probe-cookie"))?.bodySample).toContain(
-      "[redacted]",
-    );
+    const recorded = result.trace.find((r) => r.url.endsWith(`/final-probe-${source}`));
+    if (source === "oversized") expect(recorded?.bodySample).toBeUndefined();
+    else expect(recorded?.bodySample).toContain("[redacted]");
     expect(result.writeResponses).toEqual({});
     expect(JSON.stringify(result)).not.toContain(secret);
   } finally {

@@ -71,17 +71,23 @@ export async function performLogin(
   const page = await context.newPage();
   const prevPhase = recorder.phase;
   recorder.phase = "login";
+  const pageBody = async () =>
+    recorder.responseBody(await page.content(), {
+      url: page.url(),
+      contentType: "text/html",
+      resourceType: "document",
+    });
 
   try {
     await page.goto(startUrl, { waitUntil: "load" });
     let loginPageUrl = page.url();
-    let html = await page.content();
+    let html = await pageBody();
     let form = parseForms(html, loginPageUrl).find((f) => f.hasPassword);
     if (!form) {
       const target = findLoginLink(html, loginPageUrl) ?? loginFallbackUrl(loginPageUrl);
       await page.goto(target, { waitUntil: "load" });
       loginPageUrl = page.url();
-      html = await page.content();
+      html = await pageBody();
       form = parseForms(html, loginPageUrl).find((f) => f.hasPassword);
     }
     if (!form)
@@ -115,7 +121,7 @@ export async function performLogin(
     await recorder.flush();
     const after = await context.cookies(page.url());
     const changed = changedCookies(before, after);
-    const stillForm = parseForms(await page.content(), page.url()).some((f) => f.hasPassword);
+    const stillForm = parseForms(await pageBody(), page.url()).some((f) => f.hasPassword);
     const success = changed.length > 0 && !stillForm;
     const obs: LoginObservation = {
       success,

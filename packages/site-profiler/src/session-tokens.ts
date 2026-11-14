@@ -26,6 +26,7 @@ export function discoverCredentialSources(
   cookies: SecretCookie[],
   responses: readonly RecordedRequest[] = [],
   context: CookieSecretContext = {},
+  deferSelectorSecret?: (value: string, sourceSpelling?: string) => void,
 ): { tokens: Map<string, CsrfSource>; secrets: Set<string> } {
   const tokens = new Map<string, CsrfSource>();
   const secrets = new Set<string>();
@@ -62,7 +63,11 @@ export function discoverCredentialSources(
     return witnessed;
   };
   const scriptSecrets = (source: string) => {
-    for (const value of scriptCredentialSecrets(source, witnessedCredentialSelector))
+    for (const value of scriptCredentialSecrets(
+      source,
+      witnessedCredentialSelector,
+      deferSelectorSecret,
+    ))
       registerSecret(secrets, value);
   };
   const jsonSecrets = (value: unknown, credential = false): void => {
@@ -75,10 +80,14 @@ export function discoverCredentialSources(
         if (
           (credential || credentialName(key)) &&
           /selector$/i.test(key) &&
-          typeof item === "string" &&
-          witnessedCredentialSelector(item)
-        )
-          continue;
+          typeof item === "string"
+        ) {
+          if (witnessedCredentialSelector(item)) continue;
+          if (deferSelectorSecret) {
+            deferSelectorSecret(item);
+            continue;
+          }
+        }
         jsonSecrets(item, credential || credentialName(key));
       }
   };

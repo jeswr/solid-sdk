@@ -672,7 +672,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       ...discoverCredentialSources(formPages, finalCookies, recorder.trace, cookieContext())
         .secrets,
       ...cookieSecrets,
-      ...recorder.secrets,
+      ...recorder.finalSecrets(formPages),
       ...candidates.flatMap((candidate) =>
         candidate.csrf.flatMap(({ source }) => {
           if (source.kind !== "html" && source.kind !== "meta") return [];

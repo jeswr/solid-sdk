@@ -7,6 +7,7 @@ import type { RecordedRequest } from "../src/types.js";
 import { learnWriteResponses } from "../src/write-responses.js";
 
 const origin = "https://shop.test";
+const compoundStatusKey = "HTTP_Status";
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing fixture value");
   return value;
@@ -152,6 +153,12 @@ function fixture(type = "DeleteAction", list = false) {
 
 async function replay(type = "DeleteAction", mode = "verified", list = false, legacy = false) {
   const f = fixture(type, list);
+  const compoundBody = mode.startsWith("compound ")
+    ? JSON.stringify({
+        envelope: [{ [mode.split(" ")[2] ?? "HTTP_Status"]: mode.includes("auth") ? 401 : 404 }],
+        message: "Access restricted.",
+      })
+    : undefined;
   if (mode === "other tenant") {
     const before = required(f.trace[0]);
     before.url = before.url.replace("/main/", "/other/");
@@ -333,6 +340,7 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
               '<main><h1>Not found</h1><form action="/search"><button>Search</button></form></main>',
           }
         : {}),
+      ...(compoundBody ? { contentType: "application/json", bodySample: compoundBody } : {}),
     });
   }
   let policy = learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id];
@@ -570,6 +578,11 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
           { status: 404 },
         );
       if (mode === "numeric auth 404") return Response.json({ status: 401 }, { status: 404 });
+      if (compoundBody)
+        return new Response(compoundBody, {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
       if (mode === "sso 404")
         return new Response(
           '<title>Single sign-on</title><h1>Sign in</h1><form action="/sso"><button>Continue</button></form>',
@@ -1038,12 +1051,30 @@ it.each([
   { message: "Please authenticate" },
   { status: 401 },
   { status: "403" },
+  { [compoundStatusKey]: 401, message: "Access restricted." },
+  { error_code: 401, message: "Access restricted." },
+  { envelope: [{ [compoundStatusKey]: "401" }] },
+  { envelope: { errorType: 440 } },
+  { reason: "restricted" },
 ])("does not learn an authentication 404 as a missing-resource signature: %j", (body) => {
   const f = fixture();
   f.trace.push({ ...required(f.trace[0]), seq: 5, status: 404, bodySample: JSON.stringify(body) });
   expect(
     learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification?.notFound,
   ).toBeUndefined();
+});
+
+it.each([
+  "HTTP_Status",
+  "error_code",
+])("never learns or verifies a compound numeric authentication 404: %s", async (key) => {
+  const rejected = await replay("DeleteAction", `compound auth ${key}`);
+  expect(rejected.policy?.verification?.notFound).toBeUndefined();
+  expect(rejected.result.outcome?.status).toBe("uncertain");
+  expect(rejected.result.committed).toHaveLength(1);
+  const honest = await replay("DeleteAction", `compound missing ${key}`);
+  expect(honest.policy?.verification?.notFound).toBeDefined();
+  expect(honest.result.outcome?.status).toBe("completed");
 });
 
 it.each([
@@ -1106,6 +1137,56 @@ it("fetches a witnessed deleted identity using the profiling session, including 
   expect(
     learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification?.notFound,
   ).toMatchObject({ status: 404, contentType: "application/json" });
+});
+
+it("discovers a hidden credential beyond the sample limit on the actual deletion-probe path", async () => {
+  const { Recorder, BODY_LIMIT } = await import("../src/recorder.js");
+  const { playwrightReplayer } = await import("../src/verify.js");
+  const { probeDeletedResources } = await import("../src/write-not-found.js");
+  const { redactOutput } = await import("../src/session-tokens.js");
+  const f = fixture();
+  const recorder = new Recorder(origin);
+  recorder.phase = "demonstration";
+  const secret = "deleted-probe-hidden-credential";
+  for (const { seq: _seq, phase: _phase, ...entry } of f.trace)
+    recorder.recordReplay({
+      ...entry,
+      authenticationContext: recorder.authenticationContext({}, []),
+    });
+  let requests = 0;
+  const context = {
+    cookies: async () => [],
+    request: {
+      get: async () => {
+        requests++;
+        return {
+          status: () => 404,
+          headers: () => ({ "content-type": "text/html" }),
+          headersArray: () => [],
+          body: async () =>
+            Buffer.from(
+              `<h1>Not found</h1><p>${secret}</p>${" ".repeat(BODY_LIMIT + 100)}<input type="hidden" name="csrf_token" value="${secret}">`,
+            ),
+        };
+      },
+    },
+  } as unknown as import("playwright").BrowserContext;
+  await probeDeletedResources(
+    [f.write, f.read],
+    recorder.trace,
+    origin,
+    playwrightReplayer(context, recorder, "verify"),
+  );
+  expect(requests).toBe(1);
+  expect(recorder.secrets).toEqual(new Set([secret]));
+  const probe = required(recorder.trace.at(-1));
+  expect(probe.bodyTruncated).toBe(true);
+  expect(probe.bodySample).not.toContain("csrf_token");
+  expect(
+    JSON.stringify(
+      redactOutput({ trace: recorder.trace, model: { label: secret } }, recorder.secrets),
+    ),
+  ).not.toContain(secret);
 });
 
 it.each([

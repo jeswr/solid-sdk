@@ -9,11 +9,17 @@ import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "
 import { effectiveWireFields } from "./wire.js";
 
 /** Include compound keys such as http_status, errorCode and failureReason. */
-const discriminatorKey = (key: string) => /status|code|error|type|reason/i.test(key);
+export const isDiscriminatorKey = (key: string): boolean =>
+  /status|code|error|type|reason/.test(key.toLowerCase().replace(/[^a-z0-9]/g, ""));
 const authenticationMarker = (value: string) =>
-  /auth|login|signin|credential|token|forbidden|permission|denied|unauthor|unauthenticated|notauthenticated/.test(
+  /auth|login|signin|credential|token|forbidden|permission|denied|unauthor|unauthenticated|notauthenticated|restricted/.test(
     value.toLowerCase().replace(/[^a-z0-9]/g, ""),
   );
+const authenticationDiscriminator = (value: unknown): boolean =>
+  Array.isArray(value)
+    ? value.some(authenticationDiscriminator)
+    : (typeof value === "string" || typeof value === "number") &&
+      (authenticationMarker(String(value)) || [401, 403, 407, 419, 440].includes(Number(value)));
 
 export function jsonFailure(value: unknown): boolean {
   return (
@@ -22,9 +28,7 @@ export function jsonFailure(value: unknown): boolean {
     !Array.isArray(value) &&
     Object.entries(value).some(
       ([key, member]) =>
-        (discriminatorKey(key) &&
-          ["string", "number"].includes(typeof member) &&
-          authenticationMarker(String(member))) ||
+        (isDiscriminatorKey(key) && authenticationDiscriminator(member)) ||
         (/^(?:errors?|validationErrors|exception|redirect|ajaxRedirect)$/i.test(key) &&
           member !== false &&
           member != null &&
@@ -38,9 +42,7 @@ export function jsonFailure(value: unknown): boolean {
         (/^(?:success|ok|authenticated|authorized|loggedIn)$/i.test(key) && member === false) ||
         (/^(?:status|statusCode|code)$/i.test(key) &&
           ["string", "number"].includes(typeof member) &&
-          /^(?:error|fail|failed|failure|unauthenticated|unauthorized|401|403)$/i.test(
-            String(member).trim(),
-          )),
+          /^(?:error|fail|failed|failure)$/i.test(String(member).trim())),
     )
   );
 }
@@ -255,7 +257,7 @@ export function notFoundSignature(
             .sort()
             .map((key) => [
               key,
-              shape((value as Record<string, unknown>)[key], discriminatorKey(key)),
+              shape((value as Record<string, unknown>)[key], isDiscriminatorKey(key)),
             ]);
         return discriminator ? [typeof value, value] : value === null ? "null" : typeof value;
       };

@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
-import { jsonFailure, notFoundSignature, responsePageError } from "../src/response-evidence.js";
+import {
+  isDiscriminatorKey,
+  jsonFailure,
+  notFoundSignature,
+  responsePageError,
+} from "../src/response-evidence.js";
 
 it.each([
   "status",
@@ -36,6 +41,7 @@ it.each([
   "unauthorized",
   "unauthenticated",
   "not_authenticated",
+  "restricted",
 ])("rejects authentication discriminators and HTML headings across separators: %s", (value) => {
   const body = JSON.stringify({ envelope: { ERROR_CODE: `resource_${value}_required` } });
   expect(jsonFailure({ ERROR_CODE: value })).toBe(true);
@@ -46,6 +52,27 @@ it.each([
     expect(responsePageError(html, "text/html", false, true)).toBe(true);
     expect(notFoundSignature(404, "text/html", html)).toBeUndefined();
   }
+});
+
+it.each([
+  "HTTP_Status",
+  "error_code",
+  "statusCode",
+  "errorType",
+  "failureReason",
+  "S_t-a.T:u S",
+])("uses the same discriminator definition for numeric authentication and signatures: %s", (key) => {
+  expect(isDiscriminatorKey(key)).toBe(true);
+  for (const code of [401, 403, 407, 419, 440]) {
+    for (const value of [code, String(code), ` ${code} `, [code], [[String(code)]]]) {
+      expect(jsonFailure({ [key]: value })).toBe(true);
+      const body = JSON.stringify({ envelope: [{ nested: { [key]: value } }] });
+      expect(responsePageError(body, "application/json")).toBe(true);
+      expect(notFoundSignature(404, "application/json", body)).toBeUndefined();
+    }
+  }
+  expect(jsonFailure({ [key]: 404 })).toBe(false);
+  expect(notFoundSignature(404, "application/json", JSON.stringify({ [key]: 404 }))).toBeDefined();
 });
 
 it("retains HTML titles and headings while allowing incidental message text to vary", () => {

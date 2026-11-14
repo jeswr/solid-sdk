@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { BrowserContext, Request, Response } from "playwright";
 import { expect, it } from "vitest";
 import { BODY_LIMIT, Recorder } from "../src/recorder.js";
@@ -36,7 +37,7 @@ it.each([
     status: () => 200,
     allHeaders: async () => ({ "content-type": "text/html" }),
     headersArray: async () => [],
-    text: async () => `<main>Products</main>${" ".repeat(BODY_LIMIT)}${flash}`,
+    body: async () => Buffer.from(`<main>Products</main>${" ".repeat(BODY_LIMIT)}${flash}`),
   } as unknown as Response;
   handlers.get("response")?.(response);
   await recorder.flush();

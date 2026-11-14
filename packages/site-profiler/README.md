@@ -450,3 +450,16 @@ Credential-selector declarations remain configuration only when their selector l
 witnessed credential input/meta source; that source's value is registered separately.
 Unproven selectors and explicit credential values retain ordinary registration.
 Round-15 regressions are in `test/runtime-effects.test.ts` and `test/generic-browser.test.ts`.
+
+Every received body passes through `Recorder.responseBody` before sample truncation or
+evidence extraction, including browser traffic, replays, CSRF preparation, evidence fetches
+and deleted-resource probes. Credential discovery scans the complete body up to 8 MiB and
+retains only discovered secrets in the recorder's private union. Larger bodies are discarded
+and supply no evidence; their bounded prefix is still scanned, including on failed streams.
+Rendered crawl/login documents use the same boundary. Stored samples remain capped at
+256 KiB. Round-16 regressions cover hidden sources beyond that sample limit, every returned
+output surface, compound authentication codes and oversized/incomplete responses.
+Possible credential-selector values from external scripts/JSON remain protected until the
+final page witnesses distinguish configuration from credentials. Only these candidate values
+are retained; their source bodies are discarded. Explicit credentials stay registered even
+when their values also spell a witnessed selector.

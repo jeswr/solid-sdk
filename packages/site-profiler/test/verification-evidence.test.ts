@@ -9,10 +9,12 @@ import { type Operation, SCHEMA } from "@jeswr/site-model";
 import type { BrowserContext } from "playwright";
 import { afterEach, expect, it, vi } from "vitest";
 import { BODY_LIMIT, Recorder } from "../src/recorder.js";
+import { redactOutput } from "../src/session-tokens.js";
 import {
   captureVerificationEvidence,
   fetchVerificationEvidence,
 } from "../src/verification-evidence.js";
+import { playwrightReplayer } from "../src/verify.js";
 import { learnWriteResponses } from "../src/write-responses.js";
 
 function required<T>(value: T | undefined): T {
@@ -196,6 +198,243 @@ it("retains credentials discovered beyond the sample limit in discarded evidence
   expect(f.recorder.secrets).toContain(secret);
   expect(f.recorder.trace.at(-1)?.bodySample).toBeUndefined();
   expect(JSON.stringify(f.recorder.trace)).not.toContain(secret);
+});
+
+const hiddenSecret = "hidden-source-response-credential";
+const hiddenBody = `<main><h1>Missing widget</h1><p>${hiddenSecret}</p>${" ".repeat(BODY_LIMIT + 100)}<input type="hidden" name="csrf_token" value="${hiddenSecret}"></main>`;
+
+it.each([
+  "json",
+  "script",
+  "large script",
+])("resolves external %s selector candidates using final witnesses without exempting credentials", (format) => {
+  const recorder = new Recorder(origin);
+  const selector = 'input[name="csrf_token"]';
+  const unproven = 'input[name="unknown_token"]';
+  const fields = { csrfSelector: selector, tokenSelector: unproven };
+  recorder.recordReplay({
+    method: "GET",
+    url: `${origin}/config`,
+    resourceType: format.includes("script") ? "script" : "xhr",
+    contentType: format === "json" ? "application/json" : "application/javascript",
+    bodySample:
+      format === "json"
+        ? JSON.stringify(fields)
+        : `${format === "large script" ? `/*${"x".repeat(512 * 1024)}*/` : ""}window.config=${JSON.stringify(fields)};`,
+  });
+  expect(recorder.finalSecrets([])).toContain(selector);
+  recorder.recordReplay({
+    method: "GET",
+    url: `${origin}/form`,
+    resourceType: "document",
+    contentType: "text/html",
+    bodySample: `<input type="hidden" name="csrf_token" value="${hiddenSecret}">`,
+  });
+  expect(recorder.finalSecrets([])).toEqual(
+    new Set([
+      hiddenSecret,
+      unproven,
+      ...(format === "large script" ? [JSON.stringify(unproven).slice(1, -1)] : []),
+    ]),
+  );
+  // A real credential can have the same lexical value as the proven locator.
+  recorder.recordReplay({
+    method: "GET",
+    url: `${origin}/token`,
+    resourceType: "xhr",
+    contentType: "application/json",
+    bodySample: JSON.stringify({ csrf_token: selector }),
+  });
+  expect(recorder.finalSecrets([])).toContain(selector);
+});
+
+it("retains runtime values and numeric source spellings for deferred selector credentials", () => {
+  const recorder = new Recorder(origin);
+  recorder.responseBody("window.csrfSelector=0xCAFE;", {
+    url: `${origin}/config.js`,
+    resourceType: "script",
+    contentType: "application/javascript",
+  });
+  expect(recorder.finalSecrets([])).toEqual(new Set(["51966", "0xCAFE"]));
+});
+
+it.each([
+  "json",
+  "script",
+])("scans complete %s credential sources beyond the sample limit", (format) => {
+  const recorder = new Recorder(origin);
+  const body =
+    format === "json"
+      ? JSON.stringify({
+          padding: "x".repeat(BODY_LIMIT + 100),
+          nested: { csrf_token: hiddenSecret },
+        })
+      : `/*${"x".repeat(BODY_LIMIT + 100)}*/window.csrf_token="${hiddenSecret}";`;
+  recorder.recordReplay({
+    method: "GET",
+    url: `${origin}/source`,
+    resourceType: format,
+    contentType: format === "json" ? "application/json" : "text/plain",
+    bodySample: body,
+  });
+  expect(recorder.secrets).toEqual(new Set([hiddenSecret]));
+  expect(recorder.trace[0]?.bodySample).not.toContain("csrf_token");
+});
+
+it("scans only the byte-bounded prefix of an oversized response", async () => {
+  const recorder = new Recorder(origin);
+  const laterSecret = "beyond-evidence-cap-credential";
+  const metadata = { url: `${origin}/source`, resourceType: "document", contentType: "text/html" };
+  const prefix = hiddenBody + "é".repeat(VERIFICATION_EVIDENCE_LIMIT / 2);
+  await expect(
+    recorder.readResponseBody(
+      new Response(`${prefix}<input type="hidden" name="csrf_token" value="${laterSecret}">`),
+      metadata,
+    ),
+  ).rejects.toThrow("byte limit");
+  expect(recorder.secrets).toEqual(new Set([hiddenSecret]));
+  expect(recorder.trace).toEqual([]);
+});
+
+it.each([
+  false,
+  true,
+])("discovers secrets before raw replay sample truncation (oversized=%s)", (oversized) => {
+  const recorder = new Recorder(origin);
+  const entry = recorder.recordReplay({
+    method: "GET",
+    url: `${origin}/products/42`,
+    resourceType: "replay",
+    status: 404,
+    contentType: "text/html",
+    bodySample: hiddenBody + (oversized ? " ".repeat(VERIFICATION_EVIDENCE_LIMIT) : ""),
+  });
+  expect(recorder.secrets).toEqual(new Set([hiddenSecret]));
+  expect(entry.bodyTruncated).toBe(true);
+  if (oversized) {
+    expect(entry.bodySample).toBeUndefined();
+    expect(entry.responsePageFailure).toBe(true);
+    expect(entry.notFoundEvidence).toBeUndefined();
+    expect(entry.verificationEvidence).toBeUndefined();
+  } else {
+    expect(entry.bodySample).toContain(hiddenSecret);
+    expect(entry.bodySample).not.toContain("csrf_token");
+  }
+  expect(JSON.stringify(redactOutput(recorder.trace, recorder.secrets))).not.toContain(
+    hiddenSecret,
+  );
+});
+
+it.each([
+  "complete",
+  "oversized",
+  "early",
+  "broken",
+])("scans the bounded evidence prefix even when a response is %s", async (mode) => {
+  const f = fixture();
+  vi.stubGlobal("fetch", async () => {
+    const value =
+      hiddenBody + (mode === "oversized" ? " ".repeat(VERIFICATION_EVIDENCE_LIMIT) : "");
+    let sent = false;
+    return new Response(
+      mode === "broken"
+        ? new ReadableStream({
+            pull(controller) {
+              if (sent) controller.error(new Error("Fictional stream failure"));
+              else {
+                sent = true;
+                controller.enqueue(Buffer.from(value));
+              }
+            },
+          })
+        : value,
+      {
+        status: 404,
+        headers: {
+          "content-type": "text/html",
+          ...(mode === "early" ? { "content-length": "8000000" } : {}),
+          ...(mode === "oversized" ? { "content-length": String(Buffer.byteLength(value)) } : {}),
+        },
+      },
+    );
+  });
+  await fetchVerificationEvidence([f.write, f.read], f.context, f.recorder);
+  expect(f.recorder.secrets).toEqual(new Set([hiddenSecret]));
+  const evidence = f.recorder.trace.filter((r) => r.resourceType === "verification-evidence");
+  expect(evidence).toHaveLength(mode === "complete" ? 1 : 0);
+  expect(evidence[0]?.bodySample).toBeUndefined();
+  expect(JSON.stringify(redactOutput(f.recorder.trace, f.recorder.secrets))).not.toContain(
+    hiddenSecret,
+  );
+});
+
+it("scans anonymous replay responses before returning or sampling them", async () => {
+  const recorder = new Recorder(origin);
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      new Response(hiddenBody, {
+        status: 404,
+        headers: { "content-type": "text/html" },
+      }),
+  );
+  const replayer = playwrightReplayer({} as BrowserContext, recorder, "verify");
+  const response = await replayer.get(`${origin}/products/42`, { signedIn: false });
+  expect(response.body).toBe(hiddenBody);
+  expect(recorder.secrets).toEqual(new Set([hiddenSecret]));
+  expect(recorder.trace[0]?.bodyTruncated).toBe(true);
+  expect(recorder.trace[0]?.bodySample).not.toContain("csrf_token");
+  expect(JSON.stringify(redactOutput(recorder.trace, recorder.secrets))).not.toContain(
+    hiddenSecret,
+  );
+});
+
+it.each([
+  false,
+  true,
+])("scans complete CSRF preparation before token extraction (oversized=%s)", async (oversized) => {
+  const recorder = new Recorder(origin);
+  const get = vi.fn(async (url: string) => {
+    const body =
+      url === `${origin}/csrf`
+        ? hiddenBody + (oversized ? " ".repeat(VERIFICATION_EVIDENCE_LIMIT) : "")
+        : "<main>Example</main>";
+    return {
+      body: async () => Buffer.from(body),
+      status: () => 200,
+      url: () => url,
+      headers: () => ({ "content-type": "text/html" }),
+      headersArray: () => [],
+    };
+  });
+  const context = { request: { get }, cookies: async () => [] } as unknown as BrowserContext;
+  const replayer = playwrightReplayer(context, recorder, "verify");
+  const run = replayer.get(`${origin}/products/42`, {
+    signedIn: true,
+    csrf: [
+      {
+        source: {
+          kind: "html",
+          urlTemplate: `${origin}/csrf`,
+          selector: 'input[name="csrf_token"]',
+          attribute: "value",
+        },
+        target: { kind: "query", name: "csrf" },
+      },
+    ],
+  });
+  if (oversized) {
+    await expect(run).rejects.toThrow("byte limit");
+    expect(get).toHaveBeenCalledOnce();
+    expect(recorder.trace).toEqual([]);
+  } else {
+    await run;
+    expect(get).toHaveBeenCalledTimes(2);
+  }
+  expect(recorder.secrets).toEqual(new Set([hiddenSecret]));
+  expect(JSON.stringify(redactOutput(recorder.trace, recorder.secrets))).not.toContain(
+    hiddenSecret,
+  );
 });
 it.each([
   "oversized",

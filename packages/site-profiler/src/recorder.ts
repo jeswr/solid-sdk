@@ -11,11 +11,13 @@ import {
   registerSecret,
   type SecretCookie,
   staleVerificationResponse,
+  VERIFICATION_EVIDENCE_LIMIT,
 } from "@jeswr/site-executor";
 import type { BrowserContext, Request, Response } from "playwright";
 import { formFields } from "./form-body.js";
 import { isCsrfFieldName } from "./forms.js";
 import { responseFlash, responsePageError } from "./response-evidence.js";
+import { discoverCredentialSources } from "./session-tokens.js";
 import type { Phase, RecordedRequest } from "./types.js";
 import { isDangerousLink, isStatic, truncate } from "./util.js";
 import { captureVerificationEvidence } from "./verification-evidence.js";
@@ -126,6 +128,8 @@ export class Recorder {
   readonly trace: RecordedRequest[] = [];
   /** Explicit credentials from evidence-only bodies and replay preparation; never returned. */
   readonly secrets = new Set<string>();
+  private readonly concreteSecrets = new Set<string>();
+  private readonly selectorSecrets = new Map<string, Set<string>>();
   private seq = 0;
   private readonly contextKey = randomBytes(32);
   private readonly pending = new Set<Promise<void>>();
@@ -164,6 +168,125 @@ export class Recorder {
 
   rememberSecret(value: string): void {
     registerSecret(this.secrets, value);
+    registerSecret(this.concreteSecrets, value);
+  }
+
+  /** Resolve possible selector credentials against the final page witnesses. Actual
+   * credential values always remain secrets, even if they also name a valid selector. */
+  finalSecrets(pages: Array<{ url: string; html: string }>): Set<string> {
+    const candidates: RecordedRequest = {
+      seq: -1,
+      phase: this.phase,
+      method: "GET",
+      url: this.siteOrigin,
+      resourceType: "credential-candidates",
+      requestHeaders: {},
+      cookieNames: [],
+      contentType: "application/json",
+      bodySample: JSON.stringify(
+        [...this.selectorSecrets.keys()].map((value) => ({ tokenSelector: value })),
+      ),
+    };
+    const resolved = discoverCredentialSources(
+      pages,
+      [],
+      [...this.trace.filter((r) => /html/i.test(r.contentType ?? "")), candidates],
+    ).secrets;
+    return new Set([
+      ...this.concreteSecrets,
+      ...resolved,
+      ...[...this.selectorSecrets].flatMap(([value, spellings]) =>
+        resolved.has(value) ? [...spellings] : [],
+      ),
+    ]);
+  }
+
+  /** Every body passes here before sampling or evidence use. Retain discoveries only.
+   * Oversized bodies still supply their bounded prefix for credential discovery. */
+  responseBody(
+    body: string | Uint8Array,
+    metadata: Pick<RecordedRequest, "url" | "contentType" | "resourceType">,
+  ): string {
+    const bytes =
+      typeof body === "string"
+        ? Buffer.from(body)
+        : Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+    const prefix = bytes.subarray(0, VERIFICATION_EVIDENCE_LIMIT).toString("utf8");
+    const contentType = /^\s*</.test(prefix)
+      ? "text/html"
+      : /^\s*[[{]/.test(prefix)
+        ? "application/json"
+        : metadata.contentType;
+    const source: RecordedRequest = {
+      seq: -1,
+      phase: this.phase,
+      method: "GET",
+      requestHeaders: {},
+      cookieNames: [],
+      ...metadata,
+      contentType,
+      bodySample: prefix,
+    };
+    const discovered = discoverCredentialSources([], [], [source], {}, (value, sourceSpelling) => {
+      const spellings = this.selectorSecrets.get(value) ?? new Set<string>();
+      registerSecret(spellings, value);
+      if (sourceSpelling !== undefined) registerSecret(spellings, sourceSpelling);
+      if (spellings.size) this.selectorSecrets.set(value, spellings);
+      for (const spelling of spellings) registerSecret(this.secrets, spelling);
+    });
+    for (const secret of discovered.secrets) this.rememberSecret(secret);
+    if (bytes.byteLength > VERIFICATION_EVIDENCE_LIMIT)
+      throw new Error("Profiler response byte limit exceeded");
+    return prefix;
+  }
+
+  /** Bound Fetch streams; Playwright has already buffered its response body. Failed
+   * streams supply credential discoveries from their prefix, never partial evidence. */
+  async readResponseBody(
+    response: globalThis.Response | { body(): Promise<Buffer> },
+    metadata: Pick<RecordedRequest, "url" | "contentType" | "resourceType">,
+  ): Promise<string> {
+    if (typeof response.body === "function")
+      return this.responseBody(await response.body(), metadata);
+    const reader = response.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      if (reader) {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // One extra byte distinguishes an oversized body without retaining it.
+          const prefix = value.subarray(0, VERIFICATION_EVIDENCE_LIMIT + 1 - size);
+          chunks.push(prefix);
+          size += prefix.byteLength;
+          if (size > VERIFICATION_EVIDENCE_LIMIT)
+            throw new Error("Profiler response byte limit exceeded");
+        }
+      }
+      const body = this.responseBody(Buffer.concat(chunks), metadata);
+      const headers = (response as globalThis.Response).headers;
+      const length = headers.get("content-length");
+      if (
+        !headers.has("content-encoding") &&
+        length !== null &&
+        /^\d+$/.test(length) &&
+        size !== Number(length)
+      )
+        throw new Error("Profiler response ended early");
+      return body;
+    } catch (error) {
+      // Discover even when the stream is oversized or failed before completion.
+      try {
+        this.responseBody(Buffer.concat(chunks), metadata);
+      } catch {
+        // The bounded prefix was scanned before rejecting the oversized body.
+      }
+      await reader?.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      reader?.releaseLock();
+    }
   }
 
   rememberSetCookies(lines: readonly string[], url: string, loginResponse = false): void {
@@ -307,10 +430,10 @@ export class Recorder {
       })
       .filter(Boolean);
     if (setCookies.length) entry.setCookieNames = setCookies;
-    if (entry.status >= 300 && entry.status < 400) return;
-    if (!TEXT_TYPES.test(entry.contentType ?? "")) return;
     try {
-      const body = await res.text();
+      const body = await this.readResponseBody(res, entry);
+      if (entry.status >= 300 && entry.status < 400) return;
+      if (!TEXT_TYPES.test(entry.contentType ?? "")) return;
       if (entry.phase === "demonstration" && /html|json/i.test(entry.contentType ?? "")) {
         // A neutral success notice is a flash, not a page error. Creation still
         // rejects every flash via the complete inventory when learning policies.
@@ -324,6 +447,7 @@ export class Recorder {
       entry.bodySample = t.text;
       if (t.truncated) entry.bodyTruncated = true;
     } catch {
+      entry.responsePageFailure = true;
       // Bodies of pages that navigated away are not always available; the request still counts.
     }
   }
@@ -342,9 +466,20 @@ export class Recorder {
       requestHeaders: sanitiseHeaders(entry.requestHeaders ?? {}).requestHeaders,
     };
     if (full.bodySample !== undefined) {
-      const t = truncate(full.bodySample, BODY_LIMIT);
-      full.bodySample = t.text;
-      if (t.truncated) full.bodyTruncated = true;
+      try {
+        const body = this.responseBody(full.bodySample, full);
+        const t = truncate(body, BODY_LIMIT);
+        full.bodySample = t.text;
+        if (t.truncated) full.bodyTruncated = true;
+      } catch {
+        delete full.bodySample;
+        delete full.verificationEvidence;
+        delete full.notFoundEvidence;
+        delete full.formState;
+        delete full.responseFlash;
+        full.bodyTruncated = true;
+        full.responsePageFailure = true;
+      }
     }
     this.trace.push(full);
     return full;
