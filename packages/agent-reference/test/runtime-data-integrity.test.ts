@@ -21,8 +21,10 @@ for (const name of ["mortgage-main", "mortgage-core"])
     const alternative = await runScenario(input.profile, input.scenario, {
       configuration: "authenticity-data-integrity",
     });
-    expect(alternative).toHaveLength(baseline.length);
-    for (const path of alternative) {
+    expect(alternative.filter((path) => baseline.some((p) => p.path === path.path))).toHaveLength(
+      baseline.length,
+    );
+    for (const path of alternative.filter((path) => baseline.some((p) => p.path === path.path))) {
       expect(path.blocked).toBeUndefined();
       expect(path.trace).toBeDefined();
       const original = baseline.find((p) => p.path === path.path)!;

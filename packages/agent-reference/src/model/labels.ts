@@ -55,12 +55,30 @@ export class LabelIndex {
     const rule = event.rule
       ? { ...event.rule, text: plainWords(render(event.rule.text)) }
       : undefined;
+    const resolution = event.resolution
+      ? {
+          ...event.resolution,
+          question: plainWords(render(event.resolution.question)),
+          answer: plainWords(render(event.resolution.answer)),
+          path: event.resolution.path.map((step) => ({
+            ...step,
+            at: plainWords(render(step.at)),
+            says: plainWords(render(step.says)),
+          })),
+        }
+      : undefined;
     const refs: TraceRef[] = [...(event.refs ?? [])];
     for (const id of identifiers)
       if (!refs.some((ref) => ref.id === id))
         refs.push({ layer: "meaning", suite: meaningSuite, id });
     // Exact original content and exact-action review remain untouched in chat.text.
-    return { ...event, caption, ...(rule ? { rule } : {}), ...(refs.length ? { refs } : {}) };
+    return {
+      ...event,
+      caption,
+      ...(rule ? { rule } : {}),
+      ...(resolution ? { resolution } : {}),
+      ...(refs.length ? { refs } : {}),
+    };
   }
 }
 

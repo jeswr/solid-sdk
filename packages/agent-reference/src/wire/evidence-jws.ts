@@ -32,7 +32,14 @@ export function inspectEvidenceEnvelope(
   payload: import("../core/types.js").JsonObject | import("../core/types.js").Json[];
   credentials: readonly string[];
 } {
-  if (!["selective-disclosure+jws", "mandate-chain+jws", "awp-action-intent/0.1"].includes(format))
+  if (
+    ![
+      "origin-hosted",
+      "selective-disclosure+jws",
+      "mandate-chain+jws",
+      "awp-action-intent/0.1",
+    ].includes(format)
+  )
     throw new TypeError("Unsupported evidence envelope");
   assertUniqueKeys(value);
   const payload = parseBoundedJson(value);
@@ -45,7 +52,17 @@ export function inspectEvidenceEnvelope(
     } else if (Array.isArray(item)) for (const child of item) walk(child);
     else if (item && typeof item === "object") for (const child of Object.values(item)) walk(child);
   }
-  walk(payload);
+  if (format === "selective-disclosure+jws") {
+    const credential = (payload as Record<string, unknown>).credential;
+    if (typeof credential !== "string") throw new TypeError("Missing selective issuer credential");
+    inspectEvidenceJws(credential);
+    credentials.push(credential);
+  } else if (format === "origin-hosted") {
+    const anchor = (payload as Record<string, unknown>).anchor;
+    if (typeof anchor !== "string") throw new TypeError("Missing source-address register answer");
+    inspectEvidenceJws(anchor);
+    credentials.push(anchor);
+  } else walk(payload);
   if (!credentials.length && format !== "awp-action-intent/0.1" && !options.allowEmpty)
     throw new TypeError("Envelope contains no signed credential");
   return { payload: payload as JsonObject | import("../core/types.js").Json[], credentials };

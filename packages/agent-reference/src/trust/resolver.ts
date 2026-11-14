@@ -42,6 +42,7 @@ export interface OwnListEntry {
   readonly tasks: readonly Iri[];
   readonly block?: boolean;
   readonly note?: string;
+  readonly expiresAt?: string;
 }
 
 export interface RegisterEntry {
@@ -77,10 +78,14 @@ export interface TrustResolverOptions {
   readonly ownList?: readonly OwnListEntry[];
   readonly root?: TrustRoot;
   readonly name: (iri: string | undefined) => string;
+  readonly ownListOnly?: boolean;
 }
 
 export class TrustResolver {
   constructor(private readonly opts: TrustResolverOptions) {}
+  get pinnedOnly(): boolean {
+    return this.opts.ownListOnly === true;
+  }
 
   private get ownListName(): string {
     return `${this.opts.principal}'s own list`;
@@ -101,8 +106,23 @@ export class TrustResolver {
     const question = `Is ${name(input.source)} an authority for ${input.claimType} claims${
       input.subject ? ` about ${name(input.subject)}` : ""
     }?`;
-    const a = this.opts.trust.assessSource(input);
-    if (a.outcome === "accepted" || a.outcome === "unresolved" || !this.opts.root) {
+    const blocked = this.pinnedOnly
+      ? (this.opts.ownList ?? []).find((e) => e.party === input.source && e.block)
+      : undefined;
+    const a = blocked
+      ? {
+          outcome: "not-accepted" as const,
+          reason: "The principal blocked this source.",
+          rule: undefined,
+        }
+      : this.opts.trust.assessSource(input);
+    if (
+      a.outcome === "accepted" ||
+      a.outcome === "unresolved" ||
+      !this.opts.root ||
+      this.pinnedOnly ||
+      blocked
+    ) {
       return {
         question,
         path: [
@@ -121,7 +141,13 @@ export class TrustResolver {
             : a.outcome === "unresolved"
               ? "Cannot tell."
               : `Not accepted for ${input.claimType}.`,
-        outcome: a.outcome,
+        outcome: blocked
+          ? "blocked"
+          : this.pinnedOnly &&
+              a.outcome === "not-accepted" &&
+              !this.opts.trust.data.sourceAuthority.some((r) => r.source === input.source)
+            ? "no-route"
+            : a.outcome,
         checkedAt: input.at,
         ...(a.rule ? { rule: a.rule } : {}),
       };
@@ -194,7 +220,10 @@ export class TrustResolver {
       });
       return { question, path, answer: "Blocked.", outcome: "blocked", checkedAt: input.at };
     }
-    if (own?.tasks.includes(input.task)) {
+    if (
+      own?.tasks.includes(input.task) &&
+      (!this.pinnedOnly || !own.expiresAt || Date.parse(input.at) < Date.parse(own.expiresAt))
+    ) {
       path.push({
         at: this.ownListName,
         kind: "own-list",
@@ -215,7 +244,7 @@ export class TrustResolver {
         ? `${name(input.party)} is listed, but not for ${input.taskLabel}.`
         : `No entry for ${name(input.party)}.`,
     });
-    const root = this.opts.root;
+    const root = this.pinnedOnly ? undefined : this.opts.root;
     if (!root) {
       return {
         question,

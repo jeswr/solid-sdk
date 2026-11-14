@@ -75,19 +75,27 @@ import { carry } from "../settlement/carried.js";
 import { selectedSettlement } from "../settlement/configurations.js";
 import { Ledger as PaymentLedger } from "../settlement/ledger.js";
 import { FictionalDeliberationPlatform } from "../standins/deliberation.js";
+import { presentFederation } from "../standins/federation.js";
+import { FictionalOriginDirectory } from "../standins/origin-hosted.js";
 import { PodRecordMirror } from "../standins/pod-mirror.js";
+import { issueAgentRating } from "../standins/reputation.js";
 import { FictionalSolidStorage } from "../standins/storage.js";
+import { buildIndexLog, withIndexReceipts } from "../standins/trusted-index.js";
 import { FictionalWebIdDirectory } from "../standins/webid.js";
 import { MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
+import { OriginHostedVerifier } from "../suites/authenticity-origin.js";
 import { BASELINE } from "../suites/baseline.js";
 import { withNegotiatedRequirement } from "../suites/meaning-negotiated.js";
 import { withEmploymentRequirement, withMappingVocabulary } from "../suites/meaning-registry.js";
 import { PUBLIC_READ } from "../suites/public-read.js";
 import { scenarioRegistry } from "../suites/scenario.js";
+import { PresentedFederationResolver } from "../suites/trust-federation.js";
+import { ReputationResolver } from "../suites/trust-reputation.js";
 import { TraceRecorder } from "../trace/recorder.js";
 import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
+import { alterDocumentForTest, changeSelectiveSalt } from "../wire/document-faults.js";
 import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
@@ -689,7 +697,10 @@ async function runPath(
       payload.subjectKey = cast.get(statement.value.actorKeyOf).actorKey.kid;
     delete payload.actorKeyOf;
     delete payload.subjectKeyOf;
-    const jws = await signClaim(key, payload);
+    const isOrigin =
+      configuration.id === "authenticity-origin-hosted" &&
+      scenario.originHosted?.records.some((record) => record.statement === statement.id);
+    const jws = isOrigin ? "" : await signClaim(key, payload);
     signed[statement.id] = {
       jws,
       wireDigest: digestBytes(jws),
@@ -795,6 +806,88 @@ async function runPath(
       };
     }
   }
+  const indexSettings =
+    configuration.layers.trust === "trusted-index" ? scenario.trustedIndex : undefined;
+  const indexLog = indexSettings
+    ? await buildIndexLog({
+        key: required(sourceKeys.get(indexSettings.index)),
+        source: required(parties.get(indexSettings.index)).identity,
+        records: indexSettings.records.map((id) => required(signed[id]).jws),
+        sources: indexSettings.records.map((id) => String(required(signed[id]).statement.issuer)),
+        register: indexSettings.register,
+        at: now().toISOString(),
+        fork: indexSettings.fork,
+      })
+    : undefined;
+  const federationSettings =
+    configuration.layers.trust === "federation" ? scenario.federation : undefined;
+  const federationPresentation = federationSettings
+    ? await presentFederation({
+        anchor: {
+          id: required(parties.get(federationSettings.anchor)).identity,
+          key: required(sourceKeys.get(federationSettings.anchor)),
+        },
+        superior: {
+          id: required(parties.get(federationSettings.superior)).identity,
+          key: required(sourceKeys.get(federationSettings.superior)),
+        },
+        subject: {
+          id: required(parties.get(federationSettings.subject)).identity,
+          key: required(sourceKeys.get(federationSettings.subject)),
+          actorKey: cast.get(
+            required(agents.find((a) => a.actsFor === federationSettings.subject)).id,
+          ).actorKey,
+        },
+        purpose: federationSettings.purpose,
+        claimTypes: federationSettings.claimTypes,
+        at: now().toISOString(),
+        expired: federationSettings.expired,
+        businessOnly: federationSettings.businessOnly,
+      })
+    : undefined;
+  const reputationSettings =
+    configuration.layers.trust === "reputation" ? scenario.reputation : undefined;
+  const ratingEvidence = reputationSettings
+    ? await Promise.all(
+        reputationSettings.ratings.map((rating) =>
+          issueAgentRating(required(sourceKeys.get(reputationSettings.service)), {
+            service: required(parties.get(reputationSettings.service)).identity,
+            party: required(parties.get(rating.party)).identity,
+            actor: cast.get(rating.agent).identity.actor,
+            kid: cast.get(rating.agent).actorKey.kid,
+            score: rating.score,
+            at: now().toISOString(),
+          }),
+        ),
+      )
+    : [];
+  const originSettings =
+    configuration.id === "authenticity-origin-hosted" ? scenario.originHosted : undefined;
+  const originDirectory = originSettings
+    ? new FictionalOriginDirectory(
+        {
+          identity: required(parties.get(originSettings.register)).identity,
+          key: required(sourceKeys.get(originSettings.register)),
+        },
+        now().toISOString(),
+      )
+    : undefined;
+  if (originSettings && originDirectory)
+    for (const entry of originSettings.records) {
+      const record = required(signed[entry.statement]);
+      await originDirectory.publish(entry.address, record.statement);
+      const locator = originDirectory.locator(
+        String(record.statement.id),
+        originSettings.pointerFault,
+      );
+      signed[entry.statement] = {
+        ...record,
+        jws: locator,
+        format: "origin-hosted",
+        wireDigest: digestBytes(locator),
+        evidence: { role: "credential", format: "origin-hosted", value: locator },
+      };
+    }
   const documents: Record<string, string> = {};
   const documentPayload = (value: JsonObject): JsonObject => {
     const keys = Array.isArray(value.keys)
@@ -1389,6 +1482,19 @@ async function runPath(
             },
           }
         : {}),
+      ...(indexLog && agent.id === indexSettings?.reader ? { trustedIndex: indexLog.policy } : {}),
+      ...(configuration.id === "authenticity-selective-disclosure"
+        ? { selectiveAnnual: true }
+        : {}),
+      ...(originDirectory
+        ? {
+            originHosted: new OriginHostedVerifier(
+              originDirectory.register.identity,
+              originDirectory.fetch,
+              recorder.sink(agent.traceId ?? agent.id),
+            ),
+          }
+        : {}),
       ...verifiers,
       acceptedProofs: profile.acceptedProofs,
       acceptedJoint: profile.acceptedJoint,
@@ -1441,7 +1547,27 @@ async function runPath(
       name,
       taskLabel: (operation) =>
         profile.operations.find((op) => op.id === operation)?.label ?? labels.name(operation),
-      vocabulary: profile.vocabulary,
+      vocabulary:
+        configuration.id === "authenticity-selective-disclosure"
+          ? {
+              ...Object.fromEntries(
+                Object.entries(profile.vocabulary).map(([key, value]) => [
+                  key,
+                  value.values?.includes("income.gross.monthly-series")
+                    ? {
+                        ...value,
+                        values: [
+                          ...value.values,
+                          "income.gross.annual",
+                          "income.national-insurance",
+                        ],
+                      }
+                    : value,
+                ]),
+              ),
+              "terms.evidenceRequest.*.optional": { type: "code", values: [true] },
+            }
+          : profile.vocabulary,
       identifiers: profile.identifiers,
       sourceAliases: profile.sources,
       attestedDerivers: profile.attestedDerivers,
@@ -1510,7 +1636,18 @@ async function runPath(
       scenario.relianceCorroboration?.receivers.includes(agent.actor ?? "")
         ? { incomeCorroboration: scenario.relianceCorroboration }
         : {}),
-      purposes: Object.fromEntries(profile.purposes.map((p) => [p.id, p.claims])),
+      purposes: Object.fromEntries(
+        profile.purposes.map((p) => [
+          p.id,
+          configuration.id === "authenticity-selective-disclosure" &&
+          p.claims.includes("income.gross.monthly-series")
+            ? [
+                ...p.claims.filter((kind) => kind !== "income.gross.monthly-series"),
+                "income.gross.annual",
+              ]
+            : p.claims,
+        ]),
+      ),
       reliance: {
         id: `urn:profile:${profile.id}`,
         rules: profile.claims.map((c) => ({
@@ -1529,6 +1666,7 @@ async function runPath(
         trust,
         ownList: scenario.trust.ownLists[agent.id],
         root: scenario.trust.root,
+        ownListOnly: configuration.id === "trust-pinned-list",
         name,
       }),
       ...(mandate.limits
@@ -1540,11 +1678,71 @@ async function runPath(
           }
         : {}),
     };
+    if (federationSettings && federationPresentation) {
+      if (agent.actsFor === federationSettings.subject || agent.id === federationSettings.index)
+        Object.assign(gate, { supplementaryEvidence: federationPresentation });
+      if (agent.id === federationSettings.reader) {
+        const anchor = required(sourceKeys.get(federationSettings.anchor));
+        const federationResolver = new PresentedFederationResolver(
+          {
+            principal: name(cast.get(agent.id).identity.party),
+            trust,
+            ownList: scenario.trust.ownLists[agent.id],
+            root: scenario.trust.root,
+            name,
+          },
+          {
+            anchor: required(parties.get(federationSettings.anchor)).identity,
+            keys: [publicPart(anchor)],
+            subject: required(parties.get(federationSettings.subject)).identity,
+            purpose: federationSettings.purpose,
+            claimTypes: federationSettings.claimTypes,
+            expectedSubjectKey: required(sourceKeys.get(federationSettings.subject)).kid,
+          },
+        );
+        Object.assign(gate, { federation: federationResolver, resolver: federationResolver });
+      }
+    }
+    if (reputationSettings) {
+      if (
+        agent.id === reputationSettings.index ||
+        reputationSettings.ratings.some((rating) => rating.agent === agent.id)
+      )
+        Object.assign(gate, { supplementaryEvidence: ratingEvidence });
+      if (agent.id === reputationSettings.reader) {
+        const reputationResolver = new ReputationResolver(
+          {
+            principal: name(cast.get(agent.id).identity.party),
+            trust,
+            ownList: scenario.trust.ownLists[agent.id],
+            root: scenario.trust.root,
+            name,
+          },
+          {
+            service: required(parties.get(reputationSettings.service)).identity,
+            minimum: reputationSettings.minimum,
+            targets: reputationSettings.ratings.map((rating) => ({
+              party: required(parties.get(rating.party)).identity,
+              actor: cast.get(rating.agent).identity.actor,
+              kid: cast.get(rating.agent).actorKey.kid,
+            })),
+          },
+          trust,
+          cast.get(agent.id).identity.actor,
+        );
+        Object.assign(gate, { reputation: reputationResolver, resolver: reputationResolver });
+      }
+    }
     const specialised: OperationHandler[] = agent.handlers.length
       ? agent.handlers.map((id) => {
           const handler = withNegotiatedRequirement(
             withEmploymentRequirement(
-              installHandler(required(scenario.handlerImplementations[id]), signed, stores),
+              indexLog && agent.actsFor === indexSettings?.index
+                ? withIndexReceipts(
+                    installHandler(required(scenario.handlerImplementations[id]), signed, stores),
+                    indexLog.receipts,
+                  )
+                : installHandler(required(scenario.handlerImplementations[id]), signed, stores),
               configuration.layers.meaning === "registry-lookup" && agent.id === "north-agent"
                 ? scenario.registryMeaning
                 : undefined,
@@ -2464,7 +2662,7 @@ async function runPath(
             party: required(parties.get(required(peer.actsFor))).identity,
           },
           operation: { id: operation.id, version: operation.version },
-          models: operation.models,
+          models: step.models ?? operation.models,
           discover: step.discover,
           configuration:
             step.configuration === "public-read"
@@ -2548,6 +2746,25 @@ async function runPath(
               created: hostileMessage.createdAt,
             });
           } else wire = target as typeof wire;
+        }
+        for (const fault of scenario.documentFaults.filter((fault) => fault.step === step.id))
+          wire = alterDocumentForTest(wire, fault.kind);
+        if (scenario.evidenceFaults.some((fault) => fault.step === step.id)) {
+          hostileMessage = {
+            ...hostileMessage,
+            evidence: (hostileMessage.evidence ?? []).map((e) =>
+              e.format === "selective-disclosure+jws"
+                ? { ...e, value: changeSelectiveSalt(e.value) }
+                : e,
+            ),
+          };
+          const key = cast.get(item.from).actorKey;
+          wire = await writeMessagePacket(MessageNode.toNode(hostileMessage), {
+            suite: "jws",
+            key,
+            verificationMethod: "urn:awp:key:" + key.kid,
+            created: hostileMessage.createdAt,
+          });
         }
         if (step.stripSignature)
           wire = await writeMessagePacket(MessageNode.toNode(hostileMessage), { unsigned: true });
@@ -2890,14 +3107,29 @@ async function runPath(
           )
         )
           throw new Error("assessment inputs do not belong to this consumer agreement");
-        const annual = read.items?.find((i) => i.claimType === "income.gross.annual.derived")
-          ?.data as JsonObject | undefined;
+        const sourceAnnual =
+          configuration.id === "authenticity-selective-disclosure"
+            ? (read.items?.find(
+                (i) =>
+                  i.claimType === "income.gross.annual" &&
+                  scenario.selectiveCredentials.some(
+                    (credential) => required(parties.get(credential.issuer)).identity === i.source,
+                  ),
+              )?.data as JsonObject | undefined)
+            : undefined;
+        const annual =
+          sourceAnnual && typeof sourceAnnual.annualGrossIncome === "number"
+            ? { ...sourceAnnual, value: sourceAnnual.annualGrossIncome, assurance: "by-source" }
+            : (read.items?.find((i) => i.claimType === "income.gross.annual.derived")?.data as
+                | JsonObject
+                | undefined);
         const deposit = read.items?.find((i) => i.claimType === "deposit.balance")?.data as
           | JsonObject
           | undefined;
         if (
           !annual ||
-          annual.rule !== plan.annualRule ||
+          (!(sourceAnnual && annual.assurance === "by-source") &&
+            annual.rule !== plan.annualRule) ||
           !deposit ||
           typeof annual.value !== "number" ||
           typeof deposit.balance !== "number" ||

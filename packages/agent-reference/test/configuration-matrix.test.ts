@@ -3,6 +3,7 @@
 import { join } from "path";
 import { expect, it } from "vitest";
 import { loadCase } from "../src/engine/load.js";
+import { matrixWorld } from "../src/engine/matrix.js";
 import { patch, runScenario } from "../src/engine/run.js";
 import { scenarioSchema } from "../src/engine/schema.js";
 import { alternativeWireId, configurationById } from "../src/profile/configurations.js";
@@ -64,9 +65,9 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
         (count, entry) =>
           count +
           1 +
-          (
-            (entry.world.branches as { onlyUnder?: string }[] | undefined) ?? scenario.branches
-          ).filter((branch) => !branch.onlyUnder || branch.onlyUnder === entry.id).length,
+          scenarioSchema
+            .parse(matrixWorld(scenario, entry))
+            .branches.filter((branch) => !branch.onlyUnder || branch.onlyUnder === entry.id).length,
         0,
       ),
   );
@@ -80,8 +81,9 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
     const paths = results.filter((result) => result.configuration === entry.id);
     expect(paths.map((result) => result.path)).toEqual([
       "main",
-      ...((entry.world.branches as { id: string }[] | undefined) ?? scenario.branches)
-        .filter(
+      ...scenarioSchema
+        .parse(matrixWorld(scenario, entry))
+        .branches.filter(
           (branch) =>
             !("onlyUnder" in branch) || !branch.onlyUnder || branch.onlyUnder === entry.id,
         )
@@ -112,7 +114,8 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
       ),
     ).toEqual(Object.keys(entry.change));
   }
-}, 600_000);
+  // The matrix now includes 34 more live paths; retain every assertion and budget the aggregate run.
+}, 900_000);
 
 it("refuses a signed opening under a configuration the receiver does not advertise", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-core");

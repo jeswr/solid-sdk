@@ -54,10 +54,10 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "runs")).toHaveLength(152);
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(12);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
-  // 26e's alternatives plus the four native settlement configurations (three rows each).
-  expect(alternatives).toHaveLength(48);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(41);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(0);
+  // Existing alternatives plus all seven authenticity/trust configurations and their scoped branches.
+  expect(alternatives).toHaveLength(82);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(73);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(2);
   const blocked = alternatives.filter((path) => path.status === "blocked");
   expect(blocked).toHaveLength(7);
   expect(blocked.every((path) => !path.trace)).toBe(true);
@@ -66,7 +66,7 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   );
   expect(
     alternatives.filter((path) => path.configuration === "authenticity-data-integrity"),
-  ).toHaveLength(5);
+  ).toHaveLength(6);
 });
 
 it("preserves exact original content in principal review even when it contains a URI", () => {
@@ -97,4 +97,31 @@ it("builds captions from words without dotted identifiers or camel case", () => 
   expect(caption).toContain("mortgage product");
   expect(caption).toContain("original Digest");
   expect(caption).not.toMatch(/urn:|\b[a-zA-Z]+\.[a-zA-Z]+\b|[a-z][A-Z]/);
+});
+it("renders generated trust questions and lookup paths as words while retaining exact references", () => {
+  const labels = new LabelIndex();
+  labels.add("urn:source", "The fictional source");
+  const result = labels.annotations(
+    {
+      part: "inbound-gate",
+      kind: "check",
+      caption: "The lookup is recorded.",
+      resolution: {
+        question: "Does urn:source cover mortgage.product?",
+        answer: "Accepted for mortgage.product only.",
+        path: [
+          {
+            at: "The principal’s list",
+            kind: "own-list",
+            says: "urn:source is accepted for mortgage.product.",
+          },
+        ],
+      },
+    },
+    "fixed-vocabulary",
+  );
+  expect(result.resolution?.question).toBe("Does The fictional source cover mortgage product?");
+  expect(result.resolution?.answer).toBe("Accepted for mortgage product only.");
+  expect(result.resolution?.path[0]?.says).not.toMatch(/urn:|mortgage\.product/);
+  expect(result.refs?.some((ref) => ref.id === "urn:source")).toBe(true);
 });

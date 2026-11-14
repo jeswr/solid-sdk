@@ -53,7 +53,7 @@ class LenderWithCounterPurpose extends LenderPrequalHandler {
 }
 export function installHandler(
   spec: Scenario["handlerImplementations"][string],
-  statements: Readonly<Record<string, { jws: string; statement: JsonObject }>>,
+  statements: Readonly<Record<string, { jws: string; format?: string; statement: JsonObject }>>,
   stores: ReadonlyMap<string, PurposeBoundStore>,
 ): OperationHandler {
   switch (spec.template) {
@@ -61,6 +61,7 @@ export function installHandler(
       const p = z
         .strictObject({
           wallet: z.array(z.string()),
+          selectiveAnnual: z.boolean().optional(),
           policy: z.strictObject({
             requireProhibited: z.array(iri),
             maxRetentionDays: z.number(),
@@ -71,6 +72,7 @@ export function installHandler(
       return new ConsumerMortgageHandler(
         p.wallet.map((id) => required(statements[id])) as unknown as WalletItem[],
         p.policy,
+        p.selectiveAnnual,
       );
     }
     case "mortgage-lender": {
@@ -82,6 +84,8 @@ export function installHandler(
           retentionDays: z.number(),
           store: z.string(),
           derivationRule: iri.optional(),
+          selectiveAnnual: z.boolean().optional(),
+          nationalInsuranceRequested: z.boolean().optional(),
           counterPurpose: iri.optional(),
         })
         .parse(spec.params);
@@ -103,6 +107,7 @@ export function installHandler(
       return new ProductIndexHandler(
         p.records.map((id) => ({
           jws: required(statements[id]).jws,
+          format: statements[id]?.format,
           record: required(statements[id]).statement,
         })),
       );

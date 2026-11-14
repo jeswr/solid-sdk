@@ -263,3 +263,15 @@ The DQV graph is the gate's typed view of preserved signed evidence metadata; it
 annotations are defined in [meaning-reliance.ttl](vocab/meaning-reliance.ttl). Changing
 the existing evidence wire format remains the message-model lane's work. See
 [the Brief 26e report](ENGINE-REPORT.md#brief-26e) for scope, stand-ins and validation.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 26d runs the mortgage under Data Integrity, scoped own-list trust, selective payroll
+projection, origin-hosted products, a transparent product index, presented OpenID Federation
+chains and a principal’s minimum reputation score. Each uses the existing configuration
+matrix and configuration-only failure branches. Transparency receipts use RFC 9162 hashing
+with explicitly declared JSON/JWS stand-ins for SCITT COSE. Selective payroll reveals annual
+gross income and employer while withholding monthly inputs and the private insurance number;
+it remains linkable and uses the existing local disclosure mechanism. Origin observations
+are unsigned, fetched only at register-bound addresses and cannot be forwarded as evidence.
+The two recorded branch disagreements and the supported protocol subsets are explained in
+[ENGINE-REPORT.md](ENGINE-REPORT.md#brief-26d).

@@ -97,6 +97,9 @@ export const evidenceSchema = z
       .max(36)
       .optional(),
     balance: z.number().min(0).max(1e9).optional(),
+    annualGrossIncome: z.number().min(0).max(1e9).optional(),
+    employerName: z.string().min(1).max(256).optional(),
+    selectiveCredentialDigest: z.string().optional(),
     asOf: iso.optional(),
     issuedAt: iso,
     /** How the issuer produced the claim (e.g. `recorded-by-authority`). Optional. */
@@ -132,6 +135,7 @@ const evidenceRequestTerms = z.strictObject({
     .array(
       z.strictObject({
         claimType: z.string().max(128),
+        optional: z.boolean().optional(),
         periodMonths: z.number().int().min(1).max(36),
         currency: z.string().regex(/^[A-Z]{3}$/),
         employmentStatus: z
@@ -228,6 +232,7 @@ export function prequalDescription(
 // ------------------------------------------------------------------ consumer side
 
 export interface WalletItem {
+  readonly format?: string;
   readonly jws: string;
   readonly statement: EvidenceStatement;
 }
@@ -243,14 +248,20 @@ export interface ConsumerPolicy {
 export class ConsumerMortgageHandler implements OperationHandler {
   readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
-  readonly description = prequalDescription([MODEL_MONTHLY], ["initiator"]);
+  readonly description: OperationDescription;
   readonly termsSchema = prequalTerms as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;
 
   constructor(
     private readonly wallet: readonly WalletItem[],
     private readonly policy: ConsumerPolicy,
-  ) {}
+    selectiveAnnual = false,
+  ) {
+    this.description = prequalDescription(
+      [selectiveAnnual ? MODEL_ANNUAL : MODEL_MONTHLY],
+      ["initiator"],
+    );
+  }
 
   intentForProposal(ctx: HandlerContext, terms: JsonObject): ActionIntent {
     return {
@@ -344,7 +355,8 @@ export class ConsumerMortgageHandler implements OperationHandler {
       };
     }
     const missing = t.evidenceRequest.filter(
-      (r) => !this.matching(t, ctx).some((w) => w.statement.claimType === r.claimType),
+      (r) =>
+        !r.optional && !this.matching(t, ctx).some((w) => w.statement.claimType === r.claimType),
     );
     if (missing.length > 0)
       return {
@@ -374,7 +386,11 @@ export class ConsumerMortgageHandler implements OperationHandler {
           },
           intent: this.disclosureIntent(ctx, t, agreement.termsDigest),
           evidence: items.map(
-            (w): EvidenceItem => ({ role: "credential", format: "jws-compact", value: w.jws }),
+            (w): EvidenceItem => ({
+              role: "credential",
+              format: w.format ?? "jws-compact",
+              value: w.jws,
+            }),
           ),
         },
       ],
@@ -396,6 +412,8 @@ export interface LenderConfig {
   readonly retentionDays: number;
   readonly store: PurposeBoundStore;
   readonly derivationRule?: Iri;
+  readonly selectiveAnnual?: boolean;
+  readonly nationalInsuranceRequested?: boolean;
 }
 
 function monthIndex(ym: string): number {
@@ -507,8 +525,22 @@ export class LenderPrequalHandler implements OperationHandler {
       application: app.data,
       applicationId: ctx.identifierFor({ conversation: ctx.conversation.id, item: "application" }),
       evidenceRequest: [
-        { claimType: CLAIM.incomeMonthly, periodMonths: 12, currency: "USD" },
+        {
+          claimType: this.cfg.selectiveAnnual ? "income.gross.annual" : CLAIM.incomeMonthly,
+          periodMonths: 12,
+          currency: "USD",
+        },
         { claimType: CLAIM.depositBalance, periodMonths: 1, currency: "USD" },
+        ...(this.cfg.nationalInsuranceRequested
+          ? [
+              {
+                claimType: "income.national-insurance",
+                periodMonths: 12,
+                currency: "USD",
+                optional: true,
+              },
+            ]
+          : []),
       ],
       purpose: PURPOSE.creditAssessment,
       recipients: [this.cfg.lender],
@@ -670,6 +702,25 @@ export class LenderPrequalHandler implements OperationHandler {
         },
       });
       stored.push(s.id);
+      if (
+        this.cfg.selectiveAnnual &&
+        s.claimType === "income.gross.annual" &&
+        typeof s.annualGrossIncome === "number"
+      ) {
+        ctx.record({
+          type: "content-appraisal",
+          subject: s.id,
+          outcome: "source-assured-annual-income",
+          value: s.annualGrossIncome,
+          employer: s.employerName,
+          notClaimed: ["recomputation-from-hidden-months"],
+        });
+        derived = {
+          annualGrossIncome: s.annualGrossIncome,
+          currency: s.currency,
+          derivedFrom: s.id,
+        };
+      }
       if (s.claimType === CLAIM.incomeMonthly) {
         const evaluated = this.cfg.derivationRule
           ? ctx.evaluateRule?.(this.cfg.derivationRule, s.subject, terms.purpose)
@@ -716,7 +767,7 @@ export class LenderPrequalHandler implements OperationHandler {
       }
     }
     const missing = terms.evidenceRequest
-      .filter((r) => !accepted.some((a) => a.s.claimType === r.claimType))
+      .filter((r) => !r.optional && !accepted.some((a) => a.s.claimType === r.claimType))
       .map((r) => r.claimType);
     ctx.setState(`stored:${ctx.conversation.id}`, stored);
     ctx.setState(`application:${ctx.conversation.id}`, terms.application as unknown as JsonObject);

@@ -289,6 +289,232 @@
         "tampered-order"
       ]
     },
+    "documentFaults": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "graph-reordered",
+              "triple-changed"
+            ]
+          }
+        },
+        "required": [
+          "step",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "trustedIndex": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "reader": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "register": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+        },
+        "fork": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "index",
+        "reader",
+        "records",
+        "register"
+      ],
+      "additionalProperties": false
+    },
+    "federation": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "superior": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "reader": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "index": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "purpose": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+        },
+        "claimTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expired": {
+          "type": "boolean"
+        },
+        "businessOnly": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "anchor",
+        "superior",
+        "subject",
+        "reader",
+        "index",
+        "purpose",
+        "claimTypes"
+      ],
+      "additionalProperties": false
+    },
+    "reputation": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "reader": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "index": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "minimum": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ratings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "party": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "party",
+              "agent",
+              "score"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "service",
+        "reader",
+        "index",
+        "minimum",
+        "ratings"
+      ],
+      "additionalProperties": false
+    },
+    "evidenceFaults": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "const": "selective-salt"
+          }
+        },
+        "required": [
+          "step",
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "originHosted": {
+      "type": "object",
+      "properties": {
+        "register": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "statement": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "statement",
+              "address"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "pointerFault": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "register",
+        "records"
+      ],
+      "additionalProperties": false
+    },
     "stopAfter": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -998,6 +1224,44 @@
             "properties": {
               "id": {
                 "type": "string",
+                "const": "authenticity-origin-hosted"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "authenticity": {
+                    "type": "string",
+                    "const": "origin-hosted"
+                  }
+                },
+                "required": [
+                  "authenticity"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
                 "const": "trust-pinned-list"
               },
               "change": {
@@ -1006,6 +1270,120 @@
                   "trust": {
                     "type": "string",
                     "const": "pinned-list"
+                  }
+                },
+                "required": [
+                  "trust"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "trust-trusted-index"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "trust": {
+                    "type": "string",
+                    "const": "trusted-index"
+                  }
+                },
+                "required": [
+                  "trust"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "trust-federation"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "trust": {
+                    "type": "string",
+                    "const": "federation"
+                  }
+                },
+                "required": [
+                  "trust"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "trust-reputation"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "trust": {
+                    "type": "string",
+                    "const": "reputation"
                   }
                 },
                 "required": [
@@ -2073,8 +2451,12 @@
                 "authenticity-jws",
                 "authenticity-selective-disclosure",
                 "authenticity-data-integrity",
+                "authenticity-origin-hosted",
                 "trust-register-chain",
                 "trust-pinned-list",
+                "trust-trusted-index",
+                "trust-federation",
+                "trust-reputation",
                 "reliance-precedence-rules",
                 "reliance-quality-certificate",
                 "reliance-stated-confidence",
@@ -6409,6 +6791,26 @@
                 "type": "string",
                 "const": "start"
               },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "peer": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -8765,6 +9167,8 @@
     }
   },
   "required": [
+    "documentFaults",
+    "evidenceFaults",
     "paymentProviders",
     "configurations",
     "requiredMethods",

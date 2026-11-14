@@ -7,6 +7,7 @@ import { digestBytes, digestOf } from "../core/canonical.js";
 import { DEFAULT_LIMITS, parseBoundedJson } from "../core/limits.js";
 import { id, iso } from "../core/schema.js";
 import type { EvidenceItem, JsonObject } from "../core/types.js";
+import { projectSelectiveAnnual } from "../model/selective-annual.js";
 import { decodeCompactPayload } from "../wire/inspect.js";
 import type { SigningKey } from "./jws.js";
 import { type StatementCheck, signStatement, verifyStatement } from "./statements.js";
@@ -85,11 +86,11 @@ export function unverifiedEvidenceClaim(item: EvidenceItem): JsonObject {
   const presentation = presentationSchema.parse(parseBoundedJson(item.value, DEFAULT_LIMITS));
   const credential = credentialSchema.parse(decodeCompactPayload(presentation.credential));
   const { digests: _digests, type: _type, id: _id, ...metadata } = credential;
-  return {
+  return projectSelectiveAnnual({
     ...metadata,
     ...presentation.disclosure.claim,
     selectiveCredentialDigest: digestBytes(presentation.credential),
-  } as JsonObject;
+  } as JsonObject);
 }
 export async function verifySelectivePresentation(
   item: EvidenceItem,
@@ -139,6 +140,19 @@ export async function verifySelectivePresentation(
         limitations: ["revealed disclosure does not match the issuer-signed digests"],
       },
     };
+  let payload: JsonObject;
+  try {
+    payload = unverifiedEvidenceClaim(item);
+  } catch {
+    return {
+      verification: {
+        ...check.verification,
+        protectedObject: digestBytes(item.value),
+        outcome: "invalid",
+        limitations: ["The revealed claim has no admitted projection."],
+      },
+    };
+  }
   return {
     ...check,
     verification: {
@@ -149,7 +163,7 @@ export async function verifySelectivePresentation(
         "revealed claim integrity and attribution only; no hidden-value predicate, unlinkability or zero-knowledge claim",
       ],
     },
-    payload: unverifiedEvidenceClaim(item),
+    payload,
   };
 }
 export const isClaimEvidence = (item: EvidenceItem) =>
