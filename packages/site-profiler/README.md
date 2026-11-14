@@ -559,6 +559,7 @@ post to a learned target. Round 22: the signed-in fetch is sent only after the c
 answered a login document at the target or hopped to a learned login route, and
 `isDangerousLink` also reads the decoded query names and values for session-ending words
 (`?route=account/logout`, `?action=logout`, `?logout=1`, `?signout`), so such a target is never
-probed, signed in or not; a search for "delete" stays a search. The signed-in fetch to redirect or answer a login document, and no signed-in GET of
-that route in the trace (after the sign-in POST) to have answered an ordinary page.
+probed, signed in or not; a search for "delete" stays a search. The signed-in fetch must redirect or
+answer a login document, and no signed-in GET of that route in the trace (after the sign-in POST) may
+have answered an ordinary page.
 Round-20 regressions are in `test/review-r20.test.ts`; round 21 in `test/review-r21.test.ts`.
