@@ -131,7 +131,8 @@ export interface LearningResult {
 }
 export interface LearnFallbackOptions {
   model: SiteModel;
-  driver: Pick<BrowserDriver, "candidates">;
+  driver: Pick<BrowserDriver, "candidates"> & Partial<Pick<BrowserDriver, "credentialContext">>;
+  credentialContext?: ExecutorOptions["credentialContext"];
   request: ActionRequest;
   sessions: SessionProvider;
   persona?: string;
@@ -297,6 +298,7 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
       }
       // Shared model validation is necessary but executor construction has stricter checks.
       createExecutor({
+        credentialContext: driver.credentialContext ?? options.credentialContext,
         model: { ...model, operations: [...model.operations, ...proposed, operation] },
         sessions: options.sessions,
         persona: options.persona,
@@ -316,6 +318,7 @@ export async function learnFallback(options: LearnFallbackOptions): Promise<Lear
         };
         // A one-operation executor can only replay this GET. No browser APIRequestContext replay.
         const verifier = createExecutor({
+          credentialContext: driver.credentialContext ?? options.credentialContext,
           model: { ...model, operations: [operation], flows: [], login: undefined },
           sessions: options.sessions,
           persona: options.persona,

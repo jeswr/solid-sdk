@@ -39,7 +39,7 @@ import {
   isForbiddenHeader,
   requestFingerprint,
 } from "./compile.js";
-import { registerCookieSecrets } from "./cookie-secrets.js";
+import { type CookieSecretContext, registerCookieSecrets } from "./cookie-secrets.js";
 import {
   applySetCookies,
   type Cookie,
@@ -158,6 +158,8 @@ export interface ExecutionResult {
 export interface ExecutorOptions {
   model: SiteModel;
   sessions: SessionProvider;
+  /** Host-owned credential context, shared with profiling/browser learning and model rebuilds. */
+  credentialContext?: CookieSecretContext & { secrets?: Set<string> };
   /** Default: reads allowed, everything else asks (createApprovalGate()). */
   gate?: Gate;
   fetch?: typeof fetch;
@@ -384,7 +386,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
 
   function addSecrets(ctx: RunContext): void {
     for (const c of ctx.jar)
-      registerCookieSecrets(ctx.secrets, c, { model, declaredNames: ctx.credentialCookies });
+      registerCookieSecrets(ctx.secrets, c, {
+        ...options.credentialContext,
+        model,
+        declaredNames: [
+          ...(options.credentialContext?.declaredNames ?? []),
+          ...(ctx.credentialCookies ?? []),
+        ],
+      });
     for (const v of Object.values(ctx.headers)) {
       if (v.length > 0) registerSecret(ctx.secrets, v);
       const token = v.trim().split(/\s+/).at(-1);
@@ -456,7 +465,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
       if (!cookie) continue;
       if (loginResponse)
         ctx.credentialCookies = [...new Set([...(ctx.credentialCookies ?? []), cookie.name])];
-      registerCookieSecrets(ctx.secrets, cookie, { model, declaredNames: ctx.credentialCookies });
+      registerCookieSecrets(ctx.secrets, cookie, {
+        ...options.credentialContext,
+        model,
+        declaredNames: [
+          ...(options.credentialContext?.declaredNames ?? []),
+          ...(ctx.credentialCookies ?? []),
+        ],
+      });
     }
     const { jar, changed } = applySetCookies(ctx.jar, setCookies, url, now());
     if (!changed && !loginResponse) return;
@@ -990,7 +1006,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
       jar: [],
       headers: {},
       requests: 0,
-      secrets: new Set(),
+      secrets: options.credentialContext?.secrets ?? new Set(),
       controller: new AbortController(),
       deadline: performance.now() + maxExecutionMs,
     };

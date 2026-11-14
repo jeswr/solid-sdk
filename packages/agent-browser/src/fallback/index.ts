@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ExecuteOptions, ExecutionResult } from "@jeswr/site-executor";
 import type { ActionRequest, SiteModel } from "@jeswr/site-model";
-import { createTaskExecutor } from "../session.js";
+import { type CredentialContext, createTaskExecutor } from "../session.js";
 import type { Approver, TaskExecutor, TraceStep } from "../types.js";
 import { BrowserDriver, BrowserDriverError, type BrowserDriverOptions } from "./driver.js";
 import { type LearnFallbackOptions, type LearningResult, learnFallback } from "./learn.js";
@@ -53,7 +53,10 @@ export interface FallbackOptions
   transport?: LearnFallbackOptions["transport"];
   labeller?: LearnFallbackOptions["labeller"];
   /** Custom executors must preserve their host configuration when replacing the model. */
-  executorFactory?: (model: SiteModel) => TaskExecutor | Promise<TaskExecutor>;
+  executorFactory?: (
+    model: SiteModel,
+    credentialContext: CredentialContext,
+  ) => TaskExecutor | Promise<TaskExecutor>;
 }
 
 /** Opt-in, prompt-free fallback. The host supplies both planners and storage policy. */
@@ -134,12 +137,15 @@ export function createFallback(options: FallbackOptions): Fallback {
           });
           // Construct before publishing the new model. Failure retains the prior pair.
           if (learning.proposed.length) {
-            if (options.executorFactory) executor = await options.executorFactory(learning.model);
-            else if (input.executor?.withModel) executor = input.executor.withModel(learning.model);
+            if (options.executorFactory)
+              executor = await options.executorFactory(learning.model, driver.credentialContext);
+            else if (input.executor?.withModel)
+              executor = input.executor.withModel(learning.model, driver.credentialContext);
             else if (input.executor)
               throw new Error("Host executor cannot rebuild with a learned model.");
             else
               executor = createTaskExecutor({
+                credentialContext: driver.credentialContext,
                 model: learning.model,
                 cookieContext: { ...options.cookieContext, model: learning.model },
                 sessions: options.sessions,
