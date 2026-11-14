@@ -48,6 +48,12 @@ import type {
 import { setTimeout as delay } from "timers/promises";
 import { type CredentialContext, taskCredentialContext } from "../session.js";
 import type { Approver, TraceStep } from "../types.js";
+import {
+  collectLiveControls,
+  type LiveControl,
+  pressedText,
+  protectedAXNode,
+} from "./credentials.js";
 import { browserWriteFingerprint } from "./fingerprint.js";
 import { candidatesFromTrace } from "./learn.js";
 import type { BrowserAction, BrowserSnapshot } from "./planner.js";
@@ -165,6 +171,7 @@ export class BrowserDriver {
   private lastAction: number | undefined;
   private failure: BrowserDriverError | undefined;
   private closed = false;
+  private closing: Promise<void> | undefined;
   private forms: FormInfo[] = [];
   private initialCookies = "[]";
   private learnedCandidates: EndpointCandidate[] | undefined;
@@ -770,10 +777,61 @@ export class BrowserDriver {
         if (el.attribs[attr]) this.rememberUrlSecrets(el.attribs[attr], resolvedBase);
   }
 
+  private async collectCredentials<T>(collect: () => Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        collect(),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new BrowserDriverError(
+                  "limit",
+                  "Live credential collection timed out; page content withheld.",
+                ),
+              ),
+            this.options.timeoutMs ?? 10000,
+          );
+        }),
+      ]);
+    } catch (error) {
+      if (error instanceof BrowserDriverError) throw error;
+      throw new BrowserDriverError(
+        "browser",
+        "Live credential collection failed; page content withheld.",
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Page properties, including script/paste/key entry, share the executor's registration. */
-  private async rememberLiveSecrets(): Promise<void> {
-    this.rememberUrlSecrets(this.page.url());
-    this.rememberLiveState(await this.page.evaluate(readLiveCredentials));
+  private rememberLiveSecrets(): Promise<LiveControl[]> {
+    return this.collectCredentials(async () => {
+      this.rememberUrlSecrets(this.page.url());
+      const live = await collectLiveControls(this.cdp);
+      for (const url of live.urls) this.rememberUrlSecrets(url, live.base);
+      for (const control of live.controls)
+        if (control.protected) registerSecret(this.secrets, control.value);
+      this.rememberLiveState(await this.page.evaluate(readLiveCredentials));
+      return live.controls;
+    });
+  }
+
+  /** Register both supplied text and the resulting value before any input event can clear it. */
+  private rememberEnteredText(
+    control: LiveControl | undefined,
+    text: string,
+    replace = false,
+  ): void {
+    if (!control?.protected) return;
+    registerSecret(this.secrets, text);
+    if (!replace) {
+      const start = control.start ?? control.value.length;
+      const end = control.end ?? start;
+      registerSecret(this.secrets, control.value.slice(0, start) + text + control.value.slice(end));
+    }
   }
 
   private rememberLiveState(live: ReturnType<typeof readLiveCredentials>): void {
@@ -859,7 +917,8 @@ export class BrowserDriver {
         node.value?.value === undefined
           ? undefined
           : escapeControls(this.redact(String(node.value.value)));
-      if (role === "textbox" || role === "searchbox") {
+      if (protectedAXNode(node)) value = "[redacted]";
+      if ((role === "textbox" || role === "searchbox") && node.backendDOMNodeId !== undefined) {
         const { node: dom } = await this.cdp.send("DOM.describeNode", {
           backendNodeId: node.backendDOMNodeId,
         });
@@ -953,7 +1012,7 @@ export class BrowserDriver {
     if (wait > 0) await this.clock.sleep(wait);
     this.lastAction = this.clock.now();
     try {
-      await this.rememberLiveSecrets();
+      const controls = await this.rememberLiveSecrets();
       const html = await this.page.content();
       for (const value of discoverCredentialSources([{ url: this.page.url(), html }], []).secrets)
         registerSecret(this.secrets, value);
@@ -972,6 +1031,20 @@ export class BrowserDriver {
       } else if (action.kind === "back") await this.page.goBack();
       else if (action.kind === "press") {
         await this.captureSubmitter();
+        const control = controls.find((control) => control.focused);
+        const entered = pressedText(action.key);
+        if (entered.unsupported && control?.protected)
+          throw new BrowserDriverError(
+            "guard",
+            "Protected controls require a single key with optional modifiers.",
+          );
+        if (entered.paste && control?.protected) {
+          // No paste is dispatched unless its text has been obtained and registered.
+          const text = await this.collectCredentials(() =>
+            this.page.evaluate(() => navigator.clipboard.readText()),
+          );
+          this.rememberEnteredText(control, text);
+        } else if (entered.text !== undefined) this.rememberEnteredText(control, entered.text);
         await this.page.keyboard.press(action.key);
       } else {
         const objectId = await this.resolve(action.ref);
@@ -990,14 +1063,42 @@ export class BrowserDriver {
             }
             await element.click();
           } else if (action.kind === "fill") {
+            const backend = this.refs.get(action.ref)?.backend;
+            this.rememberEnteredText(
+              controls.find((control) => control.backend === backend),
+              action.text,
+              true,
+            );
             const info = await this.cdp.send("Runtime.callFunctionOn", {
               objectId,
-              functionDeclaration:
-                "function() { return Object.fromEntries([...this.attributes].map(a => [a.name, a.value])); }",
+              functionDeclaration: `function() {
+                  let root = this.getRootNode();
+                  let closed = false;
+                  while (root.host) {
+                    closed ||= root.mode === 'closed';
+                    root = root.host.getRootNode();
+                  }
+                  return { attrs: Object.fromEntries([...this.attributes].map(a => [a.name, a.value])), closed };
+                }`,
               returnByValue: true,
             });
-            if (isPasswordLikeControl(info.result.value)) registerSecret(this.secrets, action.text);
-            await element.fill(action.text);
+            if (info.exceptionDetails || !info.result.value) throw new Error();
+            if (isPasswordLikeControl(info.result.value.attrs))
+              registerSecret(this.secrets, action.text);
+            if (info.result.value.closed) {
+              const prepared = await this.cdp.send("Runtime.callFunctionOn", {
+                objectId,
+                functionDeclaration: `function() {
+                  if (!(this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement) ||
+                    this.disabled || this.readOnly || !this.getClientRects().length) return false;
+                  this.focus(); this.select(); return true;
+                }`,
+                returnByValue: true,
+              });
+              if (prepared.exceptionDetails || prepared.result.value !== true) throw new Error();
+              if (action.text) await this.page.keyboard.insertText(action.text);
+              else await this.page.keyboard.press("Delete");
+            } else await element.fill(action.text);
           } else await element.selectOption(action.value);
         } finally {
           await this.cdp.send("Runtime.releaseObject", { objectId }).catch(() => undefined);
@@ -1081,12 +1182,21 @@ export class BrowserDriver {
     return structuredClone(this.learnedCandidates);
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return;
+  close(): Promise<void> {
+    this.closing ??= this.finishClose();
+    return this.closing;
+  }
+
+  private async finishClose(): Promise<void> {
     this.closed = true;
     if (this.context) {
       try {
         if (this.page && !this.page.isClosed()) await this.rememberLiveSecrets();
+      } catch {
+        // Renderer/collection failures must never skip reading and persisting the cookie jar.
+        this.refreshError = "Fallback live credential collection failed during close.";
+      }
+      try {
         const cookies = await this.context.cookies();
         this.learningCookies = cookies;
         for (const c of cookies) this.rememberCookie(c);

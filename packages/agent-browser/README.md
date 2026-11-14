@@ -344,3 +344,16 @@ paste and script entry use the same registration path.
 `test/fallback-review-r6.test.ts` checks the `sid` name echo across both snapshot forms,
 driver/task traces, replay RDF and subsequent planner input, plus keypress passwords,
 script-set live values, one-time codes, credential fragments and URL intake boundaries.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Driver-entered credential text and its resulting control value are registered before input
+dispatch, including fills, printable key presses and clipboard pastes into closed shadow trees.
+Protection includes accessibility password labels/states and credential autocomplete attributes.
+Live collection uses CDP's shadow-piercing DOM traversal to read values in closed shadow roots;
+the configured `timeoutMs` bounds collection. Collection failure or timeout withholds the snapshot
+with a safe reason. Cookie persistence on close runs independently of collection and renderer
+evaluation, preserves the loaded revision, and makes one update attempt for a changed jar.
+Concurrent and repeated closes await the same pending persistence and cleanup.
+`test/fallback-review-r7.test.ts` covers closed-shadow press/script echoes in both snapshot forms,
+registration before dispatch even when input handlers remove controls, collection failures/timeouts,
+and exactly one cookie update after `Target crashed` or collection timeout.
