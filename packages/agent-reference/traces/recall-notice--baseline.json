@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -137,15 +137,15 @@
         "text": "The manufacturer is accepted for product recall claims."
       },
       "resolution": {
-        "question": "Is The manufacturer an authority for product.recall claims about The manufacturer?",
+        "question": "Is The manufacturer an authority for product recall claims about The manufacturer?",
         "path": [
           {
             "at": "The manufacturer's own list",
             "kind": "own-list",
-            "says": "The manufacturer is accepted for product.recall."
+            "says": "The manufacturer is accepted for product recall."
           }
         ],
-        "answer": "Accepted, for product.recall claims only."
+        "answer": "Accepted, for product recall claims only."
       },
       "caption": "The manufacturer's product recall statement: The manufacturer is an accepted source for this kind of claim."
     },
@@ -1483,15 +1483,15 @@
         "text": "The manufacturer is accepted for product recall claims."
       },
       "resolution": {
-        "question": "Is The manufacturer an authority for product.recall claims about The manufacturer?",
+        "question": "Is The manufacturer an authority for product recall claims about The manufacturer?",
         "path": [
           {
             "at": "The product owner's own list",
             "kind": "own-list",
-            "says": "The manufacturer is accepted for product.recall."
+            "says": "The manufacturer is accepted for product recall."
           }
         ],
-        "answer": "Accepted, for product.recall claims only."
+        "answer": "Accepted, for product recall claims only."
       },
       "caption": "The manufacturer's product recall statement: The manufacturer is an accepted source for this kind of claim."
     },

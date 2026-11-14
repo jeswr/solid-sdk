@@ -104,7 +104,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -171,15 +171,15 @@
         "text": "The person’s bank is accepted for income total claims."
       },
       "resolution": {
-        "question": "Is The person’s bank an authority for income.total claims about The person?",
+        "question": "Is The person’s bank an authority for income total claims about The person?",
         "path": [
           {
             "at": "The person's own list",
             "kind": "own-list",
-            "says": "The person’s bank is accepted for income.total."
+            "says": "The person’s bank is accepted for income total."
           }
         ],
-        "answer": "Accepted, for income.total claims only."
+        "answer": "Accepted, for income total claims only."
       },
       "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim."
     },
@@ -2172,15 +2172,15 @@
         "text": "The person’s bank is accepted for income total claims."
       },
       "resolution": {
-        "question": "Is The person’s bank an authority for income.total claims about The person?",
+        "question": "Is The person’s bank an authority for income total claims about The person?",
         "path": [
           {
             "at": "The lender's own list",
             "kind": "own-list",
-            "says": "The person’s bank is accepted for income.total."
+            "says": "The person’s bank is accepted for income total."
           }
         ],
-        "answer": "Accepted, for income.total claims only."
+        "answer": "Accepted, for income total claims only."
       },
       "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim."
     },
@@ -3151,15 +3151,15 @@
         "text": "The independent fictional ombudsman is accepted for forum decision claims."
       },
       "resolution": {
-        "question": "Is The independent fictional ombudsman an authority for forum.decision claims about The person?",
+        "question": "Is The independent fictional ombudsman an authority for forum decision claims about The person?",
         "path": [
           {
             "at": "The person's own list",
             "kind": "own-list",
-            "says": "The independent fictional ombudsman is accepted for forum.decision."
+            "says": "The independent fictional ombudsman is accepted for forum decision."
           }
         ],
-        "answer": "Accepted, for forum.decision claims only."
+        "answer": "Accepted, for forum decision claims only."
       },
       "caption": "The independent fictional ombudsman's forum decision statement: The independent fictional ombudsman is an accepted source for this kind of claim."
     },

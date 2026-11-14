@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -151,15 +151,15 @@
         "text": "The fictional company register is accepted for company exists claims."
       },
       "resolution": {
-        "question": "Is The fictional company register an authority for company.exists claims about The supplier?",
+        "question": "Is The fictional company register an authority for company exists claims about The supplier?",
         "path": [
           {
             "at": "The supplier's own list",
             "kind": "own-list",
-            "says": "The fictional company register is accepted for company.exists."
+            "says": "The fictional company register is accepted for company exists."
           }
         ],
-        "answer": "Accepted, for company.exists claims only."
+        "answer": "Accepted, for company exists claims only."
       },
       "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim."
     },
@@ -322,15 +322,15 @@
         "text": "The supplier’s bank is accepted for bank account owner claims."
       },
       "resolution": {
-        "question": "Is The supplier’s bank an authority for bank.account-owner claims about The supplier?",
+        "question": "Is The supplier’s bank an authority for bank account owner claims about The supplier?",
         "path": [
           {
             "at": "The supplier's own list",
             "kind": "own-list",
-            "says": "The supplier’s bank is accepted for bank.account-owner."
+            "says": "The supplier’s bank is accepted for bank account owner."
           }
         ],
-        "answer": "Accepted, for bank.account-owner claims only."
+        "answer": "Accepted, for bank account owner claims only."
       },
       "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is an accepted source for this kind of claim."
     },

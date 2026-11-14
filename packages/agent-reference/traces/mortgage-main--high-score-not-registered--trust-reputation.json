@@ -3,7 +3,7 @@
   "schema": "agent-trace/0.1",
   "useCase": "mortgage-in-principle",
   "path": {
-    "index": 21,
+    "index": 27,
     "what": "A second lender has a high signed agent score and no entry on Sam’s accepted register."
   },
   "parties": [
@@ -201,7 +201,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [

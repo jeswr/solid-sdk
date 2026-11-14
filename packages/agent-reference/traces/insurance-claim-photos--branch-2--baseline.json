@@ -79,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -484,15 +484,15 @@
         "text": "The unaccepted repair garage is accepted for repair estimate claims."
       },
       "resolution": {
-        "question": "Is The unaccepted repair garage an authority for repair.estimate claims about The policyholder?",
+        "question": "Is The unaccepted repair garage an authority for repair estimate claims about The policyholder?",
         "path": [
           {
             "at": "The policyholder's own list",
             "kind": "own-list",
-            "says": "The unaccepted repair garage is accepted for repair.estimate."
+            "says": "The unaccepted repair garage is accepted for repair estimate."
           }
         ],
-        "answer": "Accepted, for repair.estimate claims only."
+        "answer": "Accepted, for repair estimate claims only."
       },
       "caption": "The unaccepted repair garage's repair estimate statement: The unaccepted repair garage is an accepted source for this kind of claim."
     },
@@ -3062,7 +3062,7 @@
       ],
       "reason": "source-not-authoritative",
       "resolution": {
-        "question": "Is The unaccepted repair garage an authority for repair.estimate claims about The policyholder?",
+        "question": "Is The unaccepted repair garage an authority for repair estimate claims about The policyholder?",
         "path": [
           {
             "at": "The insurer's own list",
@@ -3070,7 +3070,7 @@
             "says": "no rule recognises this source"
           }
         ],
-        "answer": "Not accepted for repair.estimate."
+        "answer": "Not accepted for repair estimate."
       },
       "caption": "The unaccepted repair garage's repair estimate statement: The unaccepted repair garage is not accepted as a source for this kind of claim."
     },

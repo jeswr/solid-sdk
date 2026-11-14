@@ -187,7 +187,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -288,7 +288,7 @@
         "text": "The fictional lender is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is The fictional lender an authority for mortgage.product claims?",
+        "question": "Is The fictional lender an authority for mortgage product claims?",
         "path": [
           {
             "at": "The mortgage product index's own list",
@@ -303,10 +303,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "The fictional lender is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
     },
@@ -461,7 +461,7 @@
         "text": "Sam’s fictional bank is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is Sam’s fictional bank an authority for mortgage.product claims?",
+        "question": "Is Sam’s fictional bank an authority for mortgage product claims?",
         "path": [
           {
             "at": "The mortgage product index's own list",
@@ -476,10 +476,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
     },
@@ -1936,7 +1936,7 @@
         "text": "The fictional lender is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is The fictional lender an authority for mortgage.product claims about The mortgage product index?",
+        "question": "Is The fictional lender an authority for mortgage product claims about The mortgage product index?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
@@ -1951,10 +1951,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "The fictional lender is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
     },
@@ -1984,7 +1984,7 @@
         "text": "Sam’s fictional bank is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is Sam’s fictional bank an authority for mortgage.product claims about The mortgage product index?",
+        "question": "Is Sam’s fictional bank an authority for mortgage product claims about The mortgage product index?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
@@ -1999,10 +1999,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
     },

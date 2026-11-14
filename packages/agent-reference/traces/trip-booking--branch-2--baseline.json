@@ -108,7 +108,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -179,15 +179,15 @@
         "text": "The identity issuer is accepted for identity passport claims."
       },
       "resolution": {
-        "question": "Is The identity issuer an authority for identity.passport claims about The traveller?",
+        "question": "Is The identity issuer an authority for identity passport claims about The traveller?",
         "path": [
           {
             "at": "The traveller's own list",
             "kind": "own-list",
-            "says": "The identity issuer is accepted for identity.passport."
+            "says": "The identity issuer is accepted for identity passport."
           }
         ],
-        "answer": "Accepted, for identity.passport claims only."
+        "answer": "Accepted, for identity passport claims only."
       },
       "caption": "The identity issuer's identity passport statement: The identity issuer is an accepted source for this kind of claim."
     },

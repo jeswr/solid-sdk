@@ -63,7 +63,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -122,15 +122,15 @@
         "text": "The patient is accepted for health allergy claims."
       },
       "resolution": {
-        "question": "Is The patient an authority for health.allergy claims about The patient?",
+        "question": "Is The patient an authority for health allergy claims about The patient?",
         "path": [
           {
             "at": "The new practice's own list",
             "kind": "own-list",
-            "says": "The patient is accepted for health.allergy."
+            "says": "The patient is accepted for health allergy."
           }
         ],
-        "answer": "Accepted, for health.allergy claims only."
+        "answer": "Accepted, for health allergy claims only."
       },
       "caption": "The patient's health allergy statement: The patient is an accepted source for this kind of claim."
     },
@@ -298,15 +298,15 @@
         "text": "The clinician is accepted for health allergy claims."
       },
       "resolution": {
-        "question": "Is The clinician an authority for health.allergy claims about The patient?",
+        "question": "Is The clinician an authority for health allergy claims about The patient?",
         "path": [
           {
             "at": "The new practice's own list",
             "kind": "own-list",
-            "says": "The clinician is accepted for health.allergy."
+            "says": "The clinician is accepted for health allergy."
           }
         ],
-        "answer": "Accepted, for health.allergy claims only."
+        "answer": "Accepted, for health allergy claims only."
       },
       "caption": "The clinician's health allergy statement: The clinician is an accepted source for this kind of claim."
     },
@@ -502,15 +502,15 @@
         "text": "The old practice holding original statements is accepted for old estimate claims."
       },
       "resolution": {
-        "question": "Is The old practice holding original statements an authority for old.estimate claims about The patient?",
+        "question": "Is The old practice holding original statements an authority for old estimate claims about The patient?",
         "path": [
           {
             "at": "The new practice's own list",
             "kind": "own-list",
-            "says": "The old practice holding original statements is accepted for old.estimate."
+            "says": "The old practice holding original statements is accepted for old estimate."
           }
         ],
-        "answer": "Accepted, for old.estimate claims only."
+        "answer": "Accepted, for old estimate claims only."
       },
       "caption": "The old practice holding original statements's old estimate statement: The old practice holding original statements is an accepted source for this kind of claim."
     },

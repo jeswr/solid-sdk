@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -488,15 +488,15 @@
         "text": "The accepted repair garage is accepted for repair estimate claims."
       },
       "resolution": {
-        "question": "Is The accepted repair garage an authority for repair.estimate claims about The policyholder?",
+        "question": "Is The accepted repair garage an authority for repair estimate claims about The policyholder?",
         "path": [
           {
             "at": "The policyholder's own list",
             "kind": "own-list",
-            "says": "The accepted repair garage is accepted for repair.estimate."
+            "says": "The accepted repair garage is accepted for repair estimate."
           }
         ],
-        "answer": "Accepted, for repair.estimate claims only."
+        "answer": "Accepted, for repair estimate claims only."
       },
       "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim."
     },
@@ -5527,15 +5527,15 @@
         "text": "The accepted repair garage is accepted for repair estimate claims."
       },
       "resolution": {
-        "question": "Is The accepted repair garage an authority for repair.estimate claims about The policyholder?",
+        "question": "Is The accepted repair garage an authority for repair estimate claims about The policyholder?",
         "path": [
           {
             "at": "The insurer's own list",
             "kind": "own-list",
-            "says": "The accepted repair garage is accepted for repair.estimate."
+            "says": "The accepted repair garage is accepted for repair estimate."
           }
         ],
-        "answer": "Accepted, for repair.estimate claims only."
+        "answer": "Accepted, for repair estimate claims only."
       },
       "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim."
     },

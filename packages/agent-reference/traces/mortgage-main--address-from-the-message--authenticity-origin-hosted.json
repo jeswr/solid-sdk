@@ -3,7 +3,7 @@
   "schema": "agent-trace/0.1",
   "useCase": "mortgage-in-principle",
   "path": {
-    "index": 16,
+    "index": 22,
     "what": "The index offers a look-alike address; the verifier ignores it and fetches only the address from the signed register answer."
   },
   "parties": [
@@ -187,7 +187,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [

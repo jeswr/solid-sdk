@@ -187,7 +187,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -296,7 +296,7 @@
         "text": "The fictional lender is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is The fictional lender an authority for mortgage.product claims?",
+        "question": "Is The fictional lender an authority for mortgage product claims?",
         "path": [
           {
             "at": "The mortgage product index's own list",
@@ -311,10 +311,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "The fictional lender is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
     },
@@ -488,7 +488,7 @@
         "text": "Sam’s fictional bank is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is Sam’s fictional bank an authority for mortgage.product claims?",
+        "question": "Is Sam’s fictional bank an authority for mortgage product claims?",
         "path": [
           {
             "at": "The mortgage product index's own list",
@@ -503,10 +503,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
     },
@@ -1974,7 +1974,7 @@
         "text": "The fictional lender is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is The fictional lender an authority for mortgage.product claims about The mortgage product index?",
+        "question": "Is The fictional lender an authority for mortgage product claims about The mortgage product index?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
@@ -1989,10 +1989,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "The fictional lender is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
     },
@@ -2022,7 +2022,7 @@
         "text": "Sam’s fictional bank is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is Sam’s fictional bank an authority for mortgage.product claims about The mortgage product index?",
+        "question": "Is Sam’s fictional bank an authority for mortgage product claims about The mortgage product index?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
@@ -2037,10 +2037,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
     },
@@ -2871,14 +2871,14 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001\",\"type\":[\"Message\",\"Description\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/transport-mcp/0.1\",\"kind\":\"description\",\"conversation\":\"urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003\",\"from\":{\"id\":\"urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4\"},\"to\":{\"id\":\"urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004\",\"body\":{\"id\":\"urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk\"},\"@included\":[{\"id\":\"urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4\",\"type\":\"ParticipantRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"onBehalfOf\":\"https://northbank.example/#org\",\"operator\":\"https://northbank.example/#org\"},{\"id\":\"urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE\",\"type\":\"AudienceRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"party\":\"https://sam.example/#me\"},{\"id\":\"urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk\",\"type\":\"DescriptionBody\",\"descriptionData\":{\"id\":\"urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY\"}},{\"id\":\"urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:1cd1e2de46377e749bcc6a2718b2725cdcd3ae8a3ff09990089ccdf881e59ded\",\"byteLength\":\"182549\",\"mediaType\":\"application/n-quads\"}],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46LVY2TWVRdG5mbjVXOFVHUUpXSE1vcFpFenRXczBaNTRNN3E1Mi16aVNiNCIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOnlvcjdmTENCNm1tX2lfWEFtY3NjTFBDZHFTbFVoaTFPdVBiTEJxcTNuZFkifSwiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjFjZDFlMmRlNDYzNzdlNzQ5YmNjNmEyNzE4YjI3MjVjZGNkM2FlOGEzZmYwOTk5MDA4OWNjZGY4ODFlNTlkZWQiLCJieXRlTGVuZ3RoIjoiMTgyNTQ5IiwiaWQiOiJ1cm46YXdwOm46eW9yN2ZMQ0I2bW1faV9YQW1jc2NMUENkcVNsVWhpMU91UGJMQnFxM25kWSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3RyYW5zcG9ydC1tY3AvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOnNhbS1hZ2VudDowMDAzIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjotVjZNZVF0bmZuNVc4VUdRSldITW9wWkV6dFdzMFo1NE03cTUyLXppU2I0In0sImlkIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOm5vcnRoLWFnZW50OjAwMDEiLCJpblJlcGx5VG8iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLW1jcC10b2tlbi1wYXNzZWQtb246c2FtLWFnZW50OjAwMDQiLCJraW5kIjoiZGVzY3JpcHRpb24iLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIn0sInR5cGUiOlsiTWVzc2FnZSIsIkRlc2NyaXB0aW9uIl19.YSbqQO3NJY3w_mP3Bta4pMrrvqWdKDPZdQ5Vxs9pJbE5pLwDZrEdYjReEig3SxbkWqlKbikVBmXJ7nD4KVqnBg\"}}",
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001\",\"type\":[\"Message\",\"Description\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/transport-mcp/0.1\",\"kind\":\"description\",\"conversation\":\"urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003\",\"from\":{\"id\":\"urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4\"},\"to\":{\"id\":\"urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004\",\"body\":{\"id\":\"urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk\"},\"@included\":[{\"id\":\"urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4\",\"type\":\"ParticipantRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"onBehalfOf\":\"https://northbank.example/#org\",\"operator\":\"https://northbank.example/#org\"},{\"id\":\"urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE\",\"type\":\"AudienceRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"party\":\"https://sam.example/#me\"},{\"id\":\"urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk\",\"type\":\"DescriptionBody\",\"descriptionData\":{\"id\":\"urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY\"}},{\"id\":\"urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e70f4345f1dc0069568515c415b5d2af395b8a335b027d0b70347a74714127c3\",\"byteLength\":\"187248\",\"mediaType\":\"application/n-quads\"}],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46LVY2TWVRdG5mbjVXOFVHUUpXSE1vcFpFenRXczBaNTRNN3E1Mi16aVNiNCIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOnlvcjdmTENCNm1tX2lfWEFtY3NjTFBDZHFTbFVoaTFPdVBiTEJxcTNuZFkifSwiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmU3MGY0MzQ1ZjFkYzAwNjk1Njg1MTVjNDE1YjVkMmFmMzk1YjhhMzM1YjAyN2QwYjcwMzQ3YTc0NzE0MTI3YzMiLCJieXRlTGVuZ3RoIjoiMTg3MjQ4IiwiaWQiOiJ1cm46YXdwOm46eW9yN2ZMQ0I2bW1faV9YQW1jc2NMUENkcVNsVWhpMU91UGJMQnFxM25kWSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3RyYW5zcG9ydC1tY3AvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOnNhbS1hZ2VudDowMDAzIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjotVjZNZVF0bmZuNVc4VUdRSldITW9wWkV6dFdzMFo1NE03cTUyLXppU2I0In0sImlkIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOm5vcnRoLWFnZW50OjAwMDEiLCJpblJlcGx5VG8iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLW1jcC10b2tlbi1wYXNzZWQtb246c2FtLWFnZW50OjAwMDQiLCJraW5kIjoiZGVzY3JpcHRpb24iLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIn0sInR5cGUiOlsiTWVzc2FnZSIsIkRlc2NyaXB0aW9uIl19.9ekLYVMF1JKry7VLCGG3cV0dvzGpNVOM8OG3BlGo6Apt9X_PRsi5q-_cpULcEn88tGtdGlWIguCdNjNk3fFsDA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
-        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001> a awp:Description, awp:Message;\n    awp:body <urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/transport-mcp/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4>;\n    awp:inReplyTo <urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/description>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE>;\n    sec:proof _:awp0.\n<urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk> a awp:DescriptionBody;\n    awp:description <urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY>.\n<urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://northbank.example/#org>;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:operator <https://northbank.example/#org>.\n<urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE> a awp:AudienceRef;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:party <https://sam.example/#me>.\n<urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:1cd1e2de46377e749bcc6a2718b2725cdcd3ae8a3ff09990089ccdf881e59ded\";\n    awp:byteLength 182549.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46LVY2TWVRdG5mbjVXOFVHUUpXSE1vcFpFenRXczBaNTRNN3E1Mi16aVNiNCIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOnlvcjdmTENCNm1tX2lfWEFtY3NjTFBDZHFTbFVoaTFPdVBiTEJxcTNuZFkifSwiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjFjZDFlMmRlNDYzNzdlNzQ5YmNjNmEyNzE4YjI3MjVjZGNkM2FlOGEzZmYwOTk5MDA4OWNjZGY4ODFlNTlkZWQiLCJieXRlTGVuZ3RoIjoiMTgyNTQ5IiwiaWQiOiJ1cm46YXdwOm46eW9yN2ZMQ0I2bW1faV9YQW1jc2NMUENkcVNsVWhpMU91UGJMQnFxM25kWSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3RyYW5zcG9ydC1tY3AvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOnNhbS1hZ2VudDowMDAzIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjotVjZNZVF0bmZuNVc4VUdRSldITW9wWkV6dFdzMFo1NE03cTUyLXppU2I0In0sImlkIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOm5vcnRoLWFnZW50OjAwMDEiLCJpblJlcGx5VG8iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLW1jcC10b2tlbi1wYXNzZWQtb246c2FtLWFnZW50OjAwMDQiLCJraW5kIjoiZGVzY3JpcHRpb24iLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIn0sInR5cGUiOlsiTWVzc2FnZSIsIkRlc2NyaXB0aW9uIl19.YSbqQO3NJY3w_mP3Bta4pMrrvqWdKDPZdQ5Vxs9pJbE5pLwDZrEdYjReEig3SxbkWqlKbikVBmXJ7nD4KVqnBg\"\n}\n",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001> a awp:Description, awp:Message;\n    awp:body <urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/transport-mcp/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4>;\n    awp:inReplyTo <urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/description>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE>;\n    sec:proof _:awp0.\n<urn:awp:n:dwJ0Ih0-3ttkakCXlT20Fn_uAL1uaS1H_KAwLGx34fk> a awp:DescriptionBody;\n    awp:description <urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY>.\n<urn:awp:n:-V6MeQtnfn5W8UGQJWHMopZEztWs0Z54M7q52-ziSb4> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://northbank.example/#org>;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:operator <https://northbank.example/#org>.\n<urn:awp:n:Y7bdWy99LxE0innRnw3xNo72br9nz2WM_3aFWnwPaXE> a awp:AudienceRef;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:party <https://sam.example/#me>.\n<urn:awp:n:yor7fLCB6mm_i_XAmcscLPCdqSlUhi1OuPbLBqq3ndY> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:e70f4345f1dc0069568515c415b5d2af395b8a335b027d0b70347a74714127c3\";\n    awp:byteLength 187248.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46LVY2TWVRdG5mbjVXOFVHUUpXSE1vcFpFenRXczBaNTRNN3E1Mi16aVNiNCIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOnlvcjdmTENCNm1tX2lfWEFtY3NjTFBDZHFTbFVoaTFPdVBiTEJxcTNuZFkifSwiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmU3MGY0MzQ1ZjFkYzAwNjk1Njg1MTVjNDE1YjVkMmFmMzk1YjhhMzM1YjAyN2QwYjcwMzQ3YTc0NzE0MTI3YzMiLCJieXRlTGVuZ3RoIjoiMTg3MjQ4IiwiaWQiOiJ1cm46YXdwOm46eW9yN2ZMQ0I2bW1faV9YQW1jc2NMUENkcVNsVWhpMU91UGJMQnFxM25kWSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ZHdKMEloMC0zdHRrYWtDWGxUMjBGbl91QUwxdWFTMUhfS0F3TEd4MzRmayJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3RyYW5zcG9ydC1tY3AvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOnNhbS1hZ2VudDowMDAzIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjotVjZNZVF0bmZuNVc4VUdRSldITW9wWkV6dFdzMFo1NE03cTUyLXppU2I0In0sImlkIjoidXJuOmF3cDplbmdpbmUtbW9ydGdhZ2UtbWFpbi1tY3AtdG9rZW4tcGFzc2VkLW9uOm5vcnRoLWFnZW50OjAwMDEiLCJpblJlcGx5VG8iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLW1jcC10b2tlbi1wYXNzZWQtb246c2FtLWFnZW50OjAwMDQiLCJraW5kIjoiZGVzY3JpcHRpb24iLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpZN2JkV3k5OUx4RTBpbm5SbnczeE5vNzJicjluejJXTV8zYUZXbndQYVhFIn0sInR5cGUiOlsiTWVzc2FnZSIsIkRlc2NyaXB0aW9uIl19.9ekLYVMF1JKry7VLCGG3cV0dvzGpNVOM8OG3BlGo6Apt9X_PRsi5q-_cpULcEn88tGtdGlWIguCdNjNk3fFsDA\"\n}\n",
         "attachments": [
           {
-            "digest": "sha-256:1cd1e2de46377e749bcc6a2718b2725cdcd3ae8a3ff09990089ccdf881e59ded",
+            "digest": "sha-256:e70f4345f1dc0069568515c415b5d2af395b8a335b027d0b70347a74714127c3",
             "mediaType": "application/n-quads",
-            "byteLength": 182549
+            "byteLength": 187248
           }
         ],
         "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001",
@@ -2917,7 +2917,7 @@
                 "alg": "EdDSA"
               }
             },
-            "digest": "sha-256:bc1bc06fb39669d104de8ff76cd31ea1236edfce92bf7b2302892b8cc522e8cb"
+            "digest": "sha-256:b32bbc8b36eaf8e785b00b57b8df8d0cb56d005fb47ad0846939ec3a168d9e5e"
           },
           "authority": {
             "present": false,
@@ -2990,6 +2990,12 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/trust-reputation/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-federation/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-trusted-index/0.1",
+                    "https://w3id.org/jeswr/awp#config/authenticity-origin-hosted/0.1",
+                    "https://w3id.org/jeswr/awp#config/authenticity-selective-disclosure/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-pinned-list/0.1",
                     "https://w3id.org/jeswr/awp#config/meaning-negotiated/0.1",
                     "https://w3id.org/jeswr/awp#config/reliance-quality-certificate/0.1",
                     "https://w3id.org/jeswr/awp#config/reliance-stated-confidence/0.1",
@@ -3209,7 +3215,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:698f5f324f49a6a1fc686ef8fa17ae7c40e5360f6d456c656a40dde1f6be6bff"
+            "digest": "sha-256:d2eb41b717d7c312d443f58183b722cbb1dd2d8db457b9618c18a794fe499334"
           },
           "evidence": {
             "present": false,

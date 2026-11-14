@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -133,15 +133,15 @@
         "text": "The subscription service is accepted for subscription control claims."
       },
       "resolution": {
-        "question": "Is The subscription service an authority for subscription.control claims about The subscriber?",
+        "question": "Is The subscription service an authority for subscription control claims about The subscriber?",
         "path": [
           {
             "at": "The subscriber's own list",
             "kind": "own-list",
-            "says": "The subscription service is accepted for subscription.control."
+            "says": "The subscription service is accepted for subscription control."
           }
         ],
-        "answer": "Accepted, for subscription.control claims only."
+        "answer": "Accepted, for subscription control claims only."
       },
       "caption": "The subscription service's subscription control statement: The subscription service is an accepted source for this kind of claim."
     },
@@ -1481,15 +1481,15 @@
         "text": "The subscription service is accepted for subscription control claims."
       },
       "resolution": {
-        "question": "Is The subscription service an authority for subscription.control claims about The subscriber?",
+        "question": "Is The subscription service an authority for subscription control claims about The subscriber?",
         "path": [
           {
             "at": "The subscription service's own list",
             "kind": "own-list",
-            "says": "The subscription service is accepted for subscription.control."
+            "says": "The subscription service is accepted for subscription control."
           }
         ],
-        "answer": "Accepted, for subscription.control claims only."
+        "answer": "Accepted, for subscription control claims only."
       },
       "caption": "The subscription service's subscription control statement: The subscription service is an accepted source for this kind of claim."
     },

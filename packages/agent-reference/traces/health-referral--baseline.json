@@ -78,7 +78,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -141,15 +141,15 @@
         "text": "The professional register is accepted for organization role claims."
       },
       "resolution": {
-        "question": "Is The professional register an authority for organization.role claims about The clinician?",
+        "question": "Is The professional register an authority for organization role claims about The clinician?",
         "path": [
           {
             "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "The professional register is accepted for organization.role."
+            "says": "The professional register is accepted for organization role."
           }
         ],
-        "answer": "Accepted, for organization.role claims only."
+        "answer": "Accepted, for organization role claims only."
       },
       "caption": "The professional register's organization role statement: The professional register is an accepted source for this kind of claim."
     },
@@ -324,15 +324,15 @@
         }
       ],
       "resolution": {
-        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
+        "question": "Is The specialist clinic a party I can send the unlabelled resource to?",
         "path": [
           {
             "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "The specialist clinic is accepted for urn:op:health-referral."
+            "says": "The specialist clinic is accepted for the unlabelled resource."
           }
         ],
-        "answer": "Accepted, for urn:op:health-referral only."
+        "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only."
@@ -480,15 +480,15 @@
         }
       ],
       "resolution": {
-        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
+        "question": "Is The specialist clinic a party I can send the unlabelled resource to?",
         "path": [
           {
             "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "The specialist clinic is accepted for urn:op:health-referral."
+            "says": "The specialist clinic is accepted for the unlabelled resource."
           }
         ],
-        "answer": "Accepted, for urn:op:health-referral only."
+        "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only."
@@ -600,15 +600,15 @@
         }
       ],
       "resolution": {
-        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
+        "question": "Is The specialist clinic a party I can send the unlabelled resource to?",
         "path": [
           {
             "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "The specialist clinic is accepted for urn:op:health-referral."
+            "says": "The specialist clinic is accepted for the unlabelled resource."
           }
         ],
-        "answer": "Accepted, for urn:op:health-referral only."
+        "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only."
@@ -1227,15 +1227,15 @@
         "text": "The local record holder is accepted for referral history claims."
       },
       "resolution": {
-        "question": "Is The local record holder an authority for referral.history claims about the unlabelled resource?",
+        "question": "Is The local record holder an authority for referral history claims about the unlabelled resource?",
         "path": [
           {
             "at": "The specialist clinic's own list",
             "kind": "own-list",
-            "says": "The local record holder is accepted for referral.history."
+            "says": "The local record holder is accepted for referral history."
           }
         ],
-        "answer": "Accepted, for referral.history claims only."
+        "answer": "Accepted, for referral history claims only."
       },
       "caption": "The local record holder's referral history statement: The local record holder is an accepted source for this kind of claim."
     },

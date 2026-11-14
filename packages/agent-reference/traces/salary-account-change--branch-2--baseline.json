@@ -77,7 +77,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -140,15 +140,15 @@
         "text": "The employee’s bank is accepted for salary account claims."
       },
       "resolution": {
-        "question": "Is The employee’s bank an authority for salary.account claims about The employee?",
+        "question": "Is The employee’s bank an authority for salary account claims about The employee?",
         "path": [
           {
             "at": "The employee's own list",
             "kind": "own-list",
-            "says": "The employee’s bank is accepted for salary.account."
+            "says": "The employee’s bank is accepted for salary account."
           }
         ],
-        "answer": "Accepted, for salary.account claims only."
+        "answer": "Accepted, for salary account claims only."
       },
       "caption": "The employee’s bank's salary account statement: The employee’s bank is an accepted source for this kind of claim."
     },
@@ -1463,15 +1463,15 @@
         "text": "The employee’s bank is accepted for salary account claims."
       },
       "resolution": {
-        "question": "Is The employee’s bank an authority for salary.account claims about The employee?",
+        "question": "Is The employee’s bank an authority for salary account claims about The employee?",
         "path": [
           {
             "at": "The employer's own list",
             "kind": "own-list",
-            "says": "The employee’s bank is accepted for salary.account."
+            "says": "The employee’s bank is accepted for salary account."
           }
         ],
-        "answer": "Accepted, for salary.account claims only."
+        "answer": "Accepted, for salary account claims only."
       },
       "caption": "The employee’s bank's salary account statement: The employee’s bank is an accepted source for this kind of claim."
     },

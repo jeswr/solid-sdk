@@ -405,7 +405,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -464,15 +464,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "The person's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -1225,15 +1225,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 1's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -2486,15 +2486,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 2's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -3747,15 +3747,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 3's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -5008,15 +5008,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 4's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -6269,15 +6269,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 5's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -7530,15 +7530,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 6's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -8791,15 +8791,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 7's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -10052,15 +10052,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 8's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -11313,15 +11313,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 9's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -12574,15 +12574,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 10's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -13835,15 +13835,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 11's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -15096,15 +15096,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 12's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -16357,15 +16357,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 13's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -17618,15 +17618,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 14's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -18879,15 +18879,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 15's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -20140,15 +20140,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 16's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -21401,15 +21401,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 17's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -22662,15 +22662,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 18's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -23923,15 +23923,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 19's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },
@@ -25184,15 +25184,15 @@
         "text": "The fictional address register is accepted for contact address claims."
       },
       "resolution": {
-        "question": "Is The fictional address register an authority for contact.address claims about The person?",
+        "question": "Is The fictional address register an authority for contact address claims about The person?",
         "path": [
           {
             "at": "Fictional organization 20's own list",
             "kind": "own-list",
-            "says": "The fictional address register is accepted for contact.address."
+            "says": "The fictional address register is accepted for contact address."
           }
         ],
-        "answer": "Accepted, for contact.address claims only."
+        "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
     },

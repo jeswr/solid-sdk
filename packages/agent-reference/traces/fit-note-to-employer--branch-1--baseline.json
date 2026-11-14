@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -132,15 +132,15 @@
         "text": "The clinician is accepted for health diagnosis claims."
       },
       "resolution": {
-        "question": "Is The clinician an authority for health.diagnosis claims about The employee?",
+        "question": "Is The clinician an authority for health diagnosis claims about The employee?",
         "path": [
           {
             "at": "The employee's own list",
             "kind": "own-list",
-            "says": "The clinician is accepted for health.diagnosis."
+            "says": "The clinician is accepted for health diagnosis."
           }
         ],
-        "answer": "Accepted, for health.diagnosis claims only."
+        "answer": "Accepted, for health diagnosis claims only."
       },
       "caption": "The clinician's health diagnosis statement: The clinician is an accepted source for this kind of claim."
     },

@@ -78,7 +78,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -141,15 +141,15 @@
         "text": "The employer is accepted for benefit income claims."
       },
       "resolution": {
-        "question": "Is The employer an authority for benefit.income claims about The claimant?",
+        "question": "Is The employer an authority for benefit income claims about The claimant?",
         "path": [
           {
             "at": "The claimant's own list",
             "kind": "own-list",
-            "says": "The employer is accepted for benefit.income."
+            "says": "The employer is accepted for benefit income."
           }
         ],
-        "answer": "Accepted, for benefit.income claims only."
+        "answer": "Accepted, for benefit income claims only."
       },
       "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim."
     },
@@ -312,15 +312,15 @@
         "text": "The landlord is accepted for benefit rent claims."
       },
       "resolution": {
-        "question": "Is The landlord an authority for benefit.rent claims about The claimant?",
+        "question": "Is The landlord an authority for benefit rent claims about The claimant?",
         "path": [
           {
             "at": "The claimant's own list",
             "kind": "own-list",
-            "says": "The landlord is accepted for benefit.rent."
+            "says": "The landlord is accepted for benefit rent."
           }
         ],
-        "answer": "Accepted, for benefit.rent claims only."
+        "answer": "Accepted, for benefit rent claims only."
       },
       "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim."
     },
@@ -483,15 +483,15 @@
         "text": "The household register is accepted for benefit household claims."
       },
       "resolution": {
-        "question": "Is The household register an authority for benefit.household claims about The claimant?",
+        "question": "Is The household register an authority for benefit household claims about The claimant?",
         "path": [
           {
             "at": "The claimant's own list",
             "kind": "own-list",
-            "says": "The household register is accepted for benefit.household."
+            "says": "The household register is accepted for benefit household."
           }
         ],
-        "answer": "Accepted, for benefit.household claims only."
+        "answer": "Accepted, for benefit household claims only."
       },
       "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim."
     },
@@ -2127,15 +2127,15 @@
         "text": "The employer is accepted for benefit income claims."
       },
       "resolution": {
-        "question": "Is The employer an authority for benefit.income claims about The claimant?",
+        "question": "Is The employer an authority for benefit income claims about The claimant?",
         "path": [
           {
             "at": "The benefits office's own list",
             "kind": "own-list",
-            "says": "The employer is accepted for benefit.income."
+            "says": "The employer is accepted for benefit income."
           }
         ],
-        "answer": "Accepted, for benefit.income claims only."
+        "answer": "Accepted, for benefit income claims only."
       },
       "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim."
     },
@@ -2165,15 +2165,15 @@
         "text": "The landlord is accepted for benefit rent claims."
       },
       "resolution": {
-        "question": "Is The landlord an authority for benefit.rent claims about The claimant?",
+        "question": "Is The landlord an authority for benefit rent claims about The claimant?",
         "path": [
           {
             "at": "The benefits office's own list",
             "kind": "own-list",
-            "says": "The landlord is accepted for benefit.rent."
+            "says": "The landlord is accepted for benefit rent."
           }
         ],
-        "answer": "Accepted, for benefit.rent claims only."
+        "answer": "Accepted, for benefit rent claims only."
       },
       "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim."
     },
@@ -2203,15 +2203,15 @@
         "text": "The household register is accepted for benefit household claims."
       },
       "resolution": {
-        "question": "Is The household register an authority for benefit.household claims about The claimant?",
+        "question": "Is The household register an authority for benefit household claims about The claimant?",
         "path": [
           {
             "at": "The benefits office's own list",
             "kind": "own-list",
-            "says": "The household register is accepted for benefit.household."
+            "says": "The household register is accepted for benefit household."
           }
         ],
-        "answer": "Accepted, for benefit.household claims only."
+        "answer": "Accepted, for benefit household claims only."
       },
       "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim."
     },

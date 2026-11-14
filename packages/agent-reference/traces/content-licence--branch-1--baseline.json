@@ -115,7 +115,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -186,15 +186,15 @@
         "text": "The photographer is accepted for photo licensed asset claims."
       },
       "resolution": {
-        "question": "Is The photographer an authority for photo.licensed-asset claims about The publisher?",
+        "question": "Is The photographer an authority for photo licensed asset claims about The publisher?",
         "path": [
           {
             "at": "The publisher's own list",
             "kind": "own-list",
-            "says": "The photographer is accepted for photo.licensed-asset."
+            "says": "The photographer is accepted for photo licensed asset."
           }
         ],
-        "answer": "Accepted, for photo.licensed-asset claims only."
+        "answer": "Accepted, for photo licensed asset claims only."
       },
       "caption": "The photographer's photo licensed asset statement: The photographer is an accepted source for this kind of claim."
     },

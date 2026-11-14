@@ -3,7 +3,7 @@
   "schema": "agent-trace/0.1",
   "useCase": "mortgage-in-principle",
   "path": {
-    "index": 15,
+    "index": 21,
     "what": "A hostile holder changes the revealed disclosure salt and signs its outer message; the issuer’s commitment does not match."
   },
   "parties": [
@@ -183,7 +183,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [

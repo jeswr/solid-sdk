@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -301,15 +301,15 @@
         "text": "The architect is accepted for building height claims."
       },
       "resolution": {
-        "question": "Is The architect an authority for building.height claims about The homeowner?",
+        "question": "Is The architect an authority for building height claims about The homeowner?",
         "path": [
           {
             "at": "The architect's own list",
             "kind": "own-list",
-            "says": "The architect is accepted for building.height."
+            "says": "The architect is accepted for building height."
           }
         ],
-        "answer": "Accepted, for building.height claims only."
+        "answer": "Accepted, for building height claims only."
       },
       "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim."
     },
@@ -2406,15 +2406,15 @@
         "text": "The architect is accepted for building height claims."
       },
       "resolution": {
-        "question": "Is The architect an authority for building.height claims about The homeowner?",
+        "question": "Is The architect an authority for building height claims about The homeowner?",
         "path": [
           {
             "at": "The planning office's own list",
             "kind": "own-list",
-            "says": "The architect is accepted for building.height."
+            "says": "The architect is accepted for building height."
           }
         ],
-        "answer": "Accepted, for building.height claims only."
+        "answer": "Accepted, for building height claims only."
       },
       "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim."
     },

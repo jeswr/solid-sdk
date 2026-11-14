@@ -187,7 +187,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -486,7 +486,7 @@
         "text": "The fictional lender is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is The fictional lender an authority for mortgage.product claims?",
+        "question": "Is The fictional lender an authority for mortgage product claims?",
         "path": [
           {
             "at": "The mortgage product index's own list",
@@ -501,10 +501,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "The fictional lender is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
     },
@@ -678,7 +678,7 @@
         "text": "Sam’s fictional bank is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is Sam’s fictional bank an authority for mortgage.product claims?",
+        "question": "Is Sam’s fictional bank an authority for mortgage product claims?",
         "path": [
           {
             "at": "The mortgage product index's own list",
@@ -693,10 +693,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
     },
@@ -2164,7 +2164,7 @@
         "text": "The fictional lender is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is The fictional lender an authority for mortgage.product claims about The mortgage product index?",
+        "question": "Is The fictional lender an authority for mortgage product claims about The mortgage product index?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
@@ -2179,10 +2179,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "The fictional lender is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
     },
@@ -2212,7 +2212,7 @@
         "text": "Sam’s fictional bank is accepted for mortgage product claims."
       },
       "resolution": {
-        "question": "Is Sam’s fictional bank an authority for mortgage.product claims about The mortgage product index?",
+        "question": "Is Sam’s fictional bank an authority for mortgage product claims about The mortgage product index?",
         "path": [
           {
             "at": "Sam, the fictional applicant's own list",
@@ -2227,10 +2227,10 @@
           {
             "at": "Sector register",
             "kind": "register",
-            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank is authorized; it is an authority for mortgage product. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for mortgage.product claims only."
+        "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
     },
@@ -3045,14 +3045,14 @@
       "part": "transport",
       "kind": "message-out",
       "packet": {
-        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001\",\"type\":[\"Message\",\"Description\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1\",\"kind\":\"description\",\"conversation\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003\",\"from\":{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\"},\"to\":{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004\",\"body\":{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\"},\"@included\":[{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\",\"type\":\"ParticipantRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"onBehalfOf\":\"https://northbank.example/#org\",\"operator\":\"https://northbank.example/#org\"},{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\",\"type\":\"AudienceRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"party\":\"https://sam.example/#me\"},{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\",\"type\":\"DescriptionBody\",\"descriptionData\":{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\"}},{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:fc5030dc7b2dbea016fb670ae5450583fc5813d88cc3d7f2d80643f8bfe3d477\",\"byteLength\":\"180147\",\"mediaType\":\"application/n-quads\"}],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmZjNTAzMGRjN2IyZGJlYTAxNmZiNjcwYWU1NDUwNTgzZmM1ODEzZDg4Y2MzZDdmMmQ4MDY0M2Y4YmZlM2Q0NzciLCJieXRlTGVuZ3RoIjoiMTgwMTQ3IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.hSvTGHVzRslk0orGypkY2pY-dbbzPQLTgNof591juvTJx6UetiAG_0zM1gUW4J7ZoeYC-p9qFhCGmpesuNSlDg\"}}",
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001\",\"type\":[\"Message\",\"Description\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1\",\"kind\":\"description\",\"conversation\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003\",\"from\":{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\"},\"to\":{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004\",\"body\":{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\"},\"@included\":[{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\",\"type\":\"ParticipantRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"onBehalfOf\":\"https://northbank.example/#org\",\"operator\":\"https://northbank.example/#org\"},{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\",\"type\":\"AudienceRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"party\":\"https://sam.example/#me\"},{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\",\"type\":\"DescriptionBody\",\"descriptionData\":{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\"}},{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:9a35982b952bbb63c80e0e7ee9459cbabea20a5dcbbde9e6c8ebd6eca6445ed2\",\"byteLength\":\"184846\",\"mediaType\":\"application/n-quads\"}],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjlhMzU5ODJiOTUyYmJiNjNjODBlMGU3ZWU5NDU5Y2JhYmVhMjBhNWRjYmJkZTllNmM4ZWJkNmVjYTY0NDVlZDIiLCJieXRlTGVuZ3RoIjoiMTg0ODQ2IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.dIeHyk4mQ-rnAVY2uZMG0AZJpnVDCGlwQK3JCULzHAUZYrumCSRPx-nDIKBsMIgQK8Qhm1C1HuIUF5ZbuIvvBw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
-        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001> a awp:Description, awp:Message;\n    awp:body <urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw>;\n    awp:inReplyTo <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/description>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk>;\n    sec:proof _:awp0.\n<urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE> a awp:DescriptionBody;\n    awp:description <urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA>.\n<urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://northbank.example/#org>;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:operator <https://northbank.example/#org>.\n<urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk> a awp:AudienceRef;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:party <https://sam.example/#me>.\n<urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:fc5030dc7b2dbea016fb670ae5450583fc5813d88cc3d7f2d80643f8bfe3d477\";\n    awp:byteLength 180147.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmZjNTAzMGRjN2IyZGJlYTAxNmZiNjcwYWU1NDUwNTgzZmM1ODEzZDg4Y2MzZDdmMmQ4MDY0M2Y4YmZlM2Q0NzciLCJieXRlTGVuZ3RoIjoiMTgwMTQ3IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.hSvTGHVzRslk0orGypkY2pY-dbbzPQLTgNof591juvTJx6UetiAG_0zM1gUW4J7ZoeYC-p9qFhCGmpesuNSlDg\"\n}\n",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001> a awp:Description, awp:Message;\n    awp:body <urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw>;\n    awp:inReplyTo <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/description>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk>;\n    sec:proof _:awp0.\n<urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE> a awp:DescriptionBody;\n    awp:description <urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA>.\n<urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://northbank.example/#org>;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:operator <https://northbank.example/#org>.\n<urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk> a awp:AudienceRef;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:party <https://sam.example/#me>.\n<urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:9a35982b952bbb63c80e0e7ee9459cbabea20a5dcbbde9e6c8ebd6eca6445ed2\";\n    awp:byteLength 184846.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjlhMzU5ODJiOTUyYmJiNjNjODBlMGU3ZWU5NDU5Y2JhYmVhMjBhNWRjYmJkZTllNmM4ZWJkNmVjYTY0NDVlZDIiLCJieXRlTGVuZ3RoIjoiMTg0ODQ2IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.dIeHyk4mQ-rnAVY2uZMG0AZJpnVDCGlwQK3JCULzHAUZYrumCSRPx-nDIKBsMIgQK8Qhm1C1HuIUF5ZbuIvvBw\"\n}\n",
         "attachments": [
           {
-            "digest": "sha-256:fc5030dc7b2dbea016fb670ae5450583fc5813d88cc3d7f2d80643f8bfe3d477",
+            "digest": "sha-256:9a35982b952bbb63c80e0e7ee9459cbabea20a5dcbbde9e6c8ebd6eca6445ed2",
             "mediaType": "application/n-quads",
-            "byteLength": 180147
+            "byteLength": 184846
           }
         ],
         "id": "urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001",
@@ -3091,7 +3091,7 @@
                 "alg": "EdDSA"
               }
             },
-            "digest": "sha-256:7c89df5503a7fc8336585967630587c0bb27a511cde397d32da1f77bf75bdbff"
+            "digest": "sha-256:88c829c3bd87881c6e12662587c7c809b7fed3b38d6a56a7af11b7623ca4780d"
           },
           "authority": {
             "present": false,
@@ -3164,6 +3164,12 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/trust-reputation/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-federation/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-trusted-index/0.1",
+                    "https://w3id.org/jeswr/awp#config/authenticity-origin-hosted/0.1",
+                    "https://w3id.org/jeswr/awp#config/authenticity-selective-disclosure/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-pinned-list/0.1",
                     "https://w3id.org/jeswr/awp#config/meaning-negotiated/0.1",
                     "https://w3id.org/jeswr/awp#config/reliance-quality-certificate/0.1",
                     "https://w3id.org/jeswr/awp#config/reliance-stated-confidence/0.1",
@@ -3379,7 +3385,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:a869a863c5dbf16b7271790211e174035c0d56bc4baf7b504b81bdb55f9b1ecd"
+            "digest": "sha-256:f41df3be54a03b78ee9e87a417ae8a16d3c7419fad7b9a63eca3f757377ce1a4"
           },
           "evidence": {
             "present": false,
@@ -3422,14 +3428,14 @@
       "part": "transport",
       "kind": "message-in",
       "packet": {
-        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001\",\"type\":[\"Message\",\"Description\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1\",\"kind\":\"description\",\"conversation\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003\",\"from\":{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\"},\"to\":{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004\",\"body\":{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\"},\"@included\":[{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\",\"type\":\"ParticipantRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"onBehalfOf\":\"https://northbank.example/#org\",\"operator\":\"https://northbank.example/#org\"},{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\",\"type\":\"AudienceRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"party\":\"https://sam.example/#me\"},{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\",\"type\":\"DescriptionBody\",\"descriptionData\":{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\"}},{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:fc5030dc7b2dbea016fb670ae5450583fc5813d88cc3d7f2d80643f8bfe3d477\",\"byteLength\":\"180147\",\"mediaType\":\"application/n-quads\"}],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmZjNTAzMGRjN2IyZGJlYTAxNmZiNjcwYWU1NDUwNTgzZmM1ODEzZDg4Y2MzZDdmMmQ4MDY0M2Y4YmZlM2Q0NzciLCJieXRlTGVuZ3RoIjoiMTgwMTQ3IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.hSvTGHVzRslk0orGypkY2pY-dbbzPQLTgNof591juvTJx6UetiAG_0zM1gUW4J7ZoeYC-p9qFhCGmpesuNSlDg\"}}",
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001\",\"type\":[\"Message\",\"Description\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1\",\"kind\":\"description\",\"conversation\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003\",\"from\":{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\"},\"to\":{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004\",\"body\":{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\"},\"@included\":[{\"id\":\"urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw\",\"type\":\"ParticipantRef\",\"actor\":\"https://northbank.example/agents/intake#agent\",\"onBehalfOf\":\"https://northbank.example/#org\",\"operator\":\"https://northbank.example/#org\"},{\"id\":\"urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk\",\"type\":\"AudienceRef\",\"actor\":\"https://agents.hostco.example/sam#agent\",\"party\":\"https://sam.example/#me\"},{\"id\":\"urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE\",\"type\":\"DescriptionBody\",\"descriptionData\":{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\"}},{\"id\":\"urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:9a35982b952bbb63c80e0e7ee9459cbabea20a5dcbbde9e6c8ebd6eca6445ed2\",\"byteLength\":\"184846\",\"mediaType\":\"application/n-quads\"}],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjlhMzU5ODJiOTUyYmJiNjNjODBlMGU3ZWU5NDU5Y2JhYmVhMjBhNWRjYmJkZTllNmM4ZWJkNmVjYTY0NDVlZDIiLCJieXRlTGVuZ3RoIjoiMTg0ODQ2IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.dIeHyk4mQ-rnAVY2uZMG0AZJpnVDCGlwQK3JCULzHAUZYrumCSRPx-nDIKBsMIgQK8Qhm1C1HuIUF5ZbuIvvBw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
-        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001> a awp:Description, awp:Message;\n    awp:body <urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw>;\n    awp:inReplyTo <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/description>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk>;\n    sec:proof _:awp0.\n<urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE> a awp:DescriptionBody;\n    awp:description <urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA>.\n<urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://northbank.example/#org>;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:operator <https://northbank.example/#org>.\n<urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk> a awp:AudienceRef;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:party <https://sam.example/#me>.\n<urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:fc5030dc7b2dbea016fb670ae5450583fc5813d88cc3d7f2d80643f8bfe3d477\";\n    awp:byteLength 180147.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmZjNTAzMGRjN2IyZGJlYTAxNmZiNjcwYWU1NDUwNTgzZmM1ODEzZDg4Y2MzZDdmMmQ4MDY0M2Y4YmZlM2Q0NzciLCJieXRlTGVuZ3RoIjoiMTgwMTQ3IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.hSvTGHVzRslk0orGypkY2pY-dbbzPQLTgNof591juvTJx6UetiAG_0zM1gUW4J7ZoeYC-p9qFhCGmpesuNSlDg\"\n}\n",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001> a awp:Description, awp:Message;\n    awp:body <urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1>;\n    awp:conversation <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0003>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw>;\n    awp:inReplyTo <urn:awp:engine-mortgage-main-token-as-the-person:sam-agent:0004>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/description>;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk>;\n    sec:proof _:awp0.\n<urn:awp:n:82tf7QFGwVE-TTZythq5PvxllZdTaHsAtdAmD2mWzwE> a awp:DescriptionBody;\n    awp:description <urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA>.\n<urn:awp:n:4l15OknHFcCg6XurAQ1yBBpejV604UJp46yc-CflhUw> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <https://northbank.example/#org>;\n    awp:actor <https://northbank.example/agents/intake#agent>;\n    awp:operator <https://northbank.example/#org>.\n<urn:awp:n:IgTX-zisD4sPRfwohjAmnY5xDfY4c7fvZUyLx_yCGVk> a awp:AudienceRef;\n    awp:actor <https://agents.hostco.example/sam#agent>;\n    awp:party <https://sam.example/#me>.\n<urn:awp:n:YqRCahJMWMhMyefNdWkvzoTzRmIxEqZnMYOQhEZ2zHA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:9a35982b952bbb63c80e0e7ee9459cbabea20a5dcbbde9e6c8ebd6eca6445ed2\";\n    awp:byteLength 184846.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50IiwiaWQiOiJ1cm46YXdwOm46NGwxNU9rbkhGY0NnNlh1ckFRMXlCQnBlalY2MDRVSnA0NnljLUNmbGhVdyIsIm9uQmVoYWxmT2YiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJvcGVyYXRvciI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJodHRwczovL2FnZW50cy5ob3N0Y28uZXhhbXBsZS9zYW0jYWdlbnQiLCJpZCI6InVybjphd3A6bjpJZ1RYLXppc0Q0c1BSZndvaGpBbW5ZNXhEZlk0YzdmdlpVeUx4X3lDR1ZrIiwicGFydHkiOiJodHRwczovL3NhbS5leGFtcGxlLyNtZSIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiZGVzY3JpcHRpb25EYXRhIjp7ImlkIjoidXJuOmF3cDpuOllxUkNhaEpNV01oTXllZk5kV2t2em9UelJtSXhFcVpuTVlPUWhFWjJ6SEEifSwiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSIsInR5cGUiOiJEZXNjcmlwdGlvbkJvZHkifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjlhMzU5ODJiOTUyYmJiNjNjODBlMGU3ZWU5NDU5Y2JhYmVhMjBhNWRjYmJkZTllNmM4ZWJkNmVjYTY0NDVlZDIiLCJieXRlTGVuZ3RoIjoiMTg0ODQ2IiwiaWQiOiJ1cm46YXdwOm46WXFSQ2FoSk1XTWhNeWVmTmRXa3Z6b1R6Um1JeEVxWm5NWU9RaEVaMnpIQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46ODJ0ZjdRRkd3VkUtVFRaeXRocTVQdnhsbFpkVGFIc0F0ZEFtRDJtV3p3RSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL2F1dGhvcml0eS1hdXRob3JpemF0aW9uLXNlcnZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246c2FtLWFnZW50OjAwMDMiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjRsMTVPa25IRmNDZzZYdXJBUTF5QkJwZWpWNjA0VUpwNDZ5Yy1DZmxoVXcifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1tb3J0Z2FnZS1tYWluLXRva2VuLWFzLXRoZS1wZXJzb246bm9ydGgtYWdlbnQ6MDAwMSIsImluUmVwbHlUbyI6InVybjphd3A6ZW5naW5lLW1vcnRnYWdlLW1haW4tdG9rZW4tYXMtdGhlLXBlcnNvbjpzYW0tYWdlbnQ6MDAwNCIsImtpbmQiOiJkZXNjcmlwdGlvbiIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOklnVFgtemlzRDRzUFJmd29oakFtblk1eERmWTRjN2Z2WlV5THhfeUNHVmsifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpcHRpb24iXX0.dIeHyk4mQ-rnAVY2uZMG0AZJpnVDCGlwQK3JCULzHAUZYrumCSRPx-nDIKBsMIgQK8Qhm1C1HuIUF5ZbuIvvBw\"\n}\n",
         "attachments": [
           {
-            "digest": "sha-256:fc5030dc7b2dbea016fb670ae5450583fc5813d88cc3d7f2d80643f8bfe3d477",
+            "digest": "sha-256:9a35982b952bbb63c80e0e7ee9459cbabea20a5dcbbde9e6c8ebd6eca6445ed2",
             "mediaType": "application/n-quads",
-            "byteLength": 180147
+            "byteLength": 184846
           }
         ],
         "id": "urn:awp:engine-mortgage-main-token-as-the-person:north-agent:0001",
@@ -3468,7 +3474,7 @@
                 "alg": "EdDSA"
               }
             },
-            "digest": "sha-256:7c89df5503a7fc8336585967630587c0bb27a511cde397d32da1f77bf75bdbff"
+            "digest": "sha-256:88c829c3bd87881c6e12662587c7c809b7fed3b38d6a56a7af11b7623ca4780d"
           },
           "authority": {
             "present": false,
@@ -3541,6 +3547,12 @@
                 ],
                 "configurations": {
                   "implemented": [
+                    "https://w3id.org/jeswr/awp#config/trust-reputation/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-federation/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-trusted-index/0.1",
+                    "https://w3id.org/jeswr/awp#config/authenticity-origin-hosted/0.1",
+                    "https://w3id.org/jeswr/awp#config/authenticity-selective-disclosure/0.1",
+                    "https://w3id.org/jeswr/awp#config/trust-pinned-list/0.1",
                     "https://w3id.org/jeswr/awp#config/meaning-negotiated/0.1",
                     "https://w3id.org/jeswr/awp#config/reliance-quality-certificate/0.1",
                     "https://w3id.org/jeswr/awp#config/reliance-stated-confidence/0.1",
@@ -3756,7 +3768,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:a869a863c5dbf16b7271790211e174035c0d56bc4baf7b504b81bdb55f9b1ecd",
+            "digest": "sha-256:f41df3be54a03b78ee9e87a417ae8a16d3c7419fad7b9a63eca3f757377ce1a4",
             "untrusted": [
               {
                 "path": "description.type",
@@ -3880,106 +3892,130 @@
               },
               {
                 "path": "description.configurations.implemented.0",
-                "text": "https://w3id.org/jeswr/awp#config/meaning-negotiated/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/trust-reputation/0.1"
               },
               {
                 "path": "description.configurations.implemented.1",
-                "text": "https://w3id.org/jeswr/awp#config/reliance-quality-certificate/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/trust-federation/0.1"
               },
               {
                 "path": "description.configurations.implemented.2",
-                "text": "https://w3id.org/jeswr/awp#config/reliance-stated-confidence/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/trust-trusted-index/0.1"
               },
               {
                 "path": "description.configurations.implemented.3",
-                "text": "https://w3id.org/jeswr/awp#config/reliance-corroboration/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/authenticity-origin-hosted/0.1"
               },
               {
                 "path": "description.configurations.implemented.4",
-                "text": "https://w3id.org/jeswr/awp#config/meaning-registry-lookup/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/authenticity-selective-disclosure/0.1"
               },
               {
                 "path": "description.configurations.implemented.5",
-                "text": "https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/trust-pinned-list/0.1"
               },
               {
                 "path": "description.configurations.implemented.6",
-                "text": "https://w3id.org/jeswr/awp#config/identity-webid/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/meaning-negotiated/0.1"
               },
               {
                 "path": "description.configurations.implemented.7",
-                "text": "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/reliance-quality-certificate/0.1"
               },
               {
                 "path": "description.configurations.implemented.8",
-                "text": "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/reliance-stated-confidence/0.1"
               },
               {
                 "path": "description.configurations.implemented.9",
-                "text": "https://w3id.org/jeswr/awp#config/authenticity-data-integrity/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/reliance-corroboration/0.1"
               },
               {
                 "path": "description.configurations.implemented.10",
-                "text": "https://w3id.org/jeswr/awp#config/transport-email/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/meaning-registry-lookup/0.1"
               },
               {
                 "path": "description.configurations.implemented.11",
-                "text": "https://w3id.org/jeswr/awp#config/transport-a2a/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/authority-authorization-server/0.1"
               },
               {
                 "path": "description.configurations.implemented.12",
-                "text": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/identity-webid/0.1"
               },
               {
                 "path": "description.configurations.implemented.13",
-                "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/accountability-pod-mirror/0.1"
               },
               {
                 "path": "description.configurations.implemented.14",
-                "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-solid-inbox/0.1"
               },
               {
                 "path": "description.configurations.implemented.15",
-                "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/authenticity-data-integrity/0.1"
               },
               {
                 "path": "description.configurations.implemented.16",
-                "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-email/0.1"
               },
               {
                 "path": "description.configurations.implemented.17",
-                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-a2a/0.1"
               },
               {
                 "path": "description.configurations.implemented.18",
-                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1"
               },
               {
                 "path": "description.configurations.implemented.19",
-                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
               },
               {
                 "path": "description.configurations.implemented.20",
-                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
               },
               {
                 "path": "description.configurations.implemented.21",
-                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
               },
               {
                 "path": "description.configurations.implemented.22",
-                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
               },
               {
                 "path": "description.configurations.implemented.23",
-                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
               },
               {
                 "path": "description.configurations.implemented.24",
-                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+                "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
               },
               {
                 "path": "description.configurations.implemented.25",
+                "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.26",
+                "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.27",
+                "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.28",
+                "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.29",
+                "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.30",
+                "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+              },
+              {
+                "path": "description.configurations.implemented.31",
                 "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
               },
               {
@@ -5031,7 +5067,7 @@
       "kind": "record",
       "caption": "The authorization grant does not establish the required principal, actor and key binding.",
       "resolution": {
-        "question": "Is Sam’s fictional bank authorization server an authority for authority.grant claims about Sam, the fictional applicant?",
+        "question": "Is Sam’s fictional bank authorization server an authority for authority grant claims about Sam, the fictional applicant?",
         "path": [
           {
             "at": "The fictional lender's own list",
@@ -5046,10 +5082,10 @@
           {
             "at": "The fictional register of accepted grant issuers",
             "kind": "register",
-            "says": "Sam’s fictional bank authorization server is authorized; it is an authority for authority.grant. Checked 2026-11-13T09:00:00.000Z."
+            "says": "Sam’s fictional bank authorization server is authorized; it is an authority for authority grant. Checked 2026-11-13T09:00:00.000Z."
           }
         ],
-        "answer": "Accepted, for authority.grant claims only."
+        "answer": "Accepted, for authority grant claims only."
       }
     },
     {

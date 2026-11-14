@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -138,15 +138,15 @@
         "text": "The claims register is accepted for claims completeness claims."
       },
       "resolution": {
-        "question": "Is The claims register an authority for claims.completeness claims about The driver?",
+        "question": "Is The claims register an authority for claims completeness claims about The driver?",
         "path": [
           {
             "at": "The insurer's own list",
             "kind": "own-list",
-            "says": "The claims register is accepted for claims.completeness."
+            "says": "The claims register is accepted for claims completeness."
           }
         ],
-        "answer": "Accepted, for claims.completeness claims only."
+        "answer": "Accepted, for claims completeness claims only."
       },
       "caption": "The claims register's claims completeness statement: The claims register is an accepted source for this kind of claim."
     },
@@ -313,15 +313,15 @@
         "text": "The claims register is accepted for claims list claims."
       },
       "resolution": {
-        "question": "Is The claims register an authority for claims.list claims about The driver?",
+        "question": "Is The claims register an authority for claims list claims about The driver?",
         "path": [
           {
             "at": "The insurer's own list",
             "kind": "own-list",
-            "says": "The claims register is accepted for claims.list."
+            "says": "The claims register is accepted for claims list."
           }
         ],
-        "answer": "Accepted, for claims.list claims only."
+        "answer": "Accepted, for claims list claims only."
       },
       "caption": "The claims register's claims list statement: The claims register is an accepted source for this kind of claim."
     },

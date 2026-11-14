@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -155,15 +155,15 @@
         "text": "The fictional shared calendar service is accepted for calendar first free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar first free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+            "says": "The fictional shared calendar service is accepted for calendar first free."
           }
         ],
-        "answer": "Accepted, for calendar.first-free claims only."
+        "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The fictional shared calendar service's calendar first free statement: The fictional shared calendar service is an accepted source for this kind of claim."
     },
@@ -326,15 +326,15 @@
         "text": "The fictional shared calendar service is accepted for calendar second free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar second free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+            "says": "The fictional shared calendar service is accepted for calendar second free."
           }
         ],
-        "answer": "Accepted, for calendar.second-free claims only."
+        "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The fictional shared calendar service's calendar second free statement: The fictional shared calendar service is an accepted source for this kind of claim."
     },
@@ -493,15 +493,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar second free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+            "says": "The fictional shared calendar service is accepted for calendar second free."
           }
         ],
-        "answer": "Accepted, for calendar.second-free claims only."
+        "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -527,15 +527,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar first free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+            "says": "The fictional shared calendar service is accepted for calendar first free."
           }
         ],
-        "answer": "Accepted, for calendar.first-free claims only."
+        "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -565,15 +565,15 @@
         "text": "The fictional shared calendar service is accepted for calendar slot free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar slot free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The fictional shared calendar service's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.slot-free."
+            "says": "The fictional shared calendar service is accepted for calendar slot free."
           }
         ],
-        "answer": "Accepted, for calendar.slot-free claims only."
+        "answer": "Accepted, for calendar slot free claims only."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: The fictional shared calendar service is an accepted source for this kind of claim."
     },
@@ -1530,15 +1530,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar second free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The first person's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+            "says": "The fictional shared calendar service is accepted for calendar second free."
           }
         ],
-        "answer": "Accepted, for calendar.second-free claims only."
+        "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -1564,15 +1564,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar first free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The first person's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+            "says": "The fictional shared calendar service is accepted for calendar first free."
           }
         ],
-        "answer": "Accepted, for calendar.first-free claims only."
+        "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -1602,15 +1602,15 @@
         "text": "The fictional shared calendar service is accepted for calendar slot free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar slot free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The first person's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.slot-free."
+            "says": "The fictional shared calendar service is accepted for calendar slot free."
           }
         ],
-        "answer": "Accepted, for calendar.slot-free claims only."
+        "answer": "Accepted, for calendar slot free claims only."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: The fictional shared calendar service is an accepted source for this kind of claim."
     },
@@ -2566,15 +2566,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.second-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar second free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The second person's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.second-free."
+            "says": "The fictional shared calendar service is accepted for calendar second free."
           }
         ],
-        "answer": "Accepted, for calendar.second-free claims only."
+        "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -2600,15 +2600,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.first-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar first free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The second person's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.first-free."
+            "says": "The fictional shared calendar service is accepted for calendar first free."
           }
         ],
-        "answer": "Accepted, for calendar.first-free claims only."
+        "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -2638,15 +2638,15 @@
         "text": "The fictional shared calendar service is accepted for calendar slot free claims."
       },
       "resolution": {
-        "question": "Is The fictional shared calendar service an authority for calendar.slot-free claims about the unlabelled resource?",
+        "question": "Is The fictional shared calendar service an authority for calendar slot free claims about the unlabelled resource?",
         "path": [
           {
             "at": "The second person's own list",
             "kind": "own-list",
-            "says": "The fictional shared calendar service is accepted for calendar.slot-free."
+            "says": "The fictional shared calendar service is accepted for calendar slot free."
           }
         ],
-        "answer": "Accepted, for calendar.slot-free claims only."
+        "answer": "Accepted, for calendar slot free claims only."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: The fictional shared calendar service is an accepted source for this kind of claim."
     },

@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -150,15 +150,15 @@
         "text": "The accounting platform is accepted for business accounts claims."
       },
       "resolution": {
-        "question": "Is The accounting platform an authority for business.accounts claims about The company?",
+        "question": "Is The accounting platform an authority for business accounts claims about The company?",
         "path": [
           {
             "at": "The company's own list",
             "kind": "own-list",
-            "says": "The accounting platform is accepted for business.accounts."
+            "says": "The accounting platform is accepted for business accounts."
           }
         ],
-        "answer": "Accepted, for business.accounts claims only."
+        "answer": "Accepted, for business accounts claims only."
       },
       "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim."
     },
@@ -306,15 +306,15 @@
         "text": "The fictional tax authority is accepted for business tax filing claims."
       },
       "resolution": {
-        "question": "Is The fictional tax authority an authority for business.tax-filing claims about The company?",
+        "question": "Is The fictional tax authority an authority for business tax filing claims about The company?",
         "path": [
           {
             "at": "The company's own list",
             "kind": "own-list",
-            "says": "The fictional tax authority is accepted for business.tax-filing."
+            "says": "The fictional tax authority is accepted for business tax filing."
           }
         ],
-        "answer": "Accepted, for business.tax-filing claims only."
+        "answer": "Accepted, for business tax filing claims only."
       },
       "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim."
     },
@@ -477,15 +477,15 @@
         "text": "The company register is accepted for organization role claims."
       },
       "resolution": {
-        "question": "Is The company register an authority for organization.role claims about The director?",
+        "question": "Is The company register an authority for organization role claims about The director?",
         "path": [
           {
             "at": "The company's own list",
             "kind": "own-list",
-            "says": "The company register is accepted for organization.role."
+            "says": "The company register is accepted for organization role."
           }
         ],
-        "answer": "Accepted, for organization.role claims only."
+        "answer": "Accepted, for organization role claims only."
       },
       "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim."
     },

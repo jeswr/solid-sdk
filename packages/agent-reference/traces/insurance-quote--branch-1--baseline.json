@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -141,15 +141,15 @@
         "text": "The driver is accepted for identity details claims."
       },
       "resolution": {
-        "question": "Is The driver an authority for identity.details claims about The driver?",
+        "question": "Is The driver an authority for identity details claims about The driver?",
         "path": [
           {
             "at": "The driver's own list",
             "kind": "own-list",
-            "says": "The driver is accepted for identity.details."
+            "says": "The driver is accepted for identity details."
           }
         ],
-        "answer": "Accepted, for identity.details claims only."
+        "answer": "Accepted, for identity details claims only."
       },
       "caption": "The driver's identity details statement: The driver is an accepted source for this kind of claim."
     },

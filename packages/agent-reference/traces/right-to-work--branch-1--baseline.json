@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -714,15 +714,15 @@
         "text": "The fictional immigration office is accepted for work entitled claims."
       },
       "resolution": {
-        "question": "Is The fictional immigration office an authority for work.entitled claims about The candidate?",
+        "question": "Is The fictional immigration office an authority for work entitled claims about The candidate?",
         "path": [
           {
             "at": "The candidate's own list",
             "kind": "own-list",
-            "says": "The fictional immigration office is accepted for work.entitled."
+            "says": "The fictional immigration office is accepted for work entitled."
           }
         ],
-        "answer": "Accepted, for work.entitled claims only."
+        "answer": "Accepted, for work entitled claims only."
       },
       "caption": "The fictional immigration office's work entitled statement: The fictional immigration office is an accepted source for this kind of claim."
     },
@@ -1056,15 +1056,15 @@
         "text": "The fictional immigration office is accepted for passport scan claims."
       },
       "resolution": {
-        "question": "Is The fictional immigration office an authority for passport.scan claims about The candidate?",
+        "question": "Is The fictional immigration office an authority for passport scan claims about The candidate?",
         "path": [
           {
             "at": "The candidate's own list",
             "kind": "own-list",
-            "says": "The fictional immigration office is accepted for passport.scan."
+            "says": "The fictional immigration office is accepted for passport scan."
           }
         ],
-        "answer": "Accepted, for passport.scan claims only."
+        "answer": "Accepted, for passport scan claims only."
       },
       "caption": "The fictional immigration office's passport scan statement: The fictional immigration office is an accepted source for this kind of claim."
     },
@@ -1235,15 +1235,15 @@
         }
       ],
       "resolution": {
-        "question": "Is The employer a party I can send urn:op:right-to-work to?",
+        "question": "Is The employer a party I can send the unlabelled resource to?",
         "path": [
           {
             "at": "The candidate's own list",
             "kind": "own-list",
-            "says": "The employer is accepted for urn:op:right-to-work."
+            "says": "The employer is accepted for the unlabelled resource."
           }
         ],
-        "answer": "Accepted, for urn:op:right-to-work only."
+        "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for the unlabelled resource only."

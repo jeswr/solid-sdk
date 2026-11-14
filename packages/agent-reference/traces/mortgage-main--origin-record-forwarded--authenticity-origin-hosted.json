@@ -3,7 +3,7 @@
   "schema": "agent-trace/0.1",
   "useCase": "mortgage-in-principle",
   "path": {
-    "index": 17,
+    "index": 23,
     "what": "The core proposes forwarding its unsigned source observation to the valuer as evidence."
   },
   "parties": [
@@ -187,7 +187,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [

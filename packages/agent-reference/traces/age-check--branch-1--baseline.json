@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -137,15 +137,15 @@
         "text": "The identity issuer is accepted for identity document claims."
       },
       "resolution": {
-        "question": "Is The identity issuer an authority for identity.document claims about The customer?",
+        "question": "Is The identity issuer an authority for identity document claims about The customer?",
         "path": [
           {
             "at": "The customer's own list",
             "kind": "own-list",
-            "says": "The identity issuer is accepted for identity.document."
+            "says": "The identity issuer is accepted for identity document."
           }
         ],
-        "answer": "Accepted, for identity.document claims only."
+        "answer": "Accepted, for identity document claims only."
       },
       "caption": "The identity issuer's identity document statement: The identity issuer is an accepted source for this kind of claim."
     },

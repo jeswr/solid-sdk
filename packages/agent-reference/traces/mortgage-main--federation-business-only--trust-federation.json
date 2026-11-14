@@ -3,7 +3,7 @@
   "schema": "agent-trace/0.1",
   "useCase": "mortgage-in-principle",
   "path": {
-    "index": 20,
+    "index": 26,
     "what": "The presented federation policy covers business lending rather than this residential mortgage."
   },
   "parties": [
@@ -191,7 +191,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [

@@ -106,7 +106,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -169,15 +169,15 @@
         "text": "The clinician is accepted for emergency declaration claims."
       },
       "resolution": {
-        "question": "Is The clinician an authority for emergency.declaration claims about The clinician?",
+        "question": "Is The clinician an authority for emergency declaration claims about The clinician?",
         "path": [
           {
             "at": "The clinician's own list",
             "kind": "own-list",
-            "says": "The clinician is accepted for emergency.declaration."
+            "says": "The clinician is accepted for emergency declaration."
           }
         ],
-        "answer": "Accepted, for emergency.declaration claims only."
+        "answer": "Accepted, for emergency declaration claims only."
       },
       "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim."
     },
@@ -340,15 +340,15 @@
         "text": "The family practice is accepted for clinical summary claims."
       },
       "resolution": {
-        "question": "Is The family practice an authority for clinical.summary claims about The patient?",
+        "question": "Is The family practice an authority for clinical summary claims about The patient?",
         "path": [
           {
             "at": "The patient's own list",
             "kind": "own-list",
-            "says": "The family practice is accepted for clinical.summary."
+            "says": "The family practice is accepted for clinical summary."
           }
         ],
-        "answer": "Accepted, for clinical.summary claims only."
+        "answer": "Accepted, for clinical summary claims only."
       },
       "caption": "The family practice's clinical summary statement: The family practice is an accepted source for this kind of claim."
     },
@@ -519,15 +519,15 @@
         }
       ],
       "resolution": {
-        "question": "Is The patient a party I can send urn:op:emergency-read to?",
+        "question": "Is The patient a party I can send the unlabelled resource to?",
         "path": [
           {
             "at": "The clinician's own list",
             "kind": "own-list",
-            "says": "The patient is accepted for urn:op:emergency-read."
+            "says": "The patient is accepted for the unlabelled resource."
           }
         ],
-        "answer": "Accepted, for urn:op:emergency-read only."
+        "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
       "caption": "The patient: Accepted, for the unlabelled resource only."
@@ -1092,15 +1092,15 @@
         "text": "The clinician is accepted for emergency declaration claims."
       },
       "resolution": {
-        "question": "Is The clinician an authority for emergency.declaration claims about The clinician?",
+        "question": "Is The clinician an authority for emergency declaration claims about The clinician?",
         "path": [
           {
             "at": "The patient's own list",
             "kind": "own-list",
-            "says": "The clinician is accepted for emergency.declaration."
+            "says": "The clinician is accepted for emergency declaration."
           }
         ],
-        "answer": "Accepted, for emergency.declaration claims only."
+        "answer": "Accepted, for emergency declaration claims only."
       },
       "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim."
     },

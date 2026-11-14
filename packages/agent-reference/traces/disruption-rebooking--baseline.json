@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -127,15 +127,15 @@
         "text": "The traveller is accepted for traveller margin claims."
       },
       "resolution": {
-        "question": "Is The traveller an authority for traveller.margin claims about The traveller?",
+        "question": "Is The traveller an authority for traveller margin claims about The traveller?",
         "path": [
           {
             "at": "The traveller's own list",
             "kind": "own-list",
-            "says": "The traveller is accepted for traveller.margin."
+            "says": "The traveller is accepted for traveller margin."
           }
         ],
-        "answer": "Accepted, for traveller.margin claims only."
+        "answer": "Accepted, for traveller margin claims only."
       },
       "caption": "The traveller's traveller margin statement: The traveller is an accepted source for this kind of claim."
     },

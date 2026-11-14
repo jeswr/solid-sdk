@@ -98,7 +98,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -165,15 +165,15 @@
         "text": "The supplier’s bank is accepted for bank account owner claims."
       },
       "resolution": {
-        "question": "Is The supplier’s bank an authority for bank.account-owner claims about the unlabelled resource?",
+        "question": "Is The supplier’s bank an authority for bank account owner claims about the unlabelled resource?",
         "path": [
           {
             "at": "The business's own list",
             "kind": "own-list",
-            "says": "The supplier’s bank is accepted for bank.account-owner."
+            "says": "The supplier’s bank is accepted for bank account owner."
           }
         ],
-        "answer": "Accepted, for bank.account-owner claims only."
+        "answer": "Accepted, for bank account owner claims only."
       },
       "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is an accepted source for this kind of claim."
     },
@@ -336,15 +336,15 @@
         "text": "The staff directory is accepted for organization role claims."
       },
       "resolution": {
-        "question": "Is The staff directory an authority for organization.role claims about The first financial controller?",
+        "question": "Is The staff directory an authority for organization role claims about The first financial controller?",
         "path": [
           {
             "at": "The business's own list",
             "kind": "own-list",
-            "says": "The staff directory is accepted for organization.role."
+            "says": "The staff directory is accepted for organization role."
           }
         ],
-        "answer": "Accepted, for organization.role claims only."
+        "answer": "Accepted, for organization role claims only."
       },
       "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
     },
@@ -503,15 +503,15 @@
         "text": "The staff directory is accepted for organization role claims."
       },
       "resolution": {
-        "question": "Is The staff directory an authority for organization.role claims about The second financial controller?",
+        "question": "Is The staff directory an authority for organization role claims about The second financial controller?",
         "path": [
           {
             "at": "The business's own list",
             "kind": "own-list",
-            "says": "The staff directory is accepted for organization.role."
+            "says": "The staff directory is accepted for organization role."
           }
         ],
-        "answer": "Accepted, for organization.role claims only."
+        "answer": "Accepted, for organization role claims only."
       },
       "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
     },
@@ -670,15 +670,15 @@
         "text": "The staff directory is accepted for organization role claims."
       },
       "resolution": {
-        "question": "Is The staff directory an authority for organization.role claims about The requesting staff member?",
+        "question": "Is The staff directory an authority for organization role claims about The requesting staff member?",
         "path": [
           {
             "at": "The business's own list",
             "kind": "own-list",
-            "says": "The staff directory is accepted for organization.role."
+            "says": "The staff directory is accepted for organization role."
           }
         ],
-        "answer": "Accepted, for organization.role claims only."
+        "answer": "Accepted, for organization role claims only."
       },
       "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
     },

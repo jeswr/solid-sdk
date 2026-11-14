@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -132,15 +132,15 @@
         "text": "The device maker is accepted for activity weekly total claims."
       },
       "resolution": {
-        "question": "Is The device maker an authority for activity.weekly-total claims about The person?",
+        "question": "Is The device maker an authority for activity weekly total claims about The person?",
         "path": [
           {
             "at": "The person's own list",
             "kind": "own-list",
-            "says": "The device maker is accepted for activity.weekly-total."
+            "says": "The device maker is accepted for activity weekly total."
           }
         ],
-        "answer": "Accepted, for activity.weekly-total claims only."
+        "answer": "Accepted, for activity weekly total claims only."
       },
       "caption": "The device maker's activity weekly total statement: The device maker is an accepted source for this kind of claim."
     },

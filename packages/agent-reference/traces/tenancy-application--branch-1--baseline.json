@@ -82,7 +82,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -153,15 +153,15 @@
         "text": "The tenant’s bank is accepted for bank full statements claims."
       },
       "resolution": {
-        "question": "Is The tenant’s bank an authority for bank.full-statements claims about The tenant?",
+        "question": "Is The tenant’s bank an authority for bank full statements claims about The tenant?",
         "path": [
           {
             "at": "The tenant's own list",
             "kind": "own-list",
-            "says": "The tenant’s bank is accepted for bank.full-statements."
+            "says": "The tenant’s bank is accepted for bank full statements."
           }
         ],
-        "answer": "Accepted, for bank.full-statements claims only."
+        "answer": "Accepted, for bank full statements claims only."
       },
       "caption": "The tenant’s bank's bank full statements statement: The tenant’s bank is an accepted source for this kind of claim."
     },

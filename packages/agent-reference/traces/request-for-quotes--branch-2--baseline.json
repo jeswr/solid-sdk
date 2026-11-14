@@ -141,7 +141,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -200,15 +200,15 @@
         "text": "Fictional supplier 1 is accepted for quote supplier 1 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 1 an authority for quote.supplier-1 claims about The buyer company?",
+        "question": "Is Fictional supplier 1 an authority for quote supplier 1 claims about The buyer company?",
         "path": [
           {
             "at": "Fictional supplier 1's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 1 is accepted for quote.supplier-1."
+            "says": "Fictional supplier 1 is accepted for quote supplier 1."
           }
         ],
-        "answer": "Accepted, for quote.supplier-1 claims only."
+        "answer": "Accepted, for quote supplier 1 claims only."
       },
       "caption": "Fictional supplier 1's quote supplier 1 statement: Fictional supplier 1 is an accepted source for this kind of claim."
     },
@@ -1602,15 +1602,15 @@
         "text": "Fictional supplier 1 is accepted for quote supplier 1 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 1 an authority for quote.supplier-1 claims about The buyer company?",
+        "question": "Is Fictional supplier 1 an authority for quote supplier 1 claims about The buyer company?",
         "path": [
           {
             "at": "The buyer company's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 1 is accepted for quote.supplier-1."
+            "says": "Fictional supplier 1 is accepted for quote supplier 1."
           }
         ],
-        "answer": "Accepted, for quote.supplier-1 claims only."
+        "answer": "Accepted, for quote supplier 1 claims only."
       },
       "caption": "Fictional supplier 1's quote supplier 1 statement: Fictional supplier 1 is an accepted source for this kind of claim."
     },
@@ -1768,15 +1768,15 @@
         "text": "Fictional supplier 2 is accepted for quote supplier 2 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 2 an authority for quote.supplier-2 claims about The buyer company?",
+        "question": "Is Fictional supplier 2 an authority for quote supplier 2 claims about The buyer company?",
         "path": [
           {
             "at": "Fictional supplier 2's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 2 is accepted for quote.supplier-2."
+            "says": "Fictional supplier 2 is accepted for quote supplier 2."
           }
         ],
-        "answer": "Accepted, for quote.supplier-2 claims only."
+        "answer": "Accepted, for quote supplier 2 claims only."
       },
       "caption": "Fictional supplier 2's quote supplier 2 statement: Fictional supplier 2 is an accepted source for this kind of claim."
     },
@@ -3170,15 +3170,15 @@
         "text": "Fictional supplier 2 is accepted for quote supplier 2 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 2 an authority for quote.supplier-2 claims about The buyer company?",
+        "question": "Is Fictional supplier 2 an authority for quote supplier 2 claims about The buyer company?",
         "path": [
           {
             "at": "The buyer company's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 2 is accepted for quote.supplier-2."
+            "says": "Fictional supplier 2 is accepted for quote supplier 2."
           }
         ],
-        "answer": "Accepted, for quote.supplier-2 claims only."
+        "answer": "Accepted, for quote supplier 2 claims only."
       },
       "caption": "Fictional supplier 2's quote supplier 2 statement: Fictional supplier 2 is an accepted source for this kind of claim."
     },
@@ -3336,15 +3336,15 @@
         "text": "Fictional supplier 3 is accepted for quote supplier 3 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 3 an authority for quote.supplier-3 claims about The buyer company?",
+        "question": "Is Fictional supplier 3 an authority for quote supplier 3 claims about The buyer company?",
         "path": [
           {
             "at": "Fictional supplier 3's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 3 is accepted for quote.supplier-3."
+            "says": "Fictional supplier 3 is accepted for quote supplier 3."
           }
         ],
-        "answer": "Accepted, for quote.supplier-3 claims only."
+        "answer": "Accepted, for quote supplier 3 claims only."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: Fictional supplier 3 is an accepted source for this kind of claim."
     },
@@ -4738,15 +4738,15 @@
         "text": "Fictional supplier 3 is accepted for quote supplier 3 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 3 an authority for quote.supplier-3 claims about The buyer company?",
+        "question": "Is Fictional supplier 3 an authority for quote supplier 3 claims about The buyer company?",
         "path": [
           {
             "at": "The buyer company's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 3 is accepted for quote.supplier-3."
+            "says": "Fictional supplier 3 is accepted for quote supplier 3."
           }
         ],
-        "answer": "Accepted, for quote.supplier-3 claims only."
+        "answer": "Accepted, for quote supplier 3 claims only."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: Fictional supplier 3 is an accepted source for this kind of claim."
     },
@@ -4904,15 +4904,15 @@
         "text": "Fictional supplier 4 is accepted for quote supplier 4 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 4 an authority for quote.supplier-4 claims about The buyer company?",
+        "question": "Is Fictional supplier 4 an authority for quote supplier 4 claims about The buyer company?",
         "path": [
           {
             "at": "Fictional supplier 4's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 4 is accepted for quote.supplier-4."
+            "says": "Fictional supplier 4 is accepted for quote supplier 4."
           }
         ],
-        "answer": "Accepted, for quote.supplier-4 claims only."
+        "answer": "Accepted, for quote supplier 4 claims only."
       },
       "caption": "Fictional supplier 4's quote supplier 4 statement: Fictional supplier 4 is an accepted source for this kind of claim."
     },
@@ -6306,15 +6306,15 @@
         "text": "Fictional supplier 4 is accepted for quote supplier 4 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 4 an authority for quote.supplier-4 claims about The buyer company?",
+        "question": "Is Fictional supplier 4 an authority for quote supplier 4 claims about The buyer company?",
         "path": [
           {
             "at": "The buyer company's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 4 is accepted for quote.supplier-4."
+            "says": "Fictional supplier 4 is accepted for quote supplier 4."
           }
         ],
-        "answer": "Accepted, for quote.supplier-4 claims only."
+        "answer": "Accepted, for quote supplier 4 claims only."
       },
       "caption": "Fictional supplier 4's quote supplier 4 statement: Fictional supplier 4 is an accepted source for this kind of claim."
     },
@@ -6472,15 +6472,15 @@
         "text": "Fictional supplier 5 is accepted for quote supplier 5 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 5 an authority for quote.supplier-5 claims about The buyer company?",
+        "question": "Is Fictional supplier 5 an authority for quote supplier 5 claims about The buyer company?",
         "path": [
           {
             "at": "Fictional supplier 5's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 5 is accepted for quote.supplier-5."
+            "says": "Fictional supplier 5 is accepted for quote supplier 5."
           }
         ],
-        "answer": "Accepted, for quote.supplier-5 claims only."
+        "answer": "Accepted, for quote supplier 5 claims only."
       },
       "caption": "Fictional supplier 5's quote supplier 5 statement: Fictional supplier 5 is an accepted source for this kind of claim."
     },
@@ -7874,15 +7874,15 @@
         "text": "Fictional supplier 5 is accepted for quote supplier 5 claims."
       },
       "resolution": {
-        "question": "Is Fictional supplier 5 an authority for quote.supplier-5 claims about The buyer company?",
+        "question": "Is Fictional supplier 5 an authority for quote supplier 5 claims about The buyer company?",
         "path": [
           {
             "at": "The buyer company's own list",
             "kind": "own-list",
-            "says": "Fictional supplier 5 is accepted for quote.supplier-5."
+            "says": "Fictional supplier 5 is accepted for quote supplier 5."
           }
         ],
-        "answer": "Accepted, for quote.supplier-5 claims only."
+        "answer": "Accepted, for quote supplier 5 claims only."
       },
       "caption": "Fictional supplier 5's quote supplier 5 statement: Fictional supplier 5 is an accepted source for this kind of claim."
     },

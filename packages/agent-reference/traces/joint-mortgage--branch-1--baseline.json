@@ -105,7 +105,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -176,15 +176,15 @@
         "text": "The second applicant’s employer is accepted for income payslip claims."
       },
       "resolution": {
-        "question": "Is The second applicant’s employer an authority for income.payslip claims about The second applicant?",
+        "question": "Is The second applicant’s employer an authority for income payslip claims about The second applicant?",
         "path": [
           {
             "at": "The first applicant's own list",
             "kind": "own-list",
-            "says": "The second applicant’s employer is accepted for income.payslip."
+            "says": "The second applicant’s employer is accepted for income payslip."
           }
         ],
-        "answer": "Accepted, for income.payslip claims only."
+        "answer": "Accepted, for income payslip claims only."
       },
       "caption": "The second applicant’s employer's income payslip statement: The second applicant’s employer is an accepted source for this kind of claim."
     },

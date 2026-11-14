@@ -62,7 +62,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -396,15 +396,15 @@
       ],
       "reason": "source-accepted",
       "resolution": {
-        "question": "Is A data holder an authority for research.measurement claims about the unlabelled resource?",
+        "question": "Is A data holder an authority for research measurement claims about the unlabelled resource?",
         "path": [
           {
             "at": "A researcher's own list",
             "kind": "own-list",
-            "says": "A data holder is accepted for research.measurement."
+            "says": "A data holder is accepted for research measurement."
           }
         ],
-        "answer": "Accepted, for research.measurement claims only."
+        "answer": "Accepted, for research measurement claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read."
     },
@@ -434,15 +434,15 @@
         "text": "A data holder is accepted for research count claims."
       },
       "resolution": {
-        "question": "Is A data holder an authority for research.count claims about the unlabelled resource?",
+        "question": "Is A data holder an authority for research count claims about the unlabelled resource?",
         "path": [
           {
             "at": "A researcher's own list",
             "kind": "own-list",
-            "says": "A data holder is accepted for research.count."
+            "says": "A data holder is accepted for research count."
           }
         ],
-        "answer": "Accepted, for research.count claims only."
+        "answer": "Accepted, for research count claims only."
       },
       "caption": "A data holder's research count statement: A data holder is an accepted source for this kind of claim."
     },

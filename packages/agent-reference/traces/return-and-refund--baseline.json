@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -134,15 +134,15 @@
         "text": "The merchant is accepted for merchant receipt claims."
       },
       "resolution": {
-        "question": "Is The merchant an authority for merchant.receipt claims about The customer?",
+        "question": "Is The merchant an authority for merchant receipt claims about The customer?",
         "path": [
           {
             "at": "The customer's own list",
             "kind": "own-list",
-            "says": "The merchant is accepted for merchant.receipt."
+            "says": "The merchant is accepted for merchant receipt."
           }
         ],
-        "answer": "Accepted, for merchant.receipt claims only."
+        "answer": "Accepted, for merchant receipt claims only."
       },
       "caption": "The merchant's merchant receipt statement: The merchant is an accepted source for this kind of claim."
     },
@@ -2520,15 +2520,15 @@
         "text": "The merchant is accepted for merchant receipt claims."
       },
       "resolution": {
-        "question": "Is The merchant an authority for merchant.receipt claims about The customer?",
+        "question": "Is The merchant an authority for merchant receipt claims about The customer?",
         "path": [
           {
             "at": "The merchant's own list",
             "kind": "own-list",
-            "says": "The merchant is accepted for merchant.receipt."
+            "says": "The merchant is accepted for merchant receipt."
           }
         ],
-        "answer": "Accepted, for merchant.receipt claims only."
+        "answer": "Accepted, for merchant receipt claims only."
       },
       "caption": "The merchant's merchant receipt statement: The merchant is an accepted source for this kind of claim."
     },

@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -129,15 +129,15 @@
         "text": "The finance department is accepted for salary team total claims."
       },
       "resolution": {
-        "question": "Is The finance department an authority for salary.team-total claims about The finance department?",
+        "question": "Is The finance department an authority for salary team total claims about The finance department?",
         "path": [
           {
             "at": "The finance department's own list",
             "kind": "own-list",
-            "says": "The finance department is accepted for salary.team-total."
+            "says": "The finance department is accepted for salary team total."
           }
         ],
-        "answer": "Accepted, for salary.team-total claims only."
+        "answer": "Accepted, for salary team total claims only."
       },
       "caption": "The finance department's salary team total statement: The finance department is an accepted source for this kind of claim."
     },
@@ -1475,15 +1475,15 @@
         "text": "The finance department is accepted for salary team total claims."
       },
       "resolution": {
-        "question": "Is The finance department an authority for salary.team-total claims about The finance department?",
+        "question": "Is The finance department an authority for salary team total claims about The finance department?",
         "path": [
           {
             "at": "The people team's own list",
             "kind": "own-list",
-            "says": "The finance department is accepted for salary.team-total."
+            "says": "The finance department is accepted for salary team total."
           }
         ],
-        "answer": "Accepted, for salary.team-total claims only."
+        "answer": "Accepted, for salary team total claims only."
       },
       "caption": "The finance department's salary team total statement: The finance department is an accepted source for this kind of claim."
     },

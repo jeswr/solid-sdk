@@ -61,7 +61,7 @@
     }
   ],
   "generated": {
-    "commit": "a5e40820e25ca2de05404f9edf95814629582ceb",
+    "commit": "564baef80da74a3a256ccbee0796c2e4a851ef1f",
     "core": "scripted"
   },
   "standIns": [
@@ -132,15 +132,15 @@
         "text": "A home practice is accepted for medicine code claims."
       },
       "resolution": {
-        "question": "Is A home practice an authority for medicine.code claims about A traveller?",
+        "question": "Is A home practice an authority for medicine code claims about A traveller?",
         "path": [
           {
             "at": "A clinic abroad's own list",
             "kind": "own-list",
-            "says": "A home practice is accepted for medicine.code."
+            "says": "A home practice is accepted for medicine code."
           }
         ],
-        "answer": "Accepted, for medicine.code claims only."
+        "answer": "Accepted, for medicine code claims only."
       },
       "caption": "A home practice's medicine code statement: A home practice is an accepted source for this kind of claim."
     },
