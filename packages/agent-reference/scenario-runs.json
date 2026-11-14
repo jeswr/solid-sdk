@@ -353,7 +353,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--baseline.json",
-      "traceSha256": "18ea90f8645e91cbe92bc802506a8c045bbed82787ea1ba030055bcb5a6585f0",
+      "traceSha256": "9b2978b643f3f8ed3eb16bb77ee6a676284db80a052e12db307414e62471aecc",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -391,7 +391,7 @@
         }
       ],
       "trace": "cohort-count--branch-1--baseline.json",
-      "traceSha256": "59c9fb27dd76f21f279bf3c889dbbcc400c398d4505f80bf79d6ee55f6bb1d16",
+      "traceSha256": "bf19f264fbf6b0f2e453c45489a5d7db1d1eb54e2d65c1b50dc41e500af5bc26",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -418,7 +418,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--branch-2--baseline.json",
-      "traceSha256": "26afe97e420ec7077a4c3c43747b7819c9867c9864c755c70ee987b24146ac60",
+      "traceSha256": "0f82b5466e6042488b15aa6c92c281e4f06adfec3ff9cfd8bf7b59194a335452",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -11162,6 +11162,677 @@
       "trace": "mortgage-main--high-score-not-registered--trust-reputation.json"
     },
     {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "usage-control-human-approval",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "approval-reused",
+      "settlement": "rdf-order",
+      "configuration": "usage-control-human-approval",
+      "what": "An approval of disclosure to the valuer is presented for a different recipient.",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires an additional valuer request and an approved balance disclosure. Their recipient, integrity, source, authority, limits-approval and evidence checks are outside specification 17 usage-control feeds, contrary to the ordered confinement rule in section 2. The existing bank terms additionally require a regulated lender; human approval cannot waive that supplier restriction (UC-9). The existing digest-bound approval and release checks are retained; no second approval path is installed."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "commitments-agreement-credential",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 212,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 220,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 230,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 244,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 252,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 262,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 288,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 296,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 305,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 313,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 321,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 329,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 339,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 349,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 357,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 366,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 374,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 381,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 388,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 399,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 408,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 415,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 425,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 434,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 441,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 449,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 459,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 467,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 476,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 508,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 516,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 524,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 532,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 541,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 551,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 560,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 568,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 576,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--commitments-agreement-credential.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "one-proof-missing",
+      "settlement": "rdf-order",
+      "configuration": "commitments-agreement-credential",
+      "what": "The valuation credential carries only the valuer proof and remains an offer.",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "no-agreement",
+        "check": "authority"
+      },
+      "expected": {
+        "outcome": "refuse",
+        "reason": "no-agreement"
+      },
+      "consequences": [
+        {
+          "seq": 439,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        }
+      ],
+      "trace": "mortgage-main--one-proof-missing--commitments-agreement-credential.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "accountability-regulator-claim",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "entry-withheld",
+      "settlement": "rdf-order",
+      "configuration": "accountability-regulator-claim",
+      "what": "The lender withholds a record entry; the claimant receipt commitment exposes the gap.",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 adds a lender fee statement, register-routed claim, regulator request, lender record production and two admissions of a signed decision. Specification 19 feeds only outbound evidence; these new signed exchanges add integrity, source, authority, terms, fitness, mandate and recipient verdicts, contrary to design section 2 confinement. The existing LocalForum checks signed record segments and gaps, but its profile-selected endpoint is not a regulator discovered through the lender register (AC-7). No hard-coded forum is relabelled as register discovery."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "usage-control-odrl-model-tighten",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 172,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 180,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 190,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 198,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 205,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 213,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 223,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 235,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 253,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 261,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 280,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 288,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 297,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 305,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 314,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 322,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 330,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 338,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 348,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 358,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 366,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 377,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 385,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 392,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 399,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 409,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 417,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 424,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 433,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 441,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 448,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 456,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 466,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 474,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 483,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 515,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 523,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 531,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 539,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 548,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 560,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 569,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 577,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 585,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--usage-control-odrl-model-tighten.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "model-says-yes-to-a-no",
+      "settlement": "rdf-order",
+      "configuration": "usage-control-odrl-model-tighten",
+      "what": "The bank prohibits disclosure; the fixed model would say permit, but is never consulted on that prohibition.",
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "trace": "mortgage-main--model-says-yes-to-a-no--usage-control-odrl-model-tighten.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "accountability-vendor-fault",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "fault-was-the-principals",
+      "settlement": "rdf-order",
+      "configuration": "accountability-vendor-fault",
+      "what": "The action was inside the mandate; no supported claim against the gate vendor is produced.",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a claim exchange with the gate operator after an injected gate fault. Specification 19 feeds only evidence, whereas that exchange adds ordinary integrity/source/authority/terms/fitness and mandate/recipient checks, contrary to design section 2 confinement. CORE-L-13 attribution also needs a signed statement naming the separate builders/operators of gate and core; the current description names the agent operator only. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one. No live security gate is bypassed to fabricate a main run."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "accountability-reputation-post",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "post-about-a-person",
+      "settlement": "rdf-order",
+      "configuration": "accountability-reputation-post",
+      "what": "A proposed public post names an individual employee and is prohibited.",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires the regulator decision, publication, attached lender reply and a separately keyed reader's inbound checks. The regulator mortgage route is unresolved, and the additional signed publication/reply/reader exchanges add checks outside specification 19's sole evidence feed, contrary to design section 2 confinement. The existing bank terms also do not authorize public redistribution of the mortgage evidence (UC-9, AC-4). No private record is relabelled as a terms-compliant public post, and no post about an individual is published."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "accountability-reputation-score",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "score-without-evidence",
+      "settlement": "rdf-order",
+      "configuration": "accountability-reputation-score",
+      "what": "A rating submission without checkable evidence produces no score change.",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement."
+    },
+    {
       "scenario": "mortgage-out-of-limit",
       "useCase": "mortgage-in-principle",
       "cataloguePath": {
@@ -11549,7 +12220,7 @@
       },
       "consequences": [],
       "trace": "platform-income--baseline.json",
-      "traceSha256": "ab518b8ca00bd9c303152d3063cea06056b6f7863fc01a8be86193b8233e091e",
+      "traceSha256": "0cfd3a39045db749362b162b90e3ec784cc608bc8dac91cb18a11c8eb7f64ca5",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -12368,7 +13039,7 @@
       },
       "consequences": [],
       "trace": "salary-benchmark--baseline.json",
-      "traceSha256": "b38978b800890e6ee855f4068430605894cc86d61a98e62553c7b7ddaf208e17",
+      "traceSha256": "299b1e5e31a0a2925b58a4b05f16ae6051a3d78885d4cd0b9796cc90af4574eb",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -12396,7 +13067,7 @@
       "consequences": [],
       "note": "branch does not diverge from the main path",
       "trace": "salary-benchmark--branch-1--baseline.json",
-      "traceSha256": "c02798927fce407b8d7c419bf521b8a467890ce3c4017a328ca0f114dc5dd3b4",
+      "traceSha256": "c5862e4dfed4cdb59d37d2b8239242330c63052e170f06ee7b32ca1b5e5ac397",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
