@@ -18,7 +18,7 @@ export function isCredentialKey(name: string): boolean {
 export function isPasswordLikeControl(attrs: Record<string, string>): boolean {
   return (
     attrs.type?.toLowerCase() === "password" ||
-    /(?:^|\s)(?:current-password|new-password|one-time-code)(?:\s|$)/i.test(
+    /(?:^|\s)(?:username|current-password|new-password|one-time-code|webauthn)(?:\s|$)/i.test(
       attrs.autocomplete ?? "",
     ) ||
     ["name", "id", "autocomplete", "aria-label"].some((name) =>

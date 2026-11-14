@@ -250,7 +250,7 @@ describe("fallback review r6 credential intake", () => {
     }
   });
 
-  it("registers passwords typed with press before rendering either snapshot form", async () => {
+  it("refuses password presses and registers a complete fill before rendering either snapshot form", async () => {
     const driver = await BrowserDriver.create(driverOptions());
     const password = "b7m9r2x4";
     try {
@@ -258,7 +258,10 @@ describe("fallback review r6 credential intake", () => {
       const ref = (await driver.snapshot()).nodes.find((node) => node.name === "Entry")?.ref;
       expect(ref).toBeDefined();
       await driver.click(ref as string);
-      for (const character of password) await driver.press(character);
+      for (const character of password)
+        await expect(driver.press(character)).rejects.toMatchObject({ kind: "guard" });
+      expect(await pageOf(driver).locator('[name="entry"]').inputValue()).toBe("");
+      await driver.fill(ref as string, password);
       expect(await pageOf(driver).locator('[name="entry"]').getAttribute("value")).toBeNull();
       expect(driver.credentialContext.secrets.has(password)).toBe(true);
       const snapshot = await driver.snapshot();

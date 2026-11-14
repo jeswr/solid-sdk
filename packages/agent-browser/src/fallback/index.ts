@@ -111,16 +111,17 @@ export function createFallback(options: FallbackOptions): Fallback {
           if (count === maxSteps)
             throw new BrowserDriverError("limit", "Fallback step limit reached.");
           await driver.act(next.action);
-          // Values never return to either planner's history.
+          // Fill/type values are always masked. The driver refuses type and every printable/
+          // editing press on protected controls before dispatch and before history storage.
           history.push({
             action:
-              next.action.kind === "fill"
+              next.action.kind === "fill" || next.action.kind === "type"
                 ? { ...next.action, text: "[redacted]" }
                 : next.action.kind === "select"
                   ? { ...next.action, value: "[redacted]" }
                   : next.action.kind === "goto"
                     ? { ...next.action, url: "[same-origin page]" }
-                    : next.action,
+                    : { ...next.action },
             status: "done",
           });
         }
