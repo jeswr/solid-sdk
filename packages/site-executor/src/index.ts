@@ -73,6 +73,14 @@ export {
   summarise,
 } from "./gate.js";
 export {
+  asciiLowerCase,
+  type HtmlControlElement,
+  htmlAttribute,
+  htmlControlType,
+  isHtmlInputType,
+  parseHtmlTag,
+} from "./html-controls.js";
+export {
   effectiveEffect,
   type MatchResult,
   matchRequest,
@@ -86,6 +94,7 @@ export {
   isDiscriminatorKey,
   jsonEnvelope,
   jsonFailure,
+  jsonRootFailure,
   landingItemValues,
   notFoundSignature,
   responseFlash,

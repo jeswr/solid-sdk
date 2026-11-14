@@ -431,12 +431,26 @@ export function learnEffectVerification(
             const item = targetItem(r);
             return item ? [{ record: r, item }] : [];
           });
+        // Change evidence comes only from the immediate baseline: reads after the previous
+        // sent write of the session (or from its start) and before this write, oldest first.
+        const previousWrite = Math.max(
+          ...trace
+            .filter(
+              (r) =>
+                r.seq < write.seq && !r.blocked && !["GET", "HEAD", "OPTIONS"].includes(r.method),
+            )
+            .map((r) => r.seq),
+        );
         const beforeItems = trace
-          .filter((r) => r.seq < write.seq)
+          .filter((r) => r.seq > previousWrite && r.seq < write.seq)
+          .sort((a, b) => a.seq - b.seq)
           .flatMap((r) => {
             const item = targetItem(r);
             return item ? [item] : [];
           });
+        // A count delta is a change witness too: it starts from the same immediate baseline.
+        const baselineValue = (property: string) =>
+          beforeItems.findLast((observed) => observed[property]?.length)?.[property];
         const stateInputs = submittedStateInputs(operation, submitted, origin, identity.name);
         const changes: EffectVerification["changes"] = [];
         if (operation.actionType === `${SCHEMA}VoteAction`) {
@@ -465,13 +479,13 @@ export function learnEffectVerification(
               const property = ex.fields.find(
                 (f) =>
                   !f.untrusted &&
-                  item[f.property]?.length === 1 &&
+                  baselineValue(f.property)?.length === 1 &&
                   afterItems.length === 1 &&
                   afterItems[0]?.[f.property]?.length === 1 &&
-                  /^[+-]?\d+$/.test(item[f.property]?.[0] ?? "") &&
+                  /^[+-]?\d+$/.test(baselineValue(f.property)?.[0] ?? "") &&
                   /^[+-]?\d+$/.test(afterItems[0]?.[f.property]?.[0] ?? "") &&
                   BigInt(afterItems[0]?.[f.property]?.[0] ?? "0") -
-                    BigInt(item[f.property]?.[0] ?? "0") ===
+                    BigInt(baselineValue(f.property)?.[0] ?? "0") ===
                     BigInt(sent),
               )?.property;
               if (property) changes.push({ input: p.name, property, mode: "delta" });
@@ -566,8 +580,9 @@ export function learnEffectVerification(
                     actual?.length === 1 &&
                     /^[+-]?\d+$/.test(sent) &&
                     /^[+-]?\d+$/.test(actual[0] ?? "") &&
-                    /^[+-]?\d+$/.test(item[change.property]?.[0] ?? "") &&
-                    BigInt(actual[0] ?? "0") - BigInt(item[change.property]?.[0] ?? "0") ===
+                    /^[+-]?\d+$/.test(baselineValue(change.property)?.[0] ?? "") &&
+                    BigInt(actual[0] ?? "0") -
+                      BigInt(baselineValue(change.property)?.[0] ?? "0") ===
                       BigInt(sent)
                   );
                 return (

@@ -330,3 +330,10 @@ CSRF sources pass the read gate before transmission. Reads use Fetch `cache: "no
 `Cache-Control: no-cache` and `Pragma: no-cache`; positive Age and cache-hit metadata invalidate
 both baseline and post-write evidence. These private artifacts leave the shared contract unchanged.
 `site-profiler/test/runtime-effects.test.ts` includes the round-14 adversarial reproductions.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 17: scalar JSON roots are discriminators (exact value in not-found signatures, and
+`jsonRootFailure` applies the authentication token/numeric rules to them). Classify every form
+control with `html-controls.ts` (ASCII-case-insensitive names and types, missing/invalid input
+type is text); never compare a raw `type` attribute. Profiler pairing takes change evidence
+only from the latest same-identity read after the previous write and before this one.

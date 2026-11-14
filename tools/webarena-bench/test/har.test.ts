@@ -90,6 +90,22 @@ describe("HAR wire evidence", () => {
     expect(recorder.entries[0]?.request.postData?.text).toContain("Fixture title");
     expect(recorder.entries[0]?.request.postData?.text).not.toContain("multipart-secret");
   });
+  it("redacts HTML password controls by their HTML type, whatever the case or quoting", async () => {
+    const page = [
+      '<input type="Password" name="pw1" value="fixture-pw-one">',
+      "<INPUT TYPE=PASSWORD name=pw2 value=fixture-pw-two>",
+      "<input type='pAsSwOrD' name='pw3' value='fixture-pw-three'>",
+      '<input type="text" name="title" value="Fixture title">',
+    ].join("");
+    const recorder = captureHar(
+      async () => new Response(page, { headers: { "Content-Type": "text/html" } }),
+    );
+    await recorder.transport("https://shop.test/account");
+    const text = recorder.entries[0]?.response.content.text ?? "";
+    for (const secret of ["fixture-pw-one", "fixture-pw-two", "fixture-pw-three"])
+      expect(text).not.toContain(secret);
+    expect(text).toContain('value="Fixture title"');
+  });
   it("records failed actual requests; never fabricates a successful event", async () => {
     const recorder = captureHar(async () => {
       throw new Error("offline");

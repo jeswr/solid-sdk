@@ -153,6 +153,8 @@ function fixture(type = "DeleteAction", list = false) {
 
 async function replay(type = "DeleteAction", mode = "verified", list = false, legacy = false) {
   const f = fixture(type, list);
+  // `scalar <learned JSON> <runtime JSON>`: a scalar JSON root for the probe and the runtime read.
+  const scalar = mode.startsWith("scalar ") ? mode.split(" ").slice(1) : undefined;
   const compoundBody = mode.startsWith("compound ")
     ? JSON.stringify({
         envelope: [{ [mode.split(" ")[2] ?? "HTTP_Status"]: mode.includes("auth") ? 401 : 404 }],
@@ -341,6 +343,7 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
           }
         : {}),
       ...(compoundBody ? { contentType: "application/json", bodySample: compoundBody } : {}),
+      ...(scalar ? { contentType: "application/json", bodySample: scalar[0] } : {}),
     });
   }
   let policy = learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id];
@@ -578,6 +581,11 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
           { status: 404 },
         );
       if (mode === "numeric auth 404") return Response.json({ status: 401 }, { status: 404 });
+      if (scalar)
+        return new Response(scalar[1], {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
       if (compoundBody)
         return new Response(compoundBody, {
           status: 404,
@@ -1078,6 +1086,41 @@ it.each([
 });
 
 it.each([
+  ['"not_found"', '"not_authenticated"'],
+  ['"not_found"', '"Forbidden"'],
+  ['"not_found"', '"missing"'],
+  ["404", "401"],
+  ["404", '"404"'],
+])("r17 a learned scalar-root not-found %s cannot verify a %s response", async (learned, runtime) => {
+  const { result, policy } = await replay("DeleteAction", `scalar ${learned} ${runtime}`);
+  expect(policy?.verification?.notFound).toBeDefined();
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+});
+
+it.each([
+  '"not_found"',
+  "404",
+])("r17 an honest scalar-root not-found %s still verifies deletion", async (body) => {
+  const { result, policy } = await replay("DeleteAction", `scalar ${body} ${body}`);
+  expect(policy?.verification?.notFound).toBeDefined();
+  expect(result.outcome?.status).toBe("completed");
+});
+
+it.each([
+  '"not_authenticated"',
+  '"Forbidden"',
+  "401",
+  '"403"',
+  '["Forbidden"]',
+])("r17 never learns an authentication scalar root %s as a not-found signature", async (body) => {
+  const { result, policy } = await replay("DeleteAction", `scalar ${body} ${body}`);
+  expect(policy?.verification?.notFound).toBeUndefined();
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+});
+
+it.each([
   "application/json",
   "text/html",
 ])("learns a missing-resource %s structure only from the deleted target in its context", (contentType) => {
@@ -1139,7 +1182,11 @@ it("fetches a witnessed deleted identity using the profiling session, including 
   ).toMatchObject({ status: 404, contentType: "application/json" });
 });
 
-it("discovers a hidden credential beyond the sample limit on the actual deletion-probe path", async () => {
+it.each([
+  "hidden",
+  "HIDDEN",
+  "HiDdEn",
+])("discovers a %s credential beyond the sample limit on the actual deletion-probe path", async (type) => {
   const { Recorder, BODY_LIMIT } = await import("../src/recorder.js");
   const { playwrightReplayer } = await import("../src/verify.js");
   const { probeDeletedResources } = await import("../src/write-not-found.js");
@@ -1165,7 +1212,7 @@ it("discovers a hidden credential beyond the sample limit on the actual deletion
           headersArray: () => [],
           body: async () =>
             Buffer.from(
-              `<h1>Not found</h1><p>${secret}</p>${" ".repeat(BODY_LIMIT + 100)}<input type="hidden" name="csrf_token" value="${secret}">`,
+              `<h1>Not found</h1><p>${secret}</p>${" ".repeat(BODY_LIMIT + 100)}<input type="${type}" name="csrf_token" value="${secret}">`,
             ),
         };
       },
@@ -1900,4 +1947,106 @@ it("refuses collection learning from old body-free evidence without its envelope
   expect(
     learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification,
   ).toBeUndefined();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+/**
+ * r17: change evidence comes only from the immediate baseline. `older` is a read before an
+ * earlier session write, `immediate` the reads after that write and before this one.
+ */
+function baselinePairing(older: number | undefined, immediate: number[], earlierWrite = true) {
+  const f = quantityPairing("change");
+  const read = required(f.trace[0]);
+  const write = required(f.trace[1]);
+  const body = (units: number) => JSON.stringify({ ...f.before, [f.key]: units });
+  const reads: RecordedRequest[] = [];
+  if (older !== undefined) reads.push({ ...read, seq: -10, bodySample: body(older) });
+  if (earlierWrite)
+    reads.push({
+      ...write,
+      seq: -5,
+      url: `${origin}/stores/main/products/massUpdateStock`,
+      postData: "product%5B42%5D%5Bqty%5D=9",
+      status: 200,
+      redirectedTo: undefined,
+    });
+  immediate.forEach((units, at) => {
+    reads.push({ ...read, seq: at - immediate.length, bodySample: body(units) });
+  });
+  f.trace.splice(0, 1, ...reads);
+  return f;
+}
+
+async function executeLearned(f: ReturnType<typeof quantityPairing>) {
+  const policies = learnWriteResponses([f.write, f.read], f.trace, origin);
+  let posts = 0;
+  const executor = createExecutor({
+    model: await readSiteModel(
+      await writeSiteModel({
+        id: "urn:model",
+        site: origin,
+        generatedAt: provenance.learnedAt,
+        version: "1",
+        operations: [f.write, f.read],
+        flows: [],
+      }),
+    ),
+    writeResponses: policies,
+    sessions: {
+      get: async () => ({ cookies: [], headers: { authorization: "fictional-session-secret" } }),
+      update: async () => {},
+    },
+    gate: { authorize: async () => ({ kind: "allow" }) },
+    fetch: async (input, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        return new Response(null, { status: 303, headers: { location: "/products" } });
+      }
+      if (new URL(String(input)).pathname === "/products")
+        return new Response("<main>Products</main>");
+      // A failed update: the field already showed the submitted value and still does.
+      return Response.json({ ...f.row("73"), [f.key]: 9 });
+    },
+  });
+  const result = await executor.execute({
+    node: "urn:request",
+    types: [f.write.actionType],
+    values: () => [],
+  });
+  return { policies, result, posts };
+}
+
+it.each([
+  ["review: older 3, earlier write, immediate 9", 3, [9], true],
+  ["older 3, earlier write, no immediate read", 3, [], true],
+  ["older 3 then a later 9 with no write between", undefined, [3, 9], false],
+])("r17 never pairs on change evidence outside the immediate baseline: %s", async (_name, older, immediate, earlierWrite) => {
+  const f = baselinePairing(older, immediate, earlierWrite);
+  expect(learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification).toBe(
+    undefined,
+  );
+  const { result, posts } = await executeLearned(f);
+  expect(posts).toBe(1);
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+});
+
+it.each([
+  ["earlier write, immediate 3", undefined, [3], true],
+  ["older 9, earlier write, immediate 3", 9, [3], true],
+  ["session start, latest 3", undefined, [9, 3], false],
+])("r17 pairs a genuine change from the immediate baseline: %s", (_name, older, immediate, earlierWrite) => {
+  const f = baselinePairing(older, immediate, earlierWrite);
+  expect(
+    learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification?.changes,
+  ).toEqual([{ input: "quantity", property: f.property }]);
+});
+
+it("r17 a genuine immediate-baseline change verifies at runtime only with the submitted value", async () => {
+  const f = baselinePairing(9, [3], true);
+  const { policies, result } = await executeLearned(f);
+  expect(policies[f.write.id]?.verification?.changes).toEqual([
+    { input: "quantity", property: f.property },
+  ]);
+  expect(result.outcome?.status).toBe("completed");
 });

@@ -66,7 +66,11 @@ export function pairSubmittedField(
   return pairing ? { input: input.name, ...pairing } : undefined;
 }
 
-/** Literal and bound state fields use exactly the same witnessed pairing rule. */
+/**
+ * Literal and bound state fields use exactly the same witnessed pairing rule. `before` holds
+ * the reads at the write's identity since the previous write, oldest first: only the latest
+ * read observing a field is its baseline, and without one there is no change evidence.
+ */
 export function pairSubmittedValue(
   submitted: string,
   range: string | undefined,
@@ -97,14 +101,14 @@ export function pairSubmittedValue(
           ? learnEffectValueFormat(submitted, value)
           : undefined;
         if (!effectValueEquals(submitted, value, range, format)) return [];
-        const changed = before.some((item) => {
-          const previous = item[field.property];
-          if (previous?.length !== 1) return false;
-          const previousFormat = /#(?:decimal|integer)$/.test(range ?? "")
+        const previous = before.findLast((item) => item[field.property]?.length)?.[field.property];
+        const previousFormat =
+          previous?.length === 1 && /#(?:decimal|integer)$/.test(range ?? "")
             ? learnEffectValueFormat(submitted, previous[0] ?? "")
             : undefined;
-          return !effectValueEquals(submitted, previous[0] ?? "", range, previousFormat);
-        });
+        const changed =
+          previous?.length === 1 &&
+          !effectValueEquals(submitted, previous[0] ?? "", range, previousFormat);
         return changed || leaf ? [{ strength: changed ? 2 : 1, format }] : [];
       });
       const strongest = matches.sort((a, b) => b.strength - a.strength)[0];

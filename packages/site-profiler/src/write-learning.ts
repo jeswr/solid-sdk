@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Demonstrated text forms: meaningful inputs, witnessed fixed fields, fresh CSRF sources.
+import { isHtmlInputType } from "@jeswr/site-executor";
 import { isSelectionFilter } from "@jeswr/site-model";
 import { formCsrfRules, isCsrfFieldName, parseForms } from "./forms.js";
 import { attr, attrValue, descendants, parseHtml, text } from "./html.js";
@@ -178,7 +179,7 @@ export function learnDemonstratedForm(
       continue;
     const hidden = pages.find((page) =>
       descendants(parseHtml(page.html)).some(
-        (el) => el.name === "input" && attr(el, "type") === "hidden" && attr(el, "name") === name,
+        (el) => isHtmlInputType(el, "hidden") && attr(el, "name") === name,
       ),
     );
     const meta = pages.find((page) =>

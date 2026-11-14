@@ -31,11 +31,14 @@ const site = createServer((req, res) => {
     res.statusCode = 404;
     return html("<h1>Not found</h1><p>final-probe-credential-escaped</p>");
   }
-  if (path === "/final-probe-hidden" || path === "/final-probe-oversized") {
+  // HTML input types are ASCII-case-insensitive: HIDDEN and HiDdEn are hidden controls.
+  const hiddenProbe = /^\/final-probe-(hidden|HIDDEN|HiDdEn|oversized)$/.exec(path)?.[1];
+  if (hiddenProbe) {
     const secret = "final-probe-credential-escaped";
+    const type = hiddenProbe === "oversized" ? "hidden" : hiddenProbe;
     res.statusCode = 404;
     return html(
-      `<h1>Not found</h1><p>${secret}</p>${" ".repeat(BODY_LIMIT + 1024)}<input type="hidden" name="csrf_token" value="${secret}">${path.endsWith("oversized") ? " ".repeat(8 * 1024 * 1024) : ""}`,
+      `<h1>Not found</h1><p>${secret}</p>${" ".repeat(BODY_LIMIT + 1024)}<input type="${type}" name="csrf_token" value="${secret}">${path.endsWith("oversized") ? " ".repeat(8 * 1024 * 1024) : ""}`,
     );
   }
   if (path === "/probe-csrf") {
@@ -183,6 +186,8 @@ afterAll(async () => {
 
 it.each([
   "hidden",
+  "HIDDEN",
+  "HiDdEn",
   "oversized",
 ])("discovers credentials in complete recorded browser traffic before sampling: %s", async (source) => {
   const context = await browser.newContext();
@@ -228,6 +233,8 @@ it("does not learn from oversized rendered crawl pages", async () => {
 it.each([
   "cookie",
   "hidden",
+  "HIDDEN",
+  "HiDdEn",
   "oversized",
 ])("uses the final probe %s credential union for every output", async (source) => {
   const secret = "final-probe-credential-escaped";

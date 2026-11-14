@@ -659,3 +659,18 @@ and headings. The shared failure predicate and signature generator use the expor
 401, 403, 407, 419 and 440 under every discriminator key. These
 404 responses leave a deletion Uncertain; an honest matching not-found still verifies.
 `test/response-evidence.test.ts` covers discriminator and heading preservation.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+A scalar JSON root (string, number, boolean, or the keyless elements of an array root) is a
+discriminator: its not-found signature keeps the exact value, so a learned `"not_found"` never
+matches `"not_authenticated"` or `"Forbidden"`. `jsonRootFailure` applies the token and
+numeric (401/403/407/419/440) authentication rules to such roots inside `responsePageError`,
+so these responses never become signatures, and a non-JSON, non-HTML 404 body is checked the
+same way as one scalar document. `test/review-r17.test.ts` covers both.
+
+`html-controls.ts` is the one HTML form-control classifier (`htmlControlType`,
+`isHtmlInputType`, `htmlAttribute`, `parseHtmlTag`): attribute names and type keywords match
+ASCII-case-insensitively, a missing or invalid input type is text and a missing or invalid
+button type is submit. Every input-type decision in the executor, profiler and harness uses
+it (password-page detection, credential discovery, selector witnessing, form learning, HAR
+redaction); never compare a raw `type` attribute.

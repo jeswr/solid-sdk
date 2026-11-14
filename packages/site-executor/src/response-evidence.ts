@@ -6,6 +6,7 @@ import type { Extraction, Operation } from "@jeswr/site-model";
 import { endpointItemType, SCHEMA } from "@jeswr/site-model";
 import { compileOperation } from "./compile.js";
 import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "./dom.js";
+import { isHtmlInputType } from "./html-controls.js";
 import { effectiveWireFields } from "./wire.js";
 
 /** Include compound keys such as http_status, errorCode and failureReason. */
@@ -20,6 +21,22 @@ const authenticationDiscriminator = (value: unknown): boolean =>
     ? value.some(authenticationDiscriminator)
     : (typeof value === "string" || typeof value === "number") &&
       (authenticationMarker(String(value)) || [401, 403, 407, 419, 440].includes(Number(value)));
+
+/**
+ * Scalars outside every object member: the document root itself and, for an array root, its
+ * (nested) elements. They carry no key, so they are always treated as discriminators.
+ */
+const rootScalars = (doc: unknown): unknown[] =>
+  Array.isArray(doc)
+    ? doc.flatMap(rootScalars)
+    : doc === null || typeof doc !== "object"
+      ? [doc]
+      : [];
+
+/** A scalar JSON root (or array-root element) carrying an authentication token or status. */
+export function jsonRootFailure(doc: unknown): boolean {
+  return rootScalars(doc).some(authenticationDiscriminator);
+}
 
 export function jsonFailure(value: unknown): boolean {
   return (
@@ -102,7 +119,7 @@ export function responsePageError(
       const walk = (value: unknown): boolean =>
         jsonFailure(value) ||
         (value !== null && typeof value === "object" && Object.values(value).some(walk));
-      return walk(doc);
+      return jsonRootFailure(doc) || walk(doc);
     } catch {
       return true;
     }
@@ -113,7 +130,7 @@ export function responsePageError(
     selectElements("title, h1, h2, h3, h4, h5, h6, [role=heading]", doc).some((el) =>
       authenticationMarker(elementText(el)),
     ) ||
-    selectElements('input[type="password"]', doc).length ||
+    selectElements("input", doc).some((el) => isHtmlInputType(el, "password")) ||
     selectElements("form", doc).some((el) =>
       /(?:^|[/_-])(?:oauth2?|saml|openid|sso|login|signin|sign-in|auth|authenticate|authentication|signon|logon)(?:[/_?#-]|$)/i.test(
         attribute(el, "action") ?? "",
@@ -261,7 +278,8 @@ export function notFoundSignature(
             ]);
         return discriminator ? [typeof value, value] : value === null ? "null" : typeof value;
       };
-      structure = shape(JSON.parse(body));
+      // Root scalars keep their exact value: "not_found" never matches another scalar.
+      structure = shape(JSON.parse(body), true);
     } else if (/html/i.test(detected)) {
       const shape = (nodes: ReturnType<typeof parseHtml>["children"]): unknown =>
         nodes.flatMap((node): unknown[] =>
@@ -276,7 +294,18 @@ export function notFoundSignature(
           elementText(el),
         ),
       ];
-    } else structure = body.trim();
+    } else {
+      // A non-JSON, non-HTML body is one scalar document: the same token/status rules apply.
+      const text = body.trim();
+      let scalar: unknown = text;
+      try {
+        scalar = JSON.parse(text);
+      } catch {
+        /* Plain text stays the scalar value. */
+      }
+      if (jsonRootFailure(scalar) || authenticationDiscriminator(text)) return;
+      structure = text;
+    }
     return {
       status,
       contentType: media,

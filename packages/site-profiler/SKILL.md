@@ -273,3 +273,9 @@ CSRF sources pass the read gate before transmission. Reads use Fetch `cache: "no
 `Cache-Control: no-cache` and `Pragma: no-cache`; positive Age and cache-hit metadata invalidate
 both baseline and post-write evidence. These private artifacts leave the shared contract unchanged.
 `site-profiler/test/runtime-effects.test.ts` includes the round-14 adversarial reproductions.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Read input types only through `htmlControlType` / `isHtmlInputType` from `@jeswr/site-executor`
+(credential discovery, selector witnessing, forms, standalone CSRF sources). Pairing change
+evidence uses only the immediate baseline: the latest same-identity read of the field after
+the previous sent write and before this write; vote deltas start from it too.

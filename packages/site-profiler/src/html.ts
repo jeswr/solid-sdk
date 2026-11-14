@@ -4,6 +4,7 @@
 // combinators, and selector lists. Generated selectors stay inside this subset so any conforming
 // engine (css-select, a browser) evaluates them the same way.
 
+import { asciiLowerCase } from "@jeswr/site-executor";
 import { type ChildNode, type Document, type Element, isTag } from "domhandler";
 import { getAttributeValue, textContent } from "domutils";
 import { parseDocument } from "htmlparser2";
@@ -156,7 +157,12 @@ function matchCompound(el: Element, c: Compound, scope: Element | Document): boo
   for (const a of c.attrs) {
     const v = attr(el, a.name);
     if (v === undefined) return false;
-    if (a.value !== undefined && v !== a.value) return false;
+    // HTML matches [type=...] values ASCII-case-insensitively, as browsers and css-select do.
+    if (
+      a.value !== undefined &&
+      (a.name === "type" ? asciiLowerCase(v) !== asciiLowerCase(a.value) : v !== a.value)
+    )
+      return false;
   }
   return true;
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+import { htmlAttribute, isHtmlInputType, parseHtmlTag } from "@jeswr/site-executor";
 import type { Transport } from "./types.js";
 
 type Pair = { name: string; value: string };
@@ -67,10 +68,15 @@ function bodyText(text: string, mime: string): string {
       (whole, prefix: string, key: string) => (isSecretField(key) ? `${prefix}${redacted}` : whole),
     );
   // HTML must retain its DOM/text evidence; strip only credential-bearing input values.
+  // Control types follow the shared HTML classifier (type="PASSWORD", unquoted values).
   return text.replace(/<(?:input|meta)\b[^>]*>/gi, (tag) => {
-    const name = /\bname=["']([^"']+)["']/i.exec(tag)?.[1] ?? "";
-    return isSecretField(name) || /\btype=["']password["']/i.test(tag)
-      ? tag.replace(/\b(value|content)=(?:"[^"]*"|'[^']*')/gi, `$1="${redacted}"`)
+    const el = parseHtmlTag(tag);
+    const name = el ? (htmlAttribute(el, "name") ?? "") : "";
+    return isSecretField(name) || (el !== undefined && isHtmlInputType(el, "password"))
+      ? tag.replace(
+          /\b(value|content)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+)/gi,
+          `$1="${redacted}"`,
+        )
       : tag;
   });
 }

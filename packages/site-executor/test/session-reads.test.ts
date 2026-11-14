@@ -191,9 +191,14 @@ describe("read routing and expired sessions", () => {
     ).toBe("no-path");
     expect(transport).toHaveBeenCalledTimes(2);
   });
-  it("refuses an expired session that receives a password form with HTTP 200", async () => {
+  it.each([
+    'type="password"',
+    'type="Password"',
+    "type=PASSWORD",
+    'TYPE="pAsSwOrD"',
+  ])("refuses an expired session that receives a password form with HTTP 200: %s", async (type) => {
     const transport = vi.fn<NonNullable<ExecutorOptions["fetch"]>>(
-      async () => new Response('<html><form><input type="password"></form></html>'),
+      async () => new Response(`<html><form><input ${type}></form></html>`),
     );
     const op = {
       ...operation(),

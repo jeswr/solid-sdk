@@ -3,6 +3,7 @@
 // Step 3: form analysis. Reads every form on a page (method, action, fields, select options, hidden
 // fields) and turns hidden anti-forgery fields and csrf meta tags into CsrfRules. Never submits.
 
+import { htmlControlType, isHtmlInputType } from "@jeswr/site-executor";
 import type { CsrfRule } from "@jeswr/site-model";
 import {
   attr,
@@ -67,7 +68,7 @@ function fieldsOf(doc: Document, form: Element): FormField[] {
     const name = attr(el, "name");
     if (!name || attr(el, "disabled") !== undefined) continue;
     if (el.name === "input") {
-      const type = (attr(el, "type") ?? "text").toLowerCase();
+      const type = htmlControlType(el) ?? "text";
       if (["submit", "button", "image", "reset", "file"].includes(type)) continue;
       if ((type === "checkbox" || type === "radio") && attr(el, "checked") === undefined) {
         const existing = fields.find((f) => f.name === name);
@@ -138,8 +139,8 @@ export function parseForms(html: string, pageUrl: string): FormInfo[] {
     const submitLabels = descendants(form)
       .filter(
         (el) =>
-          (el.name === "button" && (attr(el, "type") ?? "submit") === "submit") ||
-          (el.name === "input" && attr(el, "type") === "submit"),
+          (el.name === "button" && htmlControlType(el) === "submit") ||
+          isHtmlInputType(el, "submit"),
       )
       .map((el) =>
         el.name === "input"

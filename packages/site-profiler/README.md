@@ -463,3 +463,18 @@ Possible credential-selector values from external scripts/JSON remain protected 
 final page witnesses distinguish configuration from credentials. Only these candidate values
 are retained; their source bodies are discarded. Explicit credentials stay registered even
 when their values also spell a witnessed selector.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Input types come only from the executor's shared HTML classifier: `type="HIDDEN"`,
+`type="HiDdEn"` and `type="Password"` are hidden and password controls in credential
+discovery, selector witnessing, form parsing and standalone CSRF learning, and an invalid
+type is text. The profiler's selector engine matches `[type=...]` values
+ASCII-case-insensitively, as browsers do. Scalar JSON-root 404s keep their exact value in a
+learned signature, and authentication scalars are never learned.
+
+Change evidence for pairing comes only from the immediate baseline: the latest read of that
+field at the written identity after the previous sent write of the session (or from its
+start) and before this write. Older history never counts, and without such a read there is
+no change evidence; leaf-key pairing still applies. Vote count deltas start from the same
+baseline. Round-17 regressions are in `test/review-r17.test.ts`,
+`test/runtime-effects.test.ts` and `test/generic-browser.test.ts`.

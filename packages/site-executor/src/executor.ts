@@ -53,7 +53,14 @@ import {
   type SessionBundle,
   type SessionProvider,
 } from "./cookies.js";
-import { attribute, jsonPointer, metaContent, parseHtml, selectElement } from "./dom.js";
+import {
+  attribute,
+  jsonPointer,
+  metaContent,
+  parseHtml,
+  selectElement,
+  selectElements,
+} from "./dom.js";
 import {
   effectChangesMatch,
   effectSnapshot,
@@ -75,6 +82,7 @@ import {
   moneyFields,
   summarise,
 } from "./gate.js";
+import { isHtmlInputType } from "./html-controls.js";
 import { effectiveEffect, matchRequest, maxEffect, normaliseEffect, type Target } from "./match.js";
 import {
   addAmounts,
@@ -1097,7 +1105,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
     if (
       operation.session === "signed-in" &&
       /^\s*</.test(res.body) &&
-      selectElement('form input[type="password"]', parseHtml(res.body))
+      selectElements("form input", parseHtml(res.body)).some((el) =>
+        isHtmlInputType(el, "password"),
+      )
     )
       throw new SessionError("The site requires sign-in again");
     if (operation.session === "signed-in" && /^\s*\{/.test(res.body)) {

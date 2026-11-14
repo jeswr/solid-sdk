@@ -3,6 +3,7 @@
 // requests repeat them. Ordinary IDs, one-off nonces and user input never qualify by shape alone.
 import {
   type CookieSecretContext,
+  isHtmlInputType,
   isSessionCredentialCookie,
   registerCookieSecrets,
   registerSecret,
@@ -51,7 +52,7 @@ export function discoverCredentialSources(
           elements.every(
             (el) =>
               credentialName(attr(el, "name") ?? "") &&
-              ((el.name === "input" && attr(el, "type") === "hidden" && !!attr(el, "value")) ||
+              ((isHtmlInputType(el, "hidden") && !!attr(el, "value")) ||
                 (el.name === "meta" && !!attr(el, "content"))),
           )
         );
@@ -115,12 +116,12 @@ export function discoverCredentialSources(
       const name = attr(el, "name") ?? "";
       const value = attr(el, el.name === "meta" ? "content" : "value");
       if (!value) continue;
-      if (el.name === "input" && attr(el, "type") === "password") registerSecret(secrets, value);
+      if (isHtmlInputType(el, "password")) registerSecret(secrets, value);
       if (!credentialName(name)) continue;
       if (el.name === "meta") {
         tokens.set(value, { kind: "meta", urlTemplate: page.url, name });
         registerSecret(secrets, value);
-      } else if (el.name === "input" && attr(el, "type") === "hidden") {
+      } else if (isHtmlInputType(el, "hidden")) {
         tokens.set(value, {
           kind: "html",
           urlTemplate: page.url,
@@ -154,7 +155,7 @@ export function discoverSessionTokens(
       const name = attr(el, "name");
       const value = attr(el, el.name === "meta" ? "content" : "value");
       if (!name || !value || !opaque(value)) continue;
-      if (el.name === "input" && attr(el, "type") === "hidden")
+      if (isHtmlInputType(el, "hidden"))
         sources.set(value, {
           kind: "html",
           urlTemplate: page.url,

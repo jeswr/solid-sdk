@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // A nested filter query observed on a JSON list supplies its wire prefix; rendered named
 // controls on that request's referring page supply the individual filter keys. No endpoint guessed.
+import { htmlControlType } from "@jeswr/site-executor";
 import { attr, descendants, parseHtml } from "./html.js";
 import type { EndpointCandidate } from "./types.js";
 import { varName } from "./util.js";
@@ -32,7 +33,7 @@ export function addFilterInputs(
         continue;
       if (
         el.name === "input" &&
-        !["text", "number", "date", "search"].includes(attr(el, "type") ?? "text")
+        !["text", "number", "date", "search"].includes(htmlControlType(el) ?? "")
       )
         continue;
       let parent = el.parent;
