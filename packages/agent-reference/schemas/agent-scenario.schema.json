@@ -2,6 +2,287 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "negotiatedMeaning": {
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string",
+          "format": "uri"
+        },
+        "term": {
+          "type": "string",
+          "format": "uri"
+        },
+        "definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string"
+        },
+        "proposer": {
+          "type": "string"
+        },
+        "peer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "platform",
+        "operation",
+        "term",
+        "definition",
+        "version",
+        "proposer",
+        "peer"
+      ],
+      "additionalProperties": false
+    },
+    "qualityCertificate": {
+      "type": "object",
+      "properties": {
+        "references": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "certifier": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source": {
+          "type": "string",
+          "format": "uri"
+        },
+        "dataset": {
+          "type": "string",
+          "format": "uri"
+        },
+        "category": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "references",
+        "certifier",
+        "source",
+        "dataset",
+        "category",
+        "policy"
+      ],
+      "additionalProperties": false
+    },
+    "statedConfidence": {
+      "type": "object",
+      "properties": {
+        "receivers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "claimType": {
+                "type": "string"
+              },
+              "minimum": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "metric": {
+                "type": "string",
+                "format": "uri"
+              },
+              "methods": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
+            "required": [
+              "claimType",
+              "minimum",
+              "metric",
+              "methods"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "receivers",
+        "rules"
+      ],
+      "additionalProperties": false
+    },
+    "relianceCorroboration": {
+      "type": "object",
+      "properties": {
+        "receivers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "payroll": {
+          "type": "string",
+          "format": "uri"
+        },
+        "bank": {
+          "type": "string",
+          "format": "uri"
+        },
+        "tolerance": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "receivers",
+        "payroll",
+        "bank",
+        "tolerance"
+      ],
+      "additionalProperties": false
+    },
+    "registryMeaning": {
+      "type": "object",
+      "properties": {
+        "policy": {
+          "type": "object",
+          "properties": {
+            "receivers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "acceptedLists": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 512,
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "maxStatusAgeSeconds": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "assurance": {
+              "default": "recomputed",
+              "type": "string",
+              "enum": [
+                "recomputed",
+                "attested"
+              ]
+            },
+            "approximate": {
+              "type": "string",
+              "enum": [
+                "ask-more",
+                "admit-lowered"
+              ]
+            },
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "fromList": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 512,
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "toList": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 512,
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "registry": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 512,
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "table": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 512,
+                    "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "fromList",
+                  "toList",
+                  "registry",
+                  "table",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "receivers",
+            "acceptedLists",
+            "maxStatusAgeSeconds",
+            "assurance",
+            "approximate",
+            "routes"
+          ],
+          "additionalProperties": false
+        },
+        "requestedList": {
+          "type": "string",
+          "format": "uri"
+        },
+        "acceptedCodes": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "policy",
+        "requestedList",
+        "acceptedCodes"
+      ],
+      "additionalProperties": false
+    },
     "paymentProviders": {
       "default": [],
       "type": "array",
@@ -479,6 +760,44 @@
             "properties": {
               "id": {
                 "type": "string",
+                "const": "meaning-negotiated"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "meaning": {
+                    "type": "string",
+                    "const": "negotiated"
+                  }
+                },
+                "required": [
+                  "meaning"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
                 "const": "meaning-registry-lookup"
               },
               "change": {
@@ -681,6 +1000,82 @@
                 },
                 "required": [
                   "trust"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "reliance-quality-certificate"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "reliance": {
+                    "type": "string",
+                    "const": "quality-certificate"
+                  }
+                },
+                "required": [
+                  "reliance"
+                ],
+                "additionalProperties": false
+              },
+              "world": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "world"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "reliance-stated-confidence"
+              },
+              "change": {
+                "type": "object",
+                "properties": {
+                  "reliance": {
+                    "type": "string",
+                    "const": "stated-confidence"
+                  }
+                },
+                "required": [
+                  "reliance"
                 ],
                 "additionalProperties": false
               },
@@ -1658,6 +2053,7 @@
                 "identity-organization-document-local",
                 "identity-webid",
                 "meaning-fixed-vocabulary",
+                "meaning-negotiated",
                 "meaning-registry-lookup",
                 "meaning-plain-language-upgrade",
                 "authority-mandate-signed",
@@ -1668,6 +2064,8 @@
                 "trust-register-chain",
                 "trust-pinned-list",
                 "reliance-precedence-rules",
+                "reliance-quality-certificate",
+                "reliance-stated-confidence",
                 "reliance-corroboration",
                 "usage-control-odrl-rules",
                 "usage-control-human-approval",
@@ -2102,6 +2500,7 @@
             "enum": [
               "awp-organization-identifier+jws",
               "awp-status-list+jws",
+              "awp-quality-certificate+jws",
               "awp-authority-holders+jws"
             ]
           },
@@ -4064,6 +4463,60 @@
       "type": "array",
       "items": {
         "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "const": "payment"
+              },
+              "segmentEnd": {
+                "type": "string",
+                "const": "payment"
+              },
+              "type": {
+                "type": "string",
+                "const": "term-deliberation"
+              },
+              "exchange": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "approve",
+                  "agents-only"
+                ]
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "exchange",
+              "decision",
+              "validUntil"
+            ],
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "properties": {

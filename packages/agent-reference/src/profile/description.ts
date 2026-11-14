@@ -24,6 +24,8 @@ export interface OperationDescription {
   readonly roles: readonly ("initiator" | "responder")[];
   /** Domain schema/model versions accepted for terms/inputs/outputs. */
   readonly models: readonly { readonly id: Iri; readonly version: string }[];
+  /** Exact versioned vocabulary IRIs whose behaviour this operation implements. */
+  readonly vocabularies?: readonly { readonly iri: string; readonly relation: string }[];
   readonly purposes?: readonly Iri[];
   readonly effects: readonly string[];
   readonly outcomes: readonly string[];
@@ -100,6 +102,16 @@ export function buildDescription(input: {
       throw new Error(`accepted configuration ${id} is not implemented`);
     }
   }
+  const vocabularies: { iri: string; relation: string }[] = TERM_REGISTER.filter(
+    (t) => t.relation !== "minted",
+  ).map((t) => ({
+    iri: t.iri,
+    relation: t.relation,
+  }));
+  for (const operation of input.operations)
+    for (const vocabulary of operation.vocabularies ?? [])
+      if (!vocabularies.some((v) => v.iri === vocabulary.iri && v.relation === vocabulary.relation))
+        vocabularies.push(vocabulary);
   return {
     type: "ImplementationDescription",
     describes: input.actor,
@@ -107,10 +119,7 @@ export function buildDescription(input: {
     ...(input.operator ? { operator: input.operator } : {}),
     profile: { id: PILOT_PROFILE, version: PILOT_PROFILE_VERSION },
     acceptedProfiles: [{ id: PILOT_PROFILE, versions: "0.1.x" }],
-    vocabularies: TERM_REGISTER.filter((t) => t.relation !== "minted").map((t) => ({
-      iri: t.iri,
-      relation: t.relation,
-    })),
+    vocabularies,
     configurations: { implemented: [...input.implemented], accepted: [...input.accepted] },
     operations: input.operations,
     bindings: input.bindings,

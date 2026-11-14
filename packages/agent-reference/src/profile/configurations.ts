@@ -125,6 +125,36 @@ export const CONFIG_POD_MIRROR = alternativeWireId("accountability-pod-mirror");
 export const CONFIG_SOLID_INBOX = alternativeWireId("transport-solid-inbox");
 export const CONFIG_SOLID_REFERENCE = alternativeWireId("data-access-by-reference-solid");
 export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> = {
+  [alternativeWireId("meaning-negotiated")]: localDefinition(
+    alternativeWireId("meaning-negotiated"),
+    "Exact-exchange principal approval of a recorded term proposal",
+  ),
+  [alternativeWireId("reliance-quality-certificate")]: localDefinition(
+    alternativeWireId("reliance-quality-certificate"),
+    "Accepted, scoped quality certificate for the product index",
+  ),
+  [alternativeWireId("reliance-stated-confidence")]: localDefinition(
+    alternativeWireId("reliance-stated-confidence"),
+    "Source confidence as statement-level DQV measurements",
+  ),
+  [alternativeWireId("reliance-corroboration")]: localDefinition(
+    alternativeWireId("reliance-corroboration"),
+    "Independent payroll and bank salary-credit corroboration",
+  ),
+  [alternativeWireId("meaning-registry-lookup")]: localDefinition(
+    alternativeWireId("meaning-registry-lookup"),
+    "Signed employment code-list mapping lookup",
+  ),
+  [alternativeWireId("meaning-plain-language-upgrade")]: {
+    ...localDefinition(
+      alternativeWireId("meaning-plain-language-upgrade"),
+      "Prose contact followed by structured exchange — not run",
+    ),
+    status: "unresolved",
+    unresolved: [
+      "Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
+    ],
+  },
   [CONFIG_WEBID]: {
     ...localDefinition(
       CONFIG_WEBID,

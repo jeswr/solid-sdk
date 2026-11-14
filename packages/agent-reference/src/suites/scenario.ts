@@ -6,6 +6,30 @@ export function scenarioRegistry() {
   const registry = withPublicRead(baselineRegistry());
   registry.register({
     layer: "meaning",
+    id: "negotiated",
+    name: "Principal-approved term proposals",
+    vocabulary: "immutable exchange-scoped definitions",
+    summary:
+      "A separately keyed fictional deliberation platform records an agent proposal and exact-exchange principal signatures; agreement between agents alone never authorizes reliance.",
+  });
+  registry.register({
+    layer: "reliance",
+    id: "quality-certificate",
+    name: "Certified index quality",
+    enforcedAtGate: true,
+    summary:
+      "A separately accepted certifier signs source, dataset, category, quality policy and validity; otherwise per-record quality checks still run.",
+  });
+  registry.register({
+    layer: "reliance",
+    id: "stated-confidence",
+    name: "Source-stated confidence",
+    enforcedAtGate: true,
+    summary:
+      "Statement-level DQV measurements name their metric, source, method and uncertainty; an uncalibrated model estimate meets no threshold.",
+  });
+  registry.register({
+    layer: "meaning",
     id: "registry-lookup",
     name: "Signed code-list mappings",
     vocabulary: "profile-selected signed mapping tables",
@@ -61,10 +85,10 @@ export function scenarioRegistry() {
   registry.register({
     layer: "reliance",
     id: "corroboration",
-    name: "Exact-value corroboration",
+    name: "Independent-source corroboration",
     enforcedAtGate: true,
     summary:
-      "Accepted issuers with separately configured controllers must agree on the exact subject, claim, value and period; authenticity alone never establishes truth.",
+      "Accepted issuers with separately configured controllers must agree on the subject, currency and period, using exact values or a stated task tolerance; statements derived from one record count once.",
   });
   registry.register({
     layer: "trust",

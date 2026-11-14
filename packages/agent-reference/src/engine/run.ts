@@ -29,6 +29,7 @@ import { issueMappingAttestation } from "../mechanisms/code-mapping.js";
 import { LocalDatasetHolder } from "../mechanisms/dataset-query.js";
 import { LocalForum, RECORD_LIMITS } from "../mechanisms/forum.js";
 import { JOINT_OPERATIONS, JointParty } from "../mechanisms/joint.js";
+import type { SigningKey } from "../mechanisms/jws.js";
 import { LocalDocumentResolver } from "../mechanisms/organizations.js";
 import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
 import {
@@ -70,12 +71,15 @@ import type {
 import { Cast, mandateOf, signClaim } from "../scenarios/common.js";
 import { Ledger as PaymentLedger } from "../settlement/ledger.js";
 import { RdfOrderSuite } from "../settlement/rdf-order.js";
+import { FictionalDeliberationPlatform } from "../standins/deliberation.js";
 import { PodRecordMirror } from "../standins/pod-mirror.js";
 import { FictionalSolidStorage } from "../standins/storage.js";
 import { FictionalWebIdDirectory } from "../standins/webid.js";
 import { MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
 import { BASELINE } from "../suites/baseline.js";
+import { withNegotiatedRequirement } from "../suites/meaning-negotiated.js";
+import { withEmploymentRequirement, withMappingVocabulary } from "../suites/meaning-registry.js";
 import { PUBLIC_READ } from "../suites/public-read.js";
 import { scenarioRegistry } from "../suites/scenario.js";
 import { TraceRecorder } from "../trace/recorder.js";
@@ -624,6 +628,35 @@ async function runPath(
       evidence: EvidenceItem;
     }
   > = {};
+  const negotiated =
+    configuration.layers.meaning === "negotiated" ? scenario.negotiatedMeaning : undefined;
+  const publicPart = (key: SigningKey) => ({
+    kid: key.kid,
+    alg: key.alg,
+    publicJwk: key.publicJwk,
+  });
+  const deliberation = negotiated
+    ? new FictionalDeliberationPlatform(
+        required(parties.get(negotiated.platform)).identity,
+        required(sourceKeys.get(negotiated.platform)),
+        {
+          identity: cast.get(negotiated.proposer).identity.actor,
+          key: publicPart(cast.get(negotiated.proposer).actorKey),
+        },
+        Object.fromEntries(
+          [negotiated.proposer, negotiated.peer].map((id) => [
+            cast.get(id).identity.party!,
+            publicPart(cast.get(id).ownerKey),
+          ]),
+        ),
+        {
+          identity: cast.get(negotiated.peer).identity.actor,
+          key: publicPart(cast.get(negotiated.peer).actorKey),
+        },
+        negotiated,
+        recorder.sink(negotiated.platform),
+      )
+    : undefined;
   for (const statement of scenario.statements) {
     const issuer = required(parties.get(statement.issuer));
     const key = cast.agents.has(issuer.id)
@@ -1347,6 +1380,10 @@ async function runPath(
       ...(profile.codeMappings?.receivers.includes(agent.actor ?? "")
         ? { codeMappings: { policy: profile.codeMappings, resolver } }
         : {}),
+      ...(configuration.layers.meaning === "registry-lookup" &&
+      scenario.registryMeaning?.policy.receivers.includes(agent.actor ?? "")
+        ? { registryMeaning: { settings: scenario.registryMeaning, resolver } }
+        : {}),
       ...(profile.email
         ? {
             email: {
@@ -1412,6 +1449,46 @@ async function runPath(
           }));
         }),
       claimSources: Object.fromEntries(profile.claims.map((c) => [c.kind, c.sources])),
+      ...(negotiated && deliberation && agent.id === negotiated.proposer
+        ? {
+            negotiatedMeaning: {
+              operation: negotiated.operation,
+              term: negotiated.term,
+              approved: (
+                exchange: string,
+                principal: string | undefined,
+                peer: string | undefined,
+                at: string,
+              ) =>
+                deliberation.approved(
+                  exchange,
+                  principal,
+                  peer,
+                  at,
+                  trust,
+                  cast.get(agent.id).identity.actor,
+                ),
+            },
+          }
+        : {}),
+      ...(configuration.layers.reliance === "quality-certificate" &&
+      scenario.qualityCertificate?.references[agent.actor ?? ""]
+        ? {
+            qualityCertificate: {
+              policy: scenario.qualityCertificate,
+              reference: scenario.qualityCertificate.references[agent.actor ?? ""]!,
+              resolver,
+            },
+          }
+        : {}),
+      ...(configuration.layers.reliance === "stated-confidence" &&
+      scenario.statedConfidence?.receivers.includes(agent.actor ?? "")
+        ? { statedConfidence: scenario.statedConfidence }
+        : {}),
+      ...(configuration.layers.reliance === "corroboration" &&
+      scenario.relianceCorroboration?.receivers.includes(agent.actor ?? "")
+        ? { incomeCorroboration: scenario.relianceCorroboration }
+        : {}),
       purposes: Object.fromEntries(profile.purposes.map((p) => [p.id, p.claims])),
       reliance: {
         id: `urn:profile:${profile.id}`,
@@ -1444,10 +1521,14 @@ async function runPath(
     };
     const specialised: OperationHandler[] = agent.handlers.length
       ? agent.handlers.map((id) => {
-          const handler = installHandler(
-            required(scenario.handlerImplementations[id]),
-            signed,
-            stores,
+          const handler = withNegotiatedRequirement(
+            withEmploymentRequirement(
+              installHandler(required(scenario.handlerImplementations[id]), signed, stores),
+              configuration.layers.meaning === "registry-lookup" && agent.id === "north-agent"
+                ? scenario.registryMeaning
+                : undefined,
+            ),
+            agent.id === negotiated?.peer ? negotiated : undefined,
           );
           return options.alternative
             ? withScriptedReplies(handler, (context) => {
@@ -1556,7 +1637,15 @@ async function runPath(
     ];
     const created = await cast.runtime(
       agent.id,
-      handlers,
+      handlers.map((handler) =>
+        withMappingVocabulary(
+          handler,
+          configuration.layers.meaning === "registry-lookup" &&
+            scenario.registryMeaning?.policy.receivers.includes(agent.actor ?? "")
+            ? scenario.registryMeaning
+            : undefined,
+        ),
+      ),
       [
         new SyntheticPaymentRail(),
         ...(scenario.paymentProviders.some((p) => p.agent === agent.id)
@@ -1840,6 +1929,54 @@ async function runPath(
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
     let result: unknown;
     switch (step.type) {
+      case "term-deliberation": {
+        if (!negotiated || !deliberation || step.agent !== negotiated.proposer)
+          throw new Error("No negotiated meaning platform is installed for this proposer.");
+        const exchange = template<string>(step.exchange);
+        const proposer = cast.get(negotiated.proposer),
+          peer = cast.get(negotiated.peer);
+        const proposal = {
+          type: "TermProposal",
+          issuer: proposer.identity.actor,
+          term: negotiated.term,
+          definition: negotiated.definition,
+          version: negotiated.version,
+          exchange,
+          principals: [proposer.identity.party!, peer.identity.party!],
+        };
+        const proposalJws = await signStatement(
+          proposer.actorKey,
+          "awp-term-proposal+jws",
+          proposal,
+        );
+        const acceptanceJws = await signStatement(peer.actorKey, "awp-term-agent-acceptance+jws", {
+          type: "TermAgentAcceptance",
+          issuer: peer.identity.actor,
+          proposalDigest: digestOf(proposal),
+          exchange,
+        });
+        const approvals =
+          step.decision === "approve"
+            ? await Promise.all(
+                [proposer, peer].map((party) =>
+                  signStatement(party.ownerKey, "awp-term-approval+jws", {
+                    type: "TermApproval",
+                    issuer: party.identity.party!,
+                    proposalDigest: digestOf(proposal),
+                    exchange,
+                    term: negotiated.term,
+                    decision: "approve",
+                    validUntil: step.validUntil,
+                  }),
+                ),
+              )
+            : [];
+        result = {
+          receipt: await deliberation.record(proposalJws, acceptanceJws, approvals),
+          proposalDigest: digestOf(proposal),
+        };
+        break;
+      }
       case "payment-invoice": {
         const digest = template<string>(step.agreement);
         const agreement = required(runtime.heldPaymentAgreement(digest));
@@ -2830,7 +2967,8 @@ async function runPath(
           scenario.singleUseRegisters.some((r) => r.party === p.id) ||
           profile.forum?.party === p.id ||
           scenario.agreements.some((a) => a.service === p.id) ||
-          scenario.datasets.some((d) => d.holder === p.id),
+          scenario.datasets.some((d) => d.holder === p.id) ||
+          scenario.negotiatedMeaning?.platform === p.id,
       ),
     ].map((p) => ({
       id: p.traceId ?? p.id,

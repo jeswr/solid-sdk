@@ -4,6 +4,10 @@ import { isClaimEvidence, verifySelectivePresentation } from "../mechanisms/sele
 import { MessageEnvelopeNode } from "../model/envelope.js";
 import type { PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
+import { interpretEmployment } from "../suites/meaning-registry.js";
+import { certifiedQuality } from "../suites/reliance-certificate.js";
+import { confidenceFitness } from "../suites/reliance-confidence.js";
+import { corroborateIncome } from "../suites/reliance-corroboration.js";
 import {
   liftPaymentObjects,
   paymentDocumentIn,
@@ -139,6 +143,8 @@ const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
 
 export class InboundGate {
   private activePaymentDocument: unknown;
+  /** A published mapping version cannot change within this agent's lifetime (SM-1). */
+  private readonly mappingVersions = new Map<string, string>();
   /** Authority settled per conversation (the representation statement accepted). */
   private corroborationPool: Claim[] = [];
   private claimFailure: { outcome: "refuse" | "ask-more"; reason: string } | undefined;
@@ -921,6 +927,20 @@ export class InboundGate {
   }
 
   requiredFailure(c: Claim, reason: string, operation?: string): string | undefined {
+    if (this.deps.gate.statedConfidence && reason === "confidence-too-low")
+      return "A source confidence measurement with an accepted calibration method meeting this task’s threshold is required.";
+    if (
+      this.deps.gate.incomeCorroboration &&
+      StatementQualityNode.from(c).claimType === "income.gross.monthly-series" &&
+      reason === "evidence-missing"
+    )
+      return "Independent payroll and bank salary-credit observations for the same period and currency are required.";
+    if (
+      this.deps.gate.registryMeaning &&
+      StatementQualityNode.from(c).claimType === "income.gross.monthly-series" &&
+      reason === "unsupported-term"
+    )
+      return "Employment status requires a mapping signed by a publisher accepted for both code lists.";
     if (!operation || !CURABLE_CLAIM_FAILURES.has(reason)) return undefined;
     if (
       !this.deps.gate.actionClaims?.some(
@@ -929,6 +949,26 @@ export class InboundGate {
     )
       return undefined;
     return claimRequest(this.deps.gate, c.claimType);
+  }
+
+  /** Brief 26e seam: certification also precedes optional admission-batch quality work. */
+  private async qualityIsCertified(
+    claim: unknown,
+    at: string,
+    carriedBy?: string,
+  ): Promise<boolean> {
+    const certificate = this.deps.gate.qualityCertificate;
+    return certificate
+      ? certifiedQuality(claim, {
+          ...certificate,
+          trust: this.deps.trust,
+          at,
+          verifier: this.deps.identity.actor,
+          evaluatorParty: this.deps.identity.party,
+          carriedBy,
+          record: this.deps.record,
+        })
+      : false;
   }
 
   /** Source, terms and fitness of one claim: one event each. Returns whether all passed. */
@@ -979,7 +1019,13 @@ export class InboundGate {
   async claimChecks(
     item: EvidenceItem,
     subject: Iri | undefined,
-    need: { purpose?: Iri; retentionDays?: number; task: string; taskId?: string },
+    need: {
+      purpose?: Iri;
+      retentionDays?: number;
+      task: string;
+      taskId?: string;
+      carriedBy?: string;
+    },
     phase: "source" | "terms" | "fitness",
     cache: Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>,
     termsOk: Map<string, boolean> = new Map(),
@@ -1279,27 +1325,120 @@ export class InboundGate {
         }
       }
     }
-    const f = fitnessOf(
-      StatementQualityNode.from({ ...c, method: r.methodOverride ?? c.method }),
-      this.deps.gate.reliance,
-      at,
-    );
+    if (this.deps.gate.statedConfidence) {
+      const confidence = confidenceFitness(c, this.deps.gate.statedConfidence);
+      if (confidence.statement || !confidence.ok)
+        this.verdictEvent(
+          "fitness",
+          confidence.ok ? "pass" : "fail",
+          confidence.ok
+            ? "The bank’s source-stated confidence meets this task’s threshold by the recorded calibration method."
+            : "The source confidence is below the task’s threshold or has no accepted calibration; a model’s own estimate is uncalibrated.",
+          { reason: confidence.ok ? "fit-for-use" : confidence.reason },
+        );
+      if (!confidence.ok) {
+        this.failedClaim(c, confidence.reason, need.taskId ?? need.task);
+        this.claimFailure = { outcome: "ask-more", reason: confidence.reason };
+        return false;
+      }
+    }
+    // Brief 26e seam: interpreting a qualified field never rewrites its signed parent.
+    if (
+      this.deps.gate.registryMeaning &&
+      StatementQualityNode.from(c).claimType === "income.gross.monthly-series"
+    ) {
+      const interpretation = await interpretEmployment(c, {
+        ...this.deps.gate.registryMeaning,
+        seenVersions: this.mappingVersions,
+        trust: this.deps.trust,
+        at,
+        verifier: this.deps.identity.actor,
+        record: this.deps.record,
+      });
+      this.verdictEvent(
+        "fitness",
+        interpretation.ok ? "pass" : "indeterminate",
+        interpretation.ok
+          ? "The signed payroll employment status maps to the lender’s versioned code list; the original and mapping provenance are retained."
+          : "No accepted mapping establishes the employment status requested by the lender.",
+        { reason: interpretation.ok ? "fit-for-use" : interpretation.reason },
+      );
+      if (!interpretation.ok) {
+        this.failedClaim(c, interpretation.reason, need.taskId ?? need.task);
+        this.claimFailure = { outcome: interpretation.outcome, reason: interpretation.reason };
+        return false;
+      }
+      this.emit({
+        part: "memory",
+        kind: "store",
+        caption:
+          "Employment status interpreted through the signed mapping, alongside its original payroll statement.",
+        fact: {
+          id: String(interpretation.value.id),
+          label: "Mapped employment status",
+          claimType: "employment.status",
+          subject: String(c.subject),
+          value: interpretation.value,
+          source: c.issuer,
+          method: "derived",
+          provenance:
+            "Mapped from the payroll provider’s signed employment status; mapping publisher and signed parent digest are retained.",
+        },
+      });
+    }
+    const certified = await this.qualityIsCertified(c, at, need.carriedBy);
+    const f = certified
+      ? { verdict: "pass" as const, ageDays: undefined, reason: undefined, rule: undefined }
+      : fitnessOf(
+          StatementQualityNode.from({ ...c, method: r.methodOverride ?? c.method }),
+          this.deps.gate.reliance,
+          at,
+        );
     this.verdictEvent(
       "fitness",
       f.verdict,
-      f.verdict === "pass"
-        ? `${label} is fit for ${need.task}: ${c.method ?? "method unstated"}, ${f.ageDays} days old.`
-        : f.reason === "stale-data"
-          ? `${label} is too old for ${need.task}.`
-          : f.reason === "method-not-accepted"
-            ? `${label} was not produced in a way ${need.task} accepts.`
-            : `No reliance rule covers ${label}.`,
+      certified
+        ? "An accepted current certificate covers this index, dataset, product category and quality policy; no per-record freshness check is applied."
+        : f.verdict === "pass"
+          ? `${label} is fit for ${need.task}: ${c.method ?? "method unstated"}, ${f.ageDays} days old.`
+          : f.reason === "stale-data"
+            ? `${label} is too old for ${need.task}.`
+            : f.reason === "method-not-accepted"
+              ? `${label} was not produced in a way ${need.task} accepts.`
+              : `No reliance rule covers ${label}.`,
       { ...(f.reason ? { reason: f.reason } : {}), ...(f.rule ? { rule: f.rule } : {}) },
     );
     if (termsOk.get(item.value) !== true || f.verdict !== "pass") {
       if (f.verdict !== "pass")
         this.failedClaim(c, f.reason ?? "missing-context", need.taskId ?? need.task);
       return false;
+    }
+    if (
+      this.deps.gate.incomeCorroboration &&
+      StatementQualityNode.from(c).claimType === "income.gross.monthly-series"
+    ) {
+      const corroborated = corroborateIncome(c, this.corroborationPool, {
+        settings: this.deps.gate.incomeCorroboration,
+        trust: this.deps.trust,
+        reliance: this.deps.gate.reliance,
+        at,
+        verifier: this.deps.identity.actor,
+        purpose: need.purpose,
+        record: this.deps.record,
+      });
+      this.verdictEvent(
+        "fitness",
+        corroborated.ok ? "pass" : "ask-more",
+        corroborated.ok
+          ? "Payroll and independently recorded bank salary credits agree within the stated currency tolerance."
+          : "Two independent income observations are missing; shared source records count once.",
+        { reason: corroborated.ok ? "fit-for-use" : corroborated.reason },
+      );
+      if (!corroborated.ok) {
+        this.failedClaim(c, corroborated.reason, need.taskId ?? need.task);
+        this.claimFailure = { outcome: "ask-more", reason: corroborated.reason };
+        return false;
+      }
     }
     const completeness = this.deps.gate.reliance?.rules.find(
       (r) => r.claimType === receivedClaim.claimType,
@@ -1536,8 +1675,9 @@ export class InboundGate {
           purpose: opts.purpose,
           at: this.deps.now(),
         }).verdict === "pass" &&
-        fitnessOf(StatementQualityNode.from(c), this.deps.gate.reliance, this.deps.now())
-          .verdict === "pass"
+        ((await this.qualityIsCertified(c, this.deps.now())) ||
+          fitnessOf(StatementQualityNode.from(c), this.deps.gate.reliance, this.deps.now())
+            .verdict === "pass")
       )
         candidates.push(c);
     }
@@ -1697,6 +1837,7 @@ export class Admission {
           : asked;
     return {
       taskId: conv.id,
+      ...(msg?.from.onBehalfOf ? { carriedBy: msg.from.onBehalfOf } : {}),
       ...(purpose ? { purpose } : {}),
       ...(typeof t?.retentionDays === "number" ? { retentionDays: t.retentionDays } : {}),
       task:

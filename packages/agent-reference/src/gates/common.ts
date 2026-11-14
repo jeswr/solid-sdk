@@ -210,6 +210,27 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly negotiatedMeaning?: {
+    readonly operation: string;
+    readonly term: string;
+    readonly approved: (
+      exchange: string,
+      principal: string | undefined,
+      peer: string | undefined,
+      at: string,
+    ) => boolean;
+  };
+  readonly qualityCertificate?: {
+    readonly policy: import("../suites/reliance-certificate.js").QualityCertificatePolicy;
+    readonly reference: string;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
+  readonly statedConfidence?: import("../suites/reliance-confidence.js").StatedConfidenceSettings;
+  readonly incomeCorroboration?: import("../suites/reliance-corroboration.js").CorroborationSettings;
+  readonly registryMeaning?: {
+    readonly settings: import("../suites/meaning-registry.js").RegistryMeaning;
+    readonly resolver: import("../mechanisms/organizations.js").DocumentResolver;
+  };
   readonly webId?: {
     readonly resolve: (jws: string) => Promise<
       | { readonly ok: true; readonly key: import("../mechanisms/trust.js").PinnedKey }

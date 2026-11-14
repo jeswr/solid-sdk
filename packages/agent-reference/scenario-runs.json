@@ -303,7 +303,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--baseline.json",
-      "traceSha256": "a20ea67e7e2eca007a3494fd170a164b1decdecf04ccf39b131db26438b9f662",
+      "traceSha256": "eeec3854189397a12683e70d0a7ca26f4fd47a764d5b908d8e9a3766099342ee",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -341,7 +341,7 @@
         }
       ],
       "trace": "cohort-count--branch-1--baseline.json",
-      "traceSha256": "f5fde8c45704edd6cd95399873a2eea0a9a21f6a77308aaaf5bc0948190f2a69",
+      "traceSha256": "d9db24c0768d5299b0ba71a3bd77ebdf484aeda6dd262c00bfad2091d0fc012a",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -368,7 +368,7 @@
       },
       "consequences": [],
       "trace": "cohort-count--branch-2--baseline.json",
-      "traceSha256": "e976faf42768fa55d1a7aea1f4f3743dd12ff189befc4dad17eab57906ab7323",
+      "traceSha256": "747a33ef2aa845a6716f56be08ebf67ffd2b97366635c540bded159c04dcca1f",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -4198,6 +4198,1458 @@
       "trace": "mortgage-main--profile-key-swapped--identity-webid.json"
     },
     {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "meaning-plain-language-upgrade",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "prose-as-evidence",
+      "settlement": "rdf-order",
+      "configuration": "meaning-plain-language-upgrade",
+      "what": "Prose income is offered where structured evidence is required.",
+      "status": "blocked",
+      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented."
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "meaning-registry-lookup",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 206,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 214,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 222,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 232,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 246,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 254,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 266,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 275,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 283,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 292,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 300,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 309,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 317,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 325,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 333,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 343,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 353,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 361,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 370,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 378,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 385,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 392,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 402,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 410,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 417,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 426,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 434,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 441,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 449,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 459,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 467,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 476,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 508,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 516,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 524,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 532,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 541,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 551,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 560,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 568,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 576,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--meaning-registry-lookup.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "mapping-from-nobody",
+      "settlement": "rdf-order",
+      "configuration": "meaning-registry-lookup",
+      "what": "The code mapping is signed by a publisher not accepted for these vocabularies.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "unsupported-term",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "unsupported-term"
+      },
+      "consequences": [],
+      "trace": "mortgage-main--mapping-from-nobody--meaning-registry-lookup.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "reliance-corroboration",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 212,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 220,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 230,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 244,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 252,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 263,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 272,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 280,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 289,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 297,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 306,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 314,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 322,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 330,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 340,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 350,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 358,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 367,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 375,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 382,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 389,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 399,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 407,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 414,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 423,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 431,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 438,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 446,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 456,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 464,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 473,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 505,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 513,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 521,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 529,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 538,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 548,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 557,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 565,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 573,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--reliance-corroboration.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "one-source-twice",
+      "settlement": "rdf-order",
+      "configuration": "reliance-corroboration",
+      "what": "The bank’s second observation is derived from the payroll record, so both observations have the same root source.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "evidence-missing"
+      },
+      "consequences": [
+        {
+          "seq": 270,
+          "agent": "lender",
+          "outcome": "stop",
+          "reason": "context-not-clear"
+        }
+      ],
+      "trace": "mortgage-main--one-source-twice--reliance-corroboration.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "reliance-stated-confidence",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 198,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 205,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 213,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 221,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 231,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 245,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 253,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 264,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 273,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 281,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 290,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 298,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 307,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 315,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 323,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 331,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 341,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 351,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 359,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 368,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 376,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 383,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 390,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 400,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 408,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 415,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 424,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 432,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 439,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 447,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 457,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 465,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 474,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 506,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 514,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 522,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 530,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 539,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 549,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 558,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 566,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 574,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--reliance-stated-confidence.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "model-is-sure",
+      "settlement": "rdf-order",
+      "configuration": "reliance-stated-confidence",
+      "what": "A model-produced income estimate says 0.99 without an accepted calibration.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "confidence-too-low",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "confidence-too-low"
+      },
+      "consequences": [],
+      "trace": "mortgage-main--model-is-sure--reliance-stated-confidence.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "reliance-quality-certificate",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 212,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 220,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 230,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 244,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 252,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 262,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 288,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 296,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 305,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 313,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 321,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 329,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 339,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 349,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 357,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 366,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 374,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 381,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 388,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 398,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 406,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 413,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 422,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 430,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 437,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 445,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 455,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 463,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 472,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 504,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 512,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 520,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 528,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 537,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 547,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 556,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 564,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 572,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--reliance-quality-certificate.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "certificate-does-not-cover",
+      "settlement": "rdf-order",
+      "configuration": "reliance-quality-certificate",
+      "what": "The certificate shown to Sam covers business lending, so the old residential record must pass ordinary per-record quality checks.",
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "stale-data",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "admit",
+        "reason": "stale-data"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "mortgage-main--certificate-does-not-cover--reliance-quality-certificate.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "meaning-negotiated",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 213,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 222,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 234,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 249,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 257,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 267,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 276,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 284,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 293,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 301,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 310,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 318,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 326,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 334,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 344,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 354,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 362,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 371,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 379,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 386,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 393,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 403,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 411,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 418,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 427,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 435,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 442,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 450,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 460,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 468,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 477,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 509,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 517,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 525,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 533,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 542,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 552,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 561,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 569,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 577,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-main--meaning-negotiated.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "agents-agree-between-themselves",
+      "settlement": "rdf-order",
+      "configuration": "meaning-negotiated",
+      "what": "Both agents accept the proposed definition but neither person’s approval is recorded.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      },
+      "consequences": [],
+      "trace": "mortgage-main--agents-agree-between-themselves--meaning-negotiated.json"
+    },
+    {
       "scenario": "mortgage-out-of-limit",
       "useCase": "mortgage-in-principle",
       "cataloguePath": {
@@ -4585,7 +6037,7 @@
       },
       "consequences": [],
       "trace": "platform-income--baseline.json",
-      "traceSha256": "5202091c463f6a9008454957687a2c8990c35861f301e7135e422bcb7e75b5a5",
+      "traceSha256": "192f7258b08e0148abd9bd39076bc690b58b12ffda650fc14b5473303a016f1d",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -5404,7 +6856,7 @@
       },
       "consequences": [],
       "trace": "salary-benchmark--baseline.json",
-      "traceSha256": "94d4cd342b9523fb194e02c37e721049c3a2ea1b917045f0590ebd545e6ef748",
+      "traceSha256": "86c37b11b9bc3aa0923f84c5006472e45e5728d525154c49ad425c721a702fb4",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -5432,7 +6884,7 @@
       "consequences": [],
       "note": "branch does not diverge from the main path",
       "trace": "salary-benchmark--branch-1--baseline.json",
-      "traceSha256": "cc7b2e7f831f91549c1609b8fc75e2e87816866b443dd75a7bb9f37e0ee9a567",
+      "traceSha256": "742590880f44d68848147bc03f203b97df2a008340eb48d5870b140f23f92ed6",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
