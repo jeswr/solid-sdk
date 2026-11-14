@@ -387,13 +387,21 @@ export function createExecutor(options: ExecutorOptions): Executor {
   const issued = new Map<string, Pending>();
   const operations = new Map(model.operations.map((op) => [op.id, op]));
 
+  // Keep host login/CSRF declarations even when execution uses a reduced model.
+  const credentialContext: CookieSecretContext = {
+    ...options.credentialContext,
+    model: {
+      login: [...(options.credentialContext?.model?.login ?? []), ...(model.login ?? [])],
+      operations: [...(options.credentialContext?.model?.operations ?? []), ...model.operations],
+    },
+  };
+
   function addSecrets(ctx: RunContext): void {
     for (const c of ctx.jar)
       registerCookieSecrets(ctx.secrets, c, {
-        ...options.credentialContext,
-        model,
+        ...credentialContext,
         declaredNames: [
-          ...(options.credentialContext?.declaredNames ?? []),
+          ...(credentialContext.declaredNames ?? []),
           ...(ctx.credentialCookies ?? []),
         ],
       });
@@ -469,10 +477,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
       if (loginResponse)
         ctx.credentialCookies = [...new Set([...(ctx.credentialCookies ?? []), cookie.name])];
       registerCookieSecrets(ctx.secrets, cookie, {
-        ...options.credentialContext,
-        model,
+        ...credentialContext,
         declaredNames: [
-          ...(options.credentialContext?.declaredNames ?? []),
+          ...(credentialContext.declaredNames ?? []),
           ...(ctx.credentialCookies ?? []),
         ],
       });
@@ -856,6 +863,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
                 evidence.property,
                 submitted,
                 redactWith(ctx),
+                declaration,
               ))
             );
           },

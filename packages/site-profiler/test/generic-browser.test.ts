@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { createExecutor, InMemorySessions } from "@jeswr/site-executor";
+import { type Operation, SCHEMA } from "@jeswr/site-model";
 import type { Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { crawl } from "../src/crawl.js";
@@ -271,4 +273,61 @@ it("r11 propagates login redirect GET cookie classifications before returning tr
     expect(JSON.stringify({ trace: result.trace, warnings: result.warnings })).not.toContain(
       secret,
     );
+  // r12: the host may retain the learned login model beside a reduced execution model.
+  const read: Operation = {
+    id: "urn:echo",
+    label: "Read example",
+    actionType: `${SCHEMA}ViewAction`,
+    effect: "read",
+    session: "none",
+    inputs: [],
+    request: { method: "GET", urlTemplate: `${origin}/echo` },
+    extraction: {
+      format: "json",
+      itemType: `${SCHEMA}Thing`,
+      fields: [{ property: `${SCHEMA}name`, path: "/name" }],
+    },
+    provenance: {
+      method: "crawl",
+      learnedAt: result.model.generatedAt,
+      confidence: 1,
+      derivedFrom: [],
+    },
+  };
+  for (const intake of ["vault", "response"]) {
+    const sessions = new InMemorySessions();
+    sessions.set(origin, undefined, {
+      cookies:
+        intake === "vault"
+          ? [
+              {
+                name: "key",
+                value: "Ab7xQ2",
+                domain: "127.0.0.1",
+                path: "/",
+              },
+            ]
+          : [],
+    });
+    const executor = createExecutor({
+      model: { ...result.model, login: [], operations: [read], flows: [] },
+      credentialContext: { model: result.model },
+      sessions,
+      fetch: async () =>
+        Response.json(
+          { name: "Example Ab7xQ2" },
+          {
+            headers: intake === "response" ? { "set-cookie": "key=Ab7xQ2; Path=/" } : {},
+          },
+        ),
+    });
+    const observed = await executor.execute({
+      node: "urn:request",
+      types: [read.actionType],
+      values: () => [],
+    });
+    expect(observed.status).toBe("done");
+    expect(observed.observations[0]?.turtle).toContain("[redacted]");
+    expect(JSON.stringify(observed)).not.toContain("Ab7xQ2");
+  }
 });

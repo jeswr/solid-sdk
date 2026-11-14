@@ -273,8 +273,8 @@ completion/Uncertain behavior with one approved POST and repeat refusal.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 The recorder checks the complete witnessed HTML/JSON response for error/validation evidence
-before bounding its returned sample. It retains `responsePageError` (including alert regions),
-`responsePageFailure` (excluding those regions) and opaque `responseFlash` hashes alongside
+before bounding its returned sample. It retains `responsePageError` and `responsePageFailure`
+(including error-classed alerts while excluding neutral notices) and opaque `responseFlash` hashes alongside
 that sample. A truncated landing can teach a completionOnly route/status policy only with the complete-response
 failure check and flash inventory; a truncated sample alone remains insufficient. Reads/extractions still retain their
 ordinary sample bounds. In particular, large administrative form pages can teach their witnessed
@@ -300,13 +300,18 @@ Missing or changed evidence yields Uncertain and retains the repeat guard. No ro
 fallback creates an identity. Updates, deletes and votes may instead learn `completionOnly`
 policies; these never promote a landing URL to a created identity.
 
-Alerts (`role=alert`), assertive live regions and error/validation regions block only
-created-identity promotion and learning a created-location policy. Non-creating writes
-keep their route/status outcome rules. A successful demonstration landing records its
-flash regions as `successFlash`: sorted hashes of stable attributes and normalized text,
-used only for equality, never as instructions. The same flash is success evidence; a
-changed, additional or missing flash at runtime yields Uncertain. Password pages and
-shared JSON failure evidence still fail closed.
+Neutral alerts (`role=alert`) and assertive live regions block created-identity promotion.
+Error-classed alerts, aria-invalid and shared HTML/JSON failure evidence block all write
+response verification. A demonstration flash becomes `successFlash` only after a 2xx
+landing explicitly marked free of page errors by the recorder and an independent learned
+read verifies the effect before another write: a targeted empty JSON collection proves
+deletion, as does a 404/410 at the exact previously readable main-item URL whose witnessed
+form submitted that delete. The prior item must expose its own matching permalink; all
+path context must agree, and collections, access errors and redirects prove no absence.
+An identified item's edited fields must equal the submitted values. Votes have
+no independent effect verifier yet and teach no flash. Hashes of stable attributes and
+normalized text are equality evidence only. A changed, additional or missing learned flash
+at runtime yields Uncertain; flash-free landings retain the existing route/status rules.
 Login-discovered session cookie names and model declarations feed every profiler cookie
 context. Re-register all retained cookie values as soon as their classification is known,
 before returning traces or warnings. Round-11 regressions live in the profiler's
@@ -324,8 +329,12 @@ When a script-rendered landing has no main-item extraction, `readBack` in the sa
 A `{ identity: true }` binding sends the newly assigned identity; `{ input: "name" }`
 binds a concrete submitted input, and `{ value: "1" }` retains a witnessed read control.
 The demonstration or its follow-up crawl must witness the read returning exactly one
-item of the created type, with that identity and an `inputEvidence` field equal to a
-submitted value. A collection landing cannot use a row match to promote its URL.
+item of the created type, with a trusted identity IRI and an `inputEvidence` field equal
+to a submitted value. `readBack.identityPattern` retains the witnessed origin and resource,
+tenant/store prefixes, replacing only the whole identity segment with `{id}`. Optional
+`identityAliases` come from that item's trusted URL claims or recorder-linked GET redirects.
+Execution requires every identity IRI to match one of those templates with the new identity;
+numeric equality alone never proves a match. Old sidecars need reprofiling to learn this evidence. A collection landing cannot use a row match to promote its URL.
 
 After the approved write, the executor authorizes this read through the read gate and
 runs it with the current session, origin guard, budgets, extraction and redaction. Only
@@ -344,3 +353,20 @@ Identity-filtered demonstration reads do not turn their item filters into defaul
 ordinary list/search reads. Nested filter defaults retain the first successful request's
 scope, including absent filters. The read-back policy carries its explicit identity
 bindings separately. This preserves subsequent broad searches and two-match refusals.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Nonstandard JSON row link fields can learn `schema:url` only from a recorder-linked
+successful creation landing and a subsequent singleton identity read.
+The link must match the whole witnessed resource prefix through its explicitly labelled
+identity (or the complete landing URL); tenant/store segments remain literal. The original
+field stays untrusted, and the learned URL pattern still controls runtime read-back.
+No equal-ID route inference or site-specific field mapping is used.
+
+Cleanup can make a demonstrated detail fail later read replay. Flash learning retains its
+recorded before/after effect evidence even when replay drops that operation; executable
+creation read-backs still require a retained, learned read. Fictional regressions for both
+learning paths live in `test/learning-evidence.test.ts`.
+
+Resource-pattern learning keeps that witnessed namespace even when an unclassified failed
+background POST precedes the read. Its item identity and submitted-value checks still apply.
+The separate flash-effect verifier retains its strict before-next-write window.

@@ -3,9 +3,16 @@ import {
   createApprovalGate,
   createExecutor,
   InMemorySessions,
+  responsePageError,
   type WriteResponsePolicy,
 } from "@jeswr/site-executor";
-import { type Operation, SCHEMA, type SiteModel } from "@jeswr/site-model";
+import {
+  type Operation,
+  readSiteModel,
+  SCHEMA,
+  type SiteModel,
+  writeSiteModel,
+} from "@jeswr/site-model";
 import { expect, it } from "vitest";
 import { toParameter } from "../src/operations.js";
 import { clusterRequests } from "../src/templates.js";
@@ -64,6 +71,7 @@ const read: Operation = {
     itemType: `${SCHEMA}Product`,
     fields: [
       { property: `${SCHEMA}identifier`, path: "/id" },
+      { property: `${SCHEMA}url`, path: "/url", datatype: "iri" },
       { property: `${SCHEMA}name`, path: "/name", untrusted: true },
     ],
   },
@@ -99,7 +107,10 @@ function trace(): RecordedRequest[] {
       seq: 3,
       url: `${origin}/products/rows?id=42`,
       contentType: "application/json",
-      bodySample: JSON.stringify({ total: 1, items: [{ id: "42", name: "Example widget" }] }),
+      bodySample: JSON.stringify({
+        total: 1,
+        items: [{ id: "42", url: `${origin}/products/42`, name: "Example widget" }],
+      }),
     }),
   ];
 }
@@ -135,7 +146,7 @@ async function execute(
     ],
   });
   const executor = createExecutor({
-    model,
+    model: readSiteModel(await writeSiteModel(model)),
     sessions,
     writeResponses: policy ? { [operation.id]: policy } : {},
     gate: {
@@ -163,6 +174,10 @@ async function execute(
         expect(url.searchParams.get("id")).toBe("73");
         const item = {
           id: mode === "wrong identity" ? "74" : "73",
+          url:
+            mode === "missing IRI"
+              ? undefined
+              : `${origin}${mode.startsWith("/") ? mode : "/products/73"}`,
           name: mode === "mismatched name" ? "Other widget" : "Example widget",
         };
         if (mode === "detail")
@@ -178,7 +193,9 @@ async function execute(
       return new Response(
         operation === create
           ? scriptPage
-          : `<main>Products</main>${mode === "missing alert" ? "" : `<div role="alert">${mode === "different alert" ? "Could not delete" : "Deleted successfully"}</div>`}`,
+          : mode === "failed delete"
+            ? '<main>Products</main><div role="alert" class="alert-danger">Your product could not be deleted.</div>'
+            : `<main>Products</main>${mode === "missing alert" ? "" : `<div role="alert">${mode === "different alert" ? "Could not delete" : "Deleted successfully"}</div>`}`,
       );
     },
   });
@@ -206,7 +223,11 @@ async function execute(
 
 it("learns a script-rendered create landing read-back and completes with exactly one matching item", async () => {
   const policy = learnWriteResponses([create, read], trace(), origin)[create.id];
-  expect(policy?.readBack).toEqual({ operation: read.id, bind: { id: { identity: true } } });
+  expect(policy?.readBack).toEqual({
+    operation: read.id,
+    bind: { id: { identity: true } },
+    identityPattern: `${origin}/products/{id}`,
+  });
   expect(policy?.inputEvidence).toEqual({ input: "name", property: `${SCHEMA}name` });
   const { result, reads } = await execute(policy);
   expect(result.outcome?.status).toBe("completed");
@@ -222,6 +243,9 @@ it.each([
   "partial",
   "error envelope",
   "non-success",
+  "/categories/73",
+  "/stores/other/products/73",
+  "missing IRI",
 ])("keeps created identity Uncertain when read-back returns %s", async (mode) => {
   const policy = learnWriteResponses([create, read], trace(), origin)[create.id];
   const { result } = await execute(policy, mode);
@@ -240,6 +264,7 @@ it.each([
   "mismatched name",
   "unfiltered",
   "not learned",
+  "numeric identity only",
 ])("does not learn creation read-back from %s evidence", (mode) => {
   const records = trace();
   const follow = records[2];
@@ -255,6 +280,8 @@ it.each([
   if (mode === "mismatched name")
     follow.bodySample = JSON.stringify({ total: 1, items: [{ id: "42", name: "Other widget" }] });
   if (mode === "unfiltered") follow.url = `${origin}/products/rows`;
+  if (mode === "numeric identity only")
+    follow.bodySample = JSON.stringify({ total: 1, items: [{ id: "42", name: "Example widget" }] });
   expect(
     learnWriteResponses(
       [create, read],
@@ -269,19 +296,47 @@ it.each(
     ["matching", "different alert", "missing alert"].map((mode) => [type, mode] as const),
   ),
 )("compares the witnessed %s success flash (%s) without creating an identity", async (type, mode) => {
-  const remove = { ...create, actionType: `${SCHEMA}${type}` };
+  const remove = {
+    ...create,
+    actionType: `${SCHEMA}${type}`,
+    inputs: [
+      ...create.inputs,
+      {
+        range: "http://www.w3.org/2001/XMLSchema#string",
+        required: true,
+        name: "id",
+        location: "form" as const,
+        path: [`${SCHEMA}object`, `${SCHEMA}identifier`],
+        default: "73",
+      },
+    ],
+  };
   const records = trace().slice(0, 2);
   const write = records[0],
     response = records[1];
   if (!write || !response) throw new Error("Missing landing");
   write.redirectedTo = `${origin}/products`;
+  write.postData += "&id=42";
   response.url = `${origin}/products`;
   response.bodySample = '<main>Products</main><div role="alert">Deleted successfully</div>';
-  const policy = learnWriteResponses([remove], records, origin)[remove.id];
+  response.responsePageError = false;
+  const follow = trace()[2];
+  if (!follow) throw new Error("Missing follow-up");
+  follow.bodySample = JSON.stringify({
+    total: type === "DeleteAction" ? 0 : 1,
+    items: type === "DeleteAction" ? [] : [{ id: "42", name: "Example widget" }],
+  });
+  records.push(follow);
+  const policy = learnWriteResponses([remove, read], records, origin)[remove.id];
   expect(policy?.completionOnly).toBe(true);
   expect(JSON.stringify(policy)).not.toContain("Deleted successfully");
   const { result } = await execute(policy, mode, remove, []);
-  expect(result.outcome?.status).toBe(mode === "matching" ? "completed" : "uncertain");
+  expect(result.outcome?.status).toBe(
+    (mode === "matching" && type !== "VoteAction") ||
+      (mode === "missing alert" && type === "VoteAction")
+      ? "completed"
+      : "uncertain",
+  );
   expect(result.outcome?.result).toBeUndefined();
 });
 
@@ -319,6 +374,167 @@ it("learns read-back from a witnessed follow-up crawl", () => {
   expect(learnWriteResponses([create, read], records, origin)[create.id]?.readBack?.operation).toBe(
     read.id,
   );
+});
+
+it.each([
+  ["/stores/main/products/73", "completed"],
+  ["/stores/other/products/73", "uncertain"],
+  ["/products/73", "uncertain"],
+])("r12 retains the read-back tenant prefix for %s", async (url, expected) => {
+  const records = trace();
+  const follow = records[2];
+  if (!follow) throw new Error("Missing follow-up");
+  follow.bodySample = JSON.stringify({
+    total: 1,
+    items: [{ id: "42", url: `${origin}/stores/main/products/42`, name: "Example widget" }],
+  });
+  const policy = learnWriteResponses([create, read], records, origin)[create.id];
+  expect(policy?.readBack?.identityPattern).toBe(`${origin}/stores/main/products/{id}`);
+  expect((await execute(policy, url)).result.outcome?.status).toBe(expected);
+});
+
+it("r12 admits witnessed read-item aliases and rejects an unwitnessed equal-ID crawl URL", async () => {
+  const records = trace();
+  const follow = records[2];
+  if (!follow) throw new Error("Missing follow-up");
+  follow.bodySample = JSON.stringify({
+    total: 1,
+    items: [
+      {
+        id: "42",
+        url: [`${origin}/products/42`, `${origin}/catalogue/products/42`],
+        name: "Example widget",
+      },
+    ],
+  });
+  records.push({ ...follow, seq: 4, phase: "crawl", url: `${origin}/categories/42` });
+  const policy = learnWriteResponses([create, read], records, origin)[create.id];
+  expect(policy?.readBack?.identityAliases).toEqual([`${origin}/catalogue/products/{id}`]);
+  expect((await execute(policy, "/catalogue/products/73")).result.outcome?.status).toBe(
+    "completed",
+  );
+  expect((await execute(policy, "/categories/73")).result.outcome?.status).toBe("uncertain");
+});
+
+it("r12 learns a read-back alias only from a recorder-linked GET redirect", async () => {
+  const records = trace();
+  const follow = records[2];
+  if (!follow) throw new Error("Missing follow-up");
+  records.push({
+    ...follow,
+    seq: 3,
+    method: "GET",
+    status: 302,
+    url: `${origin}/catalogue/products/42`,
+    redirectedTo: follow.url,
+    bodySample: undefined,
+  });
+  follow.seq = 4;
+  follow.redirectedFrom = 3;
+  // The query read URL is not an identity alias, so only a detail read can witness it.
+  follow.url = `${origin}/products/42`;
+  const parent = records[3];
+  if (!parent) throw new Error("Missing parent");
+  parent.redirectedTo = follow.url;
+  const detail = {
+    ...read,
+    request: { method: "GET" as const, urlTemplate: `${origin}/products/{id}` },
+    inputs: read.inputs.map((p) => ({ ...p, location: "path" as const })),
+  };
+  const policy = learnWriteResponses([create, detail], records, origin)[create.id];
+  expect(policy?.readBack?.identityAliases).toEqual([`${origin}/catalogue/products/{id}`]);
+});
+
+function deletionEvidence() {
+  const remove: Operation = {
+    ...create,
+    actionType: `${SCHEMA}DeleteAction`,
+    inputs: [
+      {
+        name: "id",
+        path: [`${SCHEMA}object`, `${SCHEMA}identifier`],
+        location: "form",
+        range: "http://www.w3.org/2001/XMLSchema#string",
+        required: true,
+        default: "73",
+      },
+    ],
+  };
+  const records = trace();
+  const [write, response, follow] = records;
+  if (!write || !response || !follow) throw new Error("Missing deletion evidence");
+  write.postData = "id=42";
+  write.redirectedTo = `${origin}/products`;
+  response.url = `${origin}/products`;
+  response.bodySample = '<main>Products</main><div role="alert">Deleted successfully</div>';
+  response.responsePageError = false;
+  follow.bodySample = JSON.stringify({ total: 0, items: [] });
+  return { remove, records, write, response, follow };
+}
+
+it("r12 never learns a failed-delete demonstration flash or completes the identical failure", async () => {
+  const { remove, records, response } = deletionEvidence();
+  response.bodySample =
+    '<main>Products</main><div role="alert" class="alert-danger">Your product could not be deleted.</div>';
+  response.responsePageError = true;
+  const policies = learnWriteResponses([remove, read], records, origin);
+  expect(policies[remove.id]?.successFlash).toBeUndefined();
+  const { result } = await execute(policies[remove.id], "failed delete", remove, []);
+  expect(result.outcome?.status).toBe("uncertain");
+});
+
+it.each([
+  "no read",
+  "item remains",
+  "other identity",
+  "non-success",
+  "missing root",
+  "error envelope",
+  "recorder error",
+  "unmarked landing",
+  "after another write",
+])("r12 learns no success flash without independent deletion evidence: %s", (mode) => {
+  const { remove, records, follow, response } = deletionEvidence();
+  if (mode === "no read") records.pop();
+  if (mode === "item remains")
+    follow.bodySample = JSON.stringify({ total: 1, items: [{ id: "42" }] });
+  if (mode === "other identity") follow.url = `${origin}/products/rows?id=43`;
+  if (mode === "non-success") follow.status = 503;
+  if (mode === "missing root") follow.bodySample = JSON.stringify({ total: 0 });
+  if (mode === "error envelope")
+    follow.bodySample = JSON.stringify({ total: 0, items: [], ok: false });
+  if (mode === "recorder error") response.responsePageError = true;
+  if (mode === "unmarked landing") response.responsePageError = undefined;
+  if (mode === "after another write") {
+    follow.seq = 4;
+    records.push({ ...records[0], ...follow, seq: 3, method: "POST", bodySample: undefined });
+  }
+  expect(
+    learnWriteResponses([remove, read], records, origin)[remove.id]?.successFlash,
+  ).toBeUndefined();
+});
+
+it("r12 learns a verified successful deletion notice from a follow-up crawl", async () => {
+  const { remove, records, follow } = deletionEvidence();
+  follow.phase = "crawl";
+  follow.demonstration = undefined;
+  const policy = learnWriteResponses([remove, read], records, origin)[remove.id];
+  expect(policy?.successFlash).toHaveLength(1);
+  expect((await execute(policy, "matching", remove, [])).result.outcome?.status).toBe("completed");
+});
+
+it.each([
+  '<div role="alert" class="alert-danger">Failed</div>',
+  '<div role="alert" class="warning">Try again</div>',
+  '<div role="alert" class="error">Try again</div>',
+  '<div role="alert" aria-invalid="true">Invalid</div>',
+])("r12 rejects error-classed flash regions even if a supplied recorder flag says success (%s)", (body) => {
+  const { remove, records, response } = deletionEvidence();
+  response.bodySample = body;
+  expect(responsePageError(body, "text/html", false)).toBe(true);
+  expect(
+    learnWriteResponses([remove, read], records, origin)[remove.id]?.successFlash,
+  ).toBeUndefined();
 });
 
 it.each([

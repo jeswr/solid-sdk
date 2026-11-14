@@ -47,7 +47,7 @@ export interface RecordedRequest {
   bodyTruncated?: boolean;
   /** Error/validation check over the complete witnessed response, before sample truncation. */
   responsePageError?: boolean;
-  /** Complete-response failure check excluding flash/validation regions. */
+  /** Complete-response failure check excluding neutral flash regions. */
   responsePageFailure?: boolean;
   /** Hashes of the complete response's flash regions, never executable text. */
   responseFlash?: string[];

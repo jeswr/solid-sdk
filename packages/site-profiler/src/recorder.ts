@@ -273,7 +273,9 @@ export class Recorder {
     try {
       const body = await res.text();
       if (entry.phase === "demonstration" && /html|json/i.test(entry.contentType ?? "")) {
-        entry.responsePageError = responsePageError(body, entry.contentType);
+        // A neutral success notice is a flash, not a page error. Creation still
+        // rejects every flash via the complete inventory when learning policies.
+        entry.responsePageError = responsePageError(body, entry.contentType, false);
         entry.responsePageFailure = responsePageError(body, entry.contentType, false);
         entry.responseFlash = responseFlash(body, entry.contentType);
       }

@@ -16,6 +16,7 @@ import { applyExtraction } from "./extraction.js";
 import { responsePageError } from "./response-evidence.js";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
+import { demonstratedEffectVerified } from "./write-effect.js";
 
 function safeUrl(value: string, origin: string): URL | undefined {
   try {
@@ -48,9 +49,62 @@ function failedPage(r: RecordedRequest, completionOnly = false): boolean {
   )
     return true;
   if (completionOnly)
-    return r.responsePageFailure ?? responsePageError(r.bodySample ?? "", r.contentType, false);
-  if (r.responsePageError !== undefined) return r.responsePageError;
-  return responsePageError(r.bodySample ?? "", r.contentType);
+    return (
+      r.responsePageError === true ||
+      (r.responsePageFailure ?? responsePageError(r.bodySample ?? "", r.contentType, false))
+    );
+  return (
+    r.responsePageError === true ||
+    !!r.responseFlash?.length ||
+    responsePageError(r.bodySample ?? "", r.contentType)
+  );
+}
+
+/** Slot only the identity, retaining literal resource, tenant and store prefixes. */
+function readBackResource(
+  urls: readonly string[],
+  identity: string,
+  origin: string,
+  follow: RecordedRequest,
+  trace: readonly RecordedRequest[],
+):
+  | Pick<NonNullable<WriteResponsePolicy["readBack"]>, "identityPattern" | "identityAliases">
+  | undefined {
+  if (!urls.length) return;
+  const patterns = new Set<string>();
+  const add = (value: string): boolean => {
+    const url = safeUrl(value, origin);
+    if (!url || responseIdentity(url.href)?.identifier !== identity) return false;
+    const pattern = locationPattern(url, undefined, follow);
+    if (!pattern?.includes("{id}")) return false;
+    patterns.add(`${origin}${pattern}`);
+    return true;
+  };
+  if (!urls.every(add)) return;
+  // Recorder-linked GET redirects witness aliases; equal numeric suffixes do not.
+  let child = follow;
+  const seen = new Set<number>();
+  while (child.redirectedFrom !== undefined && !seen.has(child.seq)) {
+    seen.add(child.seq);
+    const parent = trace.find((r) => r.seq === child.redirectedFrom);
+    const childUrl = safeUrl(child.url, origin);
+    if (
+      !parent ||
+      parent.blocked ||
+      parent.method !== "GET" ||
+      ![301, 302, 303].includes(parent.status ?? 0) ||
+      parent.redirectedTo !== child.url ||
+      !childUrl ||
+      !patterns.has(`${origin}${locationPattern(childUrl, undefined, child)}`) ||
+      !add(parent.url)
+    )
+      break;
+    child = parent;
+  }
+  const [identityPattern, ...identityAliases] = [...patterns];
+  return identityPattern
+    ? { identityPattern, ...(identityAliases.length ? { identityAliases } : {}) }
+    : undefined;
 }
 
 /** Only declared whole path inputs and the response identity can become slots. */
@@ -228,15 +282,16 @@ export function learnWriteResponses(
             );
             const item = items[0];
             const ids = trusted[0]?.[`${SCHEMA}identifier`] ?? [];
+            const urls = trusted[0]?.[`${SCHEMA}url`] ?? [];
+            const resource = readBackResource(urls, identity.identifier, origin, follow, trace);
             if (
               items.length !== 1 ||
               !item ||
-              !readBackIdentityMatches(
-                ids,
-                trusted[0]?.[`${SCHEMA}url`] ?? [],
-                identity.identifier,
-                origin,
-              ) ||
+              !resource ||
+              !readBackIdentityMatches(ids, urls, identity.identifier, origin, [
+                resource.identityPattern,
+                ...(resource.identityAliases ?? []),
+              ]) ||
               Object.values(item).some((vs) => vs.length > 100 || vs.some((v) => v.length > 4000))
             )
               continue;
@@ -267,7 +322,7 @@ export function learnWriteResponses(
               );
               if (property) {
                 inputEvidence = { input: p.name, property };
-                readBack = { operation: candidate.id, bind };
+                readBack = { operation: candidate.id, bind, ...resource };
                 break outer;
               }
             }
@@ -293,7 +348,16 @@ export function learnWriteResponses(
       if (readBack) policy.readBack = readBack;
       const flashes =
         current.responseFlash ?? responseFlash(current.bodySample, current.contentType);
-      if (completionOnly && flashes.length) policy.successFlash = flashes;
+      if (
+        completionOnly &&
+        flashes.length &&
+        current.responsePageError === false &&
+        !responsePageError(current.bodySample, current.contentType, false) &&
+        // Cleanup may make this detail unreadable during later replay verification.
+        // Its successful recorded read still proves the demonstration's effect.
+        demonstratedEffectVerified(op, write, current, operations, trace, origin)
+      )
+        policy.successFlash = flashes;
       witnesses.push(policy);
     }
     // Conflicting or incomplete demonstrations never widen a policy.

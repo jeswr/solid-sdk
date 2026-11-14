@@ -32,6 +32,10 @@ export interface WriteResponsePolicy {
   readBack?: {
     operation: string;
     bind: Record<string, { identity: true } | { input: string } | { value: string }>;
+    /** Exact witnessed resource route; only the new identity occupies {id}. */
+    identityPattern: string;
+    /** Additional resource routes witnessed as aliases of the same read item. */
+    identityAliases?: string[];
   };
   /** Opaque hashes of flash regions witnessed on a successful completion landing. */
   successFlash?: string[];
@@ -70,7 +74,27 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
     throw new BindingError("invalid write-response final status");
   if (policy.successFlash?.some((hash) => !/^[a-f0-9]{64}$/.test(hash)))
     throw new BindingError("invalid write-response flash evidence");
+  if (policy.readBack) {
+    for (const pattern of [
+      policy.readBack.identityPattern,
+      ...(policy.readBack.identityAliases ?? []),
+    ])
+      readBackIdentityUrl(pattern, "1", origin);
+  }
   for (const error of policy.errorLocationPatterns ?? []) patternPath(error, origin);
+}
+
+function readBackIdentityUrl(pattern: string, identity: string, origin: string): string {
+  if (
+    typeof pattern !== "string" ||
+    pattern.split("{id}").length !== 2 ||
+    /[{}]/.test(pattern.replace("{id}", ""))
+  )
+    throw new BindingError("read-back needs a witnessed identity pattern");
+  patternPath(pattern, origin);
+  const url = guardUrl(pattern.replace("{id}", encodeURIComponent(identity)), origin);
+  if (url.search || url.hash) throw new BindingError("invalid read-back identity pattern");
+  return url.href;
 }
 
 /** A permalink alias must retain the learned resource route and its on-origin identity. */
@@ -222,12 +246,17 @@ export function readBackIdentityMatches(
   urls: readonly string[],
   identity: string,
   origin: string,
+  patterns: readonly string[],
 ): boolean {
-  if (!(ids.length || urls.length) || !ids.every((id) => id === identity)) return false;
+  if (!urls.length || !patterns.length || !ids.every((id) => id === identity)) return false;
   return urls.every((value) => {
     try {
       const url = guardUrl(value, origin);
-      return !url.search && responseIdentity(url.href)?.identifier === identity;
+      return (
+        !url.search &&
+        !url.hash &&
+        patterns.some((pattern) => readBackIdentityUrl(pattern, identity, origin) === url.href)
+      );
     } catch {
       return false;
     }
@@ -243,6 +272,10 @@ export async function verifiedReadBackItem(
   property: string,
   submitted: string,
   redact: (value: string) => string,
+  resource: Pick<
+    NonNullable<WriteResponsePolicy["readBack"]>,
+    "identityPattern" | "identityAliases"
+  >,
 ): Promise<boolean> {
   if (responsePageError(body, extraction.format === "json" ? "application/json" : "text/html"))
     return false;
@@ -254,7 +287,10 @@ export async function verifiedReadBackItem(
     const ids = item.values.get(`${SCHEMA}identifier`) ?? [];
     const urls = [...(item.values.get(`${SCHEMA}url`) ?? []), ...(item.iri ? [item.iri] : [])];
     if (
-      !readBackIdentityMatches(ids, urls, identity, new URL(baseUrl).origin) ||
+      !readBackIdentityMatches(ids, urls, identity, new URL(baseUrl).origin, [
+        resource.identityPattern,
+        ...(resource.identityAliases ?? []),
+      ]) ||
       redact(identity) !== identity
     )
       return false;

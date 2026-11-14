@@ -45,7 +45,10 @@ export function jsonEnvelope(doc: unknown, pointer = ""): { failed: boolean; key
 }
 
 const FLASH_SELECTOR =
-  '[aria-invalid="true"], [role~="alert"], [aria-live="assertive"], .error, .errors, .form-error-message, .form-errors, .error-message, .validation-error, .validation-errors, .invalid-feedback, .alert-danger, .message-error';
+  '[aria-invalid]:not([aria-invalid="false"]), [role~="alert"], [aria-live="assertive"], .error, .errors, .form-error-message, .form-errors, .error-message, .validation-error, .validation-errors, .invalid-feedback, .alert-danger, .message-error';
+
+const FAILURE_SELECTOR =
+  '[aria-invalid]:not([aria-invalid="false"]), .error, .errors, .form-error-message, .form-errors, .error-message, .validation-error, .validation-errors, .invalid-feedback, .alert-danger, .message-error';
 
 /** Opaque equality evidence only: page text is never interpreted as an instruction. */
 export function responseFlash(body: string, contentType: string | undefined): string[] {
@@ -87,6 +90,10 @@ export function responsePageError(
   const doc = parseHtml(body);
   if (
     selectElements('input[type="password"]', doc).length ||
+    selectElements(FAILURE_SELECTOR, doc).length ||
+    selectElements('[role~="alert"], [aria-live="assertive"]', doc).some((el) =>
+      /(?:^|[\s_-])(?:error|danger|warning)(?:$|[\s_-])/i.test(attribute(el, "class") ?? ""),
+    ) ||
     (includeAlerts && selectElements(FLASH_SELECTOR, doc).length)
   )
     return true;

@@ -18,6 +18,7 @@ import { addFilterInputs } from "./filters.js";
 import { isCsrfFieldName, parseForms } from "./forms.js";
 import { attr, parseHtml, selectAll } from "./html.js";
 import { htmlRecordExtractions } from "./html-records.js";
+import { learnIdentityLinks } from "./identity-links.js";
 import { heuristicLabeller, isLoginCandidate } from "./labeller.js";
 import { type LoginObservation, performLogin, probeCandidates, refreshInfo } from "./login.js";
 import { addNavigationInputs } from "./navigation-inputs.js";
@@ -506,6 +507,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       }
     }
 
+    learnIdentityLinks(operations, recorder.trace, origin);
     cookieModel = { operations };
     reregisterCookies();
 
