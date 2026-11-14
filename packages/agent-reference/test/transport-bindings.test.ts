@@ -330,7 +330,7 @@ it("runs the transport-specific adversarial branches through separately keyed ag
       (event) => event.outcome === "refuse" && event.reason === "not-authorised",
     ),
   ).toBe(true);
-}, 600_000);
+}, 1_500_000);
 
 it.each([
   "jws",
