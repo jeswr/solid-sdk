@@ -225,3 +225,39 @@ it("detects an added exchange that changes a later baseline verdict", async () =
   expect(found).toMatch(/"check":"fitness","verdict":"pass".*"check":"fitness","verdict":"fail"/);
   expect(found).toMatch(/Final outcome/);
 }, 300_000);
+
+it("judges agent gate runs only: a mechanism's events are skipped, an agent's missing check is caught", () => {
+  // AUTHORED-BY Claude Opus 5.5 (brief 31 item 4: C2 scoped to agent gates)
+  const event = (agent: string, part: string, kind: string, extra: object = {}) =>
+    ({
+      agent,
+      part,
+      kind,
+      addedBy: "fixture",
+      caption: "",
+      ...extra,
+    }) as unknown as TraceFile["events"][number];
+  const trace = {
+    events: [
+      event("sams-agent", "outbound-gate", "check", {
+        check: "mandate",
+        verdict: "pass",
+        segment: "added",
+      }),
+      event("sams-agent", "outbound-gate", "decision", { outcome: "go" }),
+      event("forum", "outbound-gate", "check", { check: "recipient", verdict: "pass" }),
+    ],
+  };
+  const entry = { id: "fixture", added: [{ segment: "first" }] } as unknown as Entry;
+  const sam = { id: "sam-agent", traceId: "sams-agent", runs: "agent" as const };
+  const parties = [sam, { id: "forum", runs: "issuer-only" as const }];
+  const found = addedSegmentDifferences(trace, entry, parties).join("\n");
+  expect(found).toMatch(/sams-agent outbound-gate run 1: check recipient is missing/);
+  expect(found).not.toMatch(/forum/);
+  // The same events from a party that runs an agent are a gate run without a decision.
+  const asAgent = addedSegmentDifferences(trace, entry, [
+    sam,
+    { id: "forum", runs: "agent" as const },
+  ]).join("\n");
+  expect(asAgent).toMatch(/forum\|outbound-gate records checks without a decision/);
+});

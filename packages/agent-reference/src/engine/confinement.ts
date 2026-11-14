@@ -140,7 +140,7 @@ function inOrder(seen: readonly Check[], wanted: readonly Check[]): Check[] {
 export function addedSegmentDifferences(
   trace: Pick<TraceFile, "events">,
   entry: Pick<Entry, "id" | "added">,
-  parties: readonly Pick<Scenario["parties"][number], "id" | "traceId">[] = [],
+  parties: readonly Pick<Scenario["parties"][number], "id" | "traceId" | "runs">[] = [],
 ): string[] {
   const differences: string[] = [];
   const segments = addedSegments(trace);
@@ -153,6 +153,12 @@ export function addedSegmentDifferences(
       `The trace has ${segments.length} added segment(s); ${entry.id} declares ${added.length}`,
     );
   const traceId = (slug: string) => parties.find((p) => p.id === slug)?.traceId ?? slug;
+  // C2 judges agent gate runs. A party that runs no agent (the LocalForum is a mechanism,
+  // judged by its own signed decision and the forum tests) records events in the gate parts
+  // without being an agent gate; its events are not gate runs.
+  const mechanisms = new Set(
+    parties.filter((p) => p.runs !== undefined && p.runs !== "agent").map((p) => traceId(p.id)),
+  );
   segments.forEach((events, index) => {
     const declared = added[index];
     const name = declared?.segment ?? `#${index + 1}`;
@@ -162,6 +168,7 @@ export function addedSegmentDifferences(
     const runs: { agent: string; gate: string; checks: TraceEvent[]; decision: TraceEvent }[] = [];
     for (const event of events) {
       if (event.part !== "inbound-gate" && event.part !== "outbound-gate") continue;
+      if (mechanisms.has(event.agent)) continue;
       const key = `${event.agent}|${event.part}`;
       if (event.kind === "check") pending.set(key, [...(pending.get(key) ?? []), event]);
       if (event.kind === "decision") {

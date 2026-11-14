@@ -4708,3 +4708,87 @@ debugging why. The scenario wiring is kept out of the tree; the configuration st
 unresolved, and its blocked reason now states these points. The blocked wording was
 regenerated in place for the two rows. Manifest and `labels` counts are unchanged:
 282 paths, 241 runs, 15 disagree, 26 blocked.
+
+### Brief 31 item 4, completed: `accountability-regulator-claim` (blocked to runs)
+
+**Decisions recorded (coordinator, after 1a1f6457b).**
+
+1. The engine-step anchor receipt (`record-anchor`) is accepted for now. A receipt carried
+   inside a message, where the record head travels in the peer's receipt of an exchange,
+   is the stronger form. It is deferred because it would change baseline messages.
+2. C2 is scoped to agent gate runs. `addedSegmentDifferences` skips the gate-part events
+   of parties that run no agent. The LocalForum is a mechanism, and its correctness is
+   judged by its own signed decision and the forum tests. LocalForum's recorded events are
+   unchanged, so the fee-dispute traces are identical.
+   - The scoping is commented in `src/engine/confinement.ts`.
+   - A new test in `test/confinement.test.ts` shows that an agent gate missing a check
+     inside an added segment is still caught. The same lone check from a party that runs
+     an agent is still reported as a gate run without a decision.
+3. A release that discloses no fact records data-terms as not-applicable: reason
+   `no-data`, text "Nothing is disclosed." I first applied this to every distribute with
+   an empty evidence list. The oracle (164 paths) stayed identical, but the stored
+   fee-dispute outline moved (`test/forum.test.ts`: the owner's record release with no
+   facts). So it is restricted to range record releases, whose parameters carry
+   `recordFrom`. Whole-record releases keep their recorded rows, and fee-dispute is
+   unchanged.
+
+**Why the forum decided evidence-missing.** The `fee-not-in-terms` branch required the
+acceptance to be signed by the respondent. In the mortgage journey it is the other way
+round: North offered the apply terms (`north-agent` propose) and Sam accepted. The terms
+also carry the fee as an object, `{amount: 0}`, not a number.
+
+The check now accepts the agreement when:
+
+- the offer and the acceptance are signed by the case's two parties, one in each role;
+- the acceptance cites the offer;
+- the acceptance's terms digest equals the offer's terms and the digest the claim names;
+- the agreed fee (a number, or the `amount` of the fee object) differs from the fee in
+  the lender-signed statement.
+
+**Run.** The configuration requires `identity-anonymous` and declares the forum through
+`profileChange`. Its added segment runs, every agent gate passing:
+
+1. North's record head is witnessed by Sam, and Sam's by North (range anchors).
+2. North's fee notice, carrying its signed `fee.charged` statement (995), is admitted.
+3. The register agent admits the dispute-route statement.
+4. Sam's agent looks the route up anonymously and admits the answer.
+5. Both sides export range segments of the fee-notice conversation.
+6. Sam approves, and the claim goes to the ombudsman named in the admitted
+   `register.dispute-route` answer, naming the apply agreement by digest.
+7. North is asked, approves, and answers with its own range.
+8. The forum decides `not-authorised` / `fee-not-in-terms` (agreed fee 0, billed 995).
+9. Both agents admit the decision.
+
+C1, C2 and C3 are empty. If the admitted route names a forum this world does not host,
+the claim step throws and nothing is sent (tested).
+
+**`entry-withheld`.** The branch withholds the second entry of the lender's range. The
+forum measures fitness / record-unavailable (sequence gap), not the registered evidence /
+evidence-invalid. The row is "disagrees", and its `what` text gives the reason.
+
+**Counts.**
+
+| | Before | After |
+|---|---|---|
+| Manifest | 241 runs, 15 disagree, 26 blocked | 242 runs, 16 disagree, 24 blocked |
+| `labels.test.ts` alternatives | runs 89, disagrees 3, blocked 17 | runs 90, disagrees 4, blocked 15 |
+
+The manifest has 282 paths before and after. The `labels.test.ts` alternatives row count
+stays 109. Only the regulator rows, traces and outlines were regenerated; the rows sit in
+their original position, and `traces/index.json` gained two appended entries.
+
+`test/configuration-matrix.test.ts` compared each trace header's changed layers with the
+entry's own change. For a cell with `requires`, it now expects the prerequisite's layer
+as well; for the regulator claim that is `identity` and `accountability`.
+
+**Validation (item 4).**
+
+- `test/confinement.test.ts`: 8/8 pass, including the new scoping test, run after the
+  final engine change.
+- `test/configuration-matrix.test.ts`: 6/6 pass.
+- Focused: `forum`, `forum-range`, `matrix-prerequisite`, `regulator-claim-alternative`,
+  `labels` and `traces`, 29 tests, all pass.
+- Oracle: 164 paths, equal. RDF guard: 0 failures, 213 allowances.
+- `export-schemas --check` passes, and `tsc --noEmit` passes.
+- biome is clean on the changed files, apart from warnings that are already present at
+  HEAD.

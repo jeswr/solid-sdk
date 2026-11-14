@@ -12156,8 +12156,338 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "accountability-regulator-claim",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, and the signed lender-register exchange exists (identity-anonymous) to serve as its prerequisite. The whole-record segment is too large after the mortgage journey (Sam's record: 431 entries, 1,233,371 characters, above the 1,048,576-character record string bound, which is not raised), so the engine now has range segments: the entries after an anchor that the other party signed a receipt for. With them the claim reaches the forum at the ombudsman the admitted register answer names (AC-7), but the cell does not yet pass the confinement test: the LocalForum's record request records a recipient check with no gate decision, the lender's range release discloses no fact and so records no data-terms check, and the forum decides evidence-missing instead of fee-not-in-terms. No hard-coded forum is relabelled as register discovery."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 193,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 201,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 208,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 215,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 227,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 235,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 245,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 253,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 260,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 268,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 276,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 286,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 300,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 308,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 318,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 327,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 335,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 344,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 352,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 361,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 369,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 377,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 385,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 395,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 405,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 413,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 422,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 430,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 437,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 444,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 454,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 462,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 469,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 478,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 486,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 493,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 501,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 511,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 519,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 528,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 560,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 568,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 576,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 584,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 593,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 603,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 612,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 620,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 628,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 637,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 645,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 652,
+          "agent": "lender-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 662,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 670,
+          "agent": "lender-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 679,
+          "agent": "lender-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 687,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 696,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 706,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 719,
+          "agent": "lender",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 728,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 734,
+          "agent": "forum",
+          "outcome": "admit",
+          "reason": "not-authorised"
+        },
+        {
+          "seq": 740,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 747,
+          "agent": "lender",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 5,
+      "trace": "mortgage-main--accountability-regulator-claim.json"
     },
     {
       "scenario": "mortgage-main",
@@ -12165,9 +12495,20 @@
       "path": "entry-withheld",
       "settlement": "rdf-order",
       "configuration": "accountability-regulator-claim",
-      "what": "The lender withholds a record entry; the claimant receipt commitment exposes the gap.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, and the signed lender-register exchange exists (identity-anonymous) to serve as its prerequisite. The whole-record segment is too large after the mortgage journey (Sam's record: 431 entries, 1,233,371 characters, above the 1,048,576-character record string bound, which is not raised), so the engine now has range segments: the entries after an anchor that the other party signed a receipt for. With them the claim reaches the forum at the ombudsman the admitted register answer names (AC-7), but the cell does not yet pass the confinement test: the LocalForum's record request records a recipient check with no gate decision, the lender's range release discloses no fact and so records no data-terms check, and the forum decides evidence-missing instead of fee-not-in-terms. No hard-coded forum is relabelled as register discovery."
+      "what": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable.",
+      "status": "disagrees",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "record-unavailable",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "refuse",
+        "reason": "evidence-invalid"
+      },
+      "consequences": [],
+      "addedExchanges": 5,
+      "trace": "mortgage-main--entry-withheld--accountability-regulator-claim.json"
     },
     {
       "scenario": "mortgage-main",

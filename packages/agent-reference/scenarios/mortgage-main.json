@@ -29622,22 +29622,552 @@
       "change": {
         "accountability": "regulator-claim"
       },
+      "requires": "identity-anonymous",
+      "profileChange": {
+        "forum": {
+          "party": "forum",
+          "responseSeconds": 3600,
+          "observers": []
+        },
+        "operations": {
+          "urn:op:fee-notice": {
+            "id": "urn:op:fee-notice",
+            "version": "0.1",
+            "label": "Send a fee statement",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:redress"
+            ],
+            "requiresRepresentation": true
+          },
+          "urn:op:forum-claim": {
+            "id": "urn:op:forum-claim",
+            "version": "0.1",
+            "label": "Release an exact record segment to the forum",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:redress"
+            ],
+            "requiresRepresentation": true
+          },
+          "urn:op:forum-answer": {
+            "id": "urn:op:forum-answer",
+            "version": "0.1",
+            "label": "Release an exact record segment to the forum",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:redress"
+            ],
+            "requiresRepresentation": true
+          },
+          "urn:op:lender-lookup": {
+            "purposes": [
+              "https://w3id.org/jeswr/awp#purpose/product-search",
+              "urn:purpose:redress"
+            ]
+          }
+        },
+        "claims": {
+          "fee.charged": {
+            "kind": "fee.charged",
+            "sources": [
+              "https://northbank.example/#org"
+            ],
+            "methods": [
+              "recorded-by-authority"
+            ],
+            "maxAgeDays": 30
+          },
+          "register.dispute-route": {
+            "kind": "register.dispute-route",
+            "sources": [
+              "https://w3id.org/jeswr/awp#fixture/sector-register"
+            ],
+            "methods": [
+              "recorded-by-authority"
+            ],
+            "maxAgeDays": 30
+          },
+          "forum.decision": {
+            "kind": "forum.decision",
+            "sources": [
+              "urn:fictional:mortgage-ombudsman"
+            ],
+            "methods": [
+              "recorded-by-authority"
+            ],
+            "maxAgeDays": 1
+          }
+        },
+        "purposes": {
+          "urn:purpose:redress": {
+            "id": "urn:purpose:redress",
+            "claims": [
+              "fee.charged",
+              "register.dispute-route",
+              "forum.decision"
+            ]
+          }
+        },
+        "labels": {
+          "urn:op:fee-notice": "Send a fee statement",
+          "urn:op:forum-claim": "Release an exact record segment to the forum",
+          "urn:op:forum-answer": "Release an exact record segment to the forum",
+          "urn:purpose:redress": "Redress",
+          "urn:fictional:mortgage-ombudsman": "The fictional mortgage ombudsman"
+        }
+      },
       "world": {
+        "parties": {
+          "forum": {
+            "id": "forum",
+            "identity": "urn:fictional:mortgage-ombudsman",
+            "name": "The fictional mortgage ombudsman",
+            "role": "register",
+            "runs": "issuer-only"
+          }
+        },
+        "statements": {
+          "fee-statement": {
+            "id": "fee-statement",
+            "issuer": "north",
+            "subject": "https://sam.example/#me",
+            "kind": "fee.charged",
+            "value": {
+              "fee": 995,
+              "currency": "USD",
+              "service": "Mortgage arrangement fee",
+              "synthetic": true
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:fee-statement",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:mortgage-main:fee-statement"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:mortgage-main:fee-statement"
+                  }
+                ]
+              }
+            }
+          },
+          "north-dispute-route": {
+            "id": "north-dispute-route",
+            "issuer": "lender-register",
+            "subject": "https://northbank.example/#org",
+            "kind": "register.dispute-route",
+            "value": {
+              "forum": "urn:fictional:mortgage-ombudsman",
+              "entry": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:north-dispute-route",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:mortgage-main:north-dispute-route"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:mortgage-main:north-dispute-route"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "trust": {
+          "ownLists": {
+            "sam-agent": [
+              {
+                "party": "https://mortgage-index.example/#org",
+                "tasks": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+                ],
+                "note": "chosen product index"
+              },
+              {
+                "party": "https://harbourbank.example/#org",
+                "tasks": [
+                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                ],
+                "note": "Sam's own bank"
+              },
+              {
+                "party": "urn:fictional:valuation-register",
+                "tasks": [
+                  "urn:op:valuer-lookup"
+                ]
+              },
+              {
+                "party": "urn:fictional:mossbridge-payment-desk",
+                "tasks": [
+                  "urn:op:payment"
+                ]
+              },
+              {
+                "party": "https://w3id.org/jeswr/awp#fixture/sector-register",
+                "tasks": [
+                  "urn:op:lender-lookup"
+                ],
+                "note": "the sector register Sam's agent asks about lenders"
+              },
+              {
+                "party": "urn:fictional:mortgage-ombudsman",
+                "tasks": [
+                  "urn:op:forum-claim"
+                ],
+                "note": "the dispute route the register names"
+              }
+            ],
+            "north-agent": [
+              {
+                "party": "https://sam.example/#me",
+                "tasks": [
+                  "urn:op:fee-notice"
+                ]
+              },
+              {
+                "party": "urn:fictional:mortgage-ombudsman",
+                "tasks": [
+                  "urn:op:forum-answer"
+                ]
+              }
+            ]
+          },
+          "sources": {
+            "sam-agent": {
+              "urn:source:sam-agent:dispute-route": {
+                "version": "1",
+                "source": "https://w3id.org/jeswr/awp#fixture/sector-register",
+                "claimTypes": [
+                  "register.dispute-route"
+                ],
+                "subjects": "any"
+              },
+              "urn:source:sam-agent:fee-statement": {
+                "version": "1",
+                "source": "https://northbank.example/#org",
+                "claimTypes": [
+                  "fee.charged"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ]
+              },
+              "urn:source:sam-agent:forum-decision": {
+                "version": "1",
+                "source": "urn:fictional:mortgage-ombudsman",
+                "claimTypes": [
+                  "forum.decision"
+                ],
+                "subjects": "any"
+              }
+            },
+            "north-agent": {
+              "urn:source:north-agent:forum-decision": {
+                "version": "1",
+                "source": "urn:fictional:mortgage-ombudsman",
+                "claimTypes": [
+                  "forum.decision"
+                ],
+                "subjects": "any"
+              }
+            },
+            "lender-register-agent": {
+              "urn:source:lender-register-agent:dispute-route": {
+                "version": "1",
+                "source": "https://w3id.org/jeswr/awp#fixture/sector-register",
+                "claimTypes": [
+                  "register.dispute-route"
+                ],
+                "subjects": "any"
+              }
+            }
+          }
+        },
+        "mandates": {
+          "sam-agent": {
+            "withApproval": {
+              "urn:rule:distribute:forum-claim": {
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:op:forum-claim"
+              }
+            }
+          },
+          "north-agent": {
+            "autonomous": {
+              "urn:rule:use:fee-notice": {
+                "type": "permission",
+                "action": "use",
+                "target": "urn:op:fee-notice"
+              }
+            },
+            "withApproval": {
+              "urn:rule:distribute:forum-answer": {
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:op:forum-answer"
+              }
+            }
+          }
+        },
+        "script": {
+          "sam-anchor": {
+            "id": "sam-anchor",
+            "agent": "sam-agent",
+            "type": "record-anchor",
+            "witness": "north-agent",
+            "segment": "added",
+            "atStep": 40
+          },
+          "north-anchor": {
+            "id": "north-anchor",
+            "agent": "north-agent",
+            "type": "record-anchor",
+            "witness": "sam-agent",
+            "atStep": 40
+          },
+          "fee-notice": {
+            "id": "fee-notice",
+            "agent": "north-agent",
+            "type": "start",
+            "peer": "sam-agent",
+            "kind": "invoke",
+            "operation": "urn:op:fee-notice",
+            "contents": {},
+            "evidence": [
+              "fee-statement"
+            ],
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:fee-notice",
+              "target": "urn:op:fee-notice",
+              "recipient": "https://sam.example/#me",
+              "purpose": "urn:purpose:redress",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:redress",
+            "atStep": 40
+          },
+          "fee-notice-arrives": {
+            "id": "fee-notice-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "north-agent",
+            "atStep": 40
+          },
+          "route-register-holds-entry": {
+            "id": "route-register-holds-entry",
+            "agent": "lender-register-agent",
+            "type": "admit",
+            "statements": [
+              "north-dispute-route"
+            ],
+            "purpose": "urn:purpose:redress",
+            "atStep": 41
+          },
+          "route-lookup": {
+            "id": "route-lookup",
+            "agent": "sam-agent",
+            "type": "start",
+            "atStep": 41,
+            "peer": "lender-register-agent",
+            "kind": "invoke",
+            "operation": "urn:op:lender-lookup",
+            "contents": {},
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:lender-lookup",
+              "target": "urn:op:lender-lookup",
+              "recipient": "https://w3id.org/jeswr/awp#fixture/sector-register",
+              "purpose": "urn:purpose:redress",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:redress",
+            "configuration": "public-read",
+            "basis": {
+              "kind": "public"
+            },
+            "discover": false
+          },
+          "route-lookup-arrives": {
+            "id": "route-lookup-arrives",
+            "agent": "lender-register-agent",
+            "type": "receive",
+            "from": "sam-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "statement": "urn:scenario:mortgage-main:north-dispute-route"
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.north-dispute-route.evidence"
+                }
+              ]
+            },
+            "atStep": 41
+          },
+          "route-found": {
+            "id": "route-found",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "lender-register-agent",
+            "atStep": 41
+          },
+          "claimant-record": {
+            "id": "claimant-record",
+            "agent": "sam-agent",
+            "type": "record-segment",
+            "conversation": {
+              "$ref": "steps.fee-notice.conversation"
+            },
+            "atStep": 42,
+            "anchor": {
+              "$ref": "steps.sam-anchor"
+            }
+          },
+          "respondent-record": {
+            "id": "respondent-record",
+            "agent": "north-agent",
+            "type": "record-segment",
+            "conversation": {
+              "$ref": "steps.fee-notice.conversation"
+            },
+            "atStep": 42,
+            "anchor": {
+              "$ref": "steps.north-anchor"
+            }
+          },
+          "file-claim": {
+            "id": "file-claim",
+            "agent": "sam-agent",
+            "type": "forum-claim",
+            "case": "urn:case:mortgage-fee",
+            "conversation": {
+              "$ref": "steps.fee-notice.conversation"
+            },
+            "respondent": "north",
+            "segment": {
+              "$ref": "steps.claimant-record.jws"
+            },
+            "allegation": "fee-not-in-terms",
+            "observation": {
+              "$ref": "statements.fee-statement.jws"
+            },
+            "route": "register",
+            "atStep": 43,
+            "agreement": {
+              "$ref": "steps.apply.conversation"
+            }
+          },
+          "approve-claim": {
+            "id": "approve-claim",
+            "agent": "sam-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Approve these exact record bytes and the lender's fee statement to the ombudsman the register names.",
+            "atStep": 43
+          },
+          "answer": {
+            "id": "answer",
+            "agent": "north-agent",
+            "type": "forum-answer",
+            "case": "urn:case:mortgage-fee",
+            "segment": {
+              "$ref": "steps.respondent-record.jws"
+            },
+            "atStep": 44
+          },
+          "approve-answer": {
+            "id": "approve-answer",
+            "agent": "north-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Approve this exact record response.",
+            "atStep": 44
+          },
+          "decision-to-sam": {
+            "id": "decision-to-sam",
+            "agent": "sam-agent",
+            "type": "forum-decision",
+            "case": "urn:case:mortgage-fee",
+            "atStep": 45
+          },
+          "decision-to-lender": {
+            "id": "decision-to-lender",
+            "agent": "north-agent",
+            "type": "forum-decision",
+            "case": "urn:case:mortgage-fee",
+            "segmentEnd": "added",
+            "atStep": 45
+          }
+        },
         "branches": [
           {
             "id": "entry-withheld",
             "onlyUnder": "accountability-regulator-claim",
-            "what": "The lender withholds a record entry; the claimant receipt commitment exposes the gap.",
-            "change": {},
+            "what": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable.",
+            "change": {
+              "script": {
+                "respondent-record": {
+                  "attack": "gap"
+                }
+              },
+              "stopAfter": "approve-answer"
+            },
             "expect": {
               "outcome": "refuse",
-              "check": "evidence",
-              "reason": "evidence-invalid"
+              "check": "fitness",
+              "reason": "record-unavailable"
             },
-            "outline": []
+            "outline": [],
+            "catalogueExpected": {
+              "outcome": "refuse",
+              "reason": "evidence-invalid"
+            }
           }
         ]
-      }
+      },
+      "added": [
+        {
+          "segment": "lender-register-holds-entries",
+          "closes": {
+            "agent": "sam-agent",
+            "kind": "deliver",
+            "outcome": "admit"
+          }
+        },
+        {
+          "segment": "sam-anchor",
+          "closes": {
+            "agent": "sam-agent",
+            "kind": "deliver",
+            "outcome": "admit"
+          }
+        }
+      ]
     },
     {
       "id": "usage-control-odrl-model-tighten",

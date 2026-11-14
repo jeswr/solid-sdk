@@ -3,7 +3,7 @@
 import { join } from "path";
 import { expect, it } from "vitest";
 import { loadCase } from "../src/engine/load.js";
-import { matrixWorld } from "../src/engine/matrix.js";
+import { matrixPrerequisite, matrixWorld } from "../src/engine/matrix.js";
 import { patch, runScenario } from "../src/engine/run.js";
 import { scenarioSchema } from "../src/engine/schema.js";
 import { alternativeWireId, configurationById } from "../src/profile/configurations.js";
@@ -112,7 +112,13 @@ it("runs scoped branches and the declared layer change in each matrix cell", asy
           header?.layers[layer as keyof typeof BASELINE.layers] !==
           BASELINE.layers[layer as keyof typeof BASELINE.layers],
       ),
-    ).toEqual(Object.keys(entry.change));
+    ).toEqual(
+      // With `requires`, the prerequisite's layer change is part of the cell (brief 31 item 4).
+      Object.keys(BASELINE.layers).filter(
+        (layer) =>
+          layer in entry.change || layer in (matrixPrerequisite(scenario, entry)?.change ?? {}),
+      ),
+    );
   }
   // The matrix now includes 34 more live paths; retain every assertion and budget the aggregate run.
 }, 900_000);

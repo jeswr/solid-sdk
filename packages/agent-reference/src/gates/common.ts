@@ -456,6 +456,8 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
   // Brief 31 §2.2: only the configured agents, not every public-read client.
   if (id === alternativeWireId("identity-anonymous"))
     return ctx.configuration?.id === "identity-anonymous";
+  if (id === alternativeWireId("accountability-regulator-claim"))
+    return ctx.configuration?.id === "accountability-regulator-claim";
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

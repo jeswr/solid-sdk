@@ -675,10 +675,19 @@ export class LocalForum {
         verifier: this.identity,
       });
       const f = charge.payload;
-      const offer = (await verifyRecordedMessage(c.claim.agreement.offer, this.options.trust))
-        ?.message as AnyMessage | undefined;
+      const offered = await verifyRecordedMessage(c.claim.agreement.offer, this.options.trust);
+      const offer = offered?.message as AnyMessage | undefined;
       const read = await verifyRecordedMessage(c.claim.agreement.acceptance, this.options.trust);
       const acceptance = read?.message as AnyMessage | undefined;
+      // The two parties to the case signed the agreement, one offering and one accepting.
+      const signers = [offered?.pinned?.party, read?.pinned?.party].sort();
+      const parties = [c.claim.party, c.claim.respondent].sort();
+      const agreed =
+        offer?.kind === "propose"
+          ? typeof offer.body.terms.fee === "number"
+            ? offer.body.terms.fee
+            : (offer.body.terms.fee as { amount?: unknown } | undefined)?.amount
+          : undefined;
       const delivered = messages.some((m) =>
         (m.evidence ?? []).some((e) => e.value === c.claim.observation),
       );
@@ -690,15 +699,17 @@ export class LocalForum {
         f.subject === c.claim.party &&
         offer?.kind === "propose" &&
         acceptance?.kind === "accept" &&
-        read?.pinned?.party === c.claim.respondent &&
+        signers[0] === parties[0] &&
+        signers[1] === parties[1] &&
         acceptance.body.proposal === offer.id &&
         acceptance.body.termsDigest === digestOf(offer.body.terms) &&
         acceptance.body.termsDigest === c.claim.agreement.digest &&
-        offer.body.terms.fee !== f.fee
+        agreed !== f.fee
       ) {
         await this.decision(c, "not-authorised", c.claim.respondent, {
           problem: "fee-not-in-terms",
           agreement: c.claim.agreement.digest,
+          ...(typeof agreed === "number" ? { agreedFee: agreed } : {}),
           statement: digestOf(f),
           billedFee: f.fee,
         });

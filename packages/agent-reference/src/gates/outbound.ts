@@ -1808,6 +1808,14 @@ export class OutboundGate {
       );
       return undefined;
     }
+    if (p.evidence.length === 0 && typeof p.recordFrom === "number") {
+      // Brief 31 item 4: a range record release that discloses no fact still records the
+      // check. Whole-record releases keep their recorded rows (fee-dispute is unchanged).
+      this.verdict(verdicts, subject, "data-terms", "not-applicable", "Nothing is disclosed.", {
+        reason: NOT_APPLICABLE.noData,
+      });
+      return undefined;
+    }
     let blocked: string | undefined;
     const ruledItems = p.evidence.map((id) => {
       const fact = this.deps.memory.facts.get(String(id));

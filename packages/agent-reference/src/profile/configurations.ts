@@ -186,16 +186,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("usage-control-odrl-model-tighten"),
     "ODRL rules followed by a model that can only narrow",
   ),
-  [alternativeWireId("accountability-regulator-claim")]: {
-    ...localDefinition(
-      alternativeWireId("accountability-regulator-claim"),
-      "Register-routed regulator claim — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.3: the revised confinement rule admits the claim as an added segment, and the signed lender-register exchange exists (identity-anonymous) to serve as its prerequisite. The whole-record segment is too large after the mortgage journey (Sam's record: 431 entries, 1,233,371 characters, above the 1,048,576-character record string bound, which is not raised), so the engine now has range segments: the entries after an anchor that the other party signed a receipt for. With them the claim reaches the forum at the ombudsman the admitted register answer names (AC-7), but the cell does not yet pass the confinement test: the LocalForum's record request records a recipient check with no gate decision, the lender's range release discloses no fact and so records no data-terms check, and the forum decides evidence-missing instead of fee-not-in-terms. No hard-coded forum is relabelled as register discovery.",
-    ],
-  },
+  [alternativeWireId("accountability-regulator-claim")]: localDefinition(
+    alternativeWireId("accountability-regulator-claim"),
+    "Fee claim to the ombudsman the lender's register entry names, decided on both records",
+  ),
   [alternativeWireId("commitments-agreement-credential")]: localDefinition(
     alternativeWireId("commitments-agreement-credential"),
     "Native two-proof Data Integrity valuation credential inside signed messages",
