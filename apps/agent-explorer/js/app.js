@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Router, navigation, theme, evidence banner and keyboard for the agent explorer. Classic script.
 (function () {
   'use strict';
@@ -58,14 +59,13 @@
     });
     if (id === 'explore') {
       if (current === 'explore' && AX.explore.isMounted()) {
-        AX.explore.apply(st.params);
+        return AX.explore.apply(st.params);
       } else {
         unmount();
         current = 'explore';
         view.className = 'view mode-explore';
-        AX.explore.mount(view, st.params);
+        return AX.explore.mount(view, st.params);
       }
-      return;
     }
     if (current === 'explore') AX.explore.unmount();
     document.body.classList.remove('present');

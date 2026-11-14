@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // The Requirements view, driven entirely by model.requirements. Classic script.
 (function () {
   'use strict';
@@ -18,19 +19,8 @@
   function seeItHref(risk) {
     var t = AX.traceByKey[risk.trace];
     if (!t) return null;
-    var where = risk.where || [];
-    // Prefer the check that decides (a verdict other than pass), then any run of a named check,
-    // then an event in a named part; fall back to the first event.
-    function find(pred) {
-      for (var i = 0; i < t.events.length; i++) if (pred(t.events[i])) return i;
-      return -1;
-    }
-    var named = function (e) { return e.kind === 'check' && where.indexOf(e.check) >= 0; };
-    var idx = find(function (e) { return named(e) && e.verdict !== 'pass' && e.verdict !== 'not-applicable'; });
-    if (idx < 0) idx = find(function (e) { return named(e) && e.verdict === 'pass'; });
-    if (idx < 0) idx = find(function (e) { return where.indexOf(e.part) >= 0; });
-    if (idx < 0) idx = 0;
-    var e2 = t.events[idx];
+    var e2 = t.summary.requirements[risk.id];
+    if (!e2) return null;
     return AX.buildHash('explore', { scenario: t.scenario.id, config: t.configuration.id, step: e2.step, seq: e2.seq, level: 'checks' });
   }
   function sourceClass(status) {

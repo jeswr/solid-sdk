@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Guided tours: data in tours/*.json, bundled. Each stop applies a hash state and spotlights a target.
 (function () {
   'use strict';
@@ -9,6 +10,7 @@
   var spot = null;
   var card = null;
   var repositionTimer = null;
+  var showVersion = 0;
 
   function tours() { return AX.data.tours || []; }
   function find(id) { return tours().filter(function (t) { return t.id === id; })[0] || tours()[0]; }
@@ -65,10 +67,11 @@
   }
 
   function show() {
+    var version = ++showVersion;
     var stop = T.tour.stops[T.i];
     var hash = '#/' + (stop.view || 'explore') + (stop.state ? (stop.state.charAt(0) === '?' ? stop.state : '?' + stop.state) : '');
     if (AX.explore && AX.explore.stop) AX.explore.stop();
-    AX.go(hash);
+    var ready = AX.go(hash);
     var n = T.tour.stops.length;
     card.innerHTML = '<button type="button" class="tour-close" aria-label="Close the tour">&times;</button>' +
       '<p class="eyebrow">' + esc(T.tour.title) + '</p><h3 id="tour-title">' + esc(stop.title) + '</h3><p>' + esc(stop.text) + '</p>' +
@@ -79,7 +82,8 @@
     card.querySelector('[data-tour="back"]').addEventListener('click', function () { go(T.i - 1); });
     card.querySelector('[data-tour="next"]').addEventListener('click', function () { if (T.i === n - 1) stopTour(); else go(T.i + 1); });
     // Wait for the view to render, then bring the target into view and place the spotlight.
-    setTimeout(function () {
+    Promise.resolve(ready).then(function () {
+      if (!T.tour || version !== showVersion) return;
       var el = resolveTarget(stop.target);
       if (el && el.scrollIntoView) {
         var r = el.getBoundingClientRect();
@@ -89,7 +93,7 @@
       place();
       var nb = card.querySelector('[data-tour="next"]');
       if (nb) nb.focus({ preventScroll: true });
-    }, 120);
+    });
   }
   function go(i) {
     if (!T.tour) return;
@@ -122,6 +126,7 @@
     show();
   }
   function stopTour() {
+    showVersion++;
     T.tour = null;
     layer.innerHTML = '';
     spot = card = null;

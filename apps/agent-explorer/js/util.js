@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Shared lookups, data indexes and helpers for the agent explorer. Classic script.
 (function () {
   'use strict';
@@ -76,15 +77,8 @@
   // A named stretch of a trace, marked on its first and last events. Where a run stops
   // before the stretch closes, it runs to the end.
   AX.segmentRange = function (t, name) {
-    t._segments = t._segments || {};
-    if (t._segments[name] !== undefined) return t._segments[name];
-    var a = -1, b = -1;
-    t.events.forEach(function (e, i) {
-      if (e.segment === name && a < 0) a = i;
-      if (e.segmentEnd === name) b = i;
-    });
-    if (a >= 0 && b < a) b = t.events.length - 1;
-    return (t._segments[name] = a >= 0 ? [a, b] : null);
+    var segment = t.summary.segments[name];
+    return segment ? segment.range : null;
   };
   // Plumbing layers first, then the numbered ones.
   AX.orderedLayers = (M.layers || []).filter(function (l) { return l.group === 'plumbing'; })
@@ -214,26 +208,52 @@
     t.isFixture = !!(t.generated && t.generated.core === 'fixture');
     t.isBaseline = Object.keys(AX.baselineLayers).every(function (k) { return layers[k] === AX.baselineLayers[k]; });
     t.agents = t.agents || [];
-    t.events.forEach(function (e, i) {
-      if (e.kind === 'decision') e.outcomeKey = AX.outcomeKey(e);
-      if (e.packet) {
-        var ends = AX.packetEnds(t, e);
-        e.pFrom = ends.from;
-        e.pTo = ends.to;
-      }
-      e._i = i;
-    });
-    // Message events per packet, so the packet animation can split its path between them.
-    var byPacket = {};
-    t.events.forEach(function (e) { if (e.packet && /^message-/.test(e.kind)) (byPacket[e.packet.id] = byPacket[e.packet.id] || []).push(e); });
-    Object.keys(byPacket).forEach(function (id) {
-      var list = byPacket[id];
-      list.forEach(function (e, k) { e.leg = [k / list.length, (k + 1) / list.length]; });
-    });
     return t;
   });
   AX.traceByKey = {};
   AX.traces.forEach(function (t) { AX.traceByKey[t.key] = t; });
+  // The only entry point for full traces. Cache the in-flight promise as well as the
+  // completed document; navigating, tours and concurrent callers share one request.
+  var traceLoads = new Map();
+  AX.loadTrace = function (trace) {
+    var index = typeof trace === 'string' ? AX.traceByKey[trace] : trace;
+    if (!index) return Promise.reject(new Error('This trace is not in the explorer index.'));
+    if (!traceLoads.has(index.key)) {
+      var request = fetch(index.traceUrl).then(function (response) {
+        if (!response.ok) throw new Error('Trace request failed (HTTP ' + response.status + ').');
+        return response.json();
+      }).then(function (t) {
+        t = window.AXTraceData.restore(t);
+        if (!t || t.schema !== 'agent-trace/0.1' || !t.scenario || t.scenario.id !== index.scenario.id ||
+            !t.configuration || t.configuration.id !== index.configuration.id || !Array.isArray(t.events) || !t.events.length) {
+          throw new Error('The trace file does not match the explorer index.');
+        }
+        t = Object.assign({}, index, t);
+        t.events.forEach(function (e, i) {
+          if (e.kind === 'decision') e.outcomeKey = AX.outcomeKey(e);
+          if (e.packet) {
+            var ends = AX.packetEnds(t, e);
+            e.pFrom = ends.from;
+            e.pTo = ends.to;
+          }
+          e._i = i;
+        });
+        // Message events per packet, so the packet animation can split its path between them.
+        var byPacket = {};
+        t.events.forEach(function (e) { if (e.packet && /^message-/.test(e.kind)) (byPacket[e.packet.id] = byPacket[e.packet.id] || []).push(e); });
+        Object.keys(byPacket).forEach(function (id) {
+          var list = byPacket[id];
+          list.forEach(function (e, k) { e.leg = [k / list.length, (k + 1) / list.length]; });
+        });
+        return t;
+      }).catch(function (error) {
+        traceLoads.delete(index.key); // an explicit retry may try again
+        throw error;
+      });
+      traceLoads.set(index.key, request);
+    }
+    return traceLoads.get(index.key);
+  };
   AX.scenarioIds = [];
   AX.traces.forEach(function (t) { if (AX.scenarioIds.indexOf(t.scenario.id) < 0) AX.scenarioIds.push(t.scenario.id); });
   // Scenarios with a real run first, then the order of data/scenarios.json.
@@ -308,22 +328,7 @@
   };
   // Steps whose outline differs from the scenario's baseline trace.
   AX.diffSteps = function (t) {
-    if (t._diff) return t._diff;
-    var base = AX.baselineTrace(t.scenario.id);
-    var out = {};
-    if (base && base !== t) {
-      var group = function (tr) {
-        var g = {};
-        tr.events.forEach(function (e) { (g[e.step] = g[e.step] || []).push(e); });
-        Object.keys(g).forEach(function (k) { g[k] = AX.outlineOf(g[k]); });
-        return g;
-      };
-      var bs = group(base);
-      var ts = group(t);
-      Object.keys(ts).forEach(function (k) { if (bs[k] !== ts[k]) out[k] = true; });
-    }
-    t._diff = out;
-    return out;
+    return t.summary.diffSteps;
   };
   // Gate passes: which checks a gate has run, per agent, for any event index.
   AX.passesOf = function (t) {
@@ -381,7 +386,7 @@
     var same = AX.hash.cur === h;
     AX.hash.cur = h;
     mirror(h, !(opts && opts.replace) && !same);
-    if (!(opts && opts.silent) && AX.route) AX.route();
+    if (!(opts && opts.silent) && AX.route) return AX.route();
   };
   AX.parseHash = function (hash) {
     var h = (hash == null ? AX.hash.cur : hash).replace(/^#\/?/, '');

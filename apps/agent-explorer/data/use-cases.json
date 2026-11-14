@@ -583,116 +583,501 @@
      "path": "main",
      "label": "All fourteen steps",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--baseline.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "fee-amount-differs",
-     "label": "All fourteen steps",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD.",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--baseline.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "fee-payee-differs",
-     "label": "All fourteen steps",
+     "label": "The invoice requests payment to a different party's authoritatively bound account.",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--baseline.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "fee-no-offer",
-     "label": "All fourteen steps",
+     "label": "Ordinary text prompts a payment with no agreement.",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--baseline.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "main",
-     "label": "All fourteen steps",
+     "label": "All fourteen steps (transport-email)",
      "status": "runs",
-     "scenario": "mortgage-main--trans",
+     "configuration": "transport-email",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--transport-email.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "email-readable-copy-differs",
-     "label": "All fourteen steps",
+     "label": "The readable email states a different loan amount. (transport-email)",
      "status": "runs",
-     "scenario": "mortgage-main--email-readable-copy-differs--trans",
+     "configuration": "transport-email",
+     "scenario": "mortgage-main--email-readable-copy-differs",
+     "traceFile": "mortgage-main--email-readable-copy-differs--transport-email.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "main",
-     "label": "All fourteen steps",
+     "label": "All fourteen steps (transport-a2a)",
      "status": "runs",
-     "scenario": "mortgage-main--tra",
+     "configuration": "transport-a2a",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--transport-a2a.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "a2a-text-part-instruction",
-     "label": "All fourteen steps",
+     "label": "An A2A text part says approval is not needed; it is dropped and Sam is still asked. (transport-a2a)",
      "status": "runs",
-     "scenario": "mortgage-main--a2a-text-part-instruction--tra",
+     "configuration": "transport-a2a",
+     "scenario": "mortgage-main--a2a-text-part-instruction",
+     "traceFile": "mortgage-main--a2a-text-part-instruction--transport-a2a.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "a2a-task-state-lies",
-     "label": "All fourteen steps",
+     "label": "The task says completed, while the signed reply refuses; the conversation remains refused. (transport-a2a)",
      "status": "runs",
-     "scenario": "mortgage-main--a2a-task-state-lies--tra",
+     "configuration": "transport-a2a",
+     "scenario": "mortgage-main--a2a-task-state-lies",
+     "traceFile": "mortgage-main--a2a-task-state-lies--transport-a2a.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "main",
-     "label": "All fourteen steps",
+     "label": "All fourteen steps (transport-mcp)",
      "status": "runs",
-     "scenario": "mortgage-main--tra",
+     "configuration": "transport-mcp",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--transport-mcp.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "mcp-tool-description-poisoned",
-     "label": "All fourteen steps",
+     "label": "The tool description tries to bypass approval; it is dropped and Sam is still asked. (transport-mcp)",
      "status": "runs",
-     "scenario": "mortgage-main--mcp-tool-description-poisoned--tra",
+     "configuration": "transport-mcp",
+     "scenario": "mortgage-main--mcp-tool-description-poisoned",
+     "traceFile": "mortgage-main--mcp-tool-description-poisoned--transport-mcp.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "mcp-token-passed-on",
-     "label": "All fourteen steps",
+     "label": "The tool asks for its token at a different server; the hand-off is refused. (transport-mcp)",
      "status": "runs",
-     "scenario": "mortgage-main--mcp-token-passed-on--tra",
+     "configuration": "transport-mcp",
+     "scenario": "mortgage-main--mcp-token-passed-on",
+     "traceFile": "mortgage-main--mcp-token-passed-on--transport-mcp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (data-access-by-reference-solid)",
+     "status": "blocked",
+     "configuration": "data-access-by-reference-solid",
+     "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "grant-wider-than-terms",
+     "label": "The core asks to grant access to the folder instead of the balance resource. (data-access-by-reference-solid)",
+     "status": "blocked",
+     "configuration": "data-access-by-reference-solid",
+     "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "read-after-withdrawal",
+     "label": "The lender reads again after Sam withdraws access; the source refuses and the permitted copy remains recorded. (data-access-by-reference-solid)",
+     "status": "blocked",
+     "configuration": "data-access-by-reference-solid",
+     "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (transport-solid-inbox)",
+     "status": "runs",
+     "configuration": "transport-solid-inbox",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--transport-solid-inbox.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "inbox-item-changed-at-rest",
+     "label": "The storage operator alters a posted message before its receiver reads it. (transport-solid-inbox)",
+     "status": "runs",
+     "configuration": "transport-solid-inbox",
+     "scenario": "mortgage-main--inbox-item-changed-at-rest",
+     "traceFile": "mortgage-main--inbox-item-changed-at-rest--transport-solid-inbox.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (accountability-pod-mirror)",
+     "status": "runs",
+     "configuration": "accountability-pod-mirror",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--accountability-pod-mirror.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mirror-unreachable",
+     "label": "The independent record store goes down before application evidence leaves; the evidence gate holds the action until storage returns. (accountability-pod-mirror)",
+     "status": "runs",
+     "configuration": "accountability-pod-mirror",
+     "scenario": "mortgage-main--mirror-unreachable",
+     "traceFile": "mortgage-main--mirror-unreachable--accountability-pod-mirror.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (usage-control-solid-access-control)",
+     "status": "blocked",
+     "configuration": "usage-control-solid-access-control",
+     "reason": "The selected suite has no executable runtime configuration installed. Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "translation-grants-more",
+     "label": "The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied. (usage-control-solid-access-control)",
+     "status": "blocked",
+     "configuration": "usage-control-solid-access-control",
+     "reason": "The selected suite has no executable runtime configuration installed. Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The combined protected-reference grant transaction is not implemented.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (identity-webid)",
+     "status": "runs",
+     "configuration": "identity-webid",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--identity-webid.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "profile-key-swapped",
+     "label": "The lender profile publishes a different key while its independently signed register thumbprint remains unchanged. (identity-webid)",
+     "status": "runs",
+     "configuration": "identity-webid",
+     "scenario": "mortgage-main--profile-key-swapped",
+     "traceFile": "mortgage-main--profile-key-swapped--identity-webid.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (authenticity-data-integrity)",
+     "status": "runs",
+     "configuration": "authenticity-data-integrity",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--authenticity-data-integrity.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-amount-differs",
+     "label": "The invoice asks for 495 USD although the accepted fee is 450 USD. (authenticity-data-integrity)",
+     "status": "runs",
+     "configuration": "authenticity-data-integrity",
+     "scenario": "mortgage-main--fee-amount-differs",
+     "traceFile": "mortgage-main--fee-amount-differs--authenticity-data-integrity.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-payee-differs",
+     "label": "The invoice requests payment to a different party's authoritatively bound account. (authenticity-data-integrity)",
+     "status": "runs",
+     "configuration": "authenticity-data-integrity",
+     "scenario": "mortgage-main--fee-payee-differs",
+     "traceFile": "mortgage-main--fee-payee-differs--authenticity-data-integrity.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "fee-no-offer",
+     "label": "Ordinary text prompts a payment with no agreement. (authenticity-data-integrity)",
+     "status": "runs",
+     "configuration": "authenticity-data-integrity",
+     "scenario": "mortgage-main--fee-no-offer",
+     "traceFile": "mortgage-main--fee-no-offer--authenticity-data-integrity.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (meaning-plain-language-upgrade)",
+     "status": "blocked",
+     "configuration": "meaning-plain-language-upgrade",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "prose-as-evidence",
+     "label": "Prose income is offered where structured evidence is required. (meaning-plain-language-upgrade)",
+     "status": "blocked",
+     "configuration": "meaning-plain-language-upgrade",
+     "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 8 requires a prose email opening, the correspondent's description advertisement, and a persistent no-downgrade transition. The unsigned ScriptedMailbox has no correspondent agent or advertisement; the signed runtime opens with structured discovery. That upgrade boundary is not implemented.",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (meaning-registry-lookup)",
+     "status": "runs",
+     "configuration": "meaning-registry-lookup",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--meaning-registry-lookup.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mapping-from-nobody",
+     "label": "The code mapping is signed by a publisher not accepted for these vocabularies. (meaning-registry-lookup)",
+     "status": "runs",
+     "configuration": "meaning-registry-lookup",
+     "scenario": "mortgage-main--mapping-from-nobody",
+     "traceFile": "mortgage-main--mapping-from-nobody--meaning-registry-lookup.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (reliance-corroboration)",
+     "status": "runs",
+     "configuration": "reliance-corroboration",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--reliance-corroboration.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "one-source-twice",
+     "label": "The bank's second observation is derived from the payroll record, so both observations have the same root source. (reliance-corroboration)",
+     "status": "runs",
+     "configuration": "reliance-corroboration",
+     "scenario": "mortgage-main--one-source-twice",
+     "traceFile": "mortgage-main--one-source-twice--reliance-corroboration.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (reliance-stated-confidence)",
+     "status": "runs",
+     "configuration": "reliance-stated-confidence",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--reliance-stated-confidence.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "model-is-sure",
+     "label": "A model-produced income estimate says 0.99 without an accepted calibration. (reliance-stated-confidence)",
+     "status": "runs",
+     "configuration": "reliance-stated-confidence",
+     "scenario": "mortgage-main--model-is-sure",
+     "traceFile": "mortgage-main--model-is-sure--reliance-stated-confidence.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (reliance-quality-certificate)",
+     "status": "runs",
+     "configuration": "reliance-quality-certificate",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--reliance-quality-certificate.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "certificate-does-not-cover",
+     "label": "The certificate shown to Sam covers business lending, so the old residential record must pass ordinary per-record quality checks. (reliance-quality-certificate)",
+     "status": "runs",
+     "configuration": "reliance-quality-certificate",
+     "scenario": "mortgage-main--certificate-does-not-cover",
+     "traceFile": "mortgage-main--certificate-does-not-cover--reliance-quality-certificate.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (meaning-negotiated)",
+     "status": "runs",
+     "configuration": "meaning-negotiated",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--meaning-negotiated.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "agents-agree-between-themselves",
+     "label": "Both agents accept the proposed definition but neither person's approval is recorded. (meaning-negotiated)",
+     "status": "runs",
+     "configuration": "meaning-negotiated",
+     "scenario": "mortgage-main--agents-agree-between-themselves",
+     "traceFile": "mortgage-main--agents-agree-between-themselves--meaning-negotiated.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (settlement-x402)",
+     "status": "runs",
+     "configuration": "settlement-x402",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--settlement-x402.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "x402-object-tampered",
+     "label": "The carried native payment object is tampered with after signing; its protocol verifier refuses it. (settlement-x402)",
+     "status": "runs",
+     "configuration": "settlement-x402",
+     "scenario": "mortgage-main--x402-object-tampered",
+     "traceFile": "mortgage-main--x402-object-tampered--settlement-x402.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "x402-fee-amount-differs",
+     "label": "A source-signed native invoice asks for 495 USD against the 450 USD agreement. (settlement-x402)",
+     "status": "runs",
+     "configuration": "settlement-x402",
+     "scenario": "mortgage-main--x402-fee-amount-differs",
+     "traceFile": "mortgage-main--x402-fee-amount-differs--settlement-x402.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (settlement-mpp)",
+     "status": "runs",
+     "configuration": "settlement-mpp",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--settlement-mpp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mpp-object-tampered",
+     "label": "The carried native payment object is tampered with after signing; its protocol verifier refuses it. (settlement-mpp)",
+     "status": "runs",
+     "configuration": "settlement-mpp",
+     "scenario": "mortgage-main--mpp-object-tampered",
+     "traceFile": "mortgage-main--mpp-object-tampered--settlement-mpp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mpp-fee-amount-differs",
+     "label": "A source-signed native invoice asks for 495 USD against the 450 USD agreement. (settlement-mpp)",
+     "status": "runs",
+     "configuration": "settlement-mpp",
+     "scenario": "mortgage-main--mpp-fee-amount-differs",
+     "traceFile": "mortgage-main--mpp-fee-amount-differs--settlement-mpp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (settlement-ap2)",
+     "status": "runs",
+     "configuration": "settlement-ap2",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--settlement-ap2.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "ap2-object-tampered",
+     "label": "The carried native payment object is tampered with after signing; its protocol verifier refuses it. (settlement-ap2)",
+     "status": "runs",
+     "configuration": "settlement-ap2",
+     "scenario": "mortgage-main--ap2-object-tampered",
+     "traceFile": "mortgage-main--ap2-object-tampered--settlement-ap2.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "ap2-fee-amount-differs",
+     "label": "A source-signed native invoice asks for 495 USD against the 450 USD agreement. (settlement-ap2)",
+     "status": "runs",
+     "configuration": "settlement-ap2",
+     "scenario": "mortgage-main--ap2-fee-amount-differs",
+     "traceFile": "mortgage-main--ap2-fee-amount-differs--settlement-ap2.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps (settlement-acp)",
+     "status": "runs",
+     "configuration": "settlement-acp",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--settlement-acp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "acp-object-tampered",
+     "label": "The carried native payment object is tampered with after signing; its protocol verifier refuses it. (settlement-acp)",
+     "status": "runs",
+     "configuration": "settlement-acp",
+     "scenario": "mortgage-main--acp-object-tampered",
+     "traceFile": "mortgage-main--acp-object-tampered--settlement-acp.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "acp-fee-amount-differs",
+     "label": "A source-signed native invoice asks for 495 USD against the 450 USD agreement. (settlement-acp)",
+     "status": "runs",
+     "configuration": "settlement-acp",
+     "scenario": "mortgage-main--acp-fee-amount-differs",
+     "traceFile": "mortgage-main--acp-fee-amount-differs--settlement-acp.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "main",
      "label": "The core flow",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-core",
+     "traceFile": "mortgage-core--baseline.json",
+     "mortgage": "mortgage-core"
+    },
+    {
+     "path": "main",
+     "label": "The core flow (authenticity-data-integrity)",
+     "status": "runs",
+     "configuration": "authenticity-data-integrity",
+     "scenario": "mortgage-core",
+     "traceFile": "mortgage-core--authenticity-data-integrity.json",
      "mortgage": "mortgage-core"
     },
     {
      "path": "main",
      "label": "The lender asks for more than the mandate allows",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-over-ask",
+     "traceFile": "mortgage-over-ask--baseline.json",
      "mortgage": "mortgage-over-ask"
     },
     {
      "path": "main",
      "label": "The lender's terms are outside the limits",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-out-of-limit",
+     "traceFile": "mortgage-out-of-limit--baseline.json",
      "mortgage": "mortgage-out-of-limit"
     },
     {
      "path": "main",
      "label": "A message carries an instruction to pay a fee",
      "status": "runs",
+     "configuration": "baseline",
      "scenario": "mortgage-injected-fee",
+     "traceFile": "mortgage-injected-fee--baseline.json",
      "mortgage": "mortgage-injected-fee"
     }
    ],
-   "runState": "all"
+   "runState": "some"
   },
   {
    "id": "joint-mortgage",
@@ -740,19 +1125,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "joint-mortgage"
+     "configuration": "baseline",
+     "scenario": "joint-mortgage",
+     "traceFile": "joint-mortgage--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "One applicant withdraws their mandate mid-way",
      "status": "runs",
-     "scenario": "joint-mortgage--branch-1"
+     "configuration": "baseline",
+     "scenario": "joint-mortgage--branch-1",
+     "traceFile": "joint-mortgage--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "One agent tries to send the other applicant's payslip",
      "status": "runs",
-     "scenario": "joint-mortgage--branch-2"
+     "configuration": "baseline",
+     "scenario": "joint-mortgage--branch-2",
+     "traceFile": "joint-mortgage--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -802,19 +1193,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "pay-an-invoice"
+     "configuration": "baseline",
+     "scenario": "pay-an-invoice",
+     "traceFile": "pay-an-invoice--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A message gives new bank details for a known supplier",
      "status": "runs",
-     "scenario": "pay-an-invoice--branch-1"
+     "configuration": "baseline",
+     "scenario": "pay-an-invoice--branch-1",
+     "traceFile": "pay-an-invoice--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "An invoice is above the limit",
      "status": "runs",
-     "scenario": "pay-an-invoice--branch-2"
+     "configuration": "baseline",
+     "scenario": "pay-an-invoice--branch-2",
+     "traceFile": "pay-an-invoice--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -867,19 +1264,33 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "small-business-loan"
+     "configuration": "baseline",
+     "scenario": "small-business-loan",
+     "traceFile": "small-business-loan--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The director's role does not cover borrowing",
      "status": "runs",
-     "scenario": "small-business-loan--branch-1"
+     "configuration": "baseline",
+     "scenario": "small-business-loan--branch-1",
+     "traceFile": "small-business-loan--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "Management accounts are self-reported, not filed",
      "status": "runs",
-     "scenario": "small-business-loan--branch-2"
+     "configuration": "baseline",
+     "scenario": "small-business-loan--branch-2",
+     "traceFile": "small-business-loan--branch-2--baseline.json"
+    },
+    {
+     "path": "needed-claim-left-out",
+     "label": "A needed statement is left out; the receiver requests it and the sender supplies it",
+     "status": "runs",
+     "configuration": "baseline",
+     "scenario": "small-business-loan--needed-claim-left-out",
+     "traceFile": "small-business-loan--needed-claim-left-out--baseline.json"
     }
    ],
    "runState": "all"
@@ -935,19 +1346,24 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
      "path": "branch-1",
      "label": "An insurer's agent asks for date of birth and full address before quoting",
      "status": "runs",
-     "scenario": "insurance-quote--branch-1"
+     "configuration": "baseline",
+     "scenario": "insurance-quote--branch-1",
+     "traceFile": "insurance-quote--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "No register can state completeness",
      "status": "runs",
-     "scenario": "insurance-quote--branch-2"
+     "configuration": "baseline",
+     "scenario": "insurance-quote--branch-2",
+     "traceFile": "insurance-quote--branch-2--baseline.json"
     }
    ],
    "runState": "some"
@@ -999,19 +1415,42 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "insurance-claim-photos"
+     "configuration": "baseline",
+     "scenario": "insurance-claim-photos",
+     "traceFile": "insurance-claim-photos--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-     "status": "runs",
-     "scenario": "insurance-claim-photos--branch-1"
+     "status": "disagrees",
+     "configuration": "baseline",
+     "scenario": "insurance-claim-photos--branch-1",
+     "traceFile": "insurance-claim-photos--branch-1--baseline.json",
+     "actual": {
+      "outcome": "ask-more",
+      "reason": "evidence-missing",
+      "check": "fitness"
+     },
+     "expected": {
+      "outcome": "ask-more",
+      "reason": "structured-form-required"
+     }
     },
     {
      "path": "branch-2",
      "label": "The estimate is from a garage the insurer does not accept",
      "status": "runs",
-     "scenario": "insurance-claim-photos--branch-2"
+     "configuration": "baseline",
+     "scenario": "insurance-claim-photos--branch-2",
+     "traceFile": "insurance-claim-photos--branch-2--baseline.json"
+    },
+    {
+     "path": "needed-claim-left-out",
+     "label": "A needed statement is left out; the receiver requests it and the sender supplies it",
+     "status": "runs",
+     "configuration": "baseline",
+     "scenario": "insurance-claim-photos--needed-claim-left-out",
+     "traceFile": "insurance-claim-photos--needed-claim-left-out--baseline.json"
     }
    ],
    "runState": "all"
@@ -1061,13 +1500,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "hardship-request"
+     "configuration": "baseline",
+     "scenario": "hardship-request",
+     "traceFile": "hardship-request--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The agent would send a diagnosis to explain the request",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "hardship-request--branch-1",
+     "traceFile": "hardship-request--branch-1--baseline.json",
      "actual": {
       "outcome": "ask-principal",
       "reason": "approval-required",
@@ -1124,13 +1567,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "credit-file-dispute"
+     "configuration": "baseline",
+     "scenario": "credit-file-dispute",
+     "traceFile": "credit-file-dispute--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The agency does not answer by its deadline",
      "status": "runs",
-     "scenario": "credit-file-dispute--branch-1"
+     "configuration": "baseline",
+     "scenario": "credit-file-dispute--branch-1",
+     "traceFile": "credit-file-dispute--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -1185,13 +1632,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "health-referral"
+     "configuration": "baseline",
+     "scenario": "health-referral",
+     "traceFile": "health-referral--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The clinic asks for the full record",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "health-referral--branch-1",
+     "traceFile": "health-referral--branch-1--baseline.json",
      "actual": {
       "outcome": "ask-principal",
       "reason": "approval-required",
@@ -1207,7 +1658,9 @@
      "path": "branch-2",
      "label": "The referrer is not on the professional register",
      "status": "runs",
-     "scenario": "health-referral--branch-2"
+     "configuration": "baseline",
+     "scenario": "health-referral--branch-2",
+     "traceFile": "health-referral--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -1251,13 +1704,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "records-to-new-practice"
+     "configuration": "baseline",
+     "scenario": "records-to-new-practice",
+     "traceFile": "records-to-new-practice--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The patient's note of an allergy differs from the clinical entry",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "records-to-new-practice--branch-1",
+     "traceFile": "records-to-new-practice--branch-1--baseline.json",
      "actual": {
       "outcome": "admit",
       "reason": "superseded-by-better-source",
@@ -1316,19 +1773,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "prescription-dispensing"
+     "configuration": "baseline",
+     "scenario": "prescription-dispensing",
+     "traceFile": "prescription-dispensing--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The same prescription is presented at a second pharmacy",
      "status": "runs",
-     "scenario": "prescription-dispensing--branch-1"
+     "configuration": "baseline",
+     "scenario": "prescription-dispensing--branch-1",
+     "traceFile": "prescription-dispensing--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The prescriber's registration lapsed last month",
      "status": "runs",
-     "scenario": "prescription-dispensing--branch-2"
+     "configuration": "baseline",
+     "scenario": "prescription-dispensing--branch-2",
+     "traceFile": "prescription-dispensing--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -1375,13 +1838,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "discharge-letter"
+     "configuration": "baseline",
+     "scenario": "discharge-letter",
+     "traceFile": "discharge-letter--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "An agent turns \"cannot be ruled out\" into a coded diagnosis",
      "status": "runs",
-     "scenario": "discharge-letter--branch-1"
+     "configuration": "baseline",
+     "scenario": "discharge-letter--branch-1",
+     "traceFile": "discharge-letter--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -1428,13 +1895,16 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
      "path": "branch-1",
      "label": "The practice cannot state the medication list is complete",
      "status": "runs",
-     "scenario": "trial-eligibility--branch-1"
+     "configuration": "baseline",
+     "scenario": "trial-eligibility--branch-1",
+     "traceFile": "trial-eligibility--branch-1--baseline.json"
     }
    ],
    "runState": "some"
@@ -1484,13 +1954,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "emergency-access"
+     "configuration": "baseline",
+     "scenario": "emergency-access",
+     "traceFile": "emergency-access--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The request comes from a registered clinician with an emergency flag",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "emergency-access--branch-1",
+     "traceFile": "emergency-access--branch-1--baseline.json",
      "actual": {
       "outcome": "go",
       "reason": "source-accepted",
@@ -1506,7 +1980,9 @@
      "path": "branch-2",
      "label": "The same flag is used by someone not on the register",
      "status": "runs",
-     "scenario": "emergency-access--branch-2"
+     "configuration": "baseline",
+     "scenario": "emergency-access--branch-2",
+     "traceFile": "emergency-access--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -1558,19 +2034,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "carer-acts-for-parent"
+     "configuration": "baseline",
+     "scenario": "carer-acts-for-parent",
+     "traceFile": "carer-acts-for-parent--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The agent tries to change where the father lives, outside the power",
      "status": "runs",
-     "scenario": "carer-acts-for-parent--branch-1"
+     "configuration": "baseline",
+     "scenario": "carer-acts-for-parent--branch-1",
+     "traceFile": "carer-acts-for-parent--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The power is revoked",
      "status": "runs",
-     "scenario": "carer-acts-for-parent--branch-2"
+     "configuration": "baseline",
+     "scenario": "carer-acts-for-parent--branch-2",
+     "traceFile": "carer-acts-for-parent--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -1614,13 +2096,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "fit-note-to-employer"
+     "configuration": "baseline",
+     "scenario": "fit-note-to-employer",
+     "traceFile": "fit-note-to-employer--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The employer's agent asks what the condition is",
      "status": "runs",
-     "scenario": "fit-note-to-employer--branch-1"
+     "configuration": "baseline",
+     "scenario": "fit-note-to-employer--branch-1",
+     "traceFile": "fit-note-to-employer--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -1666,13 +2152,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "care-abroad"
+     "configuration": "baseline",
+     "scenario": "care-abroad",
+     "traceFile": "care-abroad--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "No mapping exists for a medicine",
      "status": "runs",
-     "scenario": "care-abroad--branch-1"
+     "configuration": "baseline",
+     "scenario": "care-abroad--branch-1",
+     "traceFile": "care-abroad--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -1721,19 +2211,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "cohort-count"
+     "configuration": "baseline",
+     "scenario": "cohort-count",
+     "traceFile": "cohort-count--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The result would cover fewer than the minimum number of patients",
      "status": "runs",
-     "scenario": "cohort-count--branch-1"
+     "configuration": "baseline",
+     "scenario": "cohort-count--branch-1",
+     "traceFile": "cohort-count--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "One hospital does not attest its input",
      "status": "runs",
-     "scenario": "cohort-count--branch-2"
+     "configuration": "baseline",
+     "scenario": "cohort-count--branch-2",
+     "traceFile": "cohort-count--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -1777,13 +2273,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "wearable-data"
+     "configuration": "baseline",
+     "scenario": "wearable-data",
+     "traceFile": "wearable-data--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The insurer's terms allow use in underwriting",
      "status": "runs",
-     "scenario": "wearable-data--branch-1"
+     "configuration": "baseline",
+     "scenario": "wearable-data--branch-1",
+     "traceFile": "wearable-data--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -1830,18 +2330,23 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "right-to-work"
+     "configuration": "baseline",
+     "scenario": "right-to-work",
+     "traceFile": "right-to-work--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The employer asks for a passport scan",
      "status": "runs",
-     "scenario": "right-to-work--branch-1"
+     "configuration": "baseline",
+     "scenario": "right-to-work--branch-1",
+     "traceFile": "right-to-work--branch-1--baseline.json"
     },
     {
      "path": "hidden-validity-proof",
      "label": "Show valid until at least a date while hiding the actual date",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
     }
    ],
@@ -1888,13 +2393,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "employment-reference"
+     "configuration": "baseline",
+     "scenario": "employment-reference",
+     "traceFile": "employment-reference--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "An agent scores the reference and rejects the candidate on the score",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "employment-reference--branch-1",
+     "traceFile": "employment-reference--branch-1--baseline.json",
      "actual": {
       "outcome": "ask-principal",
       "reason": "approval-required",
@@ -1954,19 +2463,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "salary-account-change"
+     "configuration": "baseline",
+     "scenario": "salary-account-change",
+     "traceFile": "salary-account-change--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The message is unsigned email",
      "status": "runs",
-     "scenario": "salary-account-change--branch-1"
+     "configuration": "baseline",
+     "scenario": "salary-account-change--branch-1",
+     "traceFile": "salary-account-change--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "It is signed, but not under the employee's mandate",
      "status": "runs",
-     "scenario": "salary-account-change--branch-2"
+     "configuration": "baseline",
+     "scenario": "salary-account-change--branch-2",
+     "traceFile": "salary-account-change--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -2012,13 +2527,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "expenses"
+     "configuration": "baseline",
+     "scenario": "expenses",
+     "traceFile": "expenses--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A meal is above the policy limit",
      "status": "runs",
-     "scenario": "expenses--branch-1"
+     "configuration": "baseline",
+     "scenario": "expenses--branch-1",
+     "traceFile": "expenses--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2064,13 +2583,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "platform-income"
+     "configuration": "baseline",
+     "scenario": "platform-income",
+     "traceFile": "platform-income--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The receiver requires a complete total",
      "status": "runs",
-     "scenario": "platform-income--branch-1"
+     "configuration": "baseline",
+     "scenario": "platform-income--branch-1",
+     "traceFile": "platform-income--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2123,19 +2646,24 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting income would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
     },
     {
      "path": "branch-1",
      "label": "The letting agent asks for six months of statements",
      "status": "runs",
-     "scenario": "tenancy-application--branch-1"
+     "configuration": "baseline",
+     "scenario": "tenancy-application--branch-1",
+     "traceFile": "tenancy-application--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The letting agent's agent keeps asking in different words",
      "status": "runs",
-     "scenario": "tenancy-application--branch-2"
+     "configuration": "baseline",
+     "scenario": "tenancy-application--branch-2",
+     "traceFile": "tenancy-application--branch-2--baseline.json"
     }
    ],
    "runState": "some"
@@ -2180,13 +2708,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "flat-share"
+     "configuration": "baseline",
+     "scenario": "flat-share",
+     "traceFile": "flat-share--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "One side's identity cannot be tied to any source the other accepts",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "flat-share--branch-1",
+     "traceFile": "flat-share--branch-1--baseline.json",
      "actual": {
       "outcome": "ask-principal",
       "reason": "source-unknown",
@@ -2242,13 +2774,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "repair-request"
+     "configuration": "baseline",
+     "scenario": "repair-request",
+     "traceFile": "repair-request--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The contractor quotes above the landlord's limit",
      "status": "runs",
-     "scenario": "repair-request--branch-1"
+     "configuration": "baseline",
+     "scenario": "repair-request--branch-1",
+     "traceFile": "repair-request--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2304,19 +2840,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "home-purchase"
+     "configuration": "baseline",
+     "scenario": "home-purchase",
+     "traceFile": "home-purchase--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A message gives a new account for the deposit",
      "status": "runs",
-     "scenario": "home-purchase--branch-1"
+     "configuration": "baseline",
+     "scenario": "home-purchase--branch-1",
+     "traceFile": "home-purchase--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The seller is not the registered owner",
      "status": "runs",
-     "scenario": "home-purchase--branch-2"
+     "configuration": "baseline",
+     "scenario": "home-purchase--branch-2",
+     "traceFile": "home-purchase--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -2361,13 +2903,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "benefit-claim"
+     "configuration": "baseline",
+     "scenario": "benefit-claim",
+     "traceFile": "benefit-claim--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "Household composition is self-reported only",
      "status": "runs",
-     "scenario": "benefit-claim--branch-1"
+     "configuration": "baseline",
+     "scenario": "benefit-claim--branch-1",
+     "traceFile": "benefit-claim--branch-1--baseline.json"
+    },
+    {
+     "path": "needed-claim-left-out",
+     "label": "A needed statement is left out; the receiver requests it and the sender supplies it",
+     "status": "runs",
+     "configuration": "baseline",
+     "scenario": "benefit-claim--needed-claim-left-out",
+     "traceFile": "benefit-claim--needed-claim-left-out--baseline.json"
     }
    ],
    "runState": "all"
@@ -2412,13 +2966,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "tax-agent"
+     "configuration": "baseline",
+     "scenario": "tax-agent",
+     "traceFile": "tax-agent--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The agent reads another client's account by mistake",
      "status": "runs",
-     "scenario": "tax-agent--branch-1"
+     "configuration": "baseline",
+     "scenario": "tax-agent--branch-1",
+     "traceFile": "tax-agent--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2460,13 +3018,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "change-of-address"
+     "configuration": "baseline",
+     "scenario": "change-of-address",
+     "traceFile": "change-of-address--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A recipient the person never dealt with is on the list",
      "status": "runs",
-     "scenario": "change-of-address--branch-1"
+     "configuration": "baseline",
+     "scenario": "change-of-address--branch-1",
+     "traceFile": "change-of-address--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2513,13 +3075,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "permit-application"
+     "configuration": "baseline",
+     "scenario": "permit-application",
+     "traceFile": "permit-application--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The agent declares the extension height from a model's reading of the drawing",
      "status": "runs",
-     "scenario": "permit-application--branch-1"
+     "configuration": "baseline",
+     "scenario": "permit-application--branch-1",
+     "traceFile": "permit-application--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2564,13 +3130,16 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
     },
     {
      "path": "branch-1",
      "label": "No chain links the two national registers",
      "status": "runs",
-     "scenario": "degree-recognition--branch-1"
+     "configuration": "baseline",
+     "scenario": "degree-recognition--branch-1",
+     "traceFile": "degree-recognition--branch-1--baseline.json"
     }
    ],
    "runState": "some"
@@ -2615,13 +3184,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "consent-for-a-child"
+     "configuration": "baseline",
+     "scenario": "consent-for-a-child",
+     "traceFile": "consent-for-a-child--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The second parent has objected",
      "status": "runs",
-     "scenario": "consent-for-a-child--branch-1"
+     "configuration": "baseline",
+     "scenario": "consent-for-a-child--branch-1",
+     "traceFile": "consent-for-a-child--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2672,25 +3245,33 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "shopping-agent"
+     "configuration": "baseline",
+     "scenario": "shopping-agent",
+     "traceFile": "shopping-agent--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "Fees at checkout take the price above the budget",
      "status": "runs",
-     "scenario": "shopping-agent--branch-1"
+     "configuration": "baseline",
+     "scenario": "shopping-agent--branch-1",
+     "traceFile": "shopping-agent--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "A merchant's message tells the agent to pay to a different account",
      "status": "runs",
-     "scenario": "shopping-agent--branch-2"
+     "configuration": "baseline",
+     "scenario": "shopping-agent--branch-2",
+     "traceFile": "shopping-agent--branch-2--baseline.json"
     },
     {
      "path": "asked-to-look-not-to-buy",
      "label": "The person asked only for the cheapest price; the core proposes buying.",
      "status": "runs",
-     "scenario": "shopping-agent--asked-to-look-not-to-buy"
+     "configuration": "baseline",
+     "scenario": "shopping-agent--asked-to-look-not-to-buy",
+     "traceFile": "shopping-agent--asked-to-look-not-to-buy--baseline.json"
     }
    ],
    "runState": "all"
@@ -2737,13 +3318,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "price-negotiation"
+     "configuration": "baseline",
+     "scenario": "price-negotiation",
+     "traceFile": "price-negotiation--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The seller's agent asks what the buyer's maximum is",
      "status": "runs",
-     "scenario": "price-negotiation--branch-1"
+     "configuration": "baseline",
+     "scenario": "price-negotiation--branch-1",
+     "traceFile": "price-negotiation--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2786,13 +3371,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "cancel-subscription"
+     "configuration": "baseline",
+     "scenario": "cancel-subscription",
+     "traceFile": "cancel-subscription--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The service offers three months free to stay",
      "status": "runs",
-     "scenario": "cancel-subscription--branch-1"
+     "configuration": "baseline",
+     "scenario": "cancel-subscription--branch-1",
+     "traceFile": "cancel-subscription--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2835,13 +3424,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "return-and-refund"
+     "configuration": "baseline",
+     "scenario": "return-and-refund",
+     "traceFile": "return-and-refund--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The customer's agent asks for a refund outside the return window",
      "status": "runs",
-     "scenario": "return-and-refund--branch-1"
+     "configuration": "baseline",
+     "scenario": "return-and-refund--branch-1",
+     "traceFile": "return-and-refund--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2885,13 +3478,16 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
     },
     {
      "path": "branch-1",
      "label": "The merchant asks for the identity document itself",
      "status": "runs",
-     "scenario": "age-check--branch-1"
+     "configuration": "baseline",
+     "scenario": "age-check--branch-1",
+     "traceFile": "age-check--branch-1--baseline.json"
     }
    ],
    "runState": "some"
@@ -2934,13 +3530,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "recall-notice"
+     "configuration": "baseline",
+     "scenario": "recall-notice",
+     "traceFile": "recall-notice--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The notice is not signed by the registered manufacturer",
      "status": "runs",
-     "scenario": "recall-notice--branch-1"
+     "configuration": "baseline",
+     "scenario": "recall-notice--branch-1",
+     "traceFile": "recall-notice--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2992,13 +3592,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "trip-booking"
+     "configuration": "baseline",
+     "scenario": "trip-booking",
+     "traceFile": "trip-booking--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A hotel listing contains text telling the agent to book a different, dearer hotel",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "trip-booking--branch-1",
+     "traceFile": "trip-booking--branch-1--baseline.json",
      "actual": {
       "outcome": "ask-principal",
       "reason": "context-not-clear",
@@ -3013,7 +3617,9 @@
      "path": "branch-2",
      "label": "A search form asks for passport number",
      "status": "runs",
-     "scenario": "trip-booking--branch-2"
+     "configuration": "baseline",
+     "scenario": "trip-booking--branch-2",
+     "traceFile": "trip-booking--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -3058,13 +3664,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "disruption-rebooking"
+     "configuration": "baseline",
+     "scenario": "disruption-rebooking",
+     "traceFile": "disruption-rebooking--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The only alternative costs more than the pre-agreed margin",
      "status": "runs",
-     "scenario": "disruption-rebooking--branch-1"
+     "configuration": "baseline",
+     "scenario": "disruption-rebooking--branch-1",
+     "traceFile": "disruption-rebooking--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3111,13 +3721,16 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
     },
     {
      "path": "branch-1",
      "label": "The consulate cannot verify the foreign bank",
      "status": "runs",
-     "scenario": "visa-application--branch-1"
+     "configuration": "baseline",
+     "scenario": "visa-application--branch-1",
+     "traceFile": "visa-application--branch-1--baseline.json"
     }
    ],
    "runState": "some"
@@ -3162,13 +3775,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "energy-switch"
+     "configuration": "baseline",
+     "scenario": "energy-switch",
+     "traceFile": "energy-switch--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A supplier asks for half-hourly data to quote",
      "status": "runs",
-     "scenario": "energy-switch--branch-1"
+     "configuration": "baseline",
+     "scenario": "energy-switch--branch-1",
+     "traceFile": "energy-switch--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3214,13 +3831,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "telecom-fault"
+     "configuration": "baseline",
+     "scenario": "telecom-fault",
+     "traceFile": "telecom-fault--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The provider's agent asks the customer's agent to change account settings",
      "status": "runs",
-     "scenario": "telecom-fault--branch-1"
+     "configuration": "baseline",
+     "scenario": "telecom-fault--branch-1",
+     "traceFile": "telecom-fault--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3262,13 +3883,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "subject-access-request"
+     "configuration": "baseline",
+     "scenario": "subject-access-request",
+     "traceFile": "subject-access-request--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The company demands a passport scan before answering",
      "status": "runs",
-     "scenario": "subject-access-request--branch-1"
+     "configuration": "baseline",
+     "scenario": "subject-access-request--branch-1",
+     "traceFile": "subject-access-request--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3311,13 +3936,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "erasure-request"
+     "configuration": "baseline",
+     "scenario": "erasure-request",
+     "traceFile": "erasure-request--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The company passed the data on with no duty to inform",
      "status": "runs",
-     "scenario": "erasure-request--branch-1"
+     "configuration": "baseline",
+     "scenario": "erasure-request--branch-1",
+     "traceFile": "erasure-request--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3360,13 +3989,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "fee-dispute"
+     "configuration": "baseline",
+     "scenario": "fee-dispute",
+     "traceFile": "fee-dispute--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The lender's record has a gap",
      "status": "runs",
-     "scenario": "fee-dispute--branch-1"
+     "configuration": "baseline",
+     "scenario": "fee-dispute--branch-1",
+     "traceFile": "fee-dispute--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3412,13 +4045,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "contract-wording"
+     "configuration": "baseline",
+     "scenario": "contract-wording",
+     "traceFile": "contract-wording--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "An agent accepts a clause its principal's policy does not cover",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "contract-wording--branch-1",
+     "traceFile": "contract-wording--branch-1--baseline.json",
      "actual": {
       "outcome": "ask-principal",
       "reason": "approval-required",
@@ -3480,19 +4117,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "supplier-onboarding"
+     "configuration": "baseline",
+     "scenario": "supplier-onboarding",
+     "traceFile": "supplier-onboarding--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A certificate was withdrawn last week",
      "status": "runs",
-     "scenario": "supplier-onboarding--branch-1"
+     "configuration": "baseline",
+     "scenario": "supplier-onboarding--branch-1",
+     "traceFile": "supplier-onboarding--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The account belongs to a different legal entity",
      "status": "runs",
-     "scenario": "supplier-onboarding--branch-2"
+     "configuration": "baseline",
+     "scenario": "supplier-onboarding--branch-2",
+     "traceFile": "supplier-onboarding--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -3541,19 +4184,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "request-for-quotes"
+     "configuration": "baseline",
+     "scenario": "request-for-quotes",
+     "traceFile": "request-for-quotes--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The agent would quote a rival's price to get a discount",
      "status": "runs",
-     "scenario": "request-for-quotes--branch-1"
+     "configuration": "baseline",
+     "scenario": "request-for-quotes--branch-1",
+     "traceFile": "request-for-quotes--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The order is above the employee's signing limit",
      "status": "runs",
-     "scenario": "request-for-quotes--branch-2"
+     "configuration": "baseline",
+     "scenario": "request-for-quotes--branch-2",
+     "traceFile": "request-for-quotes--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -3597,13 +4246,16 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
      "path": "branch-1",
      "label": "One tier's input is self-declared",
      "status": "runs",
-     "scenario": "recycled-content--branch-1"
+     "configuration": "baseline",
+     "scenario": "recycled-content--branch-1",
+     "traceFile": "recycled-content--branch-1--baseline.json"
     }
    ],
    "runState": "some"
@@ -3647,13 +4299,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "invoice-finance"
+     "configuration": "baseline",
+     "scenario": "invoice-finance",
+     "traceFile": "invoice-finance--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The same invoice is offered to a second financier",
      "status": "runs",
-     "scenario": "invoice-finance--branch-1"
+     "configuration": "baseline",
+     "scenario": "invoice-finance--branch-1",
+     "traceFile": "invoice-finance--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3697,13 +4353,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "salary-benchmark"
+     "configuration": "baseline",
+     "scenario": "salary-benchmark",
+     "traceFile": "salary-benchmark--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "Only two employers contribute",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "salary-benchmark--branch-1",
+     "traceFile": "salary-benchmark--branch-1--baseline.json",
      "actual": {
       "outcome": "admit",
       "reason": "fit-for-use",
@@ -3764,19 +4424,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "research-data-access"
+     "configuration": "baseline",
+     "scenario": "research-data-access",
+     "traceFile": "research-data-access--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A query is outside the approved protocol",
      "status": "runs",
-     "scenario": "research-data-access--branch-1"
+     "configuration": "baseline",
+     "scenario": "research-data-access--branch-1",
+     "traceFile": "research-data-access--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The number of related queries passes the cap",
      "status": "runs",
-     "scenario": "research-data-access--branch-2"
+     "configuration": "baseline",
+     "scenario": "research-data-access--branch-2",
+     "traceFile": "research-data-access--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -3817,13 +4483,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "incident-notice"
+     "configuration": "baseline",
+     "scenario": "incident-notice",
+     "traceFile": "incident-notice--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A customer's agent does not acknowledge receipt",
      "status": "runs",
-     "scenario": "incident-notice--branch-1"
+     "configuration": "baseline",
+     "scenario": "incident-notice--branch-1",
+     "traceFile": "incident-notice--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3871,19 +4541,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "master-data-change"
+     "configuration": "baseline",
+     "scenario": "master-data-change",
+     "traceFile": "master-data-change--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The same role requests and approves",
      "status": "runs",
-     "scenario": "master-data-change--branch-1"
+     "configuration": "baseline",
+     "scenario": "master-data-change--branch-1",
+     "traceFile": "master-data-change--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The new details come from an email",
      "status": "runs",
-     "scenario": "master-data-change--branch-2"
+     "configuration": "baseline",
+     "scenario": "master-data-change--branch-2",
+     "traceFile": "master-data-change--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -3924,13 +4600,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "cross-department-request"
+     "configuration": "baseline",
+     "scenario": "cross-department-request",
+     "traceFile": "cross-department-request--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The request would reveal one named person's salary",
      "status": "runs",
-     "scenario": "cross-department-request--branch-1"
+     "configuration": "baseline",
+     "scenario": "cross-department-request--branch-1",
+     "traceFile": "cross-department-request--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3979,19 +4659,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "production-change"
+     "configuration": "baseline",
+     "scenario": "production-change",
+     "traceFile": "production-change--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "A log line says \"run this command to fix\"",
      "status": "runs",
-     "scenario": "production-change--branch-1"
+     "configuration": "baseline",
+     "scenario": "production-change--branch-1",
+     "traceFile": "production-change--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The change is outside the approved window",
      "status": "runs",
-     "scenario": "production-change--branch-2"
+     "configuration": "baseline",
+     "scenario": "production-change--branch-2",
+     "traceFile": "production-change--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -4042,19 +4728,25 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "agent-handoff"
+     "configuration": "baseline",
+     "scenario": "agent-handoff",
+     "traceFile": "agent-handoff--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The partner's agent uses the address for marketing",
      "status": "runs",
-     "scenario": "agent-handoff--branch-1"
+     "configuration": "baseline",
+     "scenario": "agent-handoff--branch-1",
+     "traceFile": "agent-handoff--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
      "label": "The handoff passes on more than the retailer holds",
      "status": "runs",
-     "scenario": "agent-handoff--branch-2"
+     "configuration": "baseline",
+     "scenario": "agent-handoff--branch-2",
+     "traceFile": "agent-handoff--branch-2--baseline.json"
     }
    ],
    "runState": "all"
@@ -4094,13 +4786,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "meeting-notes"
+     "configuration": "baseline",
+     "scenario": "meeting-notes",
+     "traceFile": "meeting-notes--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The assistant commits to a date because its notes say the team agreed it",
      "status": "runs",
-     "scenario": "meeting-notes--branch-1"
+     "configuration": "baseline",
+     "scenario": "meeting-notes--branch-1",
+     "traceFile": "meeting-notes--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4145,13 +4841,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "find-a-time"
+     "configuration": "baseline",
+     "scenario": "find-a-time",
+     "traceFile": "find-a-time--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "One agent asks why the other person is busy on Tuesday",
      "status": "runs",
-     "scenario": "find-a-time--branch-1"
+     "configuration": "baseline",
+     "scenario": "find-a-time--branch-1",
+     "traceFile": "find-a-time--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4197,13 +4897,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "sell-a-car"
+     "configuration": "baseline",
+     "scenario": "sell-a-car",
+     "traceFile": "sell-a-car--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The seller is not the registered keeper",
      "status": "runs",
-     "scenario": "sell-a-car--branch-1"
+     "configuration": "baseline",
+     "scenario": "sell-a-car--branch-1",
+     "traceFile": "sell-a-car--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4248,13 +4952,16 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
+     "configuration": "baseline",
      "reason": "Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with \"operator outside positive BGP/JOIN/FILTER\"."
     },
     {
      "path": "branch-1",
      "label": "One side can show only a self-made profile",
      "status": "runs",
-     "scenario": "introduction--branch-1"
+     "configuration": "baseline",
+     "scenario": "introduction--branch-1",
+     "traceFile": "introduction--branch-1--baseline.json"
     }
    ],
    "runState": "some"
@@ -4297,13 +5004,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "content-licence"
+     "configuration": "baseline",
+     "scenario": "content-licence",
+     "traceFile": "content-licence--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The publisher's agent would pass the image to a sister company",
      "status": "runs",
-     "scenario": "content-licence--branch-1"
+     "configuration": "baseline",
+     "scenario": "content-licence--branch-1",
+     "traceFile": "content-licence--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4346,13 +5057,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "no-training-terms"
+     "configuration": "baseline",
+     "scenario": "no-training-terms",
+     "traceFile": "no-training-terms--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The fetching agent has no rule for \"training\"",
      "status": "runs",
-     "scenario": "no-training-terms--branch-1"
+     "configuration": "baseline",
+     "scenario": "no-training-terms--branch-1",
+     "traceFile": "no-training-terms--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4403,13 +5118,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "probing-counterparty"
+     "configuration": "baseline",
+     "scenario": "probing-counterparty",
+     "traceFile": "probing-counterparty--baseline.json"
     },
     {
      "path": "tenth-request",
      "label": "The tenth request, like the first, is outside the mandate",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "probing-counterparty--tenth-request",
+     "traceFile": "probing-counterparty--tenth-request--baseline.json",
      "actual": {
       "outcome": "refuse",
       "reason": "representation-missing",
@@ -4424,7 +5143,9 @@
      "path": "round-limit",
      "label": "The conversation passes the round limit",
      "status": "runs",
-     "scenario": "probing-counterparty--round-limit"
+     "configuration": "baseline",
+     "scenario": "probing-counterparty--round-limit",
+     "traceFile": "probing-counterparty--round-limit--baseline.json"
     }
    ],
    "runState": "all"
@@ -4470,13 +5191,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "false-but-signed"
+     "configuration": "baseline",
+     "scenario": "false-but-signed",
+     "traceFile": "false-but-signed--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "Nothing fails",
      "status": "disagrees",
+     "configuration": "baseline",
      "scenario": "false-but-signed--branch-1",
+     "traceFile": "false-but-signed--branch-1--baseline.json",
      "actual": {
       "outcome": "go",
       "reason": "source-accepted",
@@ -4529,13 +5254,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "onward-leak"
+     "configuration": "baseline",
+     "scenario": "onward-leak",
+     "traceFile": "onward-leak--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The lender's own gate, if it is used, stops the transfer",
      "status": "runs",
-     "scenario": "onward-leak--branch-1"
+     "configuration": "baseline",
+     "scenario": "onward-leak--branch-1",
+     "traceFile": "onward-leak--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4585,13 +5314,17 @@
      "path": "main",
      "label": "The main path",
      "status": "runs",
-     "scenario": "no-agent-on-the-other-side"
+     "configuration": "baseline",
+     "scenario": "no-agent-on-the-other-side",
+     "traceFile": "no-agent-on-the-other-side--baseline.json"
     },
     {
      "path": "branch-1",
      "label": "The reply asks for payment details by email",
      "status": "runs",
-     "scenario": "no-agent-on-the-other-side--branch-1"
+     "configuration": "baseline",
+     "scenario": "no-agent-on-the-other-side--branch-1",
+     "traceFile": "no-agent-on-the-other-side--branch-1--baseline.json"
     }
    ],
    "runState": "all"

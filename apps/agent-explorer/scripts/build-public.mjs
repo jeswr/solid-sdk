@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5.2
+// AUTHORED-BY Codex GPT-6
 // Builds the public copy of the explorer: the same static files, with a data bundle that
 // leaves out the team's working roadmap. The output directory can be served by any static
 // host. Usage: node scripts/build-public.mjs <out-dir>
@@ -6,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { printSizeReport } from './site-files.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = resolve(process.argv[2] ?? join(root, 'dist-public'));
@@ -20,3 +22,4 @@ execFileSync(process.execPath, [join(root, 'scripts/bundle-data.mjs')], {
   stdio: 'inherit',
 });
 console.log(`wrote ${out}`);
+printSizeReport(out);

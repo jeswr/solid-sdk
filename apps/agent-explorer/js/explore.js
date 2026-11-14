@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // The Explore view: configuration bar, chat, stage, inspector, timeline, player. Classic script.
 (function () {
   'use strict';
@@ -7,6 +8,7 @@
   var E = (AX.explore = {});
 
   var root = null;
+  var loadVersion = 0;
   var S = {
     trace: null,
     idx: 0,
@@ -129,9 +131,12 @@
       if (f) { S.rdfForm = f.dataset.rdfForm; renderInspector(); }
       if (e.target.closest('[data-rdf-context]')) { S.rdfContext = !S.rdfContext; renderInspector(); }
     });
-    E.apply(params || {});
+    root.querySelector('#stage-figure').addEventListener('click', function (e) {
+      if (e.target.closest('[data-retry-trace]')) E.apply(S.pending || {});
+    });
+    return E.apply(params || {});
   };
-  E.unmount = function () { stop(); root = null; };
+  E.unmount = function () { stop(); cancelAnimationFrame(raf); loadVersion++; root = null; S.trace = null; S.target = null; };
   E.isMounted = function () { return !!root; };
 
   // ---- State ---------------------------------------------------------------
@@ -148,12 +153,35 @@
   function stepOf(i) { return AX.stepAt(S.trace, i); }
 
   // Resolve hash params into state and render.
-  E.apply = function (p) {
+  E.apply = async function (p) {
+    var version = ++loadVersion;
+    stop();
     var scenario = p.scenario && AX.tracesFor(p.scenario).length ? p.scenario : AX.scenarioIds[0];
     if (!scenario) { root.innerHTML = '<p class="empty">No traces are loaded. Run node scripts/bundle-data.mjs.</p>'; return; }
-    var t = (p.config && AX.traceByKey[scenario + '--' + p.config]) || AX.baselineTrace(scenario);
-    var changed = t !== S.trace;
+    var index = (p.config && AX.traceByKey[scenario + '--' + p.config]) || AX.baselineTrace(scenario);
+    var changed = !S.trace || index.key !== S.trace.key;
+    S.target = index;
+    S.pending = p;
+    if (changed) {
+      S.trace = null;
+      cancelAnimationFrame(raf);
+      renderConfig();
+      root.querySelector('#stage-figure').innerHTML = '<p class="empty" role="status">Loading trace: ' + esc(index.scenario.title) + '…</p>';
+      ['#chat-list', '#inspector', '#scrub', '#pos', '#caption', '#parties', '#legend'].forEach(function (id) { root.querySelector(id).innerHTML = ''; });
+      root.querySelector('#raw').hidden = true;
+      root.querySelector('#pay-choice').hidden = true;
+      root.querySelectorAll('.timeline button').forEach(function (b) { b.disabled = true; });
+    }
+    var t;
+    try { t = await AX.loadTrace(index); }
+    catch (error) {
+      if (!root || version !== loadVersion) return;
+      root.querySelector('#stage-figure').innerHTML = '<div class="empty" role="alert"><p>Could not load this trace. ' + esc(error.message) + '</p><button type="button" class="btn" data-retry-trace>Try again</button></div>';
+      return;
+    }
+    if (!root || version !== loadVersion) return; // navigation won while the request was pending
     S.trace = t;
+    root.querySelectorAll('.timeline button').forEach(function (b) { b.disabled = false; });
     S.level = LEVELS.some(function (l) { return l[0] === p.level; }) ? p.level : (p.level ? 'checks' : S.level || 'checks');
     if (p.speed && SPEEDS.indexOf(Number(p.speed)) >= 0) S.speed = Number(p.speed);
     S.present = p.present === '1';
@@ -187,7 +215,7 @@
   };
 
   function writeHash() {
-    if (!root) return;
+    if (!root || !S.trace) return;
     var e = S.trace.events[S.idx];
     var params = { scenario: S.trace.scenario.id, config: S.trace.configuration.id, step: e.step, seq: e.seq, level: S.level };
     if (S.speed !== 1) params.speed = S.speed;
@@ -200,19 +228,21 @@
   }
 
   function go(stopIdx) {
+    if (!S.trace) return;
     var st = stops();
     stopIdx = Math.max(0, Math.min(st.length - 1, stopIdx));
     S.idx = st[stopIdx];
     render();
     writeHash();
   }
-  function move(d) { go(curStop() + d); }
+  function move(d) { if (S.trace) go(curStop() + d); }
   E.move = function (d) { stop(); move(d); };
   E.home = function () { stop(); go(0); };
-  E.end = function () { stop(); go(stops().length - 1); };
+  E.end = function () { stop(); if (S.trace) go(stops().length - 1); };
   E.toggle = function () { toggle(); };
 
   function setLevel(l) {
+    if (!S.trace) return;
     S.level = l;
     if (l === 'steps') S.idx = stepOf(S.idx).last;
     renderControls();
@@ -251,6 +281,7 @@
     if (root) renderControls();
   }
   function toggle() {
+    if (!S.trace) return;
     if (S.playing) { stop(); writeHash(); } else play();
   }
   E.stop = stop;
@@ -260,10 +291,10 @@
   }
 
   // ---- Configuration bar ---------------------------------------------------
-  function selection() { return S.trace.layersFull; }
+  function selection() { return S.target.layersFull; }
   function changeSuite(layerId, suiteId) {
     stop();
-    var sc = S.trace.scenario.id;
+    var sc = S.target.scenario.id;
     var want = Object.assign({}, selection());
     want[layerId] = suiteId;
     var t = AX.findTraceByLayers(sc, want);
@@ -273,11 +304,11 @@
       t = AX.findTraceByLayers(sc, b);
     }
     if (!t) { renderConfig(); return; }
-    var cur = S.trace.events[S.idx];
+    var cur = S.trace ? S.trace.events[S.idx] : {};
     E.apply({ scenario: sc, config: t.configuration.id, step: cur.step, level: S.level, focus: [cur.agent, cur.kind, cur.check || cur.part].join('.') });
   }
   function suiteEnabled(layerId, suiteId) {
-    var sc = S.trace.scenario.id;
+    var sc = S.target.scenario.id;
     var a = Object.assign({}, selection());
     a[layerId] = suiteId;
     if (AX.findTraceByLayers(sc, a)) return true;
@@ -286,7 +317,7 @@
     return !!AX.findTraceByLayers(sc, b);
   }
   function renderConfig() {
-    var t = S.trace;
+    var t = S.trace || S.target;
     root.querySelector('#scenario').value = t.scenario.id;
     var standIns = (t.standIns || []).map(function (x) { return x.what + ': ' + x.replacedBy; }).join('. ');
     root.querySelector('#scn-summary').textContent = AX.scenarioMeta(t.scenario.id).summary || (standIns ? 'Local stand-ins in this run. ' + standIns + '.' : '');
@@ -299,6 +330,9 @@
         return '<option value="' + s.id + '"' + (s.id === cur ? ' selected' : '') + (on ? '' : ' disabled') + '>' +
           esc(s.name + (on ? '' : ' (not run yet)')) + '</option>';
       }).join('');
+      if (!l.suites.some(function (s) { return s.id === cur; })) {
+        sel.innerHTML += '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>';
+      }
       sel.value = cur;
       var item = sel.closest('.cfg-item');
       item.classList.toggle('changed', cur !== AX.baselineLayers[l.id]);
@@ -554,10 +588,11 @@
   // the same graph as Turtle (or TriG, where the proof sits in a named graph) one click behind.
   // Traces made before messages were RDF have none of these fields and show nothing here.
   function rdfHtml(p) {
-    if (!p || p.jsonld === undefined || p.jsonld === null) return '';
-    var text = p.turtle || p.trig || '';
-    var textName = p.turtle ? 'Turtle' : 'TriG';
-    var form = S.rdfForm === 'text' && text ? 'text' : 'jsonld';
+    if (!p) return '';
+    var text = p.rdf || p.turtle || p.trig || '';
+    if (p.jsonld == null && !text) return '';
+    var textName = p.rdf ? 'RDF' : (p.turtle ? 'Turtle' : 'TriG');
+    var form = text && (S.rdfForm === 'text' || p.jsonld == null) ? 'text' : 'jsonld';
     var doc = p.jsonld;
     var ctx = p.context !== undefined ? p.context : (doc && doc['@context']);
     if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
@@ -592,6 +627,9 @@
     var h = '<section class="msg" data-anchor="inspector.message"><h3>Verifiable message</h3>';
     h += '<p class="msg-meta"><code>' + esc(p.id) + '</code> <span class="kind-chip">' + esc(p.kind) + '</span> ' + esc(sender) + ' to ' + esc(receiver) + '</p>';
     h += rdfHtml(p);
+    if (p.attachments && p.attachments.length) {
+      h += '<details class="layer present"><summary>Attachments</summary><pre class="json">' + esc(JSON.stringify(p.attachments, null, 2)) + '</pre></details>';
+    }
     h += '<div class="layer carriage"><div class="layer-head"><span class="ln">Carriage</span><span class="lstate untrusted">Never trusted</span></div><p>' + esc(AX.suiteName('transport', p.carriage.suite) + '. ' + p.carriage.summary) + '</p></div>';
     h += '<div class="signed"><div class="signed-label">Signed by ' + esc(sender) + '</div>';
     AX.model.message.layers.filter(function (l) { return l.signed; }).forEach(function (ml) {
@@ -694,6 +732,7 @@
     var h = '<header class="insp-head"><p class="eyebrow">Step ' + esc(e.step) + '<span class="of">' + (steps.indexOf(step) + 1) + ' of ' + steps.length + '</span></p>';
     h += '<h2>' + esc(AX.stepTitle(t.scenario.id, e.step, t)) + '</h2>';
     h += '<p class="who"><span class="chip">' + esc(traceAgent(e.agent).name) + '</span><span class="chip">' + esc(AX.partName(e.part)) + '</span><span class="chip quiet">' + esc(AX.kindLabels[e.kind] || e.kind) + '</span></p></header>';
+    h += omittedAttachmentsHtml(e);
     if (S.level === 'steps') h += stepSummaryHtml(step);
     if (e.kind === 'check') h += checkHtml(e);
     else if (e.kind === 'decision') {
@@ -716,6 +755,21 @@
     ins.querySelectorAll('details.layer').forEach(function (d, k) { if (d.open) keepOpen[k] = true; });
     ins.innerHTML = h;
     if (S.lastIdx === S.idx) ins.querySelectorAll('details.layer').forEach(function (d, k) { if (keepOpen[k]) d.open = true; });
+  }
+
+  function omittedAttachmentsHtml(value) {
+    var attachments = new Map();
+    function visit(v) {
+      if (!v || typeof v !== 'object') return;
+      if (v.bytesOmitted === true && v.bytes === null) attachments.set(v.digest, v);
+      Object.keys(v).forEach(function (key) { visit(v[key]); });
+    }
+    visit(value);
+    var h = '';
+    attachments.forEach(function (a) {
+      h += '<p class="rdf-note">Content omitted from the explorer copy; digest ' + esc(a.digest) + ' (' + esc(a.byteLength) + ' bytes). The full trace is in the engine repository.</p>';
+    });
+    return h;
   }
 
   function render() {

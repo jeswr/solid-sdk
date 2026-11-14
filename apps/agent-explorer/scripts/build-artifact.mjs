@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5.2
+// AUTHORED-BY Codex GPT-6
 // Builds a copy of the explorer that can be published as a hosted page whose host wraps the
 // file in its own document skeleton: the output index.html has no doctype, html, head or body
 // tags, only the title, metas, stylesheet link and the body content. All other files are
@@ -7,6 +8,7 @@
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { printSizeReport } from './site-files.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = resolve(process.argv[2] ?? join(root, 'dist-artifact'));
@@ -23,7 +25,8 @@ const keep = head
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'index.html'), `${keep}\n${body.trim()}\n`);
-for (const f of ['styles.css', 'js', 'data/bundle.js', 'data/traces-1.js', 'data/traces-2.js', 'data/traces-3.js', 'data/traces-4.js']) {
+for (const f of ['styles.css', 'js', 'data/bundle.js', 'data/traces']) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }
 console.log(`wrote ${out}`);
+printSizeReport(out);

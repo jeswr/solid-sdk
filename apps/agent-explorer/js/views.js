@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Reading views: Architecture, Message, Layers and suites, Tests, Roadmap. Classic script.
 (function () {
   'use strict';
@@ -34,16 +35,14 @@
     }).join('') + '</div>';
   }
   // First matching event: real runs first, then fixtures, baseline configurations first.
-  function firstEventWith(pred) {
+  function firstEventWith(group, id) {
     var order = AX.traces.slice().sort(function (a, b) {
       return (a.isFixture - b.isFixture) || (b.isBaseline - a.isBaseline) || (AX.scenarioIds.indexOf(a.scenario.id) - AX.scenarioIds.indexOf(b.scenario.id));
     });
     for (var k = 0; k < order.length; k++) {
       var t = order[k];
-      for (var i = 0; i < t.events.length; i++) {
-        var e = t.events[i];
-        if (pred(e)) return AX.buildHash('explore', { scenario: t.scenario.id, config: t.configuration.id, step: e.step, seq: e.seq, level: 'checks' });
-      }
+      var e = t.summary[group][id];
+      if (e) return AX.buildHash('explore', { scenario: t.scenario.id, config: t.configuration.id, step: e.step, seq: e.seq, level: 'checks' });
     }
     return null;
   }
@@ -106,12 +105,12 @@
       h += '<p class="eyebrow">' + esc(AX.partName(c.gate)) + ', check ' + c.n + '</p><h3>' + esc(c.name) + '</h3><p><strong>' + esc(c.question) + '</strong></p><p class="muted">' + esc(c.detail) + '</p>';
       var store = D.CONSULTS[c.id];
       if (store) h += '<p class="small muted">Reads the ' + esc(AX.partName(store).toLowerCase()) + '.</p>';
-      var link = firstEventWith(function (e) { return e.kind === 'check' && e.check === c.id && e.verdict !== 'not-applicable'; });
+      var link = firstEventWith('checks', c.id);
       h += riskChips(c.id);
       if (link) h += '<p><a class="btn small" href="' + link + '">See it in the walkthrough</a></p>';
     } else if (part) {
       h += '<p class="eyebrow">Part</p><h3>' + esc(part.name) + '</h3><p>' + esc(part.summary) + '</p>' + riskChips(part.id);
-      var pl = firstEventWith(function (e) { return e.part === part.id; });
+      var pl = firstEventWith('parts', part.id);
       if (pl) h += '<p><a class="btn small" href="' + pl + '">See it in the walkthrough</a></p>';
     } else {
       h += '<p class="muted">Nothing called ' + esc(sel) + ' in the model.</p>';
@@ -307,7 +306,7 @@
         var cls = 'suite ' + st.status + (isSel ? ' sel' : '');
         var at = { scenario: st.trace && st.trace.scenario.id, config: st.trace && st.trace.configuration.id };
         var seg = parent && st.trace && AX.segmentRange(st.trace, 'payment');
-        if (seg) at.seq = st.trace.events[seg[0]].seq;
+        if (seg) at.seq = st.trace.summary.segments.payment.seq;
         if (st.trace) h += '<a class="' + cls + '" ' + (isSel ? 'data-sel-target ' : '') + 'href="' + AX.buildHash('explore', at) + '" title="Open in Explore">' + inner + '</a>';
         else h += '<div class="' + cls + '"' + (isSel ? ' data-sel-target' : '') + '>' + inner + '</div>';
       });
@@ -334,13 +333,12 @@
       configs.forEach(function (c) {
         var t = AX.traceByKey[sc + '--' + c];
         if (!t) { h += '<td><span class="cell na-cell">Not run</span></td>'; return; }
-        var counts = {};
-        t.events.forEach(function (e) { if (e.kind === 'check') counts[e.verdict] = (counts[e.verdict] || 0) + 1; });
+        var counts = t.summary.checkCounts;
         var nChecks = Object.keys(counts).reduce(function (a, k) { return a + counts[k]; }, 0);
         var exp = t.expected && typeof t.expected.matches === 'boolean' ? (t.expected.matches ? '<span class="tag ok">Matches outline</span>' : '<span class="tag bad">Departs from outline</span>') : '<span class="tag">Outline not checked</span>';
         var diff = Object.keys(AX.diffSteps(t)).length;
         h += '<td><a class="cell" href="' + AX.buildHash('explore', { scenario: sc, config: c }) + '" style="color:inherit;text-decoration:none">';
-        h += '<span class="big">' + t.events.length + '<small>events, ' + nChecks + ' checks</small></span>';
+        h += '<span class="big">' + t.summary.eventCount + '<small>events, ' + nChecks + ' checks</small></span>';
         h += '<span class="counts">' + ['pass', 'not-applicable', 'ask-more', 'ask-principal', 'fail', 'indeterminate'].filter(function (v) { return counts[v]; }).map(function (v) {
           return '<span class="pill v-' + AX.verdicts[v].cls + '" title="' + esc(AX.verdicts[v].label) + '">' + AX.glyphSvg(v, 12) + counts[v] + '</span>';
         }).join('') + '</span>';
