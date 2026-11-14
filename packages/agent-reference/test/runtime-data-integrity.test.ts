@@ -32,4 +32,4 @@ for (const name of ["mortgage-main", "mortgage-core"])
       expect(packets.some((p) => p.jsonld?.includes("eddsa-rdfc-2022"))).toBe(true);
       expect(packets.every((p) => p.jsonld && p.context && p.rdf && p.attachments)).toBe(true);
     }
-  }, 600_000);
+  }, 180_000);

@@ -3191,3 +3191,274 @@ working copy remains on the requested live branch. The complete package/referenc
 and the full model corpus were not rerun; validation is the completed focused runs, live
 scenario build, immutable oracle and artifact audit above. The earlier focused run's ACP
 expiry-error mapping failure was fixed and the definitive 450-test invocation passes.
+
+
+## Brief 29
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Performance implementation in progress, offline, no commits. Baseline working tree was
+clean on `claude/project-thread-ee3kq8-speed`. Node 24.22.3 is selected with
+`PATH=/opt/node24/bin:$PATH`. Original trace, outline and manifest artifacts were saved
+under `/tmp/brief29-original-*` before any source optimization. The immutable oracle and
+RDF allowance list are not edited.
+
+Added `scripts/profile-journey.mjs`: `--iterations=N` runs all mortgage-main paths under
+baseline and authenticity-data-integrity, printing wall milliseconds for each configuration.
+`--main-only` isolates the main journey; `--cpu-prof` writes V8 CPU profiles (default
+`/tmp/agent-reference-profile`, override `--cpu-prof-dir=...`). `--output=...` retains
+comparison snapshots and `--compare=...` asserts identical ordered decisions and exact
+packet `jsonld`, `rdf` and attachment metadata. Compile with `pnpm exec tsc -p
+tsconfig.build.json`; the script copies the committed generated JavaScript runtime into
+dist before importing the compiled engine. No trace build is needed to profile.
+
+Initial inspection: pinned contexts already load and hash once per process, returning
+independent clones. Retain that implementation. SHACL shapes are parsed once, but every
+root admission reconstructs the validator and compiled constraint graph. Emit also reads
+its newly signed document and attachments again to construct the trace. Measurements
+and completed validation follow below as each change is checked.
+
+**Baseline profile (all four mortgage-main paths, one iteration, CPU profiling enabled).**
+JWS **58.798 s**, DI **63.139 s**. V8 sampled 122.932 s including imports. Inclusive
+costs overlap: named-values `entryFor` 23.465 s (19.1%), wrapper `one` 16.267 s
+(13.2%), SHACL construction 15.014 s (12.2%), `copyData` 13.698 s (11.1%), JSON-LD
+active-context cloning 12.498 s (10.2%). GC self time 24.186 s (19.7%); N3 index
+find/count self time 24.295 s (19.8%). Profile: `/tmp/brief29-before/CPU.20261114.072623.22.0.001.cpuprofile`.
+
+**Change 1 — compiled SHACL reuse.** A bounded two-entry idle pool keeps compiled
+shapes. Every root still validates against all previously required shapes with maxErrors=8.
+Each checkout is exclusive; return clones the validation engine (fresh reports, counters,
+errors and recursion state, same limits) and drops the data pointer. This is necessary
+because this library's validateNode does not reset those fields. After: JWS **39.900 s**
+(**18.898 s / 32.1% saved**); DI **43.727 s** (**19.412 s / 30.7% saved**).
+`--compare=/tmp/brief29-before.json`: **172 exact packet occurrences per suite**,
+including signed JSON-LD, RDF and attachment metadata; all ordered decisions identical.
+Focused tests: **20/20 in 5.25 s**, including interleaved valid/invalid admissions and
+60 consecutive validations before a refusal (past the validator's 50-check counter).
+
+**Changes 2–4 — live reads and byte-derived conversion.** Direct subject/predicate
+reads avoid allocating wrapper Sets merely to read terms; named-value copying uses the
+existing explicit model projection at the host/store boundary. Alone these measured
+41.947 s / 42.988 s (a small/noisy change versus Change 1; focused tests overlapped
+that measurement). They enable the cross-graph indexes below; no standalone saving is
+claimed. A 16-entry conversion cache then retains the normalized dataset from the
+writer's checked JSON-LD round trip. Keys include SHA-256 of the exact JSON bytes plus
+all limits; admission checks still run and every returned graph is independent. After
+conversion reuse: **37.446 s JWS / 34.610 s DI**; 344 packet occurrences and all decisions
+again match the baseline. This reuses the graph produced when writing without bypassing
+the receiver's key/signature checks or its attachment and shape admission.
+
+Cross-graph read indexes now supplement N3's per-graph indexes for singleton/collection
+reads and named-value lookup. They contain lexical RDF term IDs, preserve graph-order
+and duplicate-quad semantics, and return fresh terms. Native Store remains authoritative;
+all add/remove routes invalidate the indexes, including same-size graph edits. A graph
+still being constructed uses native reads until eight reads occur without a write.
+After indexing, with CPU profiling enabled: **26.449 s JWS / 26.081 s DI**, a further
+**10.997 s / 8.529 s** versus conversion reuse and **55.0% / 58.7%** versus baseline
+(**2.22× / 2.42×**). All **344 packet occurrences** are byte-identical and decisions
+unchanged. The 37 focused tests pass in 6.65 s, covering native/indexed read equality,
+named-graph duplicates, equal-size replacement, bulk writes/deletes, caller term mutation,
+attachment attacks and live graph mutation. RDF guard remains **0 failures / 213 unchanged
+allowances**.
+
+After-profile: `/tmp/brief29-index/CPU.20261114.073551.15.0.001.cpuprofile` (53.478 s
+sampled including imports/comparison). GC self time **5.551 s** (from 24.186), N3 find/count
+self time **6.393 s** (from 24.295), named-value entryFor inclusive **6.521 s** (from
+23.465), copyData **3.608 s** (from 13.698), JSON-LD context cloning **7.884 s** (from
+12.498). Remaining costs are context processing, live policy/model reads and persistence.
+RDFC/signature routines were not dominant, so their directional-literal and blank-node
+preflights remain intact; no cryptographic algorithm was reimplemented.
+
+**Routine corpus policy.** Default selection is deterministic: retain every path that
+contains an original capacity message and every forum-operation path (the six large
+intent occurrences), then sort with main paths first and scenario/configuration/path
+lexically and select paths that add a recorded message kind, executable trace
+configuration, or scenario-specific declared alternative. Add companion branches needed
+to witness every selected world's required stress checks; the engine's existing stress
+assertion stays enabled. The live capture must reproduce the complete recorded coverage
+set (47 executable configurations, 12 scenario/alternative pairs and ten observed kinds).
+The corpus also checks a model-only indeterminate message, covering all eleven kinds.
+All 26 original capacity-occurrence assertions remain. `FULL_CORPUS=1 pnpm exec vitest
+run test/complete-model.test.ts` retains the exhaustive capture and its size assertions.
+
+Additional regression checks pass **4/4 in 3.20 s**, including streamed import/removal,
+removeMatches/deleteGraph, and same-size mutation of an admitted attachment after its
+index is warm. Package typecheck and lint pass (zero lint errors; existing warnings and
+informational diagnostics remain). The global test/hook timeout is restored from 120
+to 60 seconds; the mortgage JWS/DI matrix timeout drops from 600 to 180 seconds. The
+corpus timeout drops from 1,200 seconds to 600 (sample) / 900 (full). Final timed runs
+with these settings follow. No production deadline or limit is edited.
+
+The first path-sampled corpus passed in **481.13 s** (477.87 s tests), while the full
+trace build ran on another core. The final default additionally keeps the first
+SHA-256-digest-ordered message per (wire configuration, message kind) and intent per
+(operation, action), retaining **every** original capacity message and every intent for
+the capacity operations; all captured agreements remain. This removes repeated
+round-trips of the same model structure. FULL_CORPUS bypasses both sampling stages.
+The final default/full runs below supersede this preliminary sample timing.
+
+**Full build — PASS, 8m 12.650s wall / 8m 16.618s user CPU.** This checkout now
+generates **192 live paths**, with 181 runs / 11 disagree / 14 blocked in the manifest.
+The earlier approximately 15-minute build is the brief's reported baseline, not an
+independently timed full pre-change build. Log: `/tmp/brief29-build.log`.
+
+The first artifact audit found **181 completely identical event traces**. Besides
+the six explicitly random joint traces, five native payment traces also have pre-existing
+fresh entropy: AP2 generates P-256 keys, SD-JWT salts and randomized ECDSA signatures;
+ACP uses random token UUIDs. Neither settlement nor engine source was edited. To compare
+identical inputs rather than silently excuse those packet differences, the original
+HEAD production sources were compiled in `/tmp/brief29-original-package` and run beside
+the optimized sources. `/tmp/brief29-replay.mjs` records/replays generated key pairs,
+random byte calls, UUIDs and ECDSA signatures, requiring the same algorithm, public key
+and signature-input hash; EdDSA signatures are recomputed and compared. Native verification
+still executes normally. The AP2 comparison passes **all three paths / 208 exact packet
+occurrences and every event/record**, consuming all nine key pairs, ten entropy calls,
+nine UUIDs and 258 signature calls. ACP and the final combined audit follow below.
+
+Root agent-layer guard and codegen guard (eight projects) pass; package RDF guard still
+reports **0 failures / 213 allowances**. The profile script uses the charter's bare
+module specifiers. Closing lint has zero errors (131 warnings / 455 informational
+diagnostics). No allowance, dependency, production bound, oracle or cryptographic
+implementation was changed.
+
+**Same-input byte audit — PASS.** ACP additionally passes all three paths / **168 exact
+packet occurrences and every event**, consuming eleven UUIDs and 195 signatures.
+The combined audit (`/tmp/brief29-final-audit.mjs`, result
+`/tmp/brief29-audit-summary.json`) confirms **192 unchanged decision traces**, **181
+completely identical saved event traces / 2,027 byte-identical saved packet occurrences**,
+and **376 exact same-input AP2/ACP packet occurrences** across six paths. Six joint
+traces are compared by decisions as requested. The five naturally varying saved native
+payment traces are covered by the entropy replay above rather than a weakened byte
+comparison. The immutable oracle still has **161 identical paths**.
+
+**Repository file inventory (all under packages/agent-reference).**
+
+- `ENGINE-REPORT.md`
+- `scripts/profile-journey.mjs` (new)
+- `src/model/indexed-store.ts` (new)
+- `src/model/nodes.ts`
+- `src/model/core-node.ts`
+- `src/model/named-values.ts`
+- `src/model/copy.ts`
+- `src/wire/document.ts`
+- `src/wire/attachments.ts`
+- `test/pipeline-performance.test.ts` (new)
+- `test/helpers/model-corpus.ts`
+- `test/complete-model.test.ts`
+- `test/runtime-data-integrity.test.ts`
+- `test/engine.test.ts`
+- `test/labels.test.ts`
+- `test/confinement.test.ts`
+- `vitest.config.ts`
+
+Build-generated trace/outline/manifest files will be restored to the saved original
+artifacts after all artifact-dependent tests finish. No source outside this inventory
+is edited. The full test run currently has one broad engine assertion failure under
+investigation; the exhaustive corpus is still running. Final results follow below.
+
+The broad engine failure is an existing test/configuration mismatch: it expected
+`scenario.branches.length + 1` baseline paths even for branches marked onlyUnder a
+configuration (mortgage-main expected 12, correctly received 4). The assertion now
+counts baseline-eligible branches. No engine path is skipped or changed; the existing
+matrix tests still exercise configuration-scoped branches and the immutable oracle
+still requires all 161 baseline paths. The diagnostic was **150.23 s** to that assertion;
+the first full run's engine file was **284.423 s**. The corrected full run follows.
+
+**Exhaustive corpus — PASS, 12m 35.757s wall (754.80 s Vitest).**
+`FULL_CORPUS=1 BRIEF22C_MODEL_REPORT=/tmp/brief29-corpus-full.json pnpm exec vitest
+run test/complete-model.test.ts` checks every executable path, all eleven kinds and the
+unchanged capacity assertions. This run overlapped the package suite, entropy replay
+and engine diagnostic; it is an observed wall time, not an isolated benchmark. Log:
+`/tmp/brief29-full-corpus.log`. Counts follow from the JSON report below.
+
+Exhaustive report: `{"packets": 2791, "paths": 192, "messages": 1339, "kinds": ["accept", "challenge", "deliver", "describe", "description", "indeterminate", "invoke", "propose", "receipt", "refuse", "unsupported"], "intents": 861, "agreements": 78, "failures": []}`.
+
+The corrected engine file passes **11/11 in 297.00 s** (293.30 s tests), including
+all baseline path and manifest-count assertions. Root `pnpm run lint:root` also passes,
+including RDF discipline (2,433 scanned files) and duplication (4,069 scanned files),
+without changing either baseline. The separate E0 suite is running because the first
+package command retains the already-loaded old engine assertion and therefore will
+not reach its second `&&` command. No production source changed during these checks.
+
+E0 passes **17/17 in 3.20 s** (4.302 s command wall). The full reference run also
+exposes two prior validation issues: labels.test still expects 24 alternative rows /
+19 runs, predating the four native settlement configurations (12 additional rows);
+its inventory assertions now require 36 rows / 31 runs, preserving the existing status,
+caption and coverage checks. vocabulary.test requires one rdfs:comment on every term,
+but the unchanged ontology has none for awp:reason/approval-mismatch. That check and
+the vocabulary are left intact: vocabulary edits are outside the authorized lane.
+The untouched original sources and saved original traces are being checked separately
+to pin these failures to the input checkout.
+
+The vocabulary and old label-count failures are reproduced unchanged against the
+original HEAD sources and saved original traces in **2.75 s**; log:
+`/tmp/brief29-original-existing.log`. Corrected label inventory tests pass **4/4 in
+2.89 s**. No caption, rule, ontology term or vocabulary check was changed.
+
+The final default corpus has passed inside the full run. It captures all required
+configuration/kind coverage (69 coverage tokens), keeps every capacity occurrence and
+reports: `{"packets": 1927, "paths": 76, "messages": 143, "kinds": ["accept", "challenge", "deliver", "describe", "description", "indeterminate", "invoke", "propose", "receipt", "refuse", "unsupported"], "intents": 74, "agreements": 48, "failures": []}`. A standalone timed default invocation is also
+running to distinguish its own time from the package run's scheduling.
+
+A further existing test setup failure occurs before runtime execution: the hostile
+confinement fixture replaces the configuration declarations by [bad], leaving branches
+that reference other configurations (validateReferences correctly rejects it). It now
+replaces only the selected configuration entry and retains the other declarations.
+No branch or validation is removed, and only the selected baseline/email runs execute
+as before. The full run's other confinement test already passes; the focused hostile
+fixture is being rerun.
+
+**Final timings and results (supersede provisional runs above).**
+
+| Command/check | Result |
+| --- | --- |
+| Profile, all four mortgage-main paths | JWS 58.798 → **26.449 s**; DI 63.139 → **26.081 s**; 344 packet occurrences identical, decisions unchanged. |
+| Package build | **PASS, 8m 12.650s**, all 192 live paths regenerated. |
+| Default corpus | **PASS, 6m 35.124s** command wall / 393.94 s Vitest; 76 paths, 143 messages, 74 intents, 48 agreements, all 69 coverage tokens and eleven kinds, zero failures. Log `/tmp/brief29-default-timed.log`. |
+| FULL_CORPUS=1 corpus | **PASS, 12m 35.757s**; all 192 paths, 1,339 messages, 861 intents, 78 agreements, zero failures. |
+| Full reference run | **28m 35.575s** command wall / 1714.15 s Vitest: 811 passed, 7 skipped, four existing test/configuration failures. Log `/tmp/brief29-full-test.log`. |
+| Corrected tests after that run loaded them | Engine **11/11** (297.00 s); labels **4/4** (2.89 s); hostile confinement **1/1 selected** (46.38 s; the other confinement test passed in the full run). No source behavior changed. |
+| Remaining reference failure | Unchanged `vocabulary.test.ts`: missing rdfs:comment on awp:reason/approval-mismatch, reproduced against original HEAD. The vocabulary/check are outside the performance lane and untouched. |
+| Separate E0 run | **17/17 PASS**, 4.302 s command wall. |
+| Byte/decision audit | **PASS**: 192 unchanged decision traces; immutable 161-path oracle; 2,027 identical saved packet occurrences plus 376 identical same-input AP2/ACP occurrences; six joint traces compared by decisions. |
+| Package typecheck / lint / RDF guard | **PASS**; zero lint errors, **0 RDF failures / 213 unchanged allowances**. |
+| Root lint | **PASS**, including agent layers, codegen, RDF discipline and duplication. |
+| Workspace gate:full | **FAIL outside agent-reference**, @jeswr/app-shell build; compiler details and final cleanup check below. Log `/tmp/brief29-gate-full.log`. |
+
+The full reference command retained the old versions of three test setups when it
+started; their corrections were independently verified above. It is not reported as
+a green package test command. E0 was run separately because that command stopped at
+the reference failures. The explicit vocabulary failure remains visible.
+
+Default and full corpus timings are actual observed runs; the default overlapped the
+reference suite, and the full corpus overlapped the reference suite and diagnostics.
+The before/after CPU-profile comparisons used the same profile mode and inputs.
+No full pre-change build/test benchmark beyond the supplied approximate 15/40-minute
+baselines is claimed.
+
+**Closing commands and cleanup — complete.**
+
+- Workspace gate stopped in **7.816 s**, after five cached successes: app-shell
+  cannot resolve `react`, `react/jsx-runtime` or `lucide-react`, with consequent JSX
+  type errors. No dependency installation or unrelated source repair was attempted.
+- Hostile confinement fixture: **PASS, 42.60 s tests / 46.38 s Vitest**. The unchanged
+  original fixture reproduces its old unknown-configuration error in 128 ms
+  (`/tmp/brief29-original-confinement.log`).
+- Restored every generated trace, outline and scenario manifest from the original
+  backups. `git diff --quiet -- traces outlines scenario-runs.json
+  test/oracle/pre-rdf.json` passes. The prescribed oracle snapshot to
+  `/tmp/brief29-restored-oracle.json` again has **161 equal paths**.
+- Final post-cleanup run of pipeline-performance, whole-message-fixtures, labels and
+  oracle-snapshot tests: **16/16 PASS in 13.45 s**. This checks golden signatures,
+  graph/index mutation, pooled-validation isolation and the restored artifacts.
+  Log: `/tmp/brief29-closing-tests.log`.
+- Final `pnpm exec tsc -p tsconfig.json --noEmit`, package lint and RDF pipeline guard
+  all pass: zero lint errors, 131 warnings / 455 informational diagnostics;
+  **0 RDF failures / 213 unchanged allowances**. `git diff --check` passes.
+
+The working tree contains only the seventeen inventoried package files (three new);
+no generated trace/outline/manifest, oracle, allowance, dependency, lockfile or dist
+artifact is included in the diff. No commit, merge, publish, installation or network
+request was made. Performance work is complete within the requested lane; the existing
+missing vocabulary definition and app-shell dependency failure remain explicitly
+reported, with their checks preserved.

@@ -2,7 +2,7 @@
 /** Content-addressed, bounded carriage. Digest/length admission precedes all parsing. */
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import { DataFactory, Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import { digestBytes } from "../core/canonical.js";
 import type { PilotLimits } from "../core/limits.js";
 import {
@@ -11,6 +11,7 @@ import {
   bindAttachments,
   materializeAttachments,
 } from "../model/attachments.js";
+import { IndexedStore } from "../model/indexed-store.js";
 import { AWP } from "../profile/vocabulary.js";
 import { DocumentError } from "./contexts.js";
 import {
@@ -69,7 +70,7 @@ const open = new Set(
 
 /** Follow only owned named-value structure, never domain IRIs or back-references. */
 function valueTree(dataset: Store, root: string): Store {
-  const output = new Store(),
+  const output = new IndexedStore(),
     pending = [root],
     seen = new Set<string>();
   while (pending.length) {
@@ -126,7 +127,7 @@ export async function writeAttachmentDocument(
 ): Promise<AttachmentDocument> {
   const id = node.id ?? node.value;
   if (!id) throw new DocumentError("invalid-root-iri");
-  const dataset = new Store([...materializeAttachments(node.dataset as Store)]),
+  const dataset = new IndexedStore([...materializeAttachments(node.dataset as Store)]),
     attachments = new Map<string, DocumentAttachment>(),
     values = new Map<string, AttachmentValue>();
   // Outer collections first. Removing an attached tree also removes nested candidates.
@@ -371,10 +372,11 @@ export async function admitAttachments(
     for (const entry of expected.get(attachment.digest)!) {
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       if (entry.mediaType === "application/n-quads" && !entry.datatype) {
-        const graph = await parseRdf(text, "application/n-quads", {
+        const parsed = await parseRdf(text, "application/n-quads", {
           maxBytes: ATTACHMENT_LIMITS.perAttachment,
           maxQuads: ATTACHMENT_LIMITS.quads,
         });
+        const graph = new IndexedStore([...parsed]);
         if (
           graph.getGraphs(null, null, null).some((g) => g.termType !== "DefaultGraph") ||
           valueTree(graph, entry.id).size !== graph.size ||

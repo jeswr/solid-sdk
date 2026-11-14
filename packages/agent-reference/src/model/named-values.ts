@@ -2,7 +2,6 @@
 /** Open domain data: named PropertyValue entries, never rdf:JSON or JSON strings. */
 import type { Term } from "@jeswr/fetch-rdf";
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
-import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import { RequiredAs, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { digestBytes, isIri } from "../core/canonical.js";
@@ -10,6 +9,7 @@ import { assertJsonBounds, DEFAULT_LIMITS } from "../core/limits.js";
 import type { Json, JsonObject } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
 import { attachmentGraph, attachmentTerm } from "./attachments.js";
+import { containsObject, subjectsAt } from "./indexed-store.js";
 import { RdfNode } from "./nodes.js";
 
 export const SCHEMA = "https://schema.org/";
@@ -74,16 +74,9 @@ export class NamedValuesNode extends RdfNode {
     // Every access still observes edits to the admitted store and attachment graph.
     const entryFor = (name: string): NamedValueNode | undefined => {
       const graph = attachmentGraph(this.dataset, this.id) ?? this.dataset;
-      const terms = graph
-        .getSubjects(DataFactory.namedNode(SCHEMA + "name"), DataFactory.literal(name), null)
-        .filter((term) =>
-          graph.countQuads(
-            this as never,
-            DataFactory.namedNode(SCHEMA + "itemListElement"),
-            term,
-            null,
-          ),
-        );
+      const terms = subjectsAt(graph, SCHEMA + "name", DataFactory.literal(name)).filter((term) =>
+        containsObject(graph, this as never, SCHEMA + "itemListElement", term),
+      );
       if (terms.length > 1) throw new TypeError("Duplicate parameter name");
       if (!terms[0]) return undefined;
       const entry = new NamedValueNode(terms[0], graph);
@@ -124,8 +117,8 @@ export class NamedValuesNode extends RdfNode {
   get entries(): readonly NamedValueNode[] {
     const graph = attachmentGraph(this.dataset, this.id);
     if (graph) return new NamedValuesNode(this.id, graph).entries;
-    const entries = [...objectTerms(this, SCHEMA + "itemListElement")].map(
-      (t) => new NamedValueNode(TermAs.term(t), this.dataset),
+    const entries = this.objects(SCHEMA + "itemListElement").map(
+      (t) => new NamedValueNode(t, this.dataset),
     );
     entries.sort((a, b) => a.position - b.position);
     for (let i = 0; i < entries.length; i++)

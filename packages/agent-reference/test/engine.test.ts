@@ -29,7 +29,9 @@ it("loads every declared case and preserves every catalogue branch, without clai
   for (const file of readdirSync(join(root, "scenarios"))) {
     const { profile, scenario } = loadCase(root, file.slice(0, -5));
     const results = await runScenario(profile, scenario);
-    expect(results).toHaveLength(scenario.branches.length + 1);
+    expect(results).toHaveLength(
+      scenario.branches.filter((branch) => !branch.onlyUnder).length + 1,
+    );
     for (const result of results) {
       if (result.blocked) {
         const row = manifest.paths.find(
