@@ -89,7 +89,13 @@ import {
 } from "./money.js";
 import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
 import { outcomeTurtle } from "./outcome.js";
-import { createdObjectType, responsePageError, sentInputValue } from "./response-evidence.js";
+import {
+  createdObjectType,
+  notFoundSignature,
+  responsePageError,
+  sentInputValue,
+  staleVerificationResponse,
+} from "./response-evidence.js";
 import { registerSecret, secretRedactor } from "./secrets.js";
 import {
   assertSelectionFilters,
@@ -104,6 +110,9 @@ import {
 } from "./selection.js";
 import { UriTemplateError } from "./uri-template.js";
 import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
+import { readVerificationBody } from "./verification-body.js";
+import { submittedStateInputs, verificationScopeMatches } from "./verification-context.js";
+import { exactIdentityFilter } from "./verification-filter.js";
 import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
 import {
   matchesCreatedIdentity,
@@ -275,7 +284,10 @@ interface RunContext {
   deadline: number;
 }
 
+type VerificationRead = { authorize: (url: URL) => Promise<boolean>; preparation?: boolean };
+
 interface Response0 {
+  stale: boolean;
   status: number;
   /** Private wire context, including every transmitted header and applicable cookie. */
   requestContext: string;
@@ -549,14 +561,18 @@ export function createExecutor(options: ExecutorOptions): Executor {
     accept: string | undefined,
     committed?: () => void,
     loginResponse = false,
+    verification?: VerificationRead,
   ): Promise<Response0> {
     let url = guardUrl(startUrl.href, origin);
     let currentMethod = method;
     let currentBody = body;
     const currentHeaders = { ...headers };
     const redirectLocations: string[] = [];
+    let stale = false;
     for (let redirects = 0; ; redirects++) {
       checkDeadline(ctx);
+      if (verification && !(await verification.authorize(url)))
+        throw new HttpError("verification read was not authorized");
       if (ctx.requests >= maxRequests)
         throw new LimitError(`request limit of ${maxRequests} reached`);
       ctx.requests++;
@@ -568,6 +584,10 @@ export function createExecutor(options: ExecutorOptions): Executor {
         h.set(k, v);
       }
       h.set("accept", accept ?? "*/*");
+      if (verification) {
+        h.set("cache-control", "no-cache");
+        h.set("pragma", "no-cache");
+      }
       const cookies = cookiesFor(ctx.jar, url, now());
       if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
       // Fetch's Headers object is authoritative for trimming and header names.
@@ -585,6 +605,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
             method: currentMethod,
             headers: h,
             redirect: "manual",
+            ...(verification ? { cache: "no-store" as const } : {}),
             ...(currentBody !== undefined ? { body: bodyInit(currentBody) } : {}),
           }),
         );
@@ -604,8 +625,31 @@ export function createExecutor(options: ExecutorOptions): Executor {
         url,
         loginResponse && currentMethod !== "GET" && currentMethod !== "HEAD",
       );
+      if (
+        verification &&
+        (res.headers.has("www-authenticate") || res.headers.has("proxy-authenticate"))
+      ) {
+        if (res.body) await budget(ctx, res.body.cancel());
+        throw new HttpError("verification requires authentication");
+      }
+      stale ||= staleVerificationResponse(res.headers);
+      if (verification && stale) {
+        if (res.body) await budget(ctx, res.body.cancel());
+        throw new HttpError("verification response is cached");
+      }
       const location = res.headers.get("location");
-      if (REDIRECT_STATUSES.has(res.status) && location !== null) {
+      if (
+        verification &&
+        !verification.preparation &&
+        REDIRECT_STATUSES.has(res.status) &&
+        location !== null
+      )
+        redirectLocations.push(guardUrl(new URL(location, url).href, origin).href);
+      if (
+        (!verification || verification.preparation) &&
+        REDIRECT_STATUSES.has(res.status) &&
+        location !== null
+      ) {
         if (res.body) await budget(ctx, res.body.cancel());
         let next: URL;
         try {
@@ -632,10 +676,14 @@ export function createExecutor(options: ExecutorOptions): Executor {
       }
       return {
         status: res.status,
+        stale,
         requestContext: JSON.stringify([...h].sort(([a], [b]) => a.localeCompare(b))),
         contentType: res.headers.get("content-type") ?? undefined,
         url,
-        body: await readBody(ctx, res),
+        body:
+          verification && !verification.preparation
+            ? await budget(ctx, readVerificationBody(res, ctx.controller.signal))
+            : await readBody(ctx, res),
         requestBody: currentBody,
         redirectLocations,
       };
@@ -647,6 +695,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     compiled: CompiledRequest,
     rule: NonNullable<Operation["csrf"]>[number],
     values: Record<string, string>,
+    verification?: VerificationRead,
   ): Promise<string> {
     const { source } = rule;
     let token: string | undefined;
@@ -664,7 +713,19 @@ export function createExecutor(options: ExecutorOptions): Executor {
         throw e;
       }
       const accept = source.kind === "json" ? "application/json" : "text/html";
-      const res = await send(ctx, "GET", pageUrl, {}, undefined, accept);
+      const res = await send(
+        ctx,
+        "GET",
+        pageUrl,
+        {},
+        undefined,
+        accept,
+        undefined,
+        false,
+        verification ? { ...verification, preparation: true } : undefined,
+      );
+      if (verification && (res.stale || responsePageError(res.body, res.contentType, false)))
+        throw new CsrfError("verification token source is not verified");
       if (res.status >= 400)
         throw new CsrfError(`CSRF page ${describeUrl(res.url)} answered ${res.status}`);
       if (source.kind === "json") {
@@ -725,6 +786,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     compiled: CompiledRequest,
     values: Record<string, string>,
     payment = false,
+    verification?: VerificationRead,
   ): Promise<void> {
     for (const rule of compiled.csrf) {
       // A token must never replace an already approved effectful value.
@@ -746,7 +808,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
         if (payment) throw new MoneyRefusal("CSRF target would overwrite an approved input");
         throw new BindingError("CSRF target would overwrite an approved input");
       }
-      applyCsrfToken(compiled, rule, await csrfToken(ctx, compiled, rule, values));
+      applyCsrfToken(compiled, rule, await csrfToken(ctx, compiled, rule, values, verification));
       // The compiled inventory already reflects multipart CRLF/USVString,
       // form/query Unicode conversion, JSON values and Fetch header trimming.
       // Register each decoration immediately, even if a later token fails.
@@ -758,6 +820,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     ctx: RunContext,
     operation: Operation,
     values: Record<string, string>,
+    compiledWrite: CompiledRequest,
   ) {
     ctx.baselineUnverified = false;
     const declaration = writeResponses[operation.id]?.verification;
@@ -812,13 +875,28 @@ export function createExecutor(options: ExecutorOptions): Executor {
     )
       return;
     const compiledRead = compileOperation(read, resolved, origin);
+    if (
+      !verificationScopeMatches(
+        compiledWrite,
+        operation,
+        compiledRead,
+        read,
+        declaration.scopeConstants,
+        declaration.bind,
+      ) ||
+      (operation.actionType !== `${SCHEMA}DeleteAction` &&
+        submittedStateInputs(operation, values, origin, declaration.identityInput).some(
+          (name) => !declaration.changes.some((change) => change.input === name),
+        ))
+    )
+      return;
     const target: Target = {
       kind: "operation",
       id: read.id,
       label: redactWith(ctx)(read.label),
       actionType: read.actionType,
     };
-    const run = async () => {
+    const authorize = async (url: URL) => {
       const decision = await budget(
         ctx,
         gate.authorize({
@@ -833,21 +911,40 @@ export function createExecutor(options: ExecutorOptions): Executor {
             target,
             effect: "read",
             inputs: resolved,
-            binding: { operation: read, url: compiledRead.url.href, verificationOf: operation.id },
+            binding: { operation: read, url: url.href, verificationOf: operation.id },
           }),
         }),
       );
-      if (decision.kind !== "allow") return;
-      return send(
+      return decision.kind === "allow";
+    };
+    const verification = { authorize };
+    // Authorize the verification operation before even acquiring its token. Each
+    // preparatory URL is separately authorized by send before transmission.
+    if (!(await authorize(compiledRead.url))) return;
+    await prepareCsrf(ctx, compiledRead, resolved, false, verification);
+    if (
+      !verificationScopeMatches(
+        compiledWrite,
+        operation,
+        compiledRead,
+        read,
+        declaration.scopeConstants,
+        declaration.bind,
+      )
+    )
+      return;
+    const run = () =>
+      send(
         ctx,
         "GET",
         compiledRead.url,
         compiledRead.headers,
         undefined,
         read.extraction?.format === "json" ? "application/json" : "text/html",
+        undefined,
+        false,
+        verification,
       );
-    };
-    await prepareCsrf(ctx, compiledRead, resolved);
     const context = authenticationContext(ctx);
     const epoch = ctx.sessionEpoch ?? 0;
     const before = await run();
@@ -856,6 +953,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
     // Verification never treats a redirect as absence or a changed request context.
     if (
       !before ||
+      before.stale ||
       !stable() ||
       before.status < 200 ||
       before.status >= 300 ||
@@ -870,13 +968,26 @@ export function createExecutor(options: ExecutorOptions): Executor {
       resource,
       redactWith(ctx),
     );
-    if (!baseline) return;
+    if (
+      !baseline ||
+      (operation.actionType === `${SCHEMA}DeleteAction` &&
+        baseline.collection &&
+        !exactIdentityFilter(
+          read,
+          compiledRead,
+          declaration.bind,
+          declaration.identityInput,
+          identity,
+        ))
+    )
+      return;
     ctx.baselineUnverified = false;
     return async () => {
       if (!stable()) return false;
       const after = await run();
       if (
         !after ||
+        after.stale ||
         !stable() ||
         after.redirectLocations.length ||
         after.requestContext !== before.requestContext ||
@@ -885,17 +996,13 @@ export function createExecutor(options: ExecutorOptions): Executor {
         return false;
       if (operation.actionType === `${SCHEMA}DeleteAction`) {
         if ([404, 410].includes(after.status)) {
-          // The expected missing-resource heading is compatible with absence; login,
-          // validation regions and JSON failure markers remain failures.
-          return !responsePageError(
-            after.body,
-            /^\s*</.test(after.body)
-              ? "text/html"
-              : /^\s*[[{]/.test(after.body)
-                ? "application/json"
-                : after.contentType,
-            false,
-            true,
+          const signature = notFoundSignature(after.status, after.contentType, after.body);
+          return (
+            !!declaration.notFound &&
+            !!signature &&
+            signature.status === declaration.notFound.status &&
+            signature.contentType === declaration.notFound.contentType &&
+            signature.structure === declaration.notFound.structure
           );
         }
         return (
@@ -916,8 +1023,24 @@ export function createExecutor(options: ExecutorOptions): Executor {
       );
       return (
         !!snapshot &&
-        effectChangesMatch(declaration, baseline, snapshot, (input) =>
-          sentInputValue(operation, values, input, origin),
+        (declaration.constantChanges ?? []).every(
+          (change) =>
+            compiledWrite.body &&
+            effectiveWireFields(compiledWrite).some(
+              (field) =>
+                field.location === "body" &&
+                field.name === change.name &&
+                field.value === change.value,
+            ) &&
+            snapshot.values.get(change.property)?.length === 1 &&
+            snapshot.values.get(change.property)?.[0] === change.value,
+        ) &&
+        effectChangesMatch(
+          declaration,
+          baseline,
+          snapshot,
+          (input) => sentInputValue(operation, values, input, origin),
+          (input) => operation.inputs.find((p) => p.name === input)?.range,
         )
       );
     };
@@ -930,8 +1053,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
     compiled: CompiledRequest,
     committed?: () => void,
     csrfPrepared = false,
+    verification?: VerificationRead,
   ): Promise<{ observation: ObservationRecord; items: ExtractedItem[]; responseBody: string }> {
-    if (!csrfPrepared) await prepareCsrf(ctx, compiled, values);
+    if (!csrfPrepared) await prepareCsrf(ctx, compiled, values, false, verification);
     const accept =
       operation.extraction?.format === "json"
         ? "application/json"
@@ -940,7 +1064,7 @@ export function createExecutor(options: ExecutorOptions): Executor {
           : undefined;
     const verifiesEffect = requiresEffectVerification(operation);
     const verifyEffect = verifiesEffect
-      ? await prepareEffectRead(ctx, operation, values)
+      ? await prepareEffectRead(ctx, operation, values, compiled)
       : undefined;
     if (ctx.baselineUnverified) throw new HttpError("baseline is not verified; write was not sent");
     const res = await send(
@@ -958,7 +1082,15 @@ export function createExecutor(options: ExecutorOptions): Executor {
       committed,
       operation.actionType === "https://jeswr.org/ns/site-action#LoginAction" ||
         !!model.login?.some((route) => route.operation === operation.id),
+      verification,
     );
+    if (
+      verification &&
+      (res.stale ||
+        res.redirectLocations.length ||
+        responsePageError(res.body, res.contentType, false))
+    )
+      throw new HttpError("verification response is not verified");
     if (res.status >= 400) {
       throw new HttpError(`${operation.label}: ${describeUrl(res.url)} answered ${res.status}`);
     }
@@ -1075,7 +1207,37 @@ export function createExecutor(options: ExecutorOptions): Executor {
                 }),
               );
               if (decision.kind !== "allow") return false;
-              const result = await runOperation(ctx, read, resolved, compiledRead);
+              const result = await runOperation(
+                ctx,
+                read,
+                resolved,
+                compiledRead,
+                undefined,
+                false,
+                {
+                  authorize: async (url) =>
+                    (
+                      await budget(
+                        ctx,
+                        gate.authorize({
+                          site: origin,
+                          target,
+                          effect: "read",
+                          inputs: resolved,
+                          summary: `Verify created item on ${new URL(origin).host}`,
+                          digest: approvalDigest({
+                            site: origin,
+                            modelVersion: model.version,
+                            target,
+                            effect: "read",
+                            inputs: resolved,
+                            binding: { operation: read, url: url.href, readBackOf: operation.id },
+                          }),
+                        }),
+                      )
+                    ).kind === "allow",
+                },
+              );
               return (
                 result.observation.status >= 200 &&
                 result.observation.status < 300 &&

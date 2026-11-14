@@ -3,8 +3,8 @@
 // AUTHORED-BY Claude Opus 5.5
 // Types local to the profiler. The output contract (SiteModel and friends) lives in @jeswr/site-model.
 
-import type { ExecutorOptions } from "@jeswr/site-executor";
-import type { CsrfRule, EffectClass, LearnMethod, SiteModel } from "@jeswr/site-model";
+import type { EffectVerification, ExecutorOptions, Gate } from "@jeswr/site-executor";
+import type { CsrfRule, EffectClass, Extraction, LearnMethod, SiteModel } from "@jeswr/site-model";
 import type { Browser, Page } from "playwright";
 
 /** Which profiling step issued (or observed) a request. */
@@ -24,6 +24,8 @@ export interface RecordedRequest {
   requestHeaders: Record<string, string>;
   /** Names (never values) of the cookies sent. */
   cookieNames: string[];
+  /** Per-recorder keyed equality tag for the actual credential context; never credential values. */
+  authenticationContext?: string;
   /** Request headers whose value equalled a cookie's value: header name (lower case) -> cookie name. */
   headersFromCookies?: Record<string, string>;
   /** Authorization scheme sent (e.g. 'Bearer'), never the credential. */
@@ -45,6 +47,19 @@ export interface RecordedRequest {
   /** Response body, truncated to the profiler's sample limit. */
   bodySample?: string;
   bodyTruncated?: boolean;
+  /** Complete, bounded equality evidence; the source body is never retained here. */
+  verificationEvidence?: {
+    extraction: Extraction;
+    items: Record<string, string[]>[];
+    trustedItems: Record<string, string[]>[];
+    total?: number;
+    /** null denotes a complete main-item response; absent means shape evidence is unavailable. */
+    collection?: { count: number; envelope: string[][] } | null;
+  };
+  /** Opaque complete-body absence signature; no response body is retained. */
+  notFoundEvidence?: EffectVerification["notFound"];
+  /** Form-carried values before editing, excluding credential fields. */
+  formState?: { action: string; method: string; fields: { name: string; value: string }[] }[];
   /** Error/validation check over the complete witnessed response, before sample truncation. */
   responsePageError?: boolean;
   /** Complete-response failure check excluding neutral flash regions. */
@@ -184,6 +199,8 @@ export interface ProfileOptions {
   modelId?: string;
   /** Verify learned reads, with at most one retry using recorded successful values. Default true. */
   verify?: boolean;
+  /** Authorizes additional verification-evidence GETs; defaults to the executor's read gate. */
+  verificationGate?: Gate;
   /** Version string for the model. Default 0.1.0. */
   version?: string;
 }

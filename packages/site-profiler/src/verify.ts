@@ -20,6 +20,7 @@ export interface ReplayResponse {
   contentType?: string;
   body: string;
   location?: string;
+  authenticationFailure?: boolean;
 }
 
 /** Sends GET requests for verification; signed-in replays carry the profiling session. */
@@ -211,6 +212,7 @@ export function playwrightReplayer(
       recorder.phase = phase;
       try {
         let res: ReplayResponse;
+        let authenticationContext: string;
         if (signedIn) {
           recorder.rememberCookies(await context.cookies(url));
           const bound = { ...values };
@@ -256,6 +258,10 @@ export function playwrightReplayer(
           const decorated = new URL(url);
           for (const [name, token] of queryTokens) decorated.searchParams.set(name, token);
           url = decorated.href;
+          authenticationContext = recorder.authenticationContext(
+            requestHeaders ?? {},
+            await context.cookies(url),
+          );
           const r = await context.request.get(url, {
             headers: requestHeaders,
             maxRedirects: 0,
@@ -270,17 +276,25 @@ export function playwrightReplayer(
             url,
           );
           const headers = r.headers();
-          res = { status: r.status(), body: await r.text().catch(() => "") };
+          res = { status: r.status(), body: await r.text() };
+          if (
+            headers["www-authenticate"] !== undefined ||
+            headers["proxy-authenticate"] !== undefined
+          )
+            res.authenticationFailure = true;
           if (headers["content-type"]) res.contentType = headers["content-type"];
           if (headers.location) res.location = headers.location;
         } else {
+          authenticationContext = recorder.authenticationContext(requestHeaders ?? {}, []);
           const r = await fetch(url, {
             headers: requestHeaders,
             redirect: "manual",
             signal: AbortSignal.timeout(5000),
           });
           recorder.rememberSetCookies(r.headers.getSetCookie(), url);
-          res = { status: r.status, body: await r.text().catch(() => "") };
+          res = { status: r.status, body: await r.text() };
+          if (r.headers.has("www-authenticate") || r.headers.has("proxy-authenticate"))
+            res.authenticationFailure = true;
           const ct = r.headers.get("content-type");
           if (ct) res.contentType = ct;
           const loc = r.headers.get("location");
@@ -289,11 +303,13 @@ export function playwrightReplayer(
         const entry: Parameters<Recorder["recordReplay"]>[0] = {
           method: "GET",
           url,
+          authenticationContext,
           resourceType: signedIn ? "replay" : "replay-anonymous",
           requestHeaders: requestHeaders ?? {},
           status: res.status,
           bodySample: res.body,
         };
+        if (res.authenticationFailure) entry.responsePageFailure = true;
         if (res.contentType) entry.contentType = res.contentType;
         if (res.location) entry.redirectedTo = new URL(res.location, url).toString();
         recorder.recordReplay(entry);
@@ -307,7 +323,7 @@ export function playwrightReplayer(
 
 /** A login page or JSON redirect/error envelope is not a successful data read, even with HTTP 200. */
 export function readable(op: Operation, response: ReplayResponse | undefined): boolean {
-  if (!ok(response) || !response) return false;
+  if (!ok(response) || !response || response.authenticationFailure) return false;
   if (
     /html/i.test(response.contentType ?? "") &&
     parseForms(response.body, "https://fixture.test/").some((f) => f.hasPassword)

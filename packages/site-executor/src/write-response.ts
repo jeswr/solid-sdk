@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Executor-local declarations until created-location/success evidence joins the shared contract.
 
@@ -13,6 +14,7 @@ import {
   sentInputValue,
 } from "./response-evidence.js";
 import { BindingError } from "./values.js";
+import type { WitnessedScopeConstant } from "./verification-context.js";
 
 export interface EffectVerification {
   operation: string;
@@ -20,7 +22,7 @@ export interface EffectVerification {
   identityInput: string;
   identityPattern: string;
   identityAliases?: string[];
-  /** Submitted values, or a demonstrated numeric delta (for example a vote count). */
+  /** Witnessed input-to-read-field pairings, or a demonstrated numeric delta (for example a vote count). */
   changes: {
     input: string;
     property: string;
@@ -30,6 +32,12 @@ export interface EffectVerification {
   }[];
   /** A witnessed display slug immediately following the numeric resource identity. */
   displaySlug?: boolean;
+  /** Missing-resource response fetched for this read and scope after a witnessed deletion. */
+  notFound?: { status: 404 | 410; contentType: string; structure: string };
+  /** Read-only constants whose post-write target and submitted values were witnessed. */
+  scopeConstants?: WitnessedScopeConstant[];
+  /** Demonstrated changes to literal form fields; unchanged carried fields are excluded. */
+  constantChanges?: { name: string; value: string; property: string }[];
 }
 
 export function requiresEffectVerification(operation: Operation): boolean {
@@ -113,6 +121,15 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
     const declaration = policy.readBack;
     for (const pattern of [declaration.identityPattern, ...(declaration.identityAliases ?? [])])
       readBackIdentityUrl(pattern, "1", origin);
+  }
+  if (policy.verification?.notFound) {
+    const signature = policy.verification.notFound;
+    if (
+      ![404, 410].includes(signature.status) ||
+      typeof signature.contentType !== "string" ||
+      !/^[a-f0-9]{64}$/.test(signature.structure)
+    )
+      throw new BindingError("invalid not-found signature");
   }
   if (policy.verification) {
     for (const pattern of [

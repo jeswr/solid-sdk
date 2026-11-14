@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Shared negative evidence; callers still need positive resource/success evidence.
 import { createHash } from "node:crypto";
@@ -19,10 +20,17 @@ export function jsonFailure(value: unknown): boolean {
           member != null &&
           member !== "" &&
           JSON.stringify(member) !== "[]") ||
-        (/^(?:success|ok)$/i.test(key) && member === false) ||
-        (/^status$/i.test(key) &&
+        (/^(?:message|detail|reason)$/i.test(key) &&
           typeof member === "string" &&
-          /^(?:error|fail|failed|failure)$/i.test(member)),
+          /\b(?:unauthenticated|unauthorized|please (?:(?:sign|log)[ -]?in|authenticate)|(?:authentication|authorization|sign[ -]?in|log[ -]?in) (?:required|failed)|session (?:has )?expired)\b/i.test(
+            member,
+          )) ||
+        (/^(?:success|ok|authenticated|authorized|loggedIn)$/i.test(key) && member === false) ||
+        (/^(?:status|statusCode|code)$/i.test(key) &&
+          ["string", "number"].includes(typeof member) &&
+          /^(?:error|fail|failed|failure|unauthenticated|unauthorized|401|403)$/i.test(
+            String(member).trim(),
+          )),
     )
   );
 }
@@ -76,7 +84,7 @@ export function responsePageError(
   allowNotFound = false,
 ): boolean {
   if (!body) return false;
-  if (/json/i.test(contentType ?? "")) {
+  if (/json/i.test(contentType ?? "") || /^\s*[[{]/.test(body)) {
     try {
       const doc: unknown = JSON.parse(body);
       const walk = (value: unknown): boolean =>
@@ -87,10 +95,20 @@ export function responsePageError(
       return true;
     }
   }
-  if (!/html/i.test(contentType ?? "")) return false;
+  if (!/html/i.test(contentType ?? "") && !/^\s*</.test(body)) return false;
   const doc = parseHtml(body);
   if (
     selectElements('input[type="password"]', doc).length ||
+    selectElements("form", doc).some((el) =>
+      /(?:^|[/_-])(?:oauth2?|saml|openid|sso|login|signin|sign-in|auth|authenticate|authentication|signon|logon)(?:[/_?#-]|$)/i.test(
+        attribute(el, "action") ?? "",
+      ),
+    ) ||
+    selectElements("title, h1, h2, form, [role=heading], button", doc).some((el) =>
+      /\b(?:log[ -]?in|sign[ -]?in|single[ -]?sign[ -]?on|sso|authentication required|session expired)\b/i.test(
+        el.name === "form" ? (attribute(el, "action") ?? "") : elementText(el),
+      ),
+    ) ||
     selectElements(FAILURE_SELECTOR, doc).length ||
     selectElements('[role~="alert"], [aria-live="assertive"]', doc).some((el) =>
       /(?:^|[\s_-])(?:error|danger|warning)(?:$|[\s_-])/i.test(attribute(el, "class") ?? ""),
@@ -198,4 +216,72 @@ export function sentInputValue(
   } catch {
     return;
   }
+}
+
+/** Opaque structural evidence for a witnessed missing resource, never a generic HTTP-status rule. */
+export function notFoundSignature(
+  status: number,
+  contentType: string | undefined,
+  body: string,
+): { status: 404 | 410; contentType: string; structure: string } | undefined {
+  if (status !== 404 && status !== 410) return;
+  const media = (contentType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  const detected = /^\s*</.test(body)
+    ? "text/html"
+    : /^\s*[[{]/.test(body)
+      ? "application/json"
+      : media;
+  if (responsePageError(body, detected, false, true)) return;
+  let structure: unknown;
+  try {
+    if (/json/i.test(detected)) {
+      const shape = (value: unknown): unknown => {
+        if (Array.isArray(value)) return ["array", value.map(shape)];
+        if (value && typeof value === "object")
+          return Object.keys(value)
+            .sort()
+            .map((key) => [key, shape((value as Record<string, unknown>)[key])]);
+        return value === null ? "null" : typeof value;
+      };
+      structure = shape(JSON.parse(body));
+    } else if (/html/i.test(detected)) {
+      const shape = (nodes: ReturnType<typeof parseHtml>["children"]): unknown =>
+        nodes.flatMap((node): unknown[] =>
+          "name" in node && "attribs" in node && "children" in node
+            ? [[node.name, Object.keys(node.attribs).sort(), shape(node.children)]]
+            : [],
+        );
+      structure = shape(parseHtml(body).children);
+    } else structure = body.trim();
+    return {
+      status,
+      contentType: media,
+      structure: createHash("sha256").update(JSON.stringify(structure)).digest("hex"),
+    };
+  } catch {
+    return;
+  }
+}
+
+/** Cache-hit metadata invalidates effect evidence even when the transport ignored no-store. */
+export function staleVerificationResponse(
+  headers: Headers | Readonly<Record<string, string>>,
+): boolean {
+  // Playwright joins repeated Set-Cookie with newlines. Preserve its response
+  // metadata without constructing Fetch Headers, which rejects those values.
+  const entries =
+    headers instanceof Headers
+      ? [...headers]
+      : Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value] as const);
+  const ages = entries.filter(([name]) => name === "age").map(([, value]) => value);
+  const age = ages.length ? ages.join(", ") : null;
+  return (
+    (age !== null && (!/^\s*\d+\s*$/.test(age) || Number(age) > 0)) ||
+    entries.some(
+      ([name, value]) =>
+        (/(?:cache|cached|varnish)/i.test(name) &&
+          /(?:^|[^a-z])(?:hit|stale|cached|true)(?:[^a-z]|$)/i.test(value)) ||
+        (/cache.hits?$/i.test(name) && Number(value) > 0),
+    )
+  );
 }

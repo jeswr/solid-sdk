@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Runtime evidence for existing resources; flashes never establish an effect.
 import { type Extraction, SCHEMA } from "@jeswr/site-model";
 import { jsonPointer } from "./dom.js";
 import { extract } from "./extract.js";
 import { jsonEnvelope, responsePageError } from "./response-evidence.js";
+import { canonicalValue, validateValue } from "./values.js";
 import { type EffectVerification, readBackIdentityMatches } from "./write-response.js";
 
 export interface EffectSnapshot {
@@ -67,11 +69,11 @@ export async function effectSnapshot(
     if (equality.truncation.items || equality.truncation.values) return;
     const values = equality.items[0]?.values;
     if (!values) return;
-    const envelope =
-      ex.format === "json" ? jsonEnvelope(JSON.parse(body), ex.itemPath).keys : undefined;
+    const envelope = ex.format === "json" ? jsonEnvelope(JSON.parse(body), ex.itemPath) : undefined;
+    if (envelope?.failed) return;
     return {
       values,
-      ...(envelope ? { envelope } : {}),
+      ...(envelope ? { envelope: envelope.keys } : {}),
       collection:
         ex.format === "json" && Array.isArray(jsonPointer(JSON.parse(body), ex.itemPath ?? "")),
     };
@@ -88,15 +90,13 @@ export function emptyEffectCollection(
 ): boolean {
   if (
     ex.format !== "json" ||
-    ex.itemPath === undefined ||
-    ex.totalPath === undefined ||
     !baseline.collection ||
     responsePageError(body, "application/json", false)
   )
     return false;
   try {
     const doc: unknown = JSON.parse(body);
-    const rows = jsonPointer(doc, ex.itemPath);
+    const rows = jsonPointer(doc, ex.itemPath ?? "");
     const envelope = jsonEnvelope(doc, ex.itemPath);
     return (
       Array.isArray(rows) &&
@@ -115,15 +115,16 @@ export function effectChangesMatch(
   baseline: EffectSnapshot,
   after: EffectSnapshot,
   submitted: (input: string) => string | undefined,
+  range: (input: string) => string | undefined = () => undefined,
 ): boolean {
   return (
-    declaration.changes.length > 0 &&
+    (declaration.changes.length > 0 || !!declaration.constantChanges?.length) &&
     declaration.changes.every((change) => {
       const sent = submitted(change.input);
       const values = after.values.get(change.property);
       if (sent === undefined || values?.length !== 1) return false;
       if (change.mode !== "delta")
-        return values[0] === (change.format ? formatEffectValue(sent, change.format) : sent);
+        return effectValueEquals(sent, values[0] ?? "", range(change.input), change.format);
       const before = baseline.values.get(change.property);
       return (
         before?.length === 1 &&
@@ -132,6 +133,31 @@ export function effectChangesMatch(
       );
     })
   );
+}
+
+/** Private submitted-value equality, using the input's datatype without relabelling the read. */
+export function effectValueEquals(
+  submitted: string,
+  observed: string,
+  range?: string,
+  format?: EffectVerification["changes"][number]["format"],
+): boolean {
+  if (format) return observed === formatEffectValue(submitted, format);
+  if (!range) return observed === submitted;
+  const parameter = {
+    name: "verification",
+    range,
+    path: [],
+    location: "body" as const,
+    required: false,
+  };
+  try {
+    validateValue(parameter, submitted);
+    validateValue(parameter, observed);
+    return canonicalValue(parameter, submitted) === canonicalValue(parameter, observed);
+  } catch {
+    return false;
+  }
 }
 
 /** Effect-only presentation matching never changes observations or money evidence. */

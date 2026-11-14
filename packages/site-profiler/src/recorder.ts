@@ -5,13 +5,15 @@
 // learning rule: outside a demonstration (or the user-authorised login) no non-GET request leaves
 // the browser. Blocked requests are kept in the trace as evidence of candidate writes.
 
-import { parseSetCookie, type SecretCookie } from "@jeswr/site-executor";
+import { createHmac, randomBytes } from "node:crypto";
+import { parseSetCookie, type SecretCookie, staleVerificationResponse } from "@jeswr/site-executor";
 import type { BrowserContext, Request, Response } from "playwright";
 import { formFields } from "./form-body.js";
 import { isCsrfFieldName } from "./forms.js";
 import { responseFlash, responsePageError } from "./response-evidence.js";
 import type { Phase, RecordedRequest } from "./types.js";
 import { isDangerousLink, isStatic, truncate } from "./util.js";
+import { captureVerificationEvidence } from "./verification-evidence.js";
 
 export const BODY_LIMIT = 256 * 1024;
 
@@ -118,6 +120,7 @@ export class Recorder {
   demonstration: string | undefined;
   readonly trace: RecordedRequest[] = [];
   private seq = 0;
+  private readonly contextKey = randomBytes(32);
   private readonly pending = new Set<Promise<void>>();
   private readonly entries = new Map<Request, RecordedRequest>();
   private readonly blocked = new WeakSet<Request>();
@@ -126,6 +129,26 @@ export class Recorder {
     readonly siteOrigin: string,
     private readonly onCookie?: (cookie: SecretCookie, loginResponse: boolean) => void,
   ) {}
+
+  /** Opaque within this profiling run, with a random key preventing guesses of short credentials. */
+  authenticationContext(
+    headers: Record<string, string>,
+    cookies?: readonly SecretCookie[],
+  ): string {
+    const h = new Headers(headers);
+    const cookiePairs = cookies
+      ? cookies.map((cookie) => [cookie.name, cookie.value])
+      : parseCookieHeader(h.get("cookie") ?? undefined);
+    const credentials = [...h].filter(
+      ([name]) =>
+        name === "authorization" ||
+        name === "proxy-authorization" ||
+        (SENSITIVE_HEADER.test(name) && !/csrf|xsrf|form.?key/i.test(name)),
+    );
+    return createHmac("sha256", this.contextKey)
+      .update(JSON.stringify([cookiePairs.sort(), credentials.sort()]))
+      .digest("hex");
+  }
 
   /** Register raw cookie intake without retaining it in the returned trace. */
   rememberCookies(cookies: readonly SecretCookie[]): void {
@@ -221,6 +244,7 @@ export class Recorder {
     for (const [name, value] of parseCookieHeader(headers.cookie))
       this.onCookie?.({ name, value }, false);
     const clean = sanitiseHeaders(headers);
+    entry.authenticationContext = this.authenticationContext(headers);
     entry.requestHeaders = clean.requestHeaders;
     entry.cookieNames = clean.cookieNames;
     if (clean.authScheme) entry.authScheme = clean.authScheme;
@@ -254,6 +278,10 @@ export class Recorder {
     if (!entry) return;
     entry.status = res.status();
     const headers = await res.allHeaders().catch(() => res.headers());
+    const authenticationFailure =
+      headers["www-authenticate"] !== undefined || headers["proxy-authenticate"] !== undefined;
+    const stale = staleVerificationResponse(headers);
+    if (authenticationFailure || stale) entry.responsePageFailure = true;
     if (headers["content-type"]) entry.contentType = headers["content-type"];
     if (headers.location) entry.redirectedTo = new URL(headers.location, entry.url).toString();
     const setCookies = (await res.headersArray().catch(() => []))
@@ -276,8 +304,10 @@ export class Recorder {
         // A neutral success notice is a flash, not a page error. Creation still
         // rejects every flash via the complete inventory when learning policies.
         entry.responsePageError = responsePageError(body, entry.contentType, false);
-        entry.responsePageFailure = responsePageError(body, entry.contentType, false);
+        entry.responsePageFailure =
+          authenticationFailure || stale || responsePageError(body, entry.contentType, false);
         entry.responseFlash = responseFlash(body, entry.contentType);
+        captureVerificationEvidence(entry, body);
       }
       const t = truncate(body, BODY_LIMIT);
       entry.bodySample = t.text;

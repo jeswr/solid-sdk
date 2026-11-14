@@ -48,6 +48,8 @@ export function templateVariables(template: string): { variables: string[]; erro
 /** Credentials, framing and content negotiation are owned by the executor/session layer. */
 const EXECUTOR_HEADERS = new Set([
   "accept",
+  "cache-control",
+  "pragma",
   "content-type",
   "content-length",
   "cookie",

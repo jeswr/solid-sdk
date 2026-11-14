@@ -55,8 +55,10 @@ import {
   uniq,
   valueKind,
 } from "./util.js";
+import { fetchVerificationEvidence } from "./verification-evidence.js";
 import { findProbeUrl, playwrightReplayer, verifyOperations } from "./verify.js";
 import { learnDemonstratedForm } from "./write-learning.js";
+import { probeDeletedResources } from "./write-not-found.js";
 import { learnWriteResponses } from "./write-responses.js";
 
 const FALLBACK_CHROMIUM = ["/opt/pw-browsers/chromium-1243/chrome-linux64/chrome"];
@@ -81,7 +83,13 @@ export function proposeExtraction(c: EndpointCandidate): Extraction | undefined 
   let best: { ex: Extraction; score: number } | undefined;
   for (const sample of c.samples) {
     const body = sample.bodySample;
-    if (!body || sample.bodyTruncated || (sample.status ?? 0) >= 400) continue;
+    if ((sample.status ?? 0) >= 400) continue;
+    if (sample.verificationEvidence) {
+      const { extraction: ex, items } = sample.verificationEvidence;
+      const score = items.length * 10 + ex.fields.length;
+      if (!best || score > best.score) best = { ex, score };
+    }
+    if (!body || sample.bodyTruncated) continue;
     let ex: Extraction | undefined;
     if (isJsonType(sample.contentType)) ex = proposeJsonExtraction(body, c.urlTemplate);
     else if (isHtmlType(sample.contentType)) ex = proposeHtmlExtraction(body, sample.url);
@@ -512,6 +520,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     reregisterCookies();
 
     // 9. Verify reads.
+    await fetchVerificationEvidence(operations, context, recorder, options.verificationGate);
     const verifier = playwrightReplayer(context, recorder, "verify");
     let verifiedOps = operations;
     if (options.verify !== false) {
@@ -661,6 +670,8 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     ];
     // Demonstration cleanup can remove the landing resource before read verification.
     // Its recorded response and learned read still supply the witnessed response policy.
+    if (options.verify !== false)
+      await probeDeletedResources(verifiedOps, recorder.trace, origin, verifier);
     const writeResponses = learnWriteResponses(operations, recorder.trace, origin, verifiedOps);
     const redact = secretRedactor(new Set(secrets));
     for (const [id, policy] of Object.entries(writeResponses)) {

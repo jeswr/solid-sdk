@@ -33,7 +33,12 @@ export {
   type SessionUpdateResult,
 } from "./cookies.js";
 export { jsonPointer } from "./dom.js";
-export { learnEffectValueFormat } from "./effect-verification.js";
+export {
+  effectValueEquals,
+  emptyEffectCollection,
+  formatEffectValue,
+  learnEffectValueFormat,
+} from "./effect-verification.js";
 export {
   type CommittedWrite,
   createExecutor,
@@ -81,9 +86,11 @@ export {
   jsonEnvelope,
   jsonFailure,
   landingItemValues,
+  notFoundSignature,
   responseFlash,
   responsePageError,
   sentInputValue,
+  staleVerificationResponse,
 } from "./response-evidence.js";
 export {
   MIN_REDACTION_LENGTH,
@@ -100,6 +107,15 @@ export {
   UriTemplateError,
 } from "./uri-template.js";
 export { BindingError, idFromIri, resolveParameter, validateValue } from "./values.js";
+export { readVerificationBody, VERIFICATION_EVIDENCE_LIMIT } from "./verification-body.js";
+export {
+  isScopeField,
+  readOnlyScopeConstants,
+  submittedStateInputs,
+  verificationScopeMatches,
+} from "./verification-context.js";
+export { exactIdentityFilter } from "./verification-filter.js";
+export { effectiveWireFields } from "./wire.js";
 export {
   type EffectVerification,
   matchesCreatedIdentity,

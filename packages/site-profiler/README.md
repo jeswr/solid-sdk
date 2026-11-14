@@ -23,7 +23,7 @@ Options: `startUrl`, `maxPages` (default 40 attempted pages, including failures)
 `networkIdleTimeoutMs` (5000), `login`, `demonstrations`, `labeller` (default
 `heuristicLabeller`), `browser` (else headless Chromium is launched; `SAB_CHROMIUM_PATH`
 overrides the executable), `now`, `modelId` (default `urn:sab:model:<host>`), `verify`
-(default true), `version`.
+(default true), `version`, `verificationGate` (optional gate for additional evidence GETs).
 
 ## Steps (one module each)
 
@@ -316,10 +316,15 @@ validated resolver identity to an ordinary identity-filtered read.
 After approval, immediately before sending the write, the executor runs that read through
 the read gate. A complete matching target establishes the baseline. An unverified baseline stops before
 the write and returns Uncertain without a committed write fingerprint. The same compiled GET,
-headers, session and origin are used after the write. A deletion needs a 404/410 without
+headers, session and origin are used after the write. A deletion needs a 404/410 matching its learned not-found signature and without
 authentication/failure evidence, or a successful explicitly empty identity-filtered JSON
-collection with total zero and the baseline's envelope keys. Updates need the submitted
-field values; votes may use a witnessed numeric count delta. Neither read can be redirected,
+collection with the baseline's envelope keys and, when declared, total zero. The collection
+must bind the written identifier as an equality filter or an equal from/to range; broader
+filters never prove absence. Learning requires the same template and context to show exactly
+the target before the demonstrated deletion and zero items afterward. Complete bounded
+collection-envelope evidence survives sample truncation; the profiler may fetch the witnessed
+GET through the read gate. A fresh singleton baseline is still required at execution. Updates need every submitted
+state field value; votes may use a witnessed numeric count delta. Neither read can be redirected,
 partial, a login/password page, 401/403, a changed credential-cookie context or a shared
 failure envelope. Any missing verification leaves a sent write Uncertain, with its
 fingerprint retained and no automatic retry. A denial before approval sends nothing.
@@ -386,3 +391,45 @@ learning paths live in `test/learning-evidence.test.ts`.
 Resource-pattern learning keeps that witnessed namespace even when an unclassified failed
 background POST precedes the read. Its item identity and submitted-value checks still apply.
 Runtime verification still requires the exact target resource and request context.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Verification learning compares shared query/header selectors, excluding declared paging/sorting,
+executor-owned headers and CSRF slots. Scope fields also include request-level controls in the write's form/JSON body; words
+buried in domain property paths such as `product[stock_data][website_id]` are not controls.
+Names compare across surfaces after lower-casing and stripping one leading `x-`, with no
+synonyms. Matching scope fields must carry the same constant or the same bound input;
+constant/input mixtures, conflicting values across surfaces, and different bindings refuse. A read-only scope
+constant is permitted only after a read with the same method, origin, path template and
+constant, in the same session, isolated exactly the written identity and reflected all
+submitted values after the demonstrated write. Search/filter parameters may differ; other
+request context must agree and no write may intervene.
+The sidecar pins it; substitutions, input bindings and write-only scopes remain refused.
+Execution repeats scope comparison after compilation and token decoration. Coverage includes
+all bound action inputs and literal form fields changed from the pre-edit form; unchanged
+carried form values are excluded. Partial coverage teaches no verification.
+
+Submitted inputs pair with read fields by witnessed equality under the input datatype,
+without changing either semantic label. The field must either have changed from a
+pre-write read at that identity, or share the input's normalized wire leaf key (for
+example `qty` and `product[quantity_and_stock_status][qty]`). Change evidence outranks
+a leaf-key match; equal-strength candidates are ambiguous and unused. An equal value
+with a different leaf and no change witness supplies no pairing. Runtime compares the
+paired field with the concrete submitted value, retaining exact numeric presentation
+checks. Untrusted values participate only in this private equality comparison.
+
+Stored samples retain BODY_LIMIT (256 KiB). Verification alone uses a separate 8 MiB cap.
+After demonstrations, the profiler fetches witnessed candidate GETs through the read gate in
+the profiling session and stores only bounded extraction and field/value evidence. The
+executor uses the same cap for both verification reads. Oversized, prematurely ended or
+failed streams are Uncertain; partial evidence never proves completion.
+
+A private `verification.notFound` sidecar entry records the status, content type and opaque
+JSON-envelope or HTML-document structure of a read fetched for the demonstrated deleted
+identity, in the same context. Per-profile keyed credential-context tags must agree across
+the witnessed read, write and not-found probe; missing context evidence learns no signature.
+Missing signatures never authorize 404/410 absence. Authentication
+status envelopes, login/SSO documents and redirects cannot prove absence. Verification and its
+CSRF sources pass the read gate before transmission. Reads use Fetch `cache: "no-store"`,
+`Cache-Control: no-cache` and `Pragma: no-cache`; positive Age and cache-hit metadata invalidate
+both baseline and post-write evidence. These private artifacts leave the shared contract unchanged.
+`site-profiler/test/runtime-effects.test.ts` includes the round-14 adversarial reproductions.

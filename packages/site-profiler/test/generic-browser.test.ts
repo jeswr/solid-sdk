@@ -22,6 +22,26 @@ const site = createServer((req, res) => {
     res.setHeader("content-type", "text/html");
     res.end(body);
   };
+  if (path.startsWith("/multi-cookies-")) {
+    res.setHeader("set-cookie", [
+      "sid=fictional-session-secret; Path=/",
+      "pref=fictional-preference; Path=/",
+    ]);
+    res.setHeader("content-type", "application/json");
+    if (path.endsWith("redirect")) {
+      res.writeHead(303, { location: "/portal/home" });
+      return res.end();
+    }
+    if (path.endsWith("cached")) res.setHeader("age", "2");
+    return res.end(
+      JSON.stringify({
+        id: "42",
+        sku: "EX-42",
+        name: "Example widget",
+        url: `${origin}/products/42`,
+      }),
+    );
+  }
   if (path === "/short-login" && req.method === "POST") {
     res.writeHead(303, { location: "/short-landing" });
     return res.end();
@@ -119,6 +139,40 @@ afterAll(async () => {
   await browser?.close();
   site.closeAllConnections();
   await new Promise<void>((resolve) => site.close(() => resolve()));
+});
+
+it.each([
+  "fresh",
+  "cached",
+  "redirect",
+])("records complete response metadata with repeated Set-Cookie: %s", async (mode) => {
+  const context = await browser.newContext();
+  const cookies: string[] = [];
+  const recorder = new Recorder(origin, (cookie) => cookies.push(cookie.name));
+  recorder.phase = "demonstration";
+  recorder.demonstration = "multi-cookie response";
+  await recorder.attach(context);
+  try {
+    const page = await context.newPage();
+    await page.goto(`${origin}/multi-cookies-${mode}`);
+    await recorder.flush();
+    const entry = recorder.trace.find((r) => r.url === `${origin}/multi-cookies-${mode}`);
+    expect(entry?.contentType).toBe("application/json");
+    expect(entry?.setCookieNames).toEqual(["sid", "pref"]);
+    expect(cookies).toEqual(expect.arrayContaining(["sid", "pref"]));
+    if (mode === "redirect") expect(entry?.redirectedTo).toBe(`${origin}/portal/home`);
+    else {
+      expect(entry?.bodySample).toContain("Example widget");
+      if (mode === "cached") {
+        expect(entry?.responsePageFailure).toBe(true);
+        expect(entry?.verificationEvidence).toBeUndefined();
+      } else expect(entry?.verificationEvidence?.items[0]?.[`${SCHEMA}sku`]).toEqual(["EX-42"]);
+    }
+    expect(JSON.stringify(recorder.trace)).not.toContain("fictional-session-secret");
+    expect(JSON.stringify(recorder.trace)).not.toContain("fictional-preference");
+  } finally {
+    await context.close();
+  }
 });
 
 it("uses the redirected start-page password form and records path-scoped session cookies", async () => {

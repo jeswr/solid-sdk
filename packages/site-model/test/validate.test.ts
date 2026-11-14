@@ -242,3 +242,19 @@ describe("reserved CSRF path slots", () => {
     }
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it.each([
+  "Cache-Control",
+  "pRaGmA",
+])("reserves verification freshness header %s on every model surface", (name) => {
+  for (const route of ["static", "parameter", "csrf"] as const) {
+    const op = structuredClone(search);
+    if (route === "static") op.request.headers = { [name]: "max-age=3600" };
+    if (route === "parameter")
+      op.inputs.push({ name, path: [], range: `${X}string`, required: false, location: "header" });
+    if (route === "csrf")
+      op.csrf = [{ source: { kind: "cookie", name: "token" }, target: { kind: "header", name } }];
+    expect(problems(withOps(op)).some((message) => message.includes("executor-owned"))).toBe(true);
+  }
+});
