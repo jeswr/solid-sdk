@@ -5,6 +5,7 @@ import type {
   ExecutionResult,
   ExecutionStatus,
   Executor,
+  ExecutorOptions,
 } from "@jeswr/site-executor";
 import type { SiteModel } from "@jeswr/site-model";
 import type { Fallback } from "./fallback/index.js";
@@ -45,7 +46,10 @@ export interface TaskExecutor extends Executor {
   /** Host-side redaction; never sent to the planner. */
   redact?(text: string): string;
   /** Rebuild with a learned model while retaining all host executor configuration. */
-  withModel?(model: SiteModel): TaskExecutor;
+  withModel?(
+    model: SiteModel,
+    credentialContext?: ExecutorOptions["credentialContext"],
+  ): TaskExecutor;
 }
 
 export type TaskExecutionResult = ExecutionResult & { refreshError?: string };

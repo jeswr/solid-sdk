@@ -299,7 +299,11 @@ describe("fallback review r3 Chromium regressions", () => {
     }
     expect(approvals).toHaveBeenCalledTimes(2);
     expect(sent.slice(before).filter((r) => r.method === "POST")).toHaveLength(2);
-    if (configuration === "host factory") expect(factory).toHaveBeenCalledWith(trace.model);
+    if (configuration === "host factory")
+      expect(factory).toHaveBeenCalledWith(
+        trace.model,
+        expect.objectContaining({ secrets: expect.any(Set) }),
+      );
     else expect(factory).not.toHaveBeenCalled();
   });
 });

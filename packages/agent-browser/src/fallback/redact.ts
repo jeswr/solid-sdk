@@ -1,5 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { normaliseSecretText, registerSecret, secretRedactor } from "@jeswr/site-executor";
+import {
+  isSessionCredentialCookie,
+  normaliseSecretText,
+  registerSecret,
+  secretRedactor,
+} from "@jeswr/site-executor";
+
+/** Shared query/fragment policy, including the executor's session-cookie aliases. */
+export function isCredentialKey(name: string): boolean {
+  return (
+    isSessionCredentialCookie({ name, value: "" }) ||
+    /key|code|sig|auth|pwd|pass|secret|state|nonce|antiforgery|requestverification/i.test(name)
+  );
+}
 
 /** Render page-controlled formatting as text, including bidi and zero-width controls. */
 export function escapeControls(text: string): string {
@@ -48,7 +61,6 @@ export function redactSnapshot(
       try {
         const url = new URL(value, "https://snapshot.invalid");
         let changed = false;
-        const sensitiveKey = /token|key|code|session|sig|auth|password|secret|state|nonce/i;
         const decode = (part: string) => {
           try {
             return decodeURIComponent(part);
@@ -62,7 +74,7 @@ export function redactSnapshot(
           changed = true;
         }
         for (const key of [...url.searchParams.keys()])
-          if (sensitiveKey.test(key) || secrets.has(url.searchParams.get(key) ?? "")) {
+          if (isCredentialKey(key) || secrets.has(url.searchParams.get(key) ?? "")) {
             url.searchParams.set(key, "[redacted]");
             changed = true;
           }
@@ -77,7 +89,7 @@ export function redactSnapshot(
         if (url.hash.includes("=")) {
           const params = new URLSearchParams(url.hash.slice(1));
           for (const [key, item] of params)
-            if (sensitiveKey.test(key) || secrets.has(item)) {
+            if (isCredentialKey(key) || secrets.has(item)) {
               params.set(key, "[redacted]");
               changed = true;
             }

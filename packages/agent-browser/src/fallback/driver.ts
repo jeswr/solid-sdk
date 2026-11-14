@@ -8,6 +8,7 @@ import {
   cookieHeader,
   createApprovalGate,
   domainMatches,
+  type ExecutorOptions,
   guardUrl,
   parseSetCookie,
   registerCookieSecrets,
@@ -33,8 +34,17 @@ import {
   sanitiseHeaders,
 } from "@jeswr/site-profiler";
 import { createHash } from "crypto";
-import type { Browser, BrowserContext, CDPSession, Page, Request, Route } from "playwright";
+import type {
+  APIResponse,
+  Browser,
+  BrowserContext,
+  CDPSession,
+  Page,
+  Request,
+  Route,
+} from "playwright";
 import { setTimeout as delay } from "timers/promises";
+import { type CredentialContext, taskCredentialContext } from "../session.js";
 import type { Approver, TraceStep } from "../types.js";
 import { browserWriteFingerprint } from "./fingerprint.js";
 import { candidatesFromTrace } from "./learn.js";
@@ -70,6 +80,7 @@ export interface DriverClock {
 export interface BrowserDriverOptions {
   site: string;
   cookieContext?: CookieSecretContext;
+  credentialContext?: ExecutorOptions["credentialContext"];
   sessions: SessionProvider;
   persona?: string;
   approver?: Approver;
@@ -99,7 +110,11 @@ export class BrowserDriver {
   readonly approvals: NonNullable<TraceStep["approvals"]> = [];
   readonly committed: CommittedWrite[] = [];
   private readonly recorder: Recorder;
-  private readonly secrets = new Set<string>();
+  readonly credentialContext: CredentialContext;
+  private readonly secrets: Set<string>;
+  private documentResponse:
+    | { url: string; response: APIResponse; step: number | undefined }
+    | undefined;
   private readonly approved = new Set<number>();
   private readonly entries = new WeakMap<Request, RecordedRequest>();
   private readonly inFlight = new Set<Request>();
@@ -130,6 +145,8 @@ export class BrowserDriver {
 
   private constructor(private readonly options: BrowserDriverOptions) {
     this.origin = siteOrigin(options.site);
+    this.credentialContext = taskCredentialContext(options);
+    this.secrets = this.credentialContext.secrets;
     this.recorder = new Recorder(this.origin);
     this.recorder.phase = "demonstration";
     this.clock = options.clock ?? { now: () => performance.now(), sleep: delay };
@@ -158,9 +175,9 @@ export class BrowserDriver {
 
   private cookieContext(): CookieSecretContext {
     return {
-      ...this.options.cookieContext,
+      ...this.credentialContext,
       declaredNames: [
-        ...(this.options.cookieContext?.declaredNames ?? []),
+        ...(this.credentialContext.declaredNames ?? []),
         ...(this.session?.credentialCookies ?? []),
       ],
     };
@@ -208,6 +225,8 @@ export class BrowserDriver {
       if (this.pendingRequest && req !== this.pendingRequest && req.isNavigationRequest())
         this.epoch++;
       if (new URL(req.url()).origin !== this.origin) return;
+      // This navigation only renders a response already checked and recorded by route().
+      if (this.isDocumentResponse(req)) return;
       const entry = this.recorder.recordReplay({
         method: req.method(),
         url: req.url(),
@@ -305,6 +324,18 @@ export class BrowserDriver {
     );
   }
 
+  private isDocumentResponse(req: Request): boolean {
+    if (!this.documentResponse) return false;
+    const destination = new URL(this.documentResponse.url);
+    destination.hash = ""; // Fragments belong to the document URL, never the HTTP request.
+    return (
+      req.isNavigationRequest() &&
+      req.method() === "GET" &&
+      req.url() === destination.href &&
+      this.activeStep === this.documentResponse.step
+    );
+  }
+
   private async route(route: Route): Promise<void> {
     const req = route.request();
     let entry = this.entries.get(req);
@@ -335,6 +366,16 @@ export class BrowserDriver {
     }
     if (this.failure) {
       await stop(this.failure.kind, this.failure.message);
+      return;
+    }
+    if (this.isDocumentResponse(req)) {
+      const prepared = this.documentResponse as NonNullable<typeof this.documentResponse>;
+      this.documentResponse = undefined;
+      try {
+        await route.fulfill({ response: prepared.response });
+      } finally {
+        await prepared.response.dispose();
+      }
       return;
     }
     let url = req.url();
@@ -628,6 +669,18 @@ export class BrowserDriver {
         redirected = true;
         continue;
       }
+      // Fulfillment retains the intercepted request's document URL. Hold the checked final
+      // response for a host-driven local navigation so relative URLs and site scripts see
+      // the real destination. The placeholder contains no site content or active code.
+      if (req.isNavigationRequest() && url !== req.url()) {
+        this.documentResponse = { url, response, step };
+        await route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: "<!doctype html><title>Loading</title>",
+        });
+        return;
+      }
       // A final response only: Chromium never follows redirects or forwards session headers.
       await route.fulfill({ response });
       await response.dispose();
@@ -853,7 +906,17 @@ export class BrowserDriver {
           await this.cdp.send("Runtime.releaseObject", { objectId }).catch(() => undefined);
         }
       }
-      await this.settle();
+      for (let handoffs = 0; ; handoffs++) {
+        await this.settle();
+        if (!this.documentResponse) break;
+        if (handoffs === 5)
+          throw new BrowserDriverError("limit", "Fallback navigation limit reached.");
+        const destination = this.documentResponse.url;
+        await Promise.all([
+          this.page.waitForURL(destination),
+          this.page.evaluate((url) => location.replace(url), destination),
+        ]);
+      }
       await this.recorder.flush();
       if (this.failure) throw this.failure;
     } catch (error) {
@@ -861,6 +924,10 @@ export class BrowserDriver {
       if (error instanceof BrowserDriverError) throw error;
       throw new BrowserDriverError("browser", "Browser action failed.");
     } finally {
+      if (this.documentResponse) {
+        await this.documentResponse.response.dispose();
+        this.documentResponse = undefined;
+      }
       this.activeStep = undefined;
     }
   }

@@ -165,3 +165,10 @@ or redaction algorithm. Protect trace/warning/snapshot HTML entities and mixed p
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Carry profiler `writeResponses` alongside its model into createTaskExecutor; never reconstruct
 host-specific patterns. Preserve the separate policy artifact through model RDF round trips.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Carry one host-only `credentialContext` through login, browser discovery, replay extraction and
+executor rebuilds, including custom factories/hooks. Forward it to the executor before RDF
+rendering; post-render string redaction cannot replace extraction redaction. Render manually
+checked redirected documents at the final URL before site scripts run, without repeating site
+requests. Query and fragment URL scrubbing share `isCredentialKey` and cookie/session aliases.

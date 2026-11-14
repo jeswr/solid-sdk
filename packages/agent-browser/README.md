@@ -121,6 +121,13 @@ approval summary/decision, observations, elapsed milliseconds and prompt token e
 (`ceil(chars / 4)`). It excludes transport headers, credentials and raw HTTP responses.
 The executor owns extraction redaction; the task adapter also redacts known login and
 session values. Custom executors must uphold the same no-secrets result contract.
+Host options accept `credentialContext` (registered `secrets`, cookie `declaredNames` and
+`loginCookieNames`); the existing `cookieContext` option also contributes declarations.
+Login, fallback discovery, replay verification and replacement executors share this context
+for the same session provider, site and persona. Extraction renders against it before RDF
+enters observations, the trace or planner history, including after a learned-model rebuild.
+The inner executor accepts the same option. Host-only password login uses a single-use
+grant for the learned login operation so credentials never become approval fields.
 Each step's `approvals` array records all prompts in order; `approval` retains the latest
 for compatibility. Refused payments are recorded as `refused` in trace and planner history.
 Blocked repeats are recorded as `repeat-blocked` in both, without another HTTP request.
@@ -195,12 +202,15 @@ call receives the updated catalogue, and subsequent actions use a new executor o
 model. Executors returned by `createTaskExecutor` expose `withModel(model)`, which rebuilds
 from the original host options, retaining response declarations, transport, session/persona,
 clock and limits. Custom executors can
-provide the same `withModel` hook or pass `executorFactory: (model) => executor` to
+provide the same `withModel(model, credentialContext)` hook or pass
+`executorFactory: (model, credentialContext) => executor` to
 `createFallback`. Without either hook, learning retains the prior model/executor pair and
 reports rejection rather than discarding host policy. The ordinary approval loop and task
 commitment memory continue across learning. Without `fallback`, the return shape and execution
 path stay unchanged. The ordinary RDF planner receives only bounded executor observations,
 including untrusted-text wrappers.
+Custom rebuild hooks must forward the supplied credential context to their executor along
+with their original host policy; it includes secrets discovered during the fallback.
 `Fallback.run` and `learnFallback` also return `proposed` operations and `rejected` reasons.
 No model-backed fallback planner or prompt is supplied. `scriptedFallbackPlanner` accepts
 steps, `done`, `give-up`, and input callbacks; an exhausted script gives up. A planner factory
@@ -216,6 +226,9 @@ issues a grant for that exact concrete request and browser step; it is consumed 
 A denied request is aborted. A numeric spending limit cannot approve an unknown write.
 Sent writes retain executor-compatible fingerprints and Completed/Uncertain RDF receipts,
 so task repeat blocking also covers fallback writes and failures after submission.
+Redirect hops stay manually checked. A redirected document's final response is rendered at
+its checked final URL without fetching it twice, before site scripts run; relative forms,
+links and scripts therefore resolve against that destination.
 
 `snapshot()` returns Chromium accessibility roles, names, values and stable interactive refs,
 labelled `UNTRUSTED PAGE CONTENT` and `untrusted: true`. Defaults are 100 nodes and 8,000 text
@@ -286,6 +299,10 @@ history. Enable with SAB_LIVE_FORUM_URL; see the harness README for the command.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Cookie intake and learning use the executor's shared classifier/registration and redactor.
+Host `cookieContext` declarations are merged with the current model at fallback creation,
+learning and executor rebuilds. Pass the same context to `createExecutorFetch` and
+`createTaskExecutor` for host session redaction; host names and vault `credentialCookies`
+are combined without dropping `loginCookieNames` or other context fields.
 HttpOnly, login-set/changed, model/vault-declared and common session-named cookies are credentials
 from four characters, using the shared `MIN_REDACTION_LENGTH` floor. Other cookies need a logical payload of at least eight characters;
 a preference `1` does not mask item IDs. Register wire, unquoted, percent-decoded and
@@ -305,3 +322,13 @@ executor's Uncertain outcome and repeat guard.
 `test/fallback-review-r3.test.ts` covers numeric credential discovery before snapshots/trace,
 rejection of unresolved credential constants before replay, retained host executor options
 and custom factories across learning, and visible per-value snapshot truncation.
+
+`test/fallback-review-r4.test.ts` uses `createFallback` and real Chromium to check declared
+and login-cookie redaction in both snapshot forms, rejection before read replay, and
+retained context after learning with both fallback-created and host executors.
+
+`test/fallback-review-r5.test.ts` checks script-token echoes under `items[].name`, host-declared
+six-character cookie echoes, profiler-registered secrets, replay observations and the next
+planner input across learning/rebuilds (including a raw executor returned by a host factory).
+It also checks final document URLs, approved/denied relative forms, relative links/scripts,
+queued navigation/back history and query/fragment aliases in both snapshot forms and trace.
