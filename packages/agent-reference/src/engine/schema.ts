@@ -9,7 +9,12 @@ import { chainPolicySchema } from "../mechanisms/authority-chain.js";
 import { mappingPolicySchema, mappingTableSchema } from "../mechanisms/code-mapping.js";
 import { datasetRowSchema, protocolSchema, queryGrantSchema } from "../mechanisms/dataset-query.js";
 import { dutyRuleSchema } from "../runtime/duties.js";
+import { negotiatedMeaningSchema } from "../standins/deliberation.js";
+import { registryMeaningSchema } from "../suites/meaning-registry.js";
 import { LAYER_IDS } from "../suites/registry.js";
+import { qualityCertificatePolicySchema } from "../suites/reliance-certificate.js";
+import { statedConfidenceSchema } from "../suites/reliance-confidence.js";
+import { relianceCorroborationSchema } from "../suites/reliance-corroboration.js";
 import { scenarioRegistry } from "../suites/scenario.js";
 import { INBOUND_CHECKS, OUTBOUND_CHECKS } from "../trace/types.js";
 
@@ -313,6 +318,13 @@ const base = {
   segmentEnd: z.literal("payment").optional(),
 };
 const step = z.discriminatedUnion("type", [
+  z.strictObject({
+    ...base,
+    type: z.literal("term-deliberation"),
+    exchange: json,
+    decision: z.enum(["approve", "agents-only"]),
+    validUntil: z.iso.datetime(),
+  }),
   z.strictObject({
     ...base,
     type: z.literal("proof-request"),
@@ -632,6 +644,11 @@ const configurationOptions = LAYER_IDS.flatMap((layer) =>
 );
 export const scenarioConfigurationSchema = z.union(configurationOptions);
 export const scenarioSchema = z.strictObject({
+  negotiatedMeaning: negotiatedMeaningSchema.optional(),
+  qualityCertificate: qualityCertificatePolicySchema.optional(),
+  statedConfidence: statedConfidenceSchema.optional(),
+  relianceCorroboration: relianceCorroborationSchema.optional(),
+  registryMeaning: registryMeaningSchema.optional(),
   paymentProviders: z
     .array(
       z.strictObject({
@@ -747,6 +764,7 @@ export const scenarioSchema = z.strictObject({
         typ: z.enum([
           "awp-organization-identifier+jws",
           "awp-status-list+jws",
+          "awp-quality-certificate+jws",
           "awp-authority-holders+jws",
         ]),
         value: object,

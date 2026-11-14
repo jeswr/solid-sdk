@@ -140,4 +140,4 @@ it("round-trips every executable trace packet, action intent and agreement throu
   expect(failures).toEqual([]);
   for (const [key, count] of requiredCounts)
     expect(carriageCounts.get(key) ?? 0, key).toBeGreaterThanOrEqual(count);
-}, 1_200_000);
+}, 2_700_000);

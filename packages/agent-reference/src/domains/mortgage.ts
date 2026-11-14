@@ -32,6 +32,7 @@ import type {
   ProposeBody,
 } from "../core/types.js";
 import { TYP } from "../mechanisms/statements.js";
+import { confidenceMeasurementSchema } from "../model/reliance-confidence.js";
 import type { OperationDescription } from "../profile/description.js";
 import { MORTGAGE_CONTENT } from "../profile/mortgage.js";
 import { AWP, PURPOSE } from "../profile/vocabulary.js";
@@ -43,6 +44,7 @@ import type {
   HandlerReply,
   OperationHandler,
 } from "../runtime/operations.js";
+import { incomeProvenanceSchema, salaryCreditsSchema } from "../suites/reliance-corroboration.js";
 import type { PurposeBoundStore } from "./purpose-store.js";
 import { PAYMENT_OP } from "./scheduling.js";
 
@@ -99,6 +101,10 @@ export const evidenceSchema = z
     issuedAt: iso,
     /** How the issuer produced the claim (e.g. `recorded-by-authority`). Optional. */
     method: z.string().max(64).optional(),
+    employmentStatus: z.strictObject({ codeList: z.string().url(), code: z.string() }).optional(),
+    qualityMeasurement: confidenceMeasurementSchema.optional(),
+    incomeProvenance: incomeProvenanceSchema.optional(),
+    salaryCredits: salaryCreditsSchema.optional(),
     /** The issuer's terms of use (ODRL, pilot subset, plus a deletion duty). Optional. */
     terms: z.record(z.string(), z.unknown()).optional(),
     synthetic: z.literal(true),
@@ -128,6 +134,12 @@ const evidenceRequestTerms = z.strictObject({
         claimType: z.string().max(128),
         periodMonths: z.number().int().min(1).max(36),
         currency: z.string().regex(/^[A-Z]{3}$/),
+        employmentStatus: z
+          .strictObject({ codeList: z.string().url(), codes: z.array(z.string()) })
+          .optional(),
+        incomeDefinition: z
+          .strictObject({ term: z.string().url(), label: z.literal("irregular income") })
+          .optional(),
       }),
     )
     .min(1)

@@ -18761,6 +18761,3273 @@
         "authenticity": "data-integrity"
       },
       "world": {}
+    },
+    {
+      "id": "meaning-plain-language-upgrade",
+      "change": {
+        "meaning": "plain-language-upgrade"
+      },
+      "world": {
+        "standIns": [
+          {
+            "what": "Prose email upgrade",
+            "replacedBy": "Not run: the local unsigned mailbox cannot advertise a separately keyed correspondent agent or enforce an upgrade transition."
+          }
+        ],
+        "branches": [
+          {
+            "id": "prose-as-evidence",
+            "what": "Prose income is offered where structured evidence is required.",
+            "onlyUnder": "meaning-plain-language-upgrade",
+            "change": {},
+            "expect": {
+              "outcome": "ask-more",
+              "check": "fitness",
+              "reason": "structured-form-required"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "meaning-registry-lookup",
+      "change": {
+        "meaning": "registry-lookup"
+      },
+      "world": {
+        "registryMeaning": {
+          "policy": {
+            "receivers": [
+              "https://agents.hostco.example/sam#agent",
+              "https://northbank.example/agents/intake#agent"
+            ],
+            "acceptedLists": [
+              "https://northbank.example/employment/v1"
+            ],
+            "maxStatusAgeSeconds": 3600,
+            "approximate": "ask-more",
+            "routes": [
+              {
+                "fromList": "https://paywell.example/employment/v1",
+                "toList": "https://northbank.example/employment/v1",
+                "registry": "https://employment-mappings.example/#publisher",
+                "table": "https://employment-mappings.example/paywell-north/v1",
+                "version": "1"
+              }
+            ]
+          },
+          "requestedList": "https://northbank.example/employment/v1",
+          "acceptedCodes": [
+            "employed"
+          ]
+        },
+        "parties": {
+          "employment-mapper": {
+            "id": "employment-mapper",
+            "identity": "https://employment-mappings.example/#publisher",
+            "name": "The fictional employment vocabulary publisher",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "statements": {
+          "income": {
+            "value": {
+              "employmentStatus": {
+                "codeList": "https://paywell.example/employment/v1",
+                "code": "PAYE"
+              }
+            }
+          }
+        },
+        "mappingTables": [
+          {
+            "issuer": "employment-mapper",
+            "value": {
+              "type": "CodeMappingTable",
+              "id": "https://employment-mappings.example/paywell-north/v1",
+              "issuer": "https://employment-mappings.example/#publisher",
+              "version": "1",
+              "fromList": "https://paywell.example/employment/v1",
+              "toList": "https://northbank.example/employment/v1",
+              "validFrom": "2026-11-01T00:00:00Z",
+              "validUntil": "2027-01-01T00:00:00Z",
+              "entries": [
+                {
+                  "from": "PAYE",
+                  "to": "employed",
+                  "relation": "exact"
+                }
+              ],
+              "status": {
+                "ref": "https://employment-mappings.example/status",
+                "id": "employment-v1"
+              }
+            }
+          }
+        ],
+        "documents": [
+          {
+            "id": "https://employment-mappings.example/status",
+            "issuer": "employment-mapper",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "issuer": "https://employment-mappings.example/#publisher",
+              "issuedAt": "2026-11-13T09:00:00Z",
+              "validUntil": "2026-11-13T10:00:00Z",
+              "entries": {
+                "employment-v1": "active"
+              },
+              "id": "https://employment-mappings.example/status"
+            }
+          }
+        ],
+        "trust": {
+          "sources": {
+            "north-agent": [
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/nb/paywell-income",
+                "version": "1",
+                "source": "https://paywell.example/#org",
+                "claimTypes": [
+                  "income.*"
+                ],
+                "subjects": "any",
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "North Bank source policy"
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/nb/harbourbank-deposits",
+                "version": "1",
+                "source": "https://harbourbank.example/#org",
+                "claimTypes": [
+                  "deposit.*"
+                ],
+                "subjects": "any",
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "North Bank source policy"
+              },
+              {
+                "id": "urn:policy:employment-mappings",
+                "version": "1",
+                "source": "https://employment-mappings.example/#publisher",
+                "claimTypes": [
+                  "code-mapping"
+                ],
+                "subjects": [
+                  "https://paywell.example/employment/v1"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z"
+              }
+            ],
+            "sam-agent": [
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
+                "version": "1",
+                "source": "https://harbourbank.example/#org",
+                "claimTypes": [
+                  "deposit.*"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "Sam's own list: Sam's own bank"
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
+                "version": "1",
+                "source": "https://paywell.example/#org",
+                "claimTypes": [
+                  "income.*"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "Sam's own list: Sam's employer's payroll"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:0",
+                "version": "1",
+                "source": "urn:fictional:valuation-register",
+                "claimTypes": [
+                  "valuer.registration"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:1",
+                "version": "1",
+                "source": "urn:fictional:mossbridge-payment-desk",
+                "claimTypes": [
+                  "payee-account",
+                  "payment-receipt"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:2",
+                "version": "1",
+                "source": "urn:fictional:bracken-lantern-valuations",
+                "claimTypes": [
+                  "invoice"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:policy:sam:employment-mappings",
+                "version": "1",
+                "source": "https://employment-mappings.example/#publisher",
+                "claimTypes": [
+                  "code-mapping"
+                ],
+                "subjects": [
+                  "https://paywell.example/employment/v1"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z"
+              }
+            ]
+          }
+        },
+        "standIns": [
+          {
+            "what": "Employment vocabulary registry and status service",
+            "replacedBy": "A separately keyed fictional publisher signs an immutable, directed, exact Paywell-to-lender employment mapping and fresh status, served through the in-process document resolver. These code lists and their governance are fictional; no live registry is contacted."
+          }
+        ],
+        "branches": [
+          {
+            "id": "mapping-from-nobody",
+            "what": "The code mapping is signed by a publisher not accepted for these vocabularies.",
+            "onlyUnder": "meaning-registry-lookup",
+            "change": {
+              "parties": {
+                "employment-mapper": {
+                  "identity": "https://unknown-mapper.example/#publisher"
+                }
+              },
+              "registryMeaning": {
+                "policy": {
+                  "routes": [
+                    {
+                      "fromList": "https://paywell.example/employment/v1",
+                      "toList": "https://northbank.example/employment/v1",
+                      "registry": "https://unknown-mapper.example/#publisher",
+                      "table": "https://employment-mappings.example/paywell-north/v1",
+                      "version": "1"
+                    }
+                  ]
+                }
+              },
+              "mappingTables": [
+                {
+                  "issuer": "employment-mapper",
+                  "value": {
+                    "type": "CodeMappingTable",
+                    "id": "https://employment-mappings.example/paywell-north/v1",
+                    "issuer": "https://unknown-mapper.example/#publisher",
+                    "version": "1",
+                    "fromList": "https://paywell.example/employment/v1",
+                    "toList": "https://northbank.example/employment/v1",
+                    "validFrom": "2026-11-01T00:00:00Z",
+                    "validUntil": "2027-01-01T00:00:00Z",
+                    "entries": [
+                      {
+                        "from": "PAYE",
+                        "to": "employed",
+                        "relation": "exact"
+                      }
+                    ],
+                    "status": {
+                      "ref": "https://employment-mappings.example/status",
+                      "id": "employment-v1"
+                    }
+                  }
+                }
+              ],
+              "documents": [
+                {
+                  "id": "https://employment-mappings.example/status",
+                  "issuer": "employment-mapper",
+                  "typ": "awp-status-list+jws",
+                  "value": {
+                    "type": "StatusList",
+                    "issuer": "https://unknown-mapper.example/#publisher",
+                    "issuedAt": "2026-11-13T09:00:00Z",
+                    "validUntil": "2026-11-13T10:00:00Z",
+                    "entries": {
+                      "employment-v1": "active"
+                    },
+                    "id": "https://employment-mappings.example/status"
+                  }
+                }
+              ],
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "bank-request",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 6,
+                  "peer": "harbour-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "contents": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "discover": false
+                },
+                {
+                  "id": "bank-challenges",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "challenge-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "bank-retry",
+                  "agent": "sam-agent",
+                  "type": "retry-challenge",
+                  "atStep": 8,
+                  "conversation": {
+                    "$ref": "steps.bank-request.conversation"
+                  }
+                },
+                {
+                  "id": "step-up-pending",
+                  "agent": "sam-agent",
+                  "type": "pending",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-check-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 8,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "attestation-id",
+                  "agent": "sam-agent",
+                  "type": "mint",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-attestation",
+                  "agent": "sam-agent",
+                  "type": "issue",
+                  "atStep": 8,
+                  "issuer": "identity-provider",
+                  "value": {
+                    "type": "ApprovalAttestation",
+                    "id": {
+                      "$ref": "steps.attestation-id"
+                    },
+                    "issuer": "https://id-provider.example/#org",
+                    "claimType": "identity.approval",
+                    "subject": "https://sam.example/#me",
+                    "method": "certified-face-check",
+                    "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+                    "approves": {
+                      "actor": "https://agents.hostco.example/sam#agent",
+                      "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                      "actionDigest": {
+                        "$ref": "steps.step-up-pending.actionDigest"
+                      },
+                      "challenge": {
+                        "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                      }
+                    },
+                    "issuedAt": {
+                      "$ref": "now"
+                    },
+                    "validUntil": "2026-11-13T10:01:00.000Z",
+                    "synthetic": true,
+                    "terms": {
+                      "policy": {
+                        "id": "urn:terms:face-check",
+                        "permissions": [
+                          {
+                            "type": "permission",
+                            "action": "use",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "permission",
+                            "action": "distribute",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              },
+                              {
+                                "leftOperand": "recipient",
+                                "operator": "eq",
+                                "rightOperand": "https://harbourbank.example/#org"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "attestation-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 8,
+                  "statements": [
+                    "face-attestation"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "step-up-approval",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 8,
+                  "decision": "approve",
+                  "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+                  "evidence": [
+                    "face-attestation"
+                  ]
+                },
+                {
+                  "id": "bank-releases",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 8,
+                  "from": "sam-agent",
+                  "outboundAtStep": 9
+                },
+                {
+                  "id": "balance-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 10,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "income-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 10,
+                  "statements": [
+                    "income"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "ask-more",
+              "check": "fitness",
+              "reason": "unsupported-term"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "reliance-corroboration",
+      "change": {
+        "reliance": "corroboration"
+      },
+      "world": {
+        "relianceCorroboration": {
+          "receivers": [
+            "https://northbank.example/agents/intake#agent"
+          ],
+          "payroll": "https://paywell.example/#org",
+          "bank": "https://harbourbank.example/#org",
+          "tolerance": 1
+        },
+        "statements": {
+          "income": {
+            "value": {
+              "incomeProvenance": {
+                "rootRecords": [
+                  "https://paywell.example/records/sam/2026"
+                ]
+              }
+            }
+          },
+          "deposit": {
+            "value": {
+              "salaryCredits": {
+                "currency": "USD",
+                "period": {
+                  "start": "2025-11",
+                  "end": "2026-10"
+                },
+                "monthly": [
+                  {
+                    "month": "2025-11",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2025-12",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-01",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-02",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-03",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-04",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-05",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-06",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-07",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-08",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-09",
+                    "amount": 7500
+                  },
+                  {
+                    "month": "2026-10",
+                    "amount": 7500
+                  }
+                ],
+                "method": "recorded-by-authority",
+                "rootRecords": [
+                  "https://harbourbank.example/records/salary/sam/2026"
+                ]
+              }
+            }
+          }
+        },
+        "trust": {
+          "controllers": {
+            "https://paywell.example/#org": "https://paywell.example/#controller",
+            "https://harbourbank.example/#org": "https://harbourbank.example/#controller"
+          },
+          "sources": {
+            "north-agent": [
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/nb/paywell-income",
+                "version": "1",
+                "source": "https://paywell.example/#org",
+                "claimTypes": [
+                  "income.*"
+                ],
+                "subjects": "any",
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "North Bank source policy"
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/nb/harbourbank-deposits",
+                "version": "1",
+                "source": "https://harbourbank.example/#org",
+                "claimTypes": [
+                  "deposit.*"
+                ],
+                "subjects": "any",
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "North Bank source policy"
+              },
+              {
+                "id": "urn:source:bank-salary-credits",
+                "version": "1",
+                "source": "https://harbourbank.example/#org",
+                "claimTypes": [
+                  "income.salary-credits"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ]
+              }
+            ]
+          }
+        },
+        "standIns": [
+          {
+            "what": "Independent bank salary-credit observations",
+            "replacedBy": "The fictional bank signs twelve monthly salary credits in its balance statement, independently of the fictional payroll record. The synthetic credited amounts equal payroll gross amounts; no gross-to-net conversion or real banking access is claimed. Sources attest complete root-record ancestry; their independently configured controllers are local trust facts."
+          }
+        ],
+        "branches": [
+          {
+            "id": "one-source-twice",
+            "what": "The bank’s second observation is derived from the payroll record, so both observations have the same root source.",
+            "onlyUnder": "reliance-corroboration",
+            "change": {
+              "statements": {
+                "deposit": {
+                  "value": {
+                    "salaryCredits": {
+                      "rootRecords": [
+                        "https://paywell.example/records/sam/2026"
+                      ]
+                    }
+                  }
+                }
+              },
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "bank-request",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 6,
+                  "peer": "harbour-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "contents": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "discover": false
+                },
+                {
+                  "id": "bank-challenges",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "challenge-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "bank-retry",
+                  "agent": "sam-agent",
+                  "type": "retry-challenge",
+                  "atStep": 8,
+                  "conversation": {
+                    "$ref": "steps.bank-request.conversation"
+                  }
+                },
+                {
+                  "id": "step-up-pending",
+                  "agent": "sam-agent",
+                  "type": "pending",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-check-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 8,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "attestation-id",
+                  "agent": "sam-agent",
+                  "type": "mint",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-attestation",
+                  "agent": "sam-agent",
+                  "type": "issue",
+                  "atStep": 8,
+                  "issuer": "identity-provider",
+                  "value": {
+                    "type": "ApprovalAttestation",
+                    "id": {
+                      "$ref": "steps.attestation-id"
+                    },
+                    "issuer": "https://id-provider.example/#org",
+                    "claimType": "identity.approval",
+                    "subject": "https://sam.example/#me",
+                    "method": "certified-face-check",
+                    "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+                    "approves": {
+                      "actor": "https://agents.hostco.example/sam#agent",
+                      "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                      "actionDigest": {
+                        "$ref": "steps.step-up-pending.actionDigest"
+                      },
+                      "challenge": {
+                        "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                      }
+                    },
+                    "issuedAt": {
+                      "$ref": "now"
+                    },
+                    "validUntil": "2026-11-13T10:01:00.000Z",
+                    "synthetic": true,
+                    "terms": {
+                      "policy": {
+                        "id": "urn:terms:face-check",
+                        "permissions": [
+                          {
+                            "type": "permission",
+                            "action": "use",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "permission",
+                            "action": "distribute",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              },
+                              {
+                                "leftOperand": "recipient",
+                                "operator": "eq",
+                                "rightOperand": "https://harbourbank.example/#org"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "attestation-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 8,
+                  "statements": [
+                    "face-attestation"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "step-up-approval",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 8,
+                  "decision": "approve",
+                  "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+                  "evidence": [
+                    "face-attestation"
+                  ]
+                },
+                {
+                  "id": "bank-releases",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 8,
+                  "from": "sam-agent",
+                  "outboundAtStep": 9
+                },
+                {
+                  "id": "balance-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 10,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "income-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 10,
+                  "statements": [
+                    "income"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "terms-arrive",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 11,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "approval-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 11,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "consent",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 11,
+                  "decision": "approve",
+                  "note": "Yes, share them with North Bank for the credit check."
+                },
+                {
+                  "id": "acceptance-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 12,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "evidence-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 12,
+                  "from": "sam-agent"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "ask-more",
+              "check": "fitness",
+              "reason": "evidence-missing"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "reliance-stated-confidence",
+      "change": {
+        "reliance": "stated-confidence"
+      },
+      "world": {
+        "statedConfidence": {
+          "receivers": [
+            "https://agents.hostco.example/sam#agent",
+            "https://northbank.example/agents/intake#agent"
+          ],
+          "rules": [
+            {
+              "claimType": "deposit.balance",
+              "minimum": 0.95,
+              "metric": "https://w3id.org/jeswr/awp#metric/source-confidence/v1",
+              "methods": [
+                "https://harbourbank.example/methods/ledger-reconciliation/v1"
+              ]
+            }
+          ]
+        },
+        "statements": {
+          "deposit": {
+            "value": {
+              "qualityMeasurement": {
+                "type": "http://www.w3.org/ns/dqv#QualityMeasurement",
+                "metric": "https://w3id.org/jeswr/awp#metric/source-confidence/v1",
+                "value": 0.99,
+                "method": "https://harbourbank.example/methods/ledger-reconciliation/v1",
+                "uncertainty": "epistemic",
+                "calibration": "calibrated",
+                "observations": {
+                  "correct": 99,
+                  "total": 100
+                }
+              }
+            }
+          }
+        },
+        "standIns": [
+          {
+            "what": "Bank confidence calibration history",
+            "replacedBy": "The fictional bank signs a stated confidence based on 99 correct outcomes in 100 synthetic historical ledger reconciliations. The method and observations are source assertions, not a live accuracy audit or a probability guarantee. A typed local RDF view attaches the DQV measurement to the signed statement; existing evidence carriage preserves its exact signed fields."
+          },
+          {
+            "what": "Model income estimate in the failure branch",
+            "replacedBy": "The fictional payroll source signs a synthetic model-output income estimate and explicitly marks its own 0.99 confidence as uncalibrated. No real model is called and no calibration result is invented."
+          }
+        ],
+        "branches": [
+          {
+            "id": "model-is-sure",
+            "what": "A model-produced income estimate says 0.99 without an accepted calibration.",
+            "onlyUnder": "reliance-stated-confidence",
+            "change": {
+              "statedConfidence": {
+                "rules": [
+                  {
+                    "claimType": "deposit.balance",
+                    "minimum": 0.95,
+                    "metric": "https://w3id.org/jeswr/awp#metric/source-confidence/v1",
+                    "methods": [
+                      "https://harbourbank.example/methods/ledger-reconciliation/v1"
+                    ]
+                  },
+                  {
+                    "claimType": "income.gross.monthly-series",
+                    "minimum": 0.95,
+                    "metric": "https://w3id.org/jeswr/awp#metric/source-confidence/v1",
+                    "methods": [
+                      "https://paywell.example/methods/validated-income-estimation/v1"
+                    ]
+                  }
+                ]
+              },
+              "statements": {
+                "income": {
+                  "method": "model-output",
+                  "value": {
+                    "qualityMeasurement": {
+                      "type": "http://www.w3.org/ns/dqv#QualityMeasurement",
+                      "metric": "https://w3id.org/jeswr/awp#metric/source-confidence/v1",
+                      "value": 0.99,
+                      "uncertainty": "epistemic",
+                      "calibration": "uncalibrated",
+                      "method": "https://paywell.example/methods/model-self-estimate/v1"
+                    },
+                    "originalDigest": "sha-256:9402ea4f035fa49ef72396e91b144b684827c56f166e753930e9b7aefa10ef17",
+                    "implementation": "https://paywell.example/models/income-estimator/v1",
+                    "implementationDigest": "sha-256:68ecbb71fdd58f31d0f1e095a44526980f06e088e4a31e2441bd13b20bcce981"
+                  }
+                }
+              },
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "bank-request",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 6,
+                  "peer": "harbour-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "contents": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "discover": false
+                },
+                {
+                  "id": "bank-challenges",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "challenge-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "bank-retry",
+                  "agent": "sam-agent",
+                  "type": "retry-challenge",
+                  "atStep": 8,
+                  "conversation": {
+                    "$ref": "steps.bank-request.conversation"
+                  }
+                },
+                {
+                  "id": "step-up-pending",
+                  "agent": "sam-agent",
+                  "type": "pending",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-check-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 8,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "attestation-id",
+                  "agent": "sam-agent",
+                  "type": "mint",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-attestation",
+                  "agent": "sam-agent",
+                  "type": "issue",
+                  "atStep": 8,
+                  "issuer": "identity-provider",
+                  "value": {
+                    "type": "ApprovalAttestation",
+                    "id": {
+                      "$ref": "steps.attestation-id"
+                    },
+                    "issuer": "https://id-provider.example/#org",
+                    "claimType": "identity.approval",
+                    "subject": "https://sam.example/#me",
+                    "method": "certified-face-check",
+                    "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+                    "approves": {
+                      "actor": "https://agents.hostco.example/sam#agent",
+                      "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                      "actionDigest": {
+                        "$ref": "steps.step-up-pending.actionDigest"
+                      },
+                      "challenge": {
+                        "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                      }
+                    },
+                    "issuedAt": {
+                      "$ref": "now"
+                    },
+                    "validUntil": "2026-11-13T10:01:00.000Z",
+                    "synthetic": true,
+                    "terms": {
+                      "policy": {
+                        "id": "urn:terms:face-check",
+                        "permissions": [
+                          {
+                            "type": "permission",
+                            "action": "use",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "permission",
+                            "action": "distribute",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              },
+                              {
+                                "leftOperand": "recipient",
+                                "operator": "eq",
+                                "rightOperand": "https://harbourbank.example/#org"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "attestation-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 8,
+                  "statements": [
+                    "face-attestation"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "step-up-approval",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 8,
+                  "decision": "approve",
+                  "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+                  "evidence": [
+                    "face-attestation"
+                  ]
+                },
+                {
+                  "id": "bank-releases",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 8,
+                  "from": "sam-agent",
+                  "outboundAtStep": 9
+                },
+                {
+                  "id": "balance-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 10,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "income-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 10,
+                  "statements": [
+                    "income"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "ask-more",
+              "check": "fitness",
+              "reason": "confidence-too-low"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "reliance-quality-certificate",
+      "change": {
+        "reliance": "quality-certificate"
+      },
+      "world": {
+        "qualityCertificate": {
+          "references": {
+            "https://agents.hostco.example/sam#agent": "https://quality-certifier.example/certificates/mortgage-index/v1",
+            "https://mortgage-index.example/agents/search#agent": "https://quality-certifier.example/certificates/mortgage-index/v1"
+          },
+          "certifier": "https://quality-certifier.example/#org",
+          "source": "https://mortgage-index.example/#org",
+          "dataset": "https://mortgage-index.example/datasets/residential/v1",
+          "category": "registered-residential-lenders",
+          "policy": "https://quality-certifier.example/policies/accurate-current-complete/v1"
+        },
+        "parties": {
+          "quality-certifier": {
+            "id": "quality-certifier",
+            "identity": "https://quality-certifier.example/#org",
+            "name": "The fictional independent index quality certifier",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "documents": [
+          {
+            "id": "https://quality-certifier.example/certificates/mortgage-index/v1",
+            "issuer": "quality-certifier",
+            "typ": "awp-quality-certificate+jws",
+            "value": {
+              "type": "QualityCertificate",
+              "id": "https://quality-certifier.example/certificates/mortgage-index/v1",
+              "issuer": "https://quality-certifier.example/#org",
+              "source": "https://mortgage-index.example/#org",
+              "dataset": "https://mortgage-index.example/datasets/residential/v1",
+              "category": "registered-residential-lenders",
+              "policy": "https://quality-certifier.example/policies/accurate-current-complete/v1",
+              "claimType": "mortgage.product",
+              "quality": {
+                "accurate": true,
+                "current": true,
+                "complete": true
+              },
+              "validFrom": "2026-11-01T00:00:00Z",
+              "validUntil": "2026-12-01T00:00:00Z"
+            }
+          }
+        ],
+        "statements": {
+          "north-product": {
+            "value": {
+              "qualityDataset": "https://mortgage-index.example/datasets/residential/v1",
+              "productCategory": "registered-residential-lenders",
+              "issuedAt": "2025-01-01T00:00:00Z"
+            }
+          },
+          "harbour-product": {
+            "value": {
+              "qualityDataset": "https://mortgage-index.example/datasets/residential/v1",
+              "productCategory": "registered-residential-lenders"
+            }
+          }
+        },
+        "trust": {
+          "sources": {
+            "sam-agent": [
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
+                "version": "1",
+                "source": "https://harbourbank.example/#org",
+                "claimTypes": [
+                  "deposit.*"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "Sam's own list: Sam's own bank"
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
+                "version": "1",
+                "source": "https://paywell.example/#org",
+                "claimTypes": [
+                  "income.*"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "Sam's own list: Sam's employer's payroll"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:0",
+                "version": "1",
+                "source": "urn:fictional:valuation-register",
+                "claimTypes": [
+                  "valuer.registration"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:1",
+                "version": "1",
+                "source": "urn:fictional:mossbridge-payment-desk",
+                "claimTypes": [
+                  "payee-account",
+                  "payment-receipt"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:2",
+                "version": "1",
+                "source": "urn:fictional:bracken-lantern-valuations",
+                "claimTypes": [
+                  "invoice"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:rule:sam-agent:dataset-certifier",
+                "version": "1",
+                "source": "https://quality-certifier.example/#org",
+                "claimTypes": [
+                  "dataset.quality"
+                ],
+                "subjects": [
+                  "https://mortgage-index.example/datasets/residential/v1"
+                ]
+              }
+            ],
+            "index-agent": [
+              {
+                "id": "urn:rule:index-agent:dataset-certifier",
+                "version": "1",
+                "source": "https://quality-certifier.example/#org",
+                "claimTypes": [
+                  "dataset.quality"
+                ],
+                "subjects": [
+                  "https://mortgage-index.example/datasets/residential/v1"
+                ]
+              }
+            ]
+          }
+        },
+        "standIns": [
+          {
+            "what": "Independent index quality certification",
+            "replacedBy": "A separately keyed fictional certifier signs an accurate, current and complete quality policy for the named index dataset and registered residential lenders. Certification and its process are synthetic source assertions, not a real audit. The old record publication date is deliberately retained to prove the certificate bypasses per-record freshness while its own scope and validity are enforced."
+          }
+        ],
+        "branches": [
+          {
+            "id": "certificate-does-not-cover",
+            "what": "The certificate shown to Sam covers business lending, so the old residential record must pass ordinary per-record quality checks.",
+            "onlyUnder": "reliance-quality-certificate",
+            "change": {
+              "qualityCertificate": {
+                "references": {
+                  "https://agents.hostco.example/sam#agent": "https://quality-certifier.example/certificates/mortgage-index/v1-business"
+                }
+              },
+              "documents": [
+                {
+                  "id": "https://quality-certifier.example/certificates/mortgage-index/v1",
+                  "issuer": "quality-certifier",
+                  "typ": "awp-quality-certificate+jws",
+                  "value": {
+                    "type": "QualityCertificate",
+                    "id": "https://quality-certifier.example/certificates/mortgage-index/v1",
+                    "issuer": "https://quality-certifier.example/#org",
+                    "source": "https://mortgage-index.example/#org",
+                    "dataset": "https://mortgage-index.example/datasets/residential/v1",
+                    "category": "registered-residential-lenders",
+                    "policy": "https://quality-certifier.example/policies/accurate-current-complete/v1",
+                    "claimType": "mortgage.product",
+                    "quality": {
+                      "accurate": true,
+                      "current": true,
+                      "complete": true
+                    },
+                    "validFrom": "2026-11-01T00:00:00Z",
+                    "validUntil": "2026-12-01T00:00:00Z"
+                  }
+                },
+                {
+                  "id": "https://quality-certifier.example/certificates/mortgage-index/v1-business",
+                  "issuer": "quality-certifier",
+                  "typ": "awp-quality-certificate+jws",
+                  "value": {
+                    "type": "QualityCertificate",
+                    "id": "https://quality-certifier.example/certificates/mortgage-index/v1-business",
+                    "issuer": "https://quality-certifier.example/#org",
+                    "source": "https://mortgage-index.example/#org",
+                    "dataset": "https://mortgage-index.example/datasets/residential/v1",
+                    "category": "registered-business-lenders",
+                    "policy": "https://quality-certifier.example/policies/accurate-current-complete/v1",
+                    "claimType": "mortgage.product",
+                    "quality": {
+                      "accurate": true,
+                      "current": true,
+                      "complete": true
+                    },
+                    "validFrom": "2026-11-01T00:00:00Z",
+                    "validUntil": "2026-12-01T00:00:00Z"
+                  }
+                }
+              ],
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "admit",
+              "check": "fitness",
+              "reason": "stale-data"
+            },
+            "outline": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "meaning-negotiated",
+      "change": {
+        "meaning": "negotiated"
+      },
+      "world": {
+        "negotiatedMeaning": {
+          "platform": "deliberation-platform",
+          "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+          "term": "https://terms.example/irregular-income/fd312612a04288c9ed2974486f9a334a5b86d72b45a439c12704b7d09840578c",
+          "definition": "For this mortgage exchange, irregular income means the annual gross sum of the twelve stated monthly payroll amounts for Sam; a variable month is included at its recorded gross value. Currency and the covered period remain those of the payroll statement.",
+          "version": "1",
+          "proposer": "sam-agent",
+          "peer": "north-agent"
+        },
+        "parties": {
+          "deliberation-platform": {
+            "id": "deliberation-platform",
+            "identity": "https://deliberation.example/#platform",
+            "name": "The fictional deliberation platform",
+            "role": "source",
+            "runs": "issuer-only"
+          }
+        },
+        "trust": {
+          "sources": {
+            "sam-agent": [
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/sam/own-bank-balances",
+                "version": "1",
+                "source": "https://harbourbank.example/#org",
+                "claimTypes": [
+                  "deposit.*"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "Sam's own list: Sam's own bank"
+              },
+              {
+                "id": "https://w3id.org/jeswr/awp#rule/sam/payroll-income",
+                "version": "1",
+                "source": "https://paywell.example/#org",
+                "claimTypes": [
+                  "income.*"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ],
+                "validUntil": "2027-01-01T00:00:00Z",
+                "framework": "Sam's own list: Sam's employer's payroll"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:0",
+                "version": "1",
+                "source": "urn:fictional:valuation-register",
+                "claimTypes": [
+                  "valuer.registration"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:1",
+                "version": "1",
+                "source": "urn:fictional:mossbridge-payment-desk",
+                "claimTypes": [
+                  "payee-account",
+                  "payment-receipt"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:sam-agent:payment:2",
+                "version": "1",
+                "source": "urn:fictional:bracken-lantern-valuations",
+                "claimTypes": [
+                  "invoice"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:rule:term-platform",
+                "version": "1",
+                "source": "https://deliberation.example/#platform",
+                "claimTypes": [
+                  "term.deliberation"
+                ],
+                "subjects": [
+                  "https://terms.example/irregular-income/fd312612a04288c9ed2974486f9a334a5b86d72b45a439c12704b7d09840578c"
+                ]
+              }
+            ]
+          }
+        },
+        "statements": {
+          "income": {
+            "value": {
+              "monthly": [
+                {
+                  "month": "2025-11",
+                  "gross": 7000
+                },
+                {
+                  "month": "2025-12",
+                  "gross": 8000
+                },
+                {
+                  "month": "2026-01",
+                  "gross": 7000
+                },
+                {
+                  "month": "2026-02",
+                  "gross": 8000
+                },
+                {
+                  "month": "2026-03",
+                  "gross": 7000
+                },
+                {
+                  "month": "2026-04",
+                  "gross": 8000
+                },
+                {
+                  "month": "2026-05",
+                  "gross": 7000
+                },
+                {
+                  "month": "2026-06",
+                  "gross": 8000
+                },
+                {
+                  "month": "2026-07",
+                  "gross": 7000
+                },
+                {
+                  "month": "2026-08",
+                  "gross": 8000
+                },
+                {
+                  "month": "2026-09",
+                  "gross": 7000
+                },
+                {
+                  "month": "2026-10",
+                  "gross": 8000
+                }
+              ]
+            }
+          }
+        },
+        "script": [
+          {
+            "id": "show-mandate",
+            "agent": "sam-agent",
+            "type": "show-mandate",
+            "atStep": 1
+          },
+          {
+            "id": "instruction",
+            "agent": "sam-agent",
+            "type": "instruct",
+            "atStep": 2,
+            "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+          },
+          {
+            "id": "index-admission",
+            "agent": "index-agent",
+            "type": "admit",
+            "atStep": 3,
+            "statements": [
+              "north-product",
+              "harbour-product"
+            ],
+            "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+          },
+          {
+            "id": "product-query",
+            "agent": "sam-agent",
+            "type": "start",
+            "atStep": 3,
+            "peer": "index-agent",
+            "kind": "invoke",
+            "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+            "contents": {
+              "propertyUse": "residential",
+              "rateType": "fixed"
+            },
+            "intent": {},
+            "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+            "configuration": "public-read",
+            "basis": {
+              "kind": "public"
+            },
+            "discover": false
+          },
+          {
+            "id": "query-at-index",
+            "agent": "index-agent",
+            "type": "receive",
+            "atStep": 3,
+            "from": "sam-agent"
+          },
+          {
+            "id": "products-returned",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 3,
+            "from": "index-agent"
+          },
+          {
+            "id": "apply",
+            "agent": "sam-agent",
+            "type": "start",
+            "peer": "north-agent",
+            "kind": "propose",
+            "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "contents": {
+              "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+              "propertyPrice": 450000,
+              "loanAmount": 380000,
+              "currency": "USD",
+              "applicant": "https://sam.example/#me",
+              "synthetic": true
+            },
+            "intent": {
+              "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+              "action": "use",
+              "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+              "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+              "recipient": "https://northbank.example/#org",
+              "parameters": {}
+            },
+            "discover": true,
+            "atStep": 3
+          },
+          {
+            "id": "describe-lender",
+            "agent": "north-agent",
+            "type": "receive",
+            "atStep": 4,
+            "from": "sam-agent"
+          },
+          {
+            "id": "description-returned",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 4,
+            "from": "north-agent"
+          },
+          {
+            "id": "application-arrives",
+            "agent": "north-agent",
+            "type": "receive",
+            "atStep": 5,
+            "from": "sam-agent"
+          },
+          {
+            "id": "bank-request",
+            "agent": "sam-agent",
+            "type": "start",
+            "atStep": 6,
+            "peer": "harbour-agent",
+            "kind": "invoke",
+            "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+            "contents": {
+              "account": "current account",
+              "asOf": "2026-10-31"
+            },
+            "intent": {},
+            "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+            "discover": false
+          },
+          {
+            "id": "bank-challenges",
+            "agent": "harbour-agent",
+            "type": "receive",
+            "atStep": 7,
+            "from": "sam-agent"
+          },
+          {
+            "id": "challenge-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 7,
+            "from": "harbour-agent"
+          },
+          {
+            "id": "bank-retry",
+            "agent": "sam-agent",
+            "type": "retry-challenge",
+            "atStep": 8,
+            "conversation": {
+              "$ref": "steps.bank-request.conversation"
+            }
+          },
+          {
+            "id": "step-up-pending",
+            "agent": "sam-agent",
+            "type": "pending",
+            "atStep": 8
+          },
+          {
+            "id": "face-check-time",
+            "agent": "sam-agent",
+            "type": "advance",
+            "atStep": 8,
+            "milliseconds": 60000
+          },
+          {
+            "id": "attestation-id",
+            "agent": "sam-agent",
+            "type": "mint",
+            "atStep": 8
+          },
+          {
+            "id": "face-attestation",
+            "agent": "sam-agent",
+            "type": "issue",
+            "atStep": 8,
+            "issuer": "identity-provider",
+            "value": {
+              "type": "ApprovalAttestation",
+              "id": {
+                "$ref": "steps.attestation-id"
+              },
+              "issuer": "https://id-provider.example/#org",
+              "claimType": "identity.approval",
+              "subject": "https://sam.example/#me",
+              "method": "certified-face-check",
+              "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+              "approves": {
+                "actor": "https://agents.hostco.example/sam#agent",
+                "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                "actionDigest": {
+                  "$ref": "steps.step-up-pending.actionDigest"
+                },
+                "challenge": {
+                  "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                }
+              },
+              "issuedAt": {
+                "$ref": "now"
+              },
+              "validUntil": "2026-11-13T10:01:00.000Z",
+              "synthetic": true,
+              "terms": {
+                "policy": {
+                  "id": "urn:terms:face-check",
+                  "permissions": [
+                    {
+                      "type": "permission",
+                      "action": "use",
+                      "target": {
+                        "$ref": "steps.attestation-id"
+                      },
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "eq",
+                          "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "permission",
+                      "action": "distribute",
+                      "target": {
+                        "$ref": "steps.attestation-id"
+                      },
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "eq",
+                          "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                        },
+                        {
+                          "leftOperand": "recipient",
+                          "operator": "eq",
+                          "rightOperand": "https://harbourbank.example/#org"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "attestation-admission",
+            "agent": "sam-agent",
+            "type": "admit",
+            "atStep": 8,
+            "statements": [
+              "face-attestation"
+            ],
+            "subject": "https://sam.example/#me",
+            "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+          },
+          {
+            "id": "step-up-approval",
+            "agent": "sam-agent",
+            "type": "approve",
+            "atStep": 8,
+            "decision": "approve",
+            "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+            "evidence": [
+              "face-attestation"
+            ]
+          },
+          {
+            "id": "bank-releases",
+            "agent": "harbour-agent",
+            "type": "receive",
+            "atStep": 8,
+            "from": "sam-agent",
+            "outboundAtStep": 9
+          },
+          {
+            "id": "balance-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 10,
+            "from": "harbour-agent"
+          },
+          {
+            "id": "income-admission",
+            "agent": "sam-agent",
+            "type": "admit",
+            "atStep": 10,
+            "statements": [
+              "income"
+            ],
+            "subject": "https://sam.example/#me",
+            "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+          },
+          {
+            "id": "term-deliberation",
+            "agent": "sam-agent",
+            "type": "term-deliberation",
+            "atStep": 10,
+            "exchange": {
+              "$ref": "steps.apply.conversation"
+            },
+            "decision": "approve",
+            "validUntil": "2026-11-13T10:00:00Z"
+          },
+          {
+            "id": "terms-arrive",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 11,
+            "from": "north-agent"
+          },
+          {
+            "id": "approval-time",
+            "agent": "sam-agent",
+            "type": "advance",
+            "atStep": 11,
+            "milliseconds": 60000
+          },
+          {
+            "id": "consent",
+            "agent": "sam-agent",
+            "type": "approve",
+            "atStep": 11,
+            "decision": "approve",
+            "note": "Yes, share them with North Bank for the credit check."
+          },
+          {
+            "id": "acceptance-arrives",
+            "agent": "north-agent",
+            "type": "receive",
+            "atStep": 12,
+            "from": "sam-agent"
+          },
+          {
+            "id": "evidence-arrives",
+            "agent": "north-agent",
+            "type": "receive",
+            "atStep": 12,
+            "from": "sam-agent"
+          },
+          {
+            "id": "intake-receipt",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 12,
+            "from": "north-agent"
+          },
+          {
+            "id": "assessment-time",
+            "agent": "north-agent",
+            "type": "advance",
+            "atStep": 13,
+            "milliseconds": 60000
+          },
+          {
+            "id": "assessed",
+            "agent": "north-agent",
+            "type": "store-assess",
+            "atStep": 13,
+            "store": "north-store",
+            "assessor": "https://northbank.example/agents/assessment#agent",
+            "conversation": {
+              "$ref": "steps.apply.conversation"
+            },
+            "items": [
+              "urn:awp:evidence:paywell-income-2026-10#annualised",
+              "urn:awp:evidence:harbourbank-deposit-2026-10"
+            ],
+            "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+            "assessment": "urn:assessment:mortgage-indicative"
+          },
+          {
+            "id": "decision-id",
+            "agent": "north-agent",
+            "type": "mint",
+            "atStep": 13
+          },
+          {
+            "id": "decision",
+            "agent": "north-agent",
+            "type": "issue",
+            "atStep": 13,
+            "issuer": "north-agent",
+            "value": {
+              "type": "DecisionInPrinciple",
+              "id": {
+                "$ref": "steps.decision-id"
+              },
+              "issuer": "https://northbank.example/#org",
+              "subject": "https://sam.example/#me",
+              "claimType": "mortgage.decision-in-principle",
+              "method": "decided-by-authority",
+              "issuedAt": {
+                "$ref": "now"
+              },
+              "validUntil": "2027-02-13T09:03:00.000Z",
+              "decision": {
+                "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "amount": {
+                  "$ref": "steps.assessed.amount"
+                },
+                "currency": "USD",
+                "binding": false,
+                "note": "a decision in principle, not an offer; synthetic and indicative only; a valuation is needed before a full offer"
+              },
+              "synthetic": true
+            }
+          },
+          {
+            "id": "decision-request",
+            "agent": "sam-agent",
+            "type": "invoke-agreement",
+            "atStep": 13,
+            "conversation": {
+              "$ref": "steps.apply.conversation"
+            },
+            "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+            "input": {
+              "request": "decision-in-principle"
+            },
+            "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+          },
+          {
+            "id": "decision-request-arrives",
+            "agent": "north-agent",
+            "type": "receive",
+            "atStep": 13,
+            "from": "sam-agent"
+          },
+          {
+            "id": "agreement",
+            "agent": "north-agent",
+            "type": "conversation",
+            "atStep": 13,
+            "conversation": {
+              "$ref": "steps.apply.conversation"
+            }
+          },
+          {
+            "id": "decision-returned",
+            "agent": "north-agent",
+            "type": "message",
+            "atStep": 13,
+            "conversation": {
+              "$ref": "steps.apply.conversation"
+            },
+            "kind": "deliver",
+            "body": {
+              "ref": {
+                "$ref": "steps.decision-request.outbound.0.id"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.agreement.agreement"
+                }
+              },
+              "operation": {
+                "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                "version": "0.1"
+              },
+              "output": {
+                "statement": {
+                  "$ref": "steps.decision-id"
+                }
+              }
+            },
+            "intent": {
+              "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+              "action": "use",
+              "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+              "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+              "recipient": "https://sam.example/#me",
+              "conversation": {
+                "$ref": "steps.apply.conversation"
+              },
+              "parameters": {}
+            },
+            "evidence": [
+              "decision"
+            ]
+          },
+          {
+            "id": "decision-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 13,
+            "from": "north-agent"
+          },
+          {
+            "id": "receipt-id",
+            "agent": "north-agent",
+            "type": "mint",
+            "atStep": 13
+          },
+          {
+            "id": "final-receipt",
+            "agent": "north-agent",
+            "type": "receipt",
+            "atStep": 13,
+            "conversation": {
+              "$ref": "steps.apply.conversation"
+            },
+            "activity": {
+              "$ref": "steps.receipt-id"
+            },
+            "outcome": "completed",
+            "final": true,
+            "observed": {
+              "stage": "decided",
+              "decided": {
+                "status": {
+                  "$ref": "steps.assessed.status"
+                },
+                "by": "https://northbank.example/#org",
+                "basis": "synthetic-decision-in-principle"
+              },
+              "notClaimed": [
+                "loan-approval",
+                "truth-of-evidence",
+                "complete-financial-picture"
+              ]
+            }
+          },
+          {
+            "id": "final-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "atStep": 13,
+            "from": "north-agent"
+          },
+          {
+            "id": "sam-record",
+            "agent": "sam-agent",
+            "type": "record",
+            "atStep": 14
+          },
+          {
+            "id": "north-record",
+            "agent": "north-agent",
+            "type": "record",
+            "atStep": 14
+          },
+          {
+            "id": "index-record",
+            "agent": "index-agent",
+            "type": "record",
+            "atStep": 14
+          },
+          {
+            "id": "bank-record",
+            "agent": "harbour-agent",
+            "type": "record",
+            "atStep": 14
+          },
+          {
+            "id": "valuation-register-holds-entry",
+            "agent": "valuer-register-agent",
+            "type": "admit",
+            "statements": [
+              "valuation-registration"
+            ],
+            "purpose": "urn:purpose:valuation",
+            "segment": "payment",
+            "atStep": 15
+          },
+          {
+            "id": "valuation-lookup",
+            "agent": "sam-agent",
+            "type": "start",
+            "peer": "valuer-register-agent",
+            "kind": "invoke",
+            "operation": "urn:op:valuer-lookup",
+            "contents": {
+              "service": "Home valuation"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:valuer-lookup",
+              "target": "urn:op:valuer-lookup",
+              "recipient": "urn:fictional:valuation-register",
+              "purpose": "urn:purpose:valuation",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:valuation",
+            "atStep": 16
+          },
+          {
+            "id": "valuation-lookup-arrives",
+            "agent": "valuer-register-agent",
+            "type": "receive",
+            "from": "sam-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "valuer": "urn:fictional:bracken-lantern-valuations"
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.valuation-registration.evidence"
+                }
+              ]
+            },
+            "atStep": 17
+          },
+          {
+            "id": "valuation-found",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "valuer-register-agent",
+            "atStep": 18
+          },
+          {
+            "id": "valuation-account-admitted",
+            "agent": "sam-agent",
+            "type": "admit",
+            "statements": [
+              "valuation-account",
+              "other-valuation-account"
+            ],
+            "purpose": "urn:purpose:valuation",
+            "atStep": 19
+          },
+          {
+            "id": "fee-offer",
+            "agent": "valuer-agent",
+            "type": "start",
+            "peer": "sam-agent",
+            "kind": "propose",
+            "operation": "urn:op:paid-service",
+            "contents": {
+              "service": "Home valuation",
+              "compensation": {
+                "amount": "450.00",
+                "currency": "USD",
+                "payee": "urn:fictional:bracken-lantern-valuations"
+              },
+              "validFrom": "2026-11-13T09:03:00.000Z",
+              "validUntil": "2026-11-20T09:03:00.000Z",
+              "purpose": "urn:purpose:valuation"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:paid-service",
+              "target": "urn:op:paid-service",
+              "recipient": "https://sam.example/#me",
+              "purpose": "urn:purpose:valuation",
+              "parameters": {}
+            },
+            "atStep": 20
+          },
+          {
+            "id": "fee-offer-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "valuer-agent",
+            "reply": {
+              "type": "accept",
+              "intent": {
+                "action": "use",
+                "operation": "urn:op:paid-service",
+                "target": "urn:op:paid-service",
+                "recipient": "urn:fictional:bracken-lantern-valuations",
+                "purpose": "urn:purpose:valuation",
+                "parameters": {
+                  "termsDigest": {
+                    "$ref": "current.message.body.termsDigest"
+                  }
+                },
+                "conversation": {
+                  "$ref": "current.conversation.id"
+                }
+              }
+            },
+            "atStep": 21
+          },
+          {
+            "id": "fee-accept-approved",
+            "agent": "sam-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Yes, accept this service for the agreed fee.",
+            "atStep": 22
+          },
+          {
+            "id": "fee-accept-arrives",
+            "agent": "valuer-agent",
+            "type": "receive",
+            "from": "sam-agent",
+            "agreementPlan": {
+              "requiredOutcomes": [],
+              "messages": [
+                {
+                  "kind": "receipt",
+                  "body": {
+                    "ref": {
+                      "$ref": "current.message.id"
+                    },
+                    "activity": {
+                      "$ref": "agreement.id"
+                    },
+                    "outcome": "completed",
+                    "final": false
+                  }
+                }
+              ]
+            },
+            "atStep": 23
+          },
+          {
+            "id": "fee-accept-confirmed",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "valuer-agent",
+            "atStep": 24
+          },
+          {
+            "id": "fee-invoice",
+            "agent": "valuer-agent",
+            "type": "payment-invoice",
+            "agreement": {
+              "$ref": "steps.fee-offer.outbound.0.message.body.termsDigest"
+            },
+            "invoice": "urn:scenario:mortgage-main:invoice",
+            "account": "urn:account:bracken-lantern",
+            "dueDate": "2026-11-20T09:03:00.000Z",
+            "atStep": 25
+          },
+          {
+            "id": "fee-invoice-statement",
+            "agent": "valuer-agent",
+            "type": "issue",
+            "issuer": "valuer-agent",
+            "value": {
+              "id": "urn:scenario:mortgage-main:invoice-statement",
+              "issuer": "urn:fictional:bracken-lantern-valuations",
+              "subject": "https://sam.example/#me",
+              "claimType": "invoice",
+              "method": "recorded-by-authority",
+              "asOf": {
+                "$ref": "now"
+              },
+              "payment": {
+                "$ref": "steps.fee-invoice.document"
+              }
+            },
+            "atStep": 26
+          },
+          {
+            "id": "fee-invoice-send",
+            "agent": "valuer-agent",
+            "type": "invoke-agreement",
+            "conversation": {
+              "$ref": "steps.fee-offer.conversation"
+            },
+            "operation": "urn:op:payment-request",
+            "input": {
+              "invoice": {
+                "$ref": "steps.fee-invoice.reference"
+              }
+            },
+            "purpose": "urn:purpose:valuation",
+            "evidence": [
+              "fee-invoice-statement"
+            ],
+            "atStep": 27
+          },
+          {
+            "id": "fee-invoice-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "valuer-agent",
+            "atStep": 28
+          },
+          {
+            "id": "pay",
+            "agent": "sam-agent",
+            "type": "start",
+            "peer": "payment-provider-agent",
+            "kind": "invoke",
+            "operation": "urn:op:payment",
+            "contents": {
+              "payee": {
+                "$ref": "steps.fee-invoice.payee"
+              },
+              "account": {
+                "$ref": "steps.fee-invoice.account"
+              },
+              "amount": {
+                "$ref": "steps.fee-invoice.amount"
+              },
+              "currency": {
+                "$ref": "steps.fee-invoice.currency"
+              },
+              "reference": {
+                "$ref": "steps.fee-invoice.reference"
+              },
+              "agreement": {
+                "$ref": "steps.fee-offer.outbound.0.message.body.termsDigest"
+              },
+              "instalment": 1,
+              "validUntil": "2026-11-13T10:00:00.000Z"
+            },
+            "intent": {
+              "action": "pay",
+              "operation": "urn:op:payment",
+              "target": "urn:op:payment",
+              "recipient": "urn:fictional:mossbridge-payment-desk",
+              "purpose": "urn:purpose:valuation",
+              "parameters": {
+                "payee": {
+                  "$ref": "steps.fee-invoice.payee"
+                },
+                "account": {
+                  "$ref": "steps.fee-invoice.account"
+                },
+                "amount": {
+                  "$ref": "steps.fee-invoice.amount"
+                },
+                "currency": {
+                  "$ref": "steps.fee-invoice.currency"
+                },
+                "reference": {
+                  "$ref": "steps.fee-invoice.reference"
+                },
+                "agreement": {
+                  "$ref": "steps.fee-offer.outbound.0.message.body.termsDigest"
+                },
+                "instalment": 1,
+                "validUntil": "2026-11-13T10:00:00.000Z"
+              }
+            },
+            "purpose": "urn:purpose:valuation",
+            "atStep": 29
+          },
+          {
+            "id": "fee-payment-approved",
+            "agent": "sam-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Yes, pay this exact order under the accepted terms.",
+            "atStep": 30
+          },
+          {
+            "id": "provider-receives",
+            "agent": "payment-provider-agent",
+            "type": "receive",
+            "from": "sam-agent",
+            "atStep": 31
+          },
+          {
+            "id": "provider-settles",
+            "agent": "payment-provider-agent",
+            "type": "effect",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:payment-provider",
+              "target": "urn:op:payment-provider",
+              "recipient": "urn:fictional:mossbridge-payment-desk",
+              "purpose": "urn:purpose:valuation",
+              "conversation": {
+                "$ref": "steps.pay.conversation"
+              },
+              "parameters": {
+                "message": {
+                  "$ref": "steps.fee-payment-approved.outbound.0.id"
+                }
+              }
+            },
+            "params": {
+              "message": {
+                "$ref": "steps.fee-payment-approved.outbound.0.id"
+              }
+            },
+            "activityType": "urn:activity:payment-settlement",
+            "adapter": "urn:adapter:rdf-order",
+            "atStep": 32
+          },
+          {
+            "id": "provider-receipt-statement",
+            "agent": "payment-provider-agent",
+            "type": "issue",
+            "issuer": "payment-provider-agent",
+            "value": {
+              "id": "urn:scenario:mortgage-main:payment-receipt",
+              "issuer": "urn:fictional:mossbridge-payment-desk",
+              "subject": "https://sam.example/#me",
+              "claimType": "payment-receipt",
+              "method": "recorded-by-authority",
+              "asOf": {
+                "$ref": "now"
+              },
+              "payment": {
+                "$ref": "steps.provider-settles.effect.observed.payment"
+              },
+              "terms": {
+                "policy": {
+                  "id": "urn:terms:payment-receipt",
+                  "permissions": [
+                    {
+                      "type": "permission",
+                      "action": "use",
+                      "target": "urn:scenario:mortgage-main:payment-receipt",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "eq",
+                          "rightOperand": "urn:purpose:valuation"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "permission",
+                      "action": "distribute",
+                      "target": "urn:scenario:mortgage-main:payment-receipt",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "eq",
+                          "rightOperand": "urn:purpose:valuation"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "atStep": 33
+          },
+          {
+            "id": "provider-receipt",
+            "agent": "payment-provider-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.pay.conversation"
+            },
+            "kind": "deliver",
+            "body": {
+              "ref": {
+                "$ref": "steps.fee-payment-approved.outbound.0.id"
+              },
+              "basis": {
+                "kind": "invocation",
+                "invocation": {
+                  "$ref": "steps.fee-payment-approved.outbound.0.id"
+                }
+              },
+              "operation": {
+                "id": "urn:op:payment",
+                "version": "0.1"
+              },
+              "output": {
+                "status": "settled"
+              }
+            },
+            "evidence": [
+              "provider-receipt-statement"
+            ],
+            "atStep": 34
+          },
+          {
+            "id": "provider-receipt-arrives",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "payment-provider-agent",
+            "atStep": 35
+          },
+          {
+            "id": "fee-agreement-state",
+            "agent": "sam-agent",
+            "type": "conversation",
+            "conversation": {
+              "$ref": "steps.fee-offer.conversation"
+            },
+            "atStep": 36
+          },
+          {
+            "id": "fee-forward-receipt",
+            "agent": "sam-agent",
+            "type": "message",
+            "conversation": {
+              "$ref": "steps.fee-offer.conversation"
+            },
+            "kind": "deliver",
+            "body": {
+              "ref": {
+                "$ref": "steps.fee-invoice-send.outbound.0.id"
+              },
+              "basis": {
+                "kind": "agreement",
+                "agreement": {
+                  "$ref": "steps.fee-agreement-state.agreement"
+                }
+              },
+              "operation": {
+                "id": "urn:op:payment-request",
+                "version": "0.1"
+              },
+              "output": {
+                "status": "settled"
+              }
+            },
+            "evidence": [
+              "provider-receipt-statement"
+            ],
+            "atStep": 37
+          },
+          {
+            "id": "fee-payee-receives",
+            "agent": "valuer-agent",
+            "type": "receive",
+            "from": "sam-agent",
+            "reply": {
+              "type": "receipt",
+              "activity": {
+                "$ref": "current.conversation.agreement"
+              },
+              "outcome": "completed",
+              "observed": {
+                "status": "settled"
+              },
+              "final": false
+            },
+            "atStep": 38
+          },
+          {
+            "id": "fee-acknowledged",
+            "agent": "sam-agent",
+            "type": "receive",
+            "from": "valuer-agent",
+            "segmentEnd": "payment",
+            "atStep": 39
+          }
+        ],
+        "standIns": [
+          {
+            "what": "Deliberation and approval of a new income term",
+            "replacedBy": "A separately keyed fictional platform verifies and records Sam’s agent’s signed definition proposal, the lender agent’s signed acceptance, and both fictional principals’ exact-definition, exact-exchange approvals. Fixture-host signatures replace real people’s clicks. The immutable definition identifier is derived from its text digest. No real platform or model is called."
+          }
+        ],
+        "branches": [
+          {
+            "id": "agents-agree-between-themselves",
+            "what": "Both agents accept the proposed definition but neither person’s approval is recorded.",
+            "onlyUnder": "meaning-negotiated",
+            "change": {
+              "script": [
+                {
+                  "id": "show-mandate",
+                  "agent": "sam-agent",
+                  "type": "show-mandate",
+                  "atStep": 1
+                },
+                {
+                  "id": "instruction",
+                  "agent": "sam-agent",
+                  "type": "instruct",
+                  "atStep": 2,
+                  "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+                },
+                {
+                  "id": "index-admission",
+                  "agent": "index-agent",
+                  "type": "admit",
+                  "atStep": 3,
+                  "statements": [
+                    "north-product",
+                    "harbour-product"
+                  ],
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+                },
+                {
+                  "id": "product-query",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 3,
+                  "peer": "index-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+                  "contents": {
+                    "propertyUse": "residential",
+                    "rateType": "fixed"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+                  "configuration": "public-read",
+                  "basis": {
+                    "kind": "public"
+                  },
+                  "discover": false
+                },
+                {
+                  "id": "query-at-index",
+                  "agent": "index-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "products-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 3,
+                  "from": "index-agent"
+                },
+                {
+                  "id": "apply",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "peer": "north-agent",
+                  "kind": "propose",
+                  "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                  "contents": {
+                    "model": "https://w3id.org/jeswr/awp#model/mortgage-application",
+                    "propertyPrice": 450000,
+                    "loanAmount": 380000,
+                    "currency": "USD",
+                    "applicant": "https://sam.example/#me",
+                    "synthetic": true
+                  },
+                  "intent": {
+                    "operation": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "action": "use",
+                    "target": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                    "recipient": "https://northbank.example/#org",
+                    "parameters": {}
+                  },
+                  "discover": true,
+                  "atStep": 3
+                },
+                {
+                  "id": "describe-lender",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "description-returned",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 4,
+                  "from": "north-agent"
+                },
+                {
+                  "id": "application-arrives",
+                  "agent": "north-agent",
+                  "type": "receive",
+                  "atStep": 5,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "bank-request",
+                  "agent": "sam-agent",
+                  "type": "start",
+                  "atStep": 6,
+                  "peer": "harbour-agent",
+                  "kind": "invoke",
+                  "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                  "contents": {
+                    "account": "current account",
+                    "asOf": "2026-10-31"
+                  },
+                  "intent": {},
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                  "discover": false
+                },
+                {
+                  "id": "bank-challenges",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "sam-agent"
+                },
+                {
+                  "id": "challenge-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 7,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "bank-retry",
+                  "agent": "sam-agent",
+                  "type": "retry-challenge",
+                  "atStep": 8,
+                  "conversation": {
+                    "$ref": "steps.bank-request.conversation"
+                  }
+                },
+                {
+                  "id": "step-up-pending",
+                  "agent": "sam-agent",
+                  "type": "pending",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-check-time",
+                  "agent": "sam-agent",
+                  "type": "advance",
+                  "atStep": 8,
+                  "milliseconds": 60000
+                },
+                {
+                  "id": "attestation-id",
+                  "agent": "sam-agent",
+                  "type": "mint",
+                  "atStep": 8
+                },
+                {
+                  "id": "face-attestation",
+                  "agent": "sam-agent",
+                  "type": "issue",
+                  "atStep": 8,
+                  "issuer": "identity-provider",
+                  "value": {
+                    "type": "ApprovalAttestation",
+                    "id": {
+                      "$ref": "steps.attestation-id"
+                    },
+                    "issuer": "https://id-provider.example/#org",
+                    "claimType": "identity.approval",
+                    "subject": "https://sam.example/#me",
+                    "method": "certified-face-check",
+                    "level": "https://w3id.org/jeswr/awp#assurance/certified-face-check",
+                    "approves": {
+                      "actor": "https://agents.hostco.example/sam#agent",
+                      "operation": "https://w3id.org/jeswr/awp#op/balance-statement",
+                      "actionDigest": {
+                        "$ref": "steps.step-up-pending.actionDigest"
+                      },
+                      "challenge": {
+                        "$ref": "steps.step-up-pending.intent.parameters.challenge"
+                      }
+                    },
+                    "issuedAt": {
+                      "$ref": "now"
+                    },
+                    "validUntil": "2026-11-13T10:01:00.000Z",
+                    "synthetic": true,
+                    "terms": {
+                      "policy": {
+                        "id": "urn:terms:face-check",
+                        "permissions": [
+                          {
+                            "type": "permission",
+                            "action": "use",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "permission",
+                            "action": "distribute",
+                            "target": {
+                              "$ref": "steps.attestation-id"
+                            },
+                            "constraints": [
+                              {
+                                "leftOperand": "purpose",
+                                "operator": "eq",
+                                "rightOperand": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                              },
+                              {
+                                "leftOperand": "recipient",
+                                "operator": "eq",
+                                "rightOperand": "https://harbourbank.example/#org"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "attestation-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 8,
+                  "statements": [
+                    "face-attestation"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "step-up-approval",
+                  "agent": "sam-agent",
+                  "type": "approve",
+                  "atStep": 8,
+                  "decision": "approve",
+                  "note": "Done: I did the face check with my identity provider. Yes, ask Harbour Bank.",
+                  "evidence": [
+                    "face-attestation"
+                  ]
+                },
+                {
+                  "id": "bank-releases",
+                  "agent": "harbour-agent",
+                  "type": "receive",
+                  "atStep": 8,
+                  "from": "sam-agent",
+                  "outboundAtStep": 9
+                },
+                {
+                  "id": "balance-arrives",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 10,
+                  "from": "harbour-agent"
+                },
+                {
+                  "id": "income-admission",
+                  "agent": "sam-agent",
+                  "type": "admit",
+                  "atStep": 10,
+                  "statements": [
+                    "income"
+                  ],
+                  "subject": "https://sam.example/#me",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/mortgage-application"
+                },
+                {
+                  "id": "term-deliberation",
+                  "agent": "sam-agent",
+                  "type": "term-deliberation",
+                  "atStep": 10,
+                  "exchange": {
+                    "$ref": "steps.apply.conversation"
+                  },
+                  "decision": "agents-only",
+                  "validUntil": "2026-11-13T10:00:00Z"
+                },
+                {
+                  "id": "terms-arrive",
+                  "agent": "sam-agent",
+                  "type": "receive",
+                  "atStep": 11,
+                  "from": "north-agent"
+                }
+              ]
+            },
+            "expect": {
+              "outcome": "ask-principal",
+              "check": "disclosure",
+              "reason": "approval-required"
+            },
+            "outline": []
+          }
+        ]
+      }
     }
   ],
   "paymentProviders": [

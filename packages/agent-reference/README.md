@@ -237,3 +237,29 @@ persisted background recovery service, and the WebID resolver has no historical-
 archive. These limits and the specification disagreements are detailed in
 [the Brief 26b report](ENGINE-REPORT.md#brief-26b). All parties and data are fictional;
 no live network, storage account or settlement service is used.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Meaning and reliance alternatives (Brief 26e)
+
+These `mortgage-main` configurations use the same matrix. The five executable main
+paths pass confinement; each has its own failure branch and refusal tests.
+
+| Configuration | Execution | Failure |
+|---|---|---|
+| `meaning-registry-lookup` | A signed, directed employment-code mapping from an accepted publisher retains its original statement and mapping provenance. | Unaccepted publisher: `fitness` / `unsupported-term`. |
+| `reliance-corroboration` | Independent payroll and bank observations agree for the same subject, currency and period within a stated tolerance. | Shared root record: `fitness` / `evidence-missing`. |
+| `reliance-stated-confidence` | A source-signed measurement is read as statement-level DQV with its method and calibration. | Uncalibrated model estimate: `fitness` / `confidence-too-low`. |
+| `reliance-quality-certificate` | An accepted certifier covers the index, dataset, product category, policy and time. | Other category: ordinary freshness rejects the stale record; the other valid record is admitted. |
+| `meaning-negotiated` | A fictional platform records the proposal, agent acceptance and both principals' signed approval for this exchange. | Agent agreement alone: `disclosure` / `approval-required`. |
+| `meaning-plain-language-upgrade` | Not run. The signed runtime lacks an opening prose email, description advertisement and persistent upgrade boundary. | The declared prose-evidence branch is blocked, with no trace. |
+
+Mappings, calibration observations, certification and deliberation are explicitly
+fictional, separately keyed sources. Bank salary credits equal the synthetic gross
+payroll amounts; no gross-to-net conversion is claimed. Confidence methods and certificate
+policies are source assertions. The platform supplies no real approval interface.
+Published mapping-version pins and deliberation records live for one agent run; durable
+registry governance and a prose-to-structured negotiation boundary remain unfinished.
+The DQV graph is the gate's typed view of preserved signed evidence metadata; its local
+annotations are defined in [meaning-reliance.ttl](vocab/meaning-reliance.ttl). Changing
+the existing evidence wire format remains the message-model lane's work. See
+[the Brief 26e report](ENGINE-REPORT.md#brief-26e) for scope, stand-ins and validation.

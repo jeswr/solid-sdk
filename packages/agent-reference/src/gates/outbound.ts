@@ -6,6 +6,7 @@ import { MessageNode } from "../model/message-nodes.js";
 import { PaymentAccountNode, PaymentFacts } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
 import { RdfOrderSuite } from "../settlement/rdf-order.js";
+import { negotiatedRequestMatches } from "../suites/meaning-negotiated.js";
 import { decodeJws } from "../wire/inspect.js";
 import { documentConfiguration, isMessagePacket, packetProofInfo } from "../wire/message-packet.js";
 import { paymentDocumentIn, paymentTrace } from "../wire/payment.js";
@@ -832,6 +833,46 @@ export class OutboundGate {
         verdicts,
         decision: { ...decision, outcome: "deny", reason: "malformed" },
       };
+
+    if (
+      ctx.negotiatedMeaning &&
+      scope.operation === ctx.negotiatedMeaning.operation &&
+      scope.action === "distribute"
+    ) {
+      const approved =
+        negotiatedRequestMatches(
+          this.deps.offerTerms(String(intent.parameters.termsDigest ?? "")),
+          ctx.negotiatedMeaning.term,
+        ) &&
+        ctx.negotiatedMeaning.approved(
+          scope.conversation,
+          this.deps.identity.party,
+          scope.recipient,
+          this.deps.now(),
+        );
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        approved ? "pass" : "ask-principal",
+        approved
+          ? "The principals approved this exact definition of irregular income for this exchange."
+          : "The agents agreed on irregular income, but no person’s approval of this definition is on record for this exchange.",
+        { reason: approved ? "minimal-disclosure" : "approval-required" },
+      );
+      if (!approved) {
+        this.decide(
+          "ask-principal",
+          "Approval of the proposed definition is required before relying on it.",
+          "approval-required",
+        );
+        return {
+          outcome: "ask-principal",
+          verdicts,
+          decision: { ...decision, outcome: "approval-required", reason: "approval-required" },
+        };
+      }
+    }
 
     const taskItems = this.deps.memory.context(ctx.taskId ?? scope.conversation);
     const supportIds = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
@@ -1706,6 +1747,42 @@ export class OutboundGate {
       digest,
       intent,
     });
+    // Brief 26e seam: an agent agreement cannot substitute for approval of a novel term.
+    if (
+      this.deps.gate.negotiatedMeaning &&
+      envelope.messageKind === "accept" &&
+      opts.operation === this.deps.gate.negotiatedMeaning.operation
+    ) {
+      const approved =
+        negotiatedRequestMatches(
+          this.deps.offerTerms(String(body.termsDigest ?? "")),
+          this.deps.gate.negotiatedMeaning.term,
+        ) &&
+        this.deps.gate.negotiatedMeaning.approved(
+          envelope.conversationId,
+          this.deps.identity.party,
+          intent.recipient,
+          this.deps.now(),
+        );
+      this.verdict(
+        verdicts,
+        digest,
+        "disclosure",
+        approved ? "pass" : "ask-principal",
+        approved
+          ? "The principals approved this exact definition of irregular income for this exchange."
+          : "The agents agreed on irregular income, but no person’s approval of this definition is on record for this exchange.",
+        { reason: approved ? "minimal-disclosure" : "approval-required" },
+      );
+      if (!approved) {
+        this.decide(
+          "ask-principal",
+          "Approval of the proposed definition is required before relying on it.",
+          "approval-required",
+        );
+        return finish("ask-principal", "approval-required");
+      }
+    }
     if (
       opts.intent?.action === "pay" &&
       (envelope.messageKind !== "invoke" ||

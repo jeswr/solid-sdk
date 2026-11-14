@@ -54,11 +54,11 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "runs")).toHaveLength(150);
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(11);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
-  expect(alternatives).toHaveLength(24);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(19);
+  expect(alternatives).toHaveLength(36);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(29);
   expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(0);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(5);
+  expect(blocked).toHaveLength(7);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,
