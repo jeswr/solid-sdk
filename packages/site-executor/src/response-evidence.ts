@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Shared negative evidence; callers still need positive resource/success evidence.
@@ -9,13 +10,47 @@ import { attribute, elementText, jsonPointer, parseHtml, selectElements } from "
 import { isHtmlInputType } from "./html-controls.js";
 import { effectiveWireFields } from "./wire.js";
 
-/** Include compound keys such as http_status, errorCode and failureReason. */
+/** Include compound keys such as http_status, errorCode, failureReason, err and errMsg. */
 export const isDiscriminatorKey = (key: string): boolean =>
-  /status|code|error|type|reason/.test(key.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  /status|code|error|type|reason|^errs?$|^err[a-z]|[a-z]err$/.test(
+    key.toLowerCase().replace(/[^a-z0-9]/g, ""),
+  );
+/** Separator-insensitive tokens ("log in", "please log in" and "access denied" reduce to them). */
 const authenticationMarker = (value: string) =>
-  /auth|login|signin|credential|token|forbidden|permission|denied|unauthor|unauthenticated|notauthenticated|restricted/.test(
+  /auth|login|signin|credential|token|forbidden|permission|denied|unauthor|unauthenticated|notauthenticated|restricted|notprovided/.test(
     value.toLowerCase().replace(/[^a-z0-9]/g, ""),
   );
+/**
+ * The same tokens for prose (message-like values, element-less documents, main document text):
+ * whole words, so "No such blog in this forum" is not "login". A single-token value such as
+ * "AccessDenied" or "auth_required" also gets the separator-insensitive rule.
+ */
+const AUTHENTICATION_WORDS =
+  /\b(?:auth|authentica\w*|authori[sz]\w*|unauthori[sz]\w*|unauthenticated|not[\s_-]*authenticated|log[\s_-]*(?:in|on)|sign[\s_-]*(?:in|on)|sso|credentials?|tokens?|forbidden|permissions?|denied|restricted|not[\s_-]*provided)\b/i;
+export function authenticationText(value: string): boolean {
+  const text = value.trim();
+  return AUTHENTICATION_WORDS.test(text) || (!/\s/.test(text) && authenticationMarker(text));
+}
+/** Message-like members (title, detail, message, msg, description, error_description, ...). */
+const isMessageKey = (key: string): boolean =>
+  /message|msg|detail|description|title|summary|hint|reason|cause|notice/.test(
+    key.toLowerCase().replace(/[^a-z0-9]/g, ""),
+  );
+/** Not-found context only: an authentication phrase in a message-like string at this level. */
+function jsonAuthenticationMessage(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.entries(value).some(
+      ([key, member]) =>
+        isMessageKey(key) &&
+        (Array.isArray(member) ? member : [member]).some(
+          (text) => typeof text === "string" && authenticationText(text),
+        ),
+    )
+  );
+}
 const authenticationDiscriminator = (value: unknown): boolean =>
   Array.isArray(value)
     ? value.some(authenticationDiscriminator)
@@ -118,6 +153,7 @@ export function responsePageError(
       const doc: unknown = JSON.parse(body);
       const walk = (value: unknown): boolean =>
         jsonFailure(value) ||
+        (allowNotFound && jsonAuthenticationMessage(value)) ||
         (value !== null && typeof value === "object" && Object.values(value).some(walk));
       return jsonRootFailure(doc) || walk(doc);
     } catch {
@@ -126,6 +162,14 @@ export function responsePageError(
   }
   if (!/html/i.test(contentType ?? "") && !/^\s*</.test(body)) return false;
   const doc = parseHtml(body);
+  // Not-found context: an element-less document is one scalar text, and authentication
+  // phrases in the main text (outside nav, header and footer) reject too. Neither verifies.
+  if (allowNotFound) {
+    if (!elementChildren(doc)) {
+      const text = elementText(doc);
+      if (authenticationDiscriminator(text) || authenticationText(text)) return true;
+    } else if (AUTHENTICATION_WORDS.test(mainDocumentText(doc))) return true;
+  }
   if (
     selectElements("title, h1, h2, h3, h4, h5, h6, [role=heading]", doc).some((el) =>
       authenticationMarker(elementText(el)),
@@ -158,6 +202,35 @@ export function responsePageError(
         )
       ),
   );
+}
+
+/** True when the parsed document has an element (doctype, comments and text are not elements). */
+function elementChildren(doc: ReturnType<typeof parseHtml>): boolean {
+  return doc.children.some((node) => "name" in node && "attribs" in node);
+}
+
+const NON_MAIN = new Set([
+  "head",
+  "nav",
+  "header",
+  "footer",
+  "script",
+  "style",
+  "template",
+  "noscript",
+]);
+/** Headings and body text, excluding navigation chrome and non-rendered content. */
+function mainDocumentText(doc: ReturnType<typeof parseHtml>): string {
+  const parts: string[] = [];
+  const visit = (nodes: ReturnType<typeof parseHtml>["children"]) => {
+    for (const node of nodes) {
+      if ("name" in node && "attribs" in node) {
+        if (!NON_MAIN.has(node.name.toLowerCase())) visit(node.children);
+      } else if (node.type === "text" && "data" in node) parts.push(String(node.data));
+    }
+  };
+  visit(doc.children);
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 /** An array or a repeated-item selector always denotes a collection, even with one row. */
@@ -280,7 +353,7 @@ export function notFoundSignature(
       };
       // Root scalars keep their exact value: "not_found" never matches another scalar.
       structure = shape(JSON.parse(body), true);
-    } else if (/html/i.test(detected)) {
+    } else if (/html/i.test(detected) && elementChildren(parseHtml(body))) {
       const shape = (nodes: ReturnType<typeof parseHtml>["children"]): unknown =>
         nodes.flatMap((node): unknown[] =>
           "name" in node && "attribs" in node && "children" in node
@@ -293,17 +366,26 @@ export function notFoundSignature(
         selectElements("title, h1, h2, h3, h4, h5, h6, [role=heading]", doc).map((el) =>
           elementText(el),
         ),
+        // Text beside the top-level elements keeps its exact normalised value.
+        doc.children.flatMap((node) =>
+          node.type === "text" && "data" in node && String(node.data).trim()
+            ? [String(node.data).replace(/\s+/g, " ").trim()]
+            : [],
+        ),
       ];
     } else {
-      // A non-JSON, non-HTML body is one scalar document: the same token/status rules apply.
-      const text = body.trim();
+      // A non-JSON, non-HTML body, or an HTML document without elements (empty, bare text,
+      // doctype plus text), is one scalar text document: its exact normalised text is the
+      // structure and the same token/status rules apply.
+      const text = /html/i.test(detected) ? elementText(parseHtml(body)) : body.trim();
       let scalar: unknown = text;
       try {
         scalar = JSON.parse(text);
       } catch {
         /* Plain text stays the scalar value. */
       }
-      if (jsonRootFailure(scalar) || authenticationDiscriminator(text)) return;
+      if (jsonRootFailure(scalar) || authenticationDiscriminator(text) || authenticationText(text))
+        return;
       structure = text;
     }
     return {

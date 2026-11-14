@@ -37,6 +37,12 @@ export interface RecordedRequest {
   /** Body field -> matching cookie name; values never retained. */
   bodyFromCookies?: Record<string, string>;
   status?: number;
+  /**
+   * Response-completion order: the recorder's request sequence counter when this request's
+   * response (or failure) arrived. A request whose seq is at least this value started after
+   * the response completed. Absent when completion order was not observed.
+   */
+  completedAt?: number;
   contentType?: string;
   /** Location header of a redirect response. */
   redirectedTo?: string;

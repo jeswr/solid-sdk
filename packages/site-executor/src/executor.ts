@@ -83,6 +83,7 @@ import {
   summarise,
 } from "./gate.js";
 import { isHtmlInputType } from "./html-controls.js";
+import { livenessSignature } from "./liveness.js";
 import { effectiveEffect, matchRequest, maxEffect, normaliseEffect, type Target } from "./match.js";
 import {
   addAmounts,
@@ -123,6 +124,7 @@ import { submittedStateInputs, verificationScopeMatches } from "./verification-c
 import { exactIdentityFilter } from "./verification-filter.js";
 import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
 import {
+  type EffectVerification,
   matchesCreatedIdentity,
   requiresEffectVerification,
   validateWriteResponsePolicy,
@@ -1010,7 +1012,9 @@ export function createExecutor(options: ExecutorOptions): Executor {
             !!signature &&
             signature.status === declaration.notFound.status &&
             signature.contentType === declaration.notFound.contentType &&
-            signature.structure === declaration.notFound.structure
+            signature.structure === declaration.notFound.structure &&
+            // Structural: absence counts only while the same session still reads data.
+            (await sessionLive(ctx, operation, declaration, stable))
           );
         }
         return (
@@ -1052,6 +1056,104 @@ export function createExecutor(options: ExecutorOptions): Executor {
         )
       );
     };
+  }
+
+  /**
+   * Run the learned liveness read through the read gate, with the verification cache bypass
+   * and freshness rules, and require its learned success signature. A missing, unusable,
+   * denied, redirected, stale or different response proves nothing.
+   */
+  async function sessionLive(
+    ctx: RunContext,
+    write: Operation,
+    declaration: EffectVerification,
+    stable: () => boolean,
+  ): Promise<boolean> {
+    const liveness = declaration.liveness;
+    const read = liveness && operations.get(liveness.operation);
+    if (
+      !liveness ||
+      !read ||
+      read.effect !== "read" ||
+      read.request.method !== "GET" ||
+      !read.extraction ||
+      !stable()
+    )
+      return false;
+    const bindings: Record<string, string> = {};
+    for (const [name, binding] of Object.entries(liveness.bind)) {
+      if (!read.inputs.some((p) => p.name === name) || typeof binding?.value !== "string")
+        return false;
+      bindings[name] = binding.value;
+    }
+    const resolved = operationValues(read, bindings);
+    if (
+      read.inputs.some((p) => p.required && resolved[p.name] === undefined) ||
+      Object.values(resolved).some((v) => redactWith(ctx)(v) !== v)
+    )
+      return false;
+    let compiled: CompiledRequest;
+    try {
+      compiled = compileOperation(read, resolved, origin);
+    } catch (error) {
+      if (error instanceof BindingError) return false;
+      throw error;
+    }
+    const target: Target = {
+      kind: "operation",
+      id: read.id,
+      label: redactWith(ctx)(read.label),
+      actionType: read.actionType,
+    };
+    const authorize = async (url: URL) => {
+      const decision = await budget(
+        ctx,
+        gate.authorize({
+          site: origin,
+          target,
+          effect: "read",
+          inputs: resolved,
+          summary: `Confirm the session on ${new URL(origin).host}`,
+          digest: approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target,
+            effect: "read",
+            inputs: resolved,
+            binding: { operation: read, url: url.href, livenessOf: write.id },
+          }),
+        }),
+      );
+      return decision.kind === "allow";
+    };
+    const verification = { authorize };
+    if (!(await authorize(compiled.url))) return false;
+    await prepareCsrf(ctx, compiled, resolved, false, verification);
+    if (!stable()) return false;
+    const res = await send(
+      ctx,
+      "GET",
+      compiled.url,
+      compiled.headers,
+      undefined,
+      read.extraction.format === "json" ? "application/json" : "text/html",
+      undefined,
+      false,
+      verification,
+    );
+    if (
+      res.stale ||
+      !stable() ||
+      res.redirectLocations.length ||
+      res.status !== liveness.signature.status
+    )
+      return false;
+    const signature = livenessSignature(res.status, res.contentType, res.body, read.extraction);
+    return (
+      !!signature &&
+      signature.contentType === liveness.signature.contentType &&
+      signature.structure === liveness.signature.structure
+    );
   }
 
   async function runOperation(

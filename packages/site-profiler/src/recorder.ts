@@ -328,6 +328,7 @@ export class Recorder {
     context.on("response", (res) => this.track(this.onResponse(res)));
     context.on("requestfailed", (req) => {
       const entry = this.entries.get(req);
+      this.complete(entry);
       if (entry && this.blocked.has(req)) entry.blocked = true;
     });
   }
@@ -407,9 +408,15 @@ export class Recorder {
     }
   }
 
+  /** Note when a response completed on the request clock, before any asynchronous work. */
+  private complete(entry: RecordedRequest | undefined): void {
+    if (entry && entry.completedAt === undefined) entry.completedAt = this.seq;
+  }
+
   private async onResponse(res: Response): Promise<void> {
     const entry = this.entries.get(res.request());
     if (!entry) return;
+    this.complete(entry);
     entry.status = res.status();
     const headers = await res.allHeaders().catch(() => res.headers());
     const authenticationFailure =
@@ -459,8 +466,11 @@ export class Recorder {
       requestHeaders?: Record<string, string>;
     },
   ): RecordedRequest {
+    const stamp = this.stamp();
     const full: RecordedRequest = {
-      ...this.stamp(),
+      ...stamp,
+      // A profiler replay is recorded after its response arrived.
+      completedAt: stamp.seq + 1,
       cookieNames: entry.cookieNames ?? [],
       ...entry,
       requestHeaders: sanitiseHeaders(entry.requestHeaders ?? {}).requestHeaders,

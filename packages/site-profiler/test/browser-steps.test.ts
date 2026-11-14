@@ -392,3 +392,33 @@ it("proposes witnessed compose/notification navigation as probes without guessin
     ]),
   ).toEqual(["https://shop.test/submit", "https://shop.test/notifications"]);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+describe("response completion order (r18)", () => {
+  it("records when each response completed on the request clock", async () => {
+    const context = await browser.newContext();
+    const recorder = new Recorder(origin);
+    await recorder.attach(context);
+    try {
+      const tab = await context.newPage();
+      await tab.goto(`${origin}/`);
+      await tab.goto(`${origin}/a`);
+      await recorder.flush();
+      const documents = recorder.trace.filter((r) => r.resourceType === "document");
+      const first = documents.find((r) => new URL(r.url).pathname === "/");
+      const second = documents.find((r) => new URL(r.url).pathname === "/a");
+      for (const entry of recorder.trace.filter((r) => r.status !== undefined))
+        expect(entry.completedAt).toBeGreaterThan(entry.seq);
+      // The second navigation started after the first document's response completed.
+      expect(second?.seq).toBeGreaterThanOrEqual(first?.completedAt ?? Number.POSITIVE_INFINITY);
+      const replay = recorder.recordReplay({
+        method: "GET",
+        url: `${origin}/`,
+        resourceType: "replay",
+      });
+      expect(replay.completedAt).toBe(replay.seq + 1);
+    } finally {
+      await context.close();
+    }
+  });
+});

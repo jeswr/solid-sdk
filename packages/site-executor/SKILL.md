@@ -337,3 +337,8 @@ Round 17: scalar JSON roots are discriminators (exact value in not-found signatu
 control with `html-controls.ts` (ASCII-case-insensitive names and types, missing/invalid input
 type is text); never compare a raw `type` attribute. Profiler pairing takes change evidence
 only from the latest same-identity read after the previous write and before this one.
+Round 18: a 404/410 not-found deletion also needs the learned `verification.liveness` read
+(gated, cache-bypassed, same session) to return its learned `livenessSignature`; anything else
+is Uncertain. Element-less HTML 404s are scalar text documents. In the not-found context,
+message-like values and main document text are checked with `authenticationText`; these
+markers only ever reject.

@@ -478,3 +478,18 @@ start) and before this write. Older history never counts, and without such a rea
 no change evidence; leaf-key pairing still applies. Vote count deltas start from the same
 baseline. Round-17 regressions are in `test/review-r17.test.ts`,
 `test/runtime-effects.test.ts` and `test/generic-browser.test.ts`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+A not-found deletion policy also carries one session liveness read (`write-liveness.ts`),
+learned from the demonstration: a signed-in, read-gated GET witnessed in the deletion's
+authentication context that returned 2xx with at least one item-level field and no failure or
+authentication marker. Collection reads are preferred, then reads with fewer inputs, then the
+earliest witness. Its inputs are the witnessed constants, the compiled request must reproduce
+the witnessed URL, and it never addresses an identity deleted in the demonstration. Without
+one, a not-found deletion stays Uncertain.
+
+The recorder records response-completion order: `completedAt` is the request sequence counter
+when a response (or failure) arrived, so a request with `seq >= completedAt` started after it
+completed. Immediate-baseline change evidence uses only reads that started after the previous
+write completed; without that write's recorded completion there is no change evidence.
+Round-18 regressions are in `test/runtime-effects.test.ts` and `test/browser-steps.test.ts`.

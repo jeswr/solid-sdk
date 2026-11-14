@@ -674,3 +674,34 @@ ASCII-case-insensitively, a missing or invalid input type is text and a missing 
 button type is submit. Every input-type decision in the executor, profiler and harness uses
 it (password-page detection, credential discovery, selector witnessing, form learning, HAR
 redaction); never compare a raw `type` attribute.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+### Round 18: session liveness proof for not-found deletions
+
+A deletion verified by a 404/410 not-found signature completes only if, after the absence
+read, the learned `verification.liveness` read returns its learned success signature in the
+same session and authentication context. The sidecar entry names a learned read-gated GET,
+its witnessed constant inputs (`bind: { name: { value } }`, nothing from the write) and a
+`LivenessSignature` (exact 2xx status, media type and an opaque structure hash). The executor
+authorises the read through the read gate, sends it with the verification cache bypass and
+freshness rules (`cache: "no-store"`, `Cache-Control`/`Pragma: no-cache`, no redirects, positive
+Age, cache hits and authentication challenges reject), and requires `livenessSignature` to
+match: the response has the extraction's format, carries no failure or authentication marker
+(the shared `responsePageError` predicate) and at least one row with an item-level field. The
+structure is the JSON envelope (collection ancestor keys, or the main item's keys) or the HTML
+element paths leading to the rows. A missing, unusable, denied, failed or different liveness
+response leaves the deletion Uncertain with its fingerprint retained. Collection absence is
+unchanged and needs no liveness read.
+
+An element-less HTML 404 (empty, bare text, doctype plus text) is one scalar text document:
+its exact normalised text is the signature structure and the scalar token and status rules
+apply. Text beside top-level elements keeps its value too. In the not-found context only,
+`responsePageError` also applies the authentication predicate to message-like string values at
+any depth (title, detail, message, msg, description, error_description and similar) and to
+the main document text (body text excluding head, nav, header, footer and non-rendered
+elements). Prose matches whole words (`authenticationText`), so "blog in" is not "login"; a
+single-token value also gets the separator-insensitive rule. `err` and `errors` are
+discriminator keys, and the tokens include "log in", "please log in", "access denied",
+"permission" and "not provided". These markers only reject; they never make a response verify.
+`test/review-r18.test.ts` and `site-profiler/test/runtime-effects.test.ts` cover every
+round-18 reproduction.

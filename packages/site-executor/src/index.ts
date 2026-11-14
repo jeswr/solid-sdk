@@ -81,6 +81,11 @@ export {
   parseHtmlTag,
 } from "./html-controls.js";
 export {
+  type LivenessRead,
+  type LivenessSignature,
+  livenessSignature,
+} from "./liveness.js";
+export {
   effectiveEffect,
   type MatchResult,
   matchRequest,
@@ -90,6 +95,7 @@ export {
 } from "./match.js";
 export { describeUrl, guardUrl, isLoopbackHost, OriginError, siteOrigin } from "./origin.js";
 export {
+  authenticationText,
   createdObjectType,
   isDiscriminatorKey,
   jsonEnvelope,

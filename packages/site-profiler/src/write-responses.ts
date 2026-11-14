@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Response policies come only from complete, causally linked demonstration traffic.
 import {
@@ -18,6 +19,7 @@ import { responsePageError } from "./response-evidence.js";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
 import { learnEffectVerification } from "./write-effect.js";
+import { learnLivenessRead } from "./write-liveness.js";
 
 function failedPage(r: RecordedRequest): boolean {
   return !!(
@@ -43,6 +45,11 @@ export function learnWriteResponses(
     if (op.effect === "read" || op.provenance.method !== "demonstration") continue;
     if (requiresEffectVerification(op)) {
       const verification = learnEffectVerification(op, learnedOperations, trace, origin);
+      // A not-found deletion also needs a session liveness read; without one it stays Uncertain.
+      const liveness =
+        verification?.notFound &&
+        learnLivenessRead(op, verification, operations, learnedOperations, trace, origin);
+      if (verification && liveness) verification.liveness = liveness;
       if (verification)
         policies[op.id] = {
           createdLocationPattern: "/",

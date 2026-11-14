@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Executor-local declarations until created-location/success evidence joins the shared contract.
@@ -6,6 +7,7 @@ import type { Operation } from "@jeswr/site-model";
 import { type Extraction, responseIdentity, SCHEMA } from "@jeswr/site-model";
 import { attribute, elementText, jsonPointer, parseHtml, selectElement } from "./dom.js";
 import { extract } from "./extract.js";
+import type { LivenessRead } from "./liveness.js";
 import { guardUrl } from "./origin.js";
 import {
   createdObjectType,
@@ -34,6 +36,11 @@ export interface EffectVerification {
   displaySlug?: boolean;
   /** Missing-resource response fetched for this read and scope after a witnessed deletion. */
   notFound?: { status: 404 | 410; contentType: string; structure: string };
+  /**
+   * Session liveness proof for a not-found deletion: after the absence read, this learned read
+   * must return its learned success signature in the same session, or the deletion is Uncertain.
+   */
+  liveness?: LivenessRead;
   /** Read-only constants whose post-write target and submitted values were witnessed. */
   scopeConstants?: WitnessedScopeConstant[];
   /** Demonstrated changes to literal form fields; unchanged carried fields are excluded. */
@@ -130,6 +137,27 @@ export function validateWriteResponsePolicy(policy: WriteResponsePolicy, origin:
       !/^[a-f0-9]{64}$/.test(signature.structure)
     )
       throw new BindingError("invalid not-found signature");
+  }
+  if (policy.verification?.liveness) {
+    const liveness = policy.verification.liveness;
+    if (
+      typeof liveness.operation !== "string" ||
+      !liveness.bind ||
+      typeof liveness.bind !== "object" ||
+      Object.values(liveness.bind).some(
+        (binding) =>
+          !binding ||
+          typeof binding !== "object" ||
+          Object.keys(binding).join() !== "value" ||
+          typeof binding.value !== "string",
+      ) ||
+      !Number.isSafeInteger(liveness.signature?.status) ||
+      liveness.signature.status < 200 ||
+      liveness.signature.status >= 300 ||
+      typeof liveness.signature.contentType !== "string" ||
+      !/^[a-f0-9]{64}$/.test(liveness.signature.structure)
+    )
+      throw new BindingError("invalid liveness read");
   }
   if (policy.verification) {
     for (const pattern of [

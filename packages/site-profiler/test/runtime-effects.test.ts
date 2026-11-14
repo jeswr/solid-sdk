@@ -148,17 +148,52 @@ function fixture(type = "DeleteAction", list = false) {
       ),
     }),
   ];
-  return { write, read, trace, row, envelope };
+  // A signed-in collection read witnessed in the same context: the session liveness proof.
+  const live: Operation = {
+    ...read,
+    id: "urn:liveness",
+    label: "List example products",
+    inputs: [],
+    request: {
+      method: "GET",
+      urlTemplate: `${origin}/stores/main/listing`,
+      headers: { "x-requested-with": "XMLHttpRequest" },
+    },
+    extraction: {
+      format: "json",
+      itemType: `${SCHEMA}Product`,
+      itemPath: "/items",
+      fields: [{ property: `${SCHEMA}identifier`, path: "/id" }],
+    },
+  };
+  const liveBody = () => ({ total: 2, items: [row("80"), row("81")] });
+  return { write, read, trace, row, envelope, record, live, liveBody };
 }
 
-async function replay(type = "DeleteAction", mode = "verified", list = false, legacy = false) {
+/** A not-found probe whose learned and runtime bodies the caller chooses (review r18). */
+interface NotFoundBodies {
+  contentType: string;
+  learned: string;
+  runtime: string;
+  runtimeContentType?: string;
+}
+
+async function replay(
+  type = "DeleteAction",
+  mode = "verified",
+  list = false,
+  legacy = false,
+  probe?: NotFoundBodies,
+) {
   const f = fixture(type, list);
   // `scalar <learned JSON> <runtime JSON>`: a scalar JSON root for the probe and the runtime read.
   const scalar = mode.startsWith("scalar ") ? mode.split(" ").slice(1) : undefined;
   const compoundBody = mode.startsWith("compound ")
     ? JSON.stringify({
         envelope: [{ [mode.split(" ")[2] ?? "HTTP_Status"]: mode.includes("auth") ? 401 : 404 }],
-        message: "Access restricted.",
+        // An authentication phrase in a message rejects on its own (r18), so only the
+        // authentication variant carries one; the honest variant differs by discriminator.
+        message: mode.includes("auth") ? "Access restricted." : "Missing widget.",
       })
     : undefined;
   if (mode === "other tenant") {
@@ -344,9 +379,17 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
         : {}),
       ...(compoundBody ? { contentType: "application/json", bodySample: compoundBody } : {}),
       ...(scalar ? { contentType: "application/json", bodySample: scalar[0] } : {}),
+      ...(probe ? { contentType: probe.contentType, bodySample: probe.learned } : {}),
     });
   }
-  let policy = learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id];
+  if (mode !== "no liveness")
+    f.trace.push(
+      f.record(100, {
+        url: `${origin}/stores/main/listing`,
+        bodySample: JSON.stringify(f.liveBody()),
+      }),
+    );
+  let policy = learnWriteResponses([f.write, f.read, f.live], f.trace, origin)[f.write.id];
   expect(policy?.successFlash).toBeUndefined();
   const unlearned =
     mode === "other tenant" ||
@@ -441,7 +484,7 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
         site: origin,
         generatedAt: provenance.learnedAt,
         version: "1",
-        operations: [f.write, f.read],
+        operations: [f.write, f.read, f.live],
         flows: [],
       }),
     ),
@@ -450,6 +493,8 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
     gate: {
       authorize: async (request) => {
         authorized.push(request.effect);
+        if (mode === "liveness denied" && request.target.id === f.live.id)
+          return { kind: "deny", reason: "Fixture liveness denial" };
         if (
           (mode === "read denied" ||
             mode === "token source read denied" ||
@@ -493,6 +538,41 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
       }
       if (url.pathname === "/products")
         return new Response('<div role="alert">Unable to change product.</div>');
+      if (url.pathname === "/stores/main/listing") {
+        // The liveness read is gated and sent with the verification cache bypass.
+        expect(authorized.at(-1)).toBe("read");
+        expect(init?.cache).toBe("no-store");
+        expect(headers.get("cache-control")).toBe("no-cache");
+        expect(headers.get("pragma")).toBe("no-cache");
+        if (mode === "liveness login")
+          return new Response(
+            '<main><h1>Sign in</h1><form action="/login"><input type="password" name="pw"></form></main>',
+            { headers: { "content-type": "text/html" } },
+          );
+        if (mode === "liveness login json")
+          return Response.json({
+            total: 2,
+            items: [f.row("80")],
+            status: "unauthenticated",
+          });
+        if (mode === "liveness 401") return Response.json(f.liveBody(), { status: 401 });
+        if (mode === "liveness auth envelope")
+          return Response.json({ total: 0, items: [], message: "Please sign in to view products" });
+        if (mode === "liveness empty") return Response.json({ total: 0, items: [] });
+        if (mode === "liveness changed envelope") return Response.json({ items: [f.row("80")] });
+        if (mode === "liveness cached")
+          return Response.json(f.liveBody(), { headers: { age: "120" } });
+        if (mode === "liveness cache hit")
+          return Response.json(f.liveBody(), { headers: { "x-cache": "HIT" } });
+        if (mode === "liveness redirect")
+          return new Response(null, { status: 302, headers: { location: "/login" } });
+        if (mode === "liveness challenge")
+          return Response.json(f.liveBody(), {
+            status: 200,
+            headers: { "www-authenticate": "Bearer" },
+          });
+        return Response.json(f.liveBody());
+      }
       reads++;
       expect(authorized.at(-1)).toBe("read");
       expect(headers.get("x-requested-with")).toBe("XMLHttpRequest");
@@ -581,6 +661,11 @@ async function replay(type = "DeleteAction", mode = "verified", list = false, le
           { status: 404 },
         );
       if (mode === "numeric auth 404") return Response.json({ status: 401 }, { status: 404 });
+      if (probe)
+        return new Response(probe.runtime, {
+          status: 404,
+          headers: { "content-type": probe.runtimeContentType ?? probe.contentType },
+        });
       if (scalar)
         return new Response(scalar[1], {
           status: 404,
@@ -705,11 +790,15 @@ it.each([
   "verified",
   "gone",
 ])("verifies deletion with a baseline 200 and same-context %s absence", async (mode) => {
-  const { result, calls } = await replay("DeleteAction", mode);
+  const { result, calls, policy } = await replay("DeleteAction", mode);
   expect(result.outcome?.status).toBe("completed");
-  expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "GET", "GET"]);
+  expect(policy?.verification?.liveness?.operation).toBe("urn:liveness");
+  expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "GET", "GET", "GET"]);
   expect(calls[0]?.url).toBe(calls[3]?.url);
   expect([...required(calls[0]).headers]).toEqual([...required(calls[3]).headers]);
+  // The liveness read follows the absence read, in the same session.
+  expect(calls[4]?.url).toBe(`${origin}/stores/main/listing`);
+  expect(calls[4]?.headers.get("cookie")).toBe(calls[3]?.headers.get("cookie"));
 });
 it("verifies deletion with an explicitly empty identity-filtered list in the baseline success envelope", async () => {
   expect((await replay("DeleteAction", "verified", true)).result.outcome?.status).toBe("completed");
@@ -1954,7 +2043,12 @@ it("refuses collection learning from old body-free evidence without its envelope
  * r17: change evidence comes only from the immediate baseline. `older` is a read before an
  * earlier session write, `immediate` the reads after that write and before this one.
  */
-function baselinePairing(older: number | undefined, immediate: number[], earlierWrite = true) {
+function baselinePairing(
+  older: number | undefined,
+  immediate: number[],
+  earlierWrite = true,
+  writeCompletedAt: number | null = -4,
+) {
   const f = quantityPairing("change");
   const read = required(f.trace[0]);
   const write = required(f.trace[1]);
@@ -1965,6 +2059,9 @@ function baselinePairing(older: number | undefined, immediate: number[], earlier
     reads.push({
       ...write,
       seq: -5,
+      // The earlier write's response arrived before the next request started, unless the
+      // caller sets another completion (r18) or none (null: completion order not observed).
+      ...(writeCompletedAt === null ? {} : { completedAt: writeCompletedAt }),
       url: `${origin}/stores/main/products/massUpdateStock`,
       postData: "product%5B42%5D%5Bqty%5D=9",
       status: 200,
@@ -2049,4 +2146,286 @@ it("r17 a genuine immediate-baseline change verifies at runtime only with the su
     { input: "quantity", property: f.property },
   ]);
   expect(result.outcome?.status).toBe("completed");
+});
+
+// AUTHORED-BY Claude Opus 5.5
+// Round 18: every review reproduction runs the whole pipeline (learning, RDF round trip,
+// approved POST, repeat guard) and must end Uncertain with the write committed.
+it.each([
+  ["text/html; charset=utf-8", "Not Found", "Forbidden"],
+  ["text/html; charset=utf-8", "Not Found", "not_authenticated"],
+  ["text/html; charset=utf-8", "Not Found", "Unauthorized"],
+  ["text/html; charset=utf-8", "", "Forbidden"],
+  ["text/html; charset=utf-8", "", "401 Unauthorized"],
+  ["text/html; charset=utf-8", "<!DOCTYPE html>Not Found", "<!DOCTYPE html>Login required"],
+  [
+    "application/problem+json",
+    '{"type":"about:blank","title":"Not Found","status":404}',
+    '{"type":"about:blank","title":"Forbidden","status":404}',
+  ],
+  ["text/html; charset=utf-8", "<p>Not Found</p>", "<p>Please log in to continue</p>"],
+  [
+    "text/html; charset=utf-8",
+    "<main><p>No such widget.</p></main>",
+    "<main><p>Access denied: authentication required.</p></main>",
+  ],
+  ["text/plain", "Not Found", "Forbidden"],
+  ["text/plain", "Not Found", "Not authorised"],
+  ["text/plain", "Not Found", "You must sign in"],
+  ["application/json", '{"message":"Not found"}', '{"message":"Session expired"}'],
+  ["application/json", '{"message":"Not found"}', '{"message":"Access denied"}'],
+  [
+    "application/json",
+    '{"detail":"Not found."}',
+    '{"detail":"You do not have permission to perform this action."}',
+  ],
+  [
+    "application/json",
+    '{"detail":"Not found."}',
+    '{"detail":"Authentication credentials were not provided."}',
+  ],
+  ["application/json", '{"title":"Not Found"}', '{"title":"Unauthorized"}'],
+  ["application/json", '{"err":"not_found"}', '{"err":"not_authenticated"}'],
+  [
+    "application/json",
+    '{"error_description":"no such item"}',
+    '{"error_description":"login required"}',
+  ],
+])("r18 a learned %s not-found %j cannot verify the deletion for %j", async (contentType, learned, runtime) => {
+  const { result, policy } = await replay("DeleteAction", "r18 probe", false, false, {
+    contentType,
+    learned,
+    runtime,
+  });
+  expect(policy?.verification?.notFound).toBeDefined();
+  expect(policy?.verification?.liveness).toBeDefined();
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+});
+
+it.each([
+  ["text/html; charset=utf-8", "Not Found"],
+  ["text/html; charset=utf-8", ""],
+  ["text/html; charset=utf-8", "<!DOCTYPE html>Not Found"],
+  ["application/problem+json", '{"type":"about:blank","title":"Not Found","status":404}'],
+  ["application/json", '{"detail":"Not found."}'],
+  ["text/html; charset=utf-8", "<main><p>No such widget.</p></main>"],
+])("r18 an honest %s not-found %j with a live session still verifies deletion", async (contentType, body) => {
+  const { result, calls } = await replay("DeleteAction", "r18 probe", false, false, {
+    contentType,
+    learned: body,
+    runtime: body,
+  });
+  expect(result.outcome?.status).toBe("completed");
+  expect(calls.at(-1)?.url).toBe(`${origin}/stores/main/listing`);
+});
+
+it.each([
+  "liveness login",
+  "liveness login json",
+  "liveness 401",
+  "liveness auth envelope",
+  "liveness empty",
+  "liveness changed envelope",
+  "liveness cached",
+  "liveness cache hit",
+  "liveness redirect",
+  "liveness challenge",
+  "liveness denied",
+])("r18 a matching not-found deletion is Uncertain when the liveness read fails: %s", async (mode) => {
+  const { result, calls, policy } = await replay("DeleteAction", mode);
+  expect(policy?.verification?.notFound).toBeDefined();
+  expect(policy?.verification?.liveness?.operation).toBe("urn:liveness");
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+  // A denied liveness read is never transmitted.
+  const listed = calls.filter((c) => c.url === `${origin}/stores/main/listing`).length;
+  expect(listed).toBe(mode === "liveness denied" ? 0 : 1);
+});
+
+it("r18 a matching not-found deletion without a learned liveness read is Uncertain", async () => {
+  const { result, policy, calls } = await replay("DeleteAction", "no liveness");
+  expect(policy?.verification?.notFound).toBeDefined();
+  expect(policy?.verification?.liveness).toBeUndefined();
+  expect(result.outcome?.status).toBe("uncertain");
+  expect(result.committed).toHaveLength(1);
+  expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "GET", "GET"]);
+});
+
+it("r18 collection absence is unchanged and needs no liveness read", async () => {
+  const { result, policy } = await replay("DeleteAction", "verified", true);
+  expect(policy?.verification?.notFound).toBeUndefined();
+  expect(policy?.verification?.liveness).toBeUndefined();
+  expect(result.outcome?.status).toBe("completed");
+});
+
+/** The deletion fixture with its 404 probe, plus one liveness witness changed by `change`. */
+function livenessLearning(
+  change: (sample: RecordedRequest, live: Operation) => void,
+  extra: (f: ReturnType<typeof fixture>) => RecordedRequest[] = () => [],
+) {
+  const f = fixture();
+  f.trace.push(...extra(f));
+  f.trace.push({
+    ...required(f.trace[0]),
+    seq: 5,
+    status: 404,
+    contentType: "text/plain;charset=UTF-8",
+    bodySample: "",
+  });
+  const sample = f.record(100, {
+    url: `${origin}/stores/main/listing`,
+    bodySample: JSON.stringify(f.liveBody()),
+  });
+  change(sample, f.live);
+  f.trace.push(sample);
+  return learnWriteResponses([f.write, f.read, f.live], f.trace, origin)[f.write.id]?.verification;
+}
+
+it.each([
+  [
+    "a read that needs no session",
+    (_r: RecordedRequest, live: Operation) => {
+      live.session = "none";
+    },
+  ],
+  [
+    "another authentication context",
+    (r: RecordedRequest) => {
+      r.authenticationContext = "other-context";
+    },
+  ],
+  [
+    "an empty list",
+    (r: RecordedRequest) => {
+      r.bodySample = JSON.stringify({ total: 0, items: [] });
+    },
+  ],
+  [
+    "an authentication envelope",
+    (r: RecordedRequest) => {
+      r.bodySample = JSON.stringify({
+        ...JSON.parse(r.bodySample ?? "{}"),
+        status: "unauthenticated",
+      });
+    },
+  ],
+  [
+    "a failed response",
+    (r: RecordedRequest) => {
+      r.status = 401;
+    },
+  ],
+  [
+    "a redirect",
+    (r: RecordedRequest) => {
+      r.redirectedTo = `${origin}/login`;
+    },
+  ],
+  [
+    "a page failure",
+    (r: RecordedRequest) => {
+      r.responsePageFailure = true;
+    },
+  ],
+  [
+    "a truncated sample",
+    (r: RecordedRequest) => {
+      r.bodyTruncated = true;
+    },
+  ],
+  [
+    "a crawl response",
+    (r: RecordedRequest) => {
+      r.phase = "crawl";
+    },
+  ],
+  [
+    "the deleted identity",
+    (r: RecordedRequest, live: Operation) => {
+      live.request.urlTemplate = `${origin}/stores/main/listing/{owner}`;
+      live.inputs = [
+        {
+          name: "owner",
+          path: [],
+          location: "path",
+          range: "http://www.w3.org/2001/XMLSchema#string",
+          required: true,
+        },
+      ];
+      r.url = `${origin}/stores/main/listing/42`;
+    },
+  ],
+])("r18 learns no liveness read from %s", (_name, change) => {
+  const verification = livenessLearning(change);
+  expect(verification?.notFound).toBeDefined();
+  expect(verification?.liveness).toBeUndefined();
+});
+
+it("r18 learns the liveness read's witnessed constants and prefers a collection", () => {
+  // Without the collection, the surviving detail read is the liveness read.
+  expect(
+    livenessLearning(
+      (r) => {
+        r.phase = "crawl";
+      },
+      (f) => [
+        f.record(50, {
+          url: `${origin}/stores/main/products/77`,
+          bodySample: JSON.stringify(f.row("77")),
+        }),
+      ],
+    )?.liveness,
+  ).toMatchObject({ operation: "urn:read", bind: { id: { value: "77" } } });
+  const verification = livenessLearning(
+    (r, live) => {
+      live.request.urlTemplate = `${origin}/stores/main/listing{?page}`;
+      live.inputs = [
+        {
+          name: "page",
+          path: [],
+          location: "query",
+          range: "http://www.w3.org/2001/XMLSchema#string",
+          required: false,
+        },
+      ];
+      r.url = `${origin}/stores/main/listing?page=2`;
+    },
+    (f) => [
+      // An earlier, input-free detail read of a surviving item: a candidate, but not a collection.
+      f.record(50, {
+        url: `${origin}/stores/main/products/77`,
+        bodySample: JSON.stringify(f.row("77")),
+      }),
+    ],
+  );
+  expect(verification?.liveness).toMatchObject({
+    operation: "urn:liveness",
+    bind: { page: { value: "2" } },
+    signature: { status: 200, contentType: "application/json" },
+  });
+});
+
+it("r18 a read issued while the previous write was in flight is no change baseline", async () => {
+  // The earlier write (seq -5) completed only after the immediate read (seq -1) started.
+  const f = baselinePairing(undefined, [3], true, 0);
+  expect(learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification).toBe(
+    undefined,
+  );
+  const { result, posts } = await executeLearned(f);
+  expect(posts).toBe(1);
+  expect(result.outcome?.status).toBe("uncertain");
+});
+
+it("r18 without the previous write's completion order there is no change evidence", () => {
+  const f = baselinePairing(undefined, [3], true, null);
+  expect(learnWriteResponses([f.write, f.read], f.trace, origin)[f.write.id]?.verification).toBe(
+    undefined,
+  );
+  // The same trace with completion recorded before the read started still pairs.
+  const paired = baselinePairing(undefined, [3], true, -1);
+  expect(
+    learnWriteResponses([paired.write, paired.read], paired.trace, origin)[paired.write.id]
+      ?.verification?.changes,
+  ).toEqual([{ input: "quantity", property: paired.property }]);
 });
