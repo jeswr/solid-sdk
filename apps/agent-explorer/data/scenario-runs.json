@@ -13455,8 +13455,379 @@
    "path": "main",
    "settlement": "rdf-order",
    "configuration": "accountability-reputation-post",
-   "status": "blocked",
-   "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published."
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-more",
+    "reason": "assurance-insufficient",
+    "check": "authority"
+   },
+   "consequences": [
+    {
+     "seq": 193,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 201,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 208,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 215,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 227,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 235,
+     "agent": "bank",
+     "outcome": "admit"
+    },
+    {
+     "seq": 245,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 253,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 260,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 268,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 276,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 286,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 300,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 308,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 318,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 327,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 335,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 344,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 352,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 361,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 369,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 377,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 385,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 395,
+     "agent": "valuer-register-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 405,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 413,
+     "agent": "valuer-register-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 422,
+     "agent": "valuer-register-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 430,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 437,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 444,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 454,
+     "agent": "valuer-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 462,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 469,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 478,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 486,
+     "agent": "valuer-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 493,
+     "agent": "valuer-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 501,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 511,
+     "agent": "valuer-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 519,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 528,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 560,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 568,
+     "agent": "payment-provider-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 576,
+     "agent": "payment-provider-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 584,
+     "agent": "payment-provider-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 593,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 603,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 612,
+     "agent": "valuer-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 620,
+     "agent": "valuer-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 628,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 637,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 645,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 652,
+     "agent": "lender-register-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 662,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 670,
+     "agent": "lender-register-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 679,
+     "agent": "lender-register-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 687,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 696,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 706,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 719,
+     "agent": "lender",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 728,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 734,
+     "agent": "forum",
+     "outcome": "admit",
+     "reason": "not-authorised"
+    },
+    {
+     "seq": 740,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 747,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 754,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 763,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 773,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 779,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 788,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 794,
+     "agent": "post-reader-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 801,
+     "agent": "post-reader-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 808,
+     "agent": "post-reader-agent",
+     "outcome": "admit"
+    }
+   ],
+   "addedExchanges": 5,
+   "trace": "mortgage-main--accountability-reputation-post.json"
   },
   {
    "scenario": "mortgage-main",
@@ -13464,9 +13835,41 @@
    "path": "post-about-a-person",
    "settlement": "rdf-order",
    "configuration": "accountability-reputation-post",
-   "what": "A proposed public post names an individual employee and is prohibited.",
-   "status": "blocked",
-   "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published."
+   "what": "The claim names an individual employee of the lender, so the ombudsman's signed decision terms prohibit passing the decision to the public host; Sam's outbound gate stops the post at its data-terms check.",
+   "status": "runs",
+   "actual": {
+    "outcome": "stop",
+    "reason": "prohibited",
+    "check": "data-terms"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "prohibited"
+   },
+   "consequences": [],
+   "addedExchanges": 5,
+   "trace": "mortgage-main--post-about-a-person--accountability-reputation-post.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "evidence-not-publishable",
+   "settlement": "rdf-order",
+   "configuration": "accountability-reputation-post",
+   "what": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached.",
+   "status": "disagrees",
+   "actual": {
+    "outcome": "stop",
+    "reason": "excessive-scope",
+    "check": "disclosure"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "prohibited"
+   },
+   "consequences": [],
+   "addedExchanges": 5,
+   "trace": "mortgage-main--evidence-not-publishable--accountability-reputation-post.json"
   },
   {
    "scenario": "mortgage-out-of-limit",

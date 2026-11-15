@@ -1601,17 +1601,37 @@
     {
      "path": "main",
      "label": "All fourteen steps (accountability-reputation-post)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "accountability-reputation-post",
-     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--accountability-reputation-post.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "post-about-a-person",
-     "label": "A proposed public post names an individual employee and is prohibited. (accountability-reputation-post)",
-     "status": "blocked",
+     "label": "The claim names an individual employee of the lender, so the ombudsman's signed decision terms prohibit passing the decision to the public host; Sam's outbound gate stops the post at its data-terms check. (accountability-reputation-post)",
+     "status": "runs",
      "configuration": "accountability-reputation-post",
-     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
+     "scenario": "mortgage-main--post-about-a-person",
+     "traceFile": "mortgage-main--post-about-a-person--accountability-reputation-post.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "evidence-not-publishable",
+     "label": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached. (accountability-reputation-post)",
+     "status": "disagrees",
+     "configuration": "accountability-reputation-post",
+     "scenario": "mortgage-main--evidence-not-publishable",
+     "traceFile": "mortgage-main--evidence-not-publishable--accountability-reputation-post.json",
+     "actual": {
+      "outcome": "stop",
+      "reason": "excessive-scope",
+      "check": "disclosure"
+     },
+     "expected": {
+      "outcome": "stop",
+      "reason": "prohibited"
+     },
      "mortgage": "mortgage-main"
     },
     {
