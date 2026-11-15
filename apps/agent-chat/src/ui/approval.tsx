@@ -16,9 +16,10 @@ import {
 } from "@jeswr/agent-consent";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProductView } from "../engine/types.js";
-import { AGENT_NAME } from "../engine/world.js";
+import { AGENT_NAME, PRINCIPAL } from "../engine/world.js";
 import { Icon, ProductArt, Seal } from "./art.js";
 import { CheckList, FactRow, Meter } from "./chat.js";
+import { forgetPasskey, type UserCheck, verifyUser } from "./passkey.js";
 
 const EXPLORER = "https://claude.ai/artifact/CeeevpC9wCwDyzcGDMrpPw";
 
@@ -69,8 +70,72 @@ export function HoldToConfirm({
   );
 }
 
+/**
+ * Face ID (or the device's screen lock) through a passkey, before anything is signed. A
+ * verified check goes straight on to signing; where passkeys cannot run, a clearly labelled
+ * simulated step stands in; a cancelled or failed check returns to the sheet unsigned.
+ */
+function VerifyPrompt({
+  digest,
+  onVerified,
+  onCancel,
+}: {
+  digest: string;
+  onVerified: (check: UserCheck) => void;
+  onCancel: (message: string) => void;
+}) {
+  const [check, setCheck] = useState<UserCheck>();
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void verifyUser(digest, PRINCIPAL.name).then((result) => {
+      setCheck(result);
+      if (result.status === "verified") onVerified(result);
+      else if (result.status === "cancelled")
+        onCancel("Face ID did not confirm it is you with your passkey, so nothing was approved.");
+      else if (result.status === "failed")
+        onCancel(`The passkey check failed (${result.reason}), so nothing was approved.`);
+    });
+  }, [digest, onVerified, onCancel]);
+  useEffect(() => {
+    if (check?.status !== "simulated") return;
+    const t = setTimeout(() => onVerified(check), 1400);
+    return () => clearTimeout(t);
+  }, [check, onVerified]);
+  const simulated = check?.status === "simulated";
+  return (
+    <div className="device" role="dialog" aria-label="Confirm it is you">
+      <div className="panel">
+        <div className="print signing">
+          <Icon name="face" size={40} />
+        </div>
+        <strong>{simulated ? "Face ID (simulated)" : "Confirm with Face ID"}</strong>
+        <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
+          {simulated
+            ? "Simulated: passkeys cannot run here, so no Face ID check was made."
+            : "Your device checks it is you with a passkey before this approval is signed."}
+        </div>
+        {simulated && (
+          <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+            Why: {check.reason}. Open the app in its own tab to use a real passkey.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** The device confirmation: the engine signs with the non-extractable device key. */
-function DevicePrompt({ kid, onDone }: { kid?: string; onDone: () => void }) {
+function DevicePrompt({
+  kid,
+  check,
+  onDone,
+}: {
+  kid?: string;
+  check?: UserCheck;
+  onDone: () => void;
+}) {
   useEffect(() => {
     const t = setTimeout(onDone, 900);
     return () => clearTimeout(t);
@@ -85,6 +150,13 @@ function DevicePrompt({ kid, onDone }: { kid?: string; onDone: () => void }) {
         <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
           Signing with this device's key. The key never leaves this device.
         </div>
+        {check && (
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            {check.status === "verified"
+              ? `Face ID confirmed it is you${check.registered ? " and set up a passkey on this device" : ""}.`
+              : "Simulated check: no Face ID was used."}
+          </div>
+        )}
         {kid && <div className="kid">key {kid.slice(0, 24)}…</div>}
       </div>
     </div>
@@ -365,7 +437,8 @@ export function LimitEditor({
 type Mode =
   | { type: "sheet" }
   | { type: "editor"; offered: OfferedResponse }
-  | { type: "device"; response: PrincipalResponse }
+  | { type: "verify"; response: PrincipalResponse }
+  | { type: "device"; response: PrincipalResponse; check: UserCheck }
   | { type: "face"; offered: OfferedResponse };
 
 export function ApprovalSheet({
@@ -424,7 +497,7 @@ export function ApprovalSheet({
       const less = request.offered.find((x) => x.type === "share-less");
       if (less)
         return setMode({
-          type: "device",
+          type: "verify",
           response: {
             requestId: request.id,
             digest: request.digest,
@@ -436,7 +509,7 @@ export function ApprovalSheet({
     }
     if (o.type === "approve-once")
       return setMode({
-        type: "device",
+        type: "verify",
         response: {
           requestId: request.id,
           digest: request.digest,
@@ -445,6 +518,16 @@ export function ApprovalSheet({
         },
       });
   };
+
+  const verified = useCallback(
+    (check: UserCheck) =>
+      setMode((m) => (m.type === "verify" ? { type: "device", response: m.response, check } : m)),
+    [],
+  );
+  const notVerified = useCallback((message: string) => {
+    setError(message);
+    setMode({ type: "sheet" });
+  }, []);
 
   const missingRequired = offeredFields.some((f) => f.required && !keep.has(f.id));
   const visible = request.offered.filter((o) => o.type !== "share-less");
@@ -479,7 +562,7 @@ export function ApprovalSheet({
             onCancel={() => setMode({ type: "sheet" })}
             onConfirm={(draft) =>
               setMode({
-                type: "device",
+                type: "verify",
                 response: {
                   requestId: request.id,
                   digest: request.digest,
@@ -569,7 +652,23 @@ export function ApprovalSheet({
                 />
               ))}
             </dl>
-            {error && <div className="warn">{error}</div>}
+            {error && (
+              <div className="warn">
+                {error}{" "}
+                {error.includes("passkey") && (
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => {
+                      forgetPasskey();
+                      setError(undefined);
+                    }}
+                  >
+                    Reset Face ID passkey
+                  </button>
+                )}
+              </div>
+            )}
             <div className="actions">
               {primary.map((o) => {
                 const label =
@@ -672,7 +771,12 @@ export function ApprovalSheet({
           </>
         )}
       </div>
-      {mode.type === "device" && <DevicePrompt kid={kid} onDone={() => void send(mode.response)} />}
+      {mode.type === "verify" && (
+        <VerifyPrompt digest={request.digest} onVerified={verified} onCancel={notVerified} />
+      )}
+      {mode.type === "device" && (
+        <DevicePrompt kid={kid} check={mode.check} onDone={() => void send(mode.response)} />
+      )}
       {mode.type === "face" && action.type === "step-up" && (
         <FaceCheck
           by={action.performedBy}

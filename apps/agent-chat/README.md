@@ -23,6 +23,16 @@ demo is fictional: Sam, the stores, the banks and the products.
    the lender (the gate withholds what the purpose does not need), pass a simulated face
    check, and receive a signed, non-binding decision.
 
+Every approval, limit and share is confirmed with Face ID (or the device's screen lock)
+before it is signed: a WebAuthn passkey on the platform authenticator, with
+`userVerification: "required"`, registered on first use (`src/ui/passkey.ts`). The challenge
+is bound to the action digest, and the answer counts only if its client data, relying party and
+user-verified flag check out; a cancelled or failed check approves nothing. Where passkeys
+cannot run (a frame without the permission, a browser or device without a platform
+authenticator), a step labelled "simulated" stands in. This is a check in the browser that
+gates the device-key signature, not a server-side verification. The bank's face check in
+flow 5 is a separate, simulated identity-provider step.
+
 **What it can do** lists every rule, with meters and hold-to-turn-off. **Activity** keeps
 each decision with its checks, digest and signed consent record. **Accounts** reserves a
 place for the sign-in and password-manager connector, which is built separately.
