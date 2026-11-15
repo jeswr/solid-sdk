@@ -3737,103 +3737,6 @@
             "properties": {
               "id": {
                 "type": "string",
-                "const": "accountability-reputation-score"
-              },
-              "change": {
-                "type": "object",
-                "properties": {
-                  "accountability": {
-                    "type": "string",
-                    "const": "reputation-score"
-                  }
-                },
-                "required": [
-                  "accountability"
-                ],
-                "additionalProperties": false
-              },
-              "world": {
-                "default": {},
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "$ref": "#/$defs/__schema0"
-                }
-              },
-              "replaces": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^(party|statement|step|mandate):[a-z0-9][a-z0-9-]*(#.+)?$"
-                }
-              },
-              "added": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "segment": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9][a-z0-9-]*$"
-                    },
-                    "closes": {
-                      "type": "object",
-                      "properties": {
-                        "agent": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9-]*$"
-                        },
-                        "kind": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "outcome": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "required": [
-                        "agent",
-                        "kind",
-                        "outcome"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "segment"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "requires": {
-                "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9-]*$"
-              },
-              "profileChange": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "$ref": "#/$defs/__schema0"
-                }
-              }
-            },
-            "required": [
-              "id",
-              "change",
-              "world"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
                 "const": "accountability-reputation-post"
               },
               "change": {
@@ -5211,7 +5114,6 @@
                 "commitments-signed-offer-acceptance",
                 "commitments-agreement-credential",
                 "accountability-local-ledger",
-                "accountability-reputation-score",
                 "accountability-reputation-post",
                 "accountability-vendor-fault",
                 "accountability-regulator-claim",

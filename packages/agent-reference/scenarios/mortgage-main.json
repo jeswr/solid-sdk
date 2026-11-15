@@ -16589,18 +16589,6 @@
         "reason": "prohibited"
       },
       "outline": []
-    },
-    {
-      "id": "score-without-evidence",
-      "onlyUnder": "accountability-reputation-score",
-      "what": "A rating submission without checkable evidence produces no score change.",
-      "change": {},
-      "expect": {
-        "outcome": "stop",
-        "check": "evidence",
-        "reason": "evidence-missing"
-      },
-      "outline": []
     }
   ],
   "expect": [
@@ -31898,28 +31886,6 @@
               "outcome": "stop",
               "check": "data-terms",
               "reason": "prohibited"
-            },
-            "outline": []
-          }
-        ]
-      }
-    },
-    {
-      "id": "accountability-reputation-score",
-      "change": {
-        "accountability": "reputation-score"
-      },
-      "world": {
-        "branches": [
-          {
-            "id": "score-without-evidence",
-            "onlyUnder": "accountability-reputation-score",
-            "what": "A rating submission without checkable evidence produces no score change.",
-            "change": {},
-            "expect": {
-              "outcome": "stop",
-              "check": "evidence",
-              "reason": "evidence-missing"
             },
             "outline": []
           }

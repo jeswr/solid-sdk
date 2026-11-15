@@ -13137,25 +13137,6 @@
       "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published."
     },
     {
-      "scenario": "mortgage-main",
-      "useCase": "mortgage-in-principle",
-      "path": "main",
-      "settlement": "rdf-order",
-      "configuration": "accountability-reputation-score",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement."
-    },
-    {
-      "scenario": "mortgage-main",
-      "useCase": "mortgage-in-principle",
-      "path": "score-without-evidence",
-      "settlement": "rdf-order",
-      "configuration": "accountability-reputation-score",
-      "what": "A rating submission without checkable evidence produces no score change.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement."
-    },
-    {
       "scenario": "mortgage-out-of-limit",
       "useCase": "mortgage-in-principle",
       "cataloguePath": {

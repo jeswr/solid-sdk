@@ -725,13 +725,6 @@
           "summary": "As the baseline, and a wronged party's agent can publish what happened, with evidence a reader can check.",
           "maturity": "research",
           "basis": ""
-        },
-        {
-          "id": "reputation-score",
-          "name": "Reputation score",
-          "summary": "As the baseline, and a rating service scores how each party's agents behave, sector by sector.",
-          "maturity": "research",
-          "basis": ""
         }
       ],
       "label": "7"

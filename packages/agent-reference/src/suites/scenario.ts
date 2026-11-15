@@ -6,14 +6,6 @@ export function scenarioRegistry() {
   const registry = withPublicRead(baselineRegistry());
   registry.register({
     layer: "accountability",
-    id: "reputation-score",
-    name: "Evidence-backed contested reputation score",
-    record: "hash-chained-local",
-    summary:
-      "Not run: the regulator and public-post prerequisites are unresolved, and no evidence-admission, scoring, contest or service-accountability policy is specified.",
-  });
-  registry.register({
-    layer: "accountability",
     id: "reputation-post",
     name: "Evidence-backed organisational reputation post",
     record: "hash-chained-local",

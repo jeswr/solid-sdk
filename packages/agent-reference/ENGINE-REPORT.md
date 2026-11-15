@@ -4933,3 +4933,32 @@ in principal review.
 - Oracle: 164 paths, equal. RDF guard: 0 failures, 213 allowances.
 - `export-schemas --check` passes, and `tsc --noEmit` passes.
 - biome is clean on the changed files.
+
+### Maintainer decisions, 15 Nov
+
+1. **Reputation score: out of the normative spec.**
+   - Reputation stays as individually checkable claims, and `reputation-post` remains a
+     suite. An aggregate score cannot be traced to who said what.
+   - Removed:
+     - the accountability suite `reputation-score` from `src/suites/scenario.ts`;
+     - the configuration `accountability-reputation-score` from
+       `src/profile/configurations.ts`;
+     - its configuration and its `score-without-evidence` branch in
+       `scenarios/mortgage-main.json`;
+     - the model fixture entry, and `test/reputation-score-alternative.test.ts`.
+   - `test/reputation-score-not-offered.test.ts` now asserts that no suite, configuration
+     or branch is offered.
+   - The schema was regenerated, and the two blocked rows were removed, not re-marked.
+   - Manifest: 282 → 280 paths; 243 runs and 17 disagrees unchanged; 22 → 20 blocked.
+   - The spec note on the accountability suites is written separately by the coordinator.
+     This change does not touch it.
+2. **National insurance number (`withheld-claim-asked-for`): not applied, needs a design
+   call.**
+   - The run stops the optional extra disclosure (disclosure / excessive-scope) and then
+     continues on the allowed projection, ending with a final receipt.
+   - Setting the expectation to `stop` makes the engine throw "an effect followed a stop".
+     A `stop` expectation requires that the stopped agent sends nothing more.
+   - The row stays "disagrees" (expected go, actual stop) until one of two things is
+     chosen:
+     - end the run at the stop, which drops the receipt the test asserts;
+     - add an expectation for a stop scoped to one action.

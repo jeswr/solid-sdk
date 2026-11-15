@@ -152,16 +152,6 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("trust-pinned-list"),
     "Only the principal’s scoped own list; no register fallback",
   ),
-  [alternativeWireId("accountability-reputation-score")]: {
-    ...localDefinition(
-      alternativeWireId("accountability-reputation-score"),
-      "Evidence-backed contested reputation score — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Design 26 section 9 requires a checkable public post and regulator decision, a rating-service exchange, signed score and evidence-backed contest. The prerequisite mortgage post and regulator route are unresolved. Those added signed exchanges also violate design section 2 confinement outside specification 19's evidence feed. Specification 19 explicitly leaves the evidence-admission, scoring, contest and service-accountability policy unspecified (AC-7/8); no numerical score is invented from unchecked evidence. Reading the result as a trust input belongs to the separate reputation trust suite, which this lane does not implement.",
-    ],
-  },
   [alternativeWireId("accountability-reputation-post")]: {
     ...localDefinition(
       alternativeWireId("accountability-reputation-post"),

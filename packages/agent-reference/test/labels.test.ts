@@ -56,12 +56,13 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
   // 26e, settlement, 26c, 26d and 26f rows; brief 31 adds supplier-terms-hold and runs the
   // regulator claim (entry-withheld disagrees) and the email endpoint
-  // (mailbox-reply-as-evidence disagrees).
-  expect(alternatives).toHaveLength(109);
+  // (mailbox-reply-as-evidence disagrees). The reputation-score suite and its two blocked
+  // rows are removed (maintainer decision, 15 Nov).
+  expect(alternatives).toHaveLength(107);
   expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(91);
   expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(5);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(13);
+  expect(blocked).toHaveLength(11);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,
