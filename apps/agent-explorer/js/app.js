@@ -10,6 +10,7 @@
   var current = null;
 
   var VIEWS = [
+    { id: 'home', label: 'Home' },
     { id: 'explore', label: 'Explore' },
     { id: 'architecture', label: 'Architecture' },
     { id: 'message', label: 'Message' },
@@ -52,7 +53,7 @@
   // ---- Router -------------------------------------------------------------------
   function route() {
     var st = AX.parseHash();
-    var id = VIEWS.some(function (v) { return v.id === st.view; }) ? st.view : 'explore';
+    var id = VIEWS.some(function (v) { return v.id === st.view; }) ? st.view : 'home';
     nav.querySelectorAll('a').forEach(function (a) {
       if (a.dataset.view === id) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
@@ -146,6 +147,7 @@
   // ---- Start -----------------------------------------------------------------------
   document.getElementById('tour-btn').addEventListener('click', function () { if (AX.tour) AX.tour.start(); });
   route();
-  // Someone arriving from an email footer came to read one page: do not put the tour invite over it.
-  if (AX.tour && current !== 'start') AX.tour.maybeInvite();
+  // Someone arriving from an email footer came to read one page, and the home page offers the
+  // tour itself: do not put the tour invite over either.
+  if (AX.tour && current !== 'start' && current !== 'home') AX.tour.maybeInvite();
 })();

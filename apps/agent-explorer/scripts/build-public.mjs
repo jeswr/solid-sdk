@@ -4,7 +4,7 @@
 // leaves out the team's working roadmap. The output directory can be served by any static
 // host. Usage: node scripts/build-public.mjs <out-dir>
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { printSizeReport } from './site-files.mjs';
@@ -17,6 +17,8 @@ mkdirSync(join(out, 'data'), { recursive: true });
 for (const f of ['index.html', 'styles.css', 'js']) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }
+// The walkthrough video is not committed (see media/README.md); copy it when present.
+if (existsSync(join(root, 'media'))) cpSync(join(root, 'media'), join(out, 'media'), { recursive: true });
 execFileSync(process.execPath, [join(root, 'scripts/bundle-data.mjs')], {
   env: { ...process.env, AX_PUBLIC: '1', AX_BUNDLE_OUT: join(out, 'data/bundle.js') },
   stdio: 'inherit',

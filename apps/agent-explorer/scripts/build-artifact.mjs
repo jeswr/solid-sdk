@@ -5,7 +5,7 @@
 // tags, only the title, metas, stylesheet link and the body content. All other files are
 // copied unchanged.
 // Usage: node scripts/build-artifact.mjs <out-dir>
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { printSizeReport } from './site-files.mjs';
@@ -28,5 +28,7 @@ writeFileSync(join(out, 'index.html'), `${keep}\n${body.trim()}\n`);
 for (const f of ['styles.css', 'js', 'data/bundle.js', 'data/traces']) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }
+// The walkthrough video is not committed (see media/README.md); copy it when present.
+if (existsSync(join(root, 'media'))) cpSync(join(root, 'media'), join(out, 'media'), { recursive: true });
 console.log(`wrote ${out}`);
 printSizeReport(out);

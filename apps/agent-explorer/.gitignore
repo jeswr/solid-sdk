@@ -5,3 +5,5 @@ data/traces-*.js
 data/traces/
 dist-artifact/
 dist-public
+# AUTHORED-BY Claude Opus 5.5 — the walkthrough video is too large to commit
+media/*.mp4

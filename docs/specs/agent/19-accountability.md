@@ -1,7 +1,7 @@
 <!-- AUTHORED-BY Claude Fable 5.2 -->
 # Accountability and redress
 
-Draft 0.5, 13 November 2026. Layer 7 of the paper's seven gaps.
+Draft 0.6, 15 November 2026. Layer 7 of the paper's seven gaps.
 
 **Question: what happens when something goes wrong?**
 
@@ -62,7 +62,6 @@ also kept and in the route to redress.
 | `regulator-claim` | Claim to a regulator | Defined | Sector complaint routes; logging and oversight duties in the EU AI Act | This work |
 | `vendor-fault` | Fault passed to the vendor | Sketch | Product liability and contract terms | This work |
 | `reputation-post` | Public reputation | Sketch | | Research |
-| `reputation-score` | Reputation score | Sketch | | Research |
 
 ### `local-ledger`
 
@@ -138,12 +137,14 @@ choice and within the terms that govern them. A post is a claim like any other, 
 reader's agent runs its own inbound checks on it. The party it concerns has a right of
 reply attached to the same post. Posts about individuals are out of scope. Sketch only.
 
-### `reputation-score`
+### Why there is no reputation score
 
-As the baseline, and a rating service scores how each party's agents behave, sector by
-sector, from evidence submitted to it. A score feeds the trust framework layer's
-`reputation` suite. The suite would have to define what evidence counts, how a party
-contests a score, and how the service is itself held to account. Sketch only.
+Not normative. An aggregate score of how a party's agents behave is deliberately out of
+scope. A number cannot be traced back to who said what, so a receiver cannot check it the
+way it checks a claim, and the party it concerns cannot answer a particular statement in it.
+Reputation in this model is carried as individually checkable claims (`reputation-post`),
+each signed by its author and carrying its evidence, which a reader's agent runs its own
+inbound checks on.
 
 ## How this lines up with law
 

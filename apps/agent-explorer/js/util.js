@@ -412,7 +412,7 @@
   AX.parseHash = function (hash) {
     var h = (hash == null ? AX.hash.cur : hash).replace(/^#\/?/, '');
     var q = h.indexOf('?');
-    var view = (q < 0 ? h : h.slice(0, q)) || 'explore';
+    var view = (q < 0 ? h : h.slice(0, q)) || 'home';
     var params = {};
     if (q >= 0) {
       h.slice(q + 1).split('&').forEach(function (kv) {

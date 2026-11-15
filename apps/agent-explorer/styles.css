@@ -865,3 +865,17 @@ table.results td:first-child strong { font-weight: 650; }
 @media (max-width: 820px) { .start-grid { grid-template-columns: minmax(0, 1fr); } }
 .start-links .btn { white-space: normal; text-align: left; }
 @media (max-width: 480px) { .mail-head { grid-template-columns: minmax(0, 1fr); gap: 0; } .mail-head dd { margin-bottom: 6px; } }
+
+/* Home page (AUTHORED-BY Claude Opus 5.5) */
+.home-video { margin: 8px 0 0; max-width: 960px; }
+.home-video video { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.home-video figcaption { margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.home-chapters { margin-top: 10px; max-width: 960px; }
+.home-chapters > summary { cursor: pointer; color: var(--accent); }
+.home-chapters ol { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 16px; }
+.home-chapters .linkish { background: none; border: 0; padding: 4px 0; font: inherit; color: var(--ink); cursor: pointer; text-align: left; display: flex; gap: 10px; }
+.home-chapters .linkish:hover { color: var(--accent); }
+.home-chapters .t { font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 3.2em; }
+.home-guide .linkcard { display: block; color: inherit; }
+.home-guide .linkcard:hover { border-color: var(--accent); }
+.home-guide .linkcard h3 { color: var(--accent); }
