@@ -11,7 +11,13 @@ import {
   type TraceEvent,
   type TraceFile,
 } from "../trace/types.js";
-import { addedStepProblem, matrixPrerequisite, matrixWorld } from "./matrix.js";
+import {
+  addedStepProblem,
+  matrixExtended,
+  matrixPrerequisite,
+  matrixReferenceWorld,
+  matrixWorld,
+} from "./matrix.js";
 import { patch } from "./run.js";
 import { type Scenario, scenarioSchema } from "./schema.js";
 
@@ -343,9 +349,9 @@ export function patchDifferences(scenario: Scenario, entry: Entry): string[] {
   let world: Scenario;
   let reference: Scenario;
   try {
-    const prerequisite = matrixPrerequisite(scenario, entry);
     // Compare parsed worlds, as the engine runs them, so schema defaults never read as edits.
-    reference = scenarioSchema.parse(prerequisite ? patch(scenario, prerequisite.world) : scenario);
+    // With `extends` the reference is the extended configuration's world (brief 31 §2.9).
+    reference = scenarioSchema.parse(matrixReferenceWorld(scenario, entry));
     world = scenarioSchema.parse(matrixWorld(scenario, entry));
   } catch (error) {
     return [`Patch refused: ${(error as Error).message}`];
@@ -367,6 +373,17 @@ export function patchDifferences(scenario: Scenario, entry: Entry): string[] {
       differences.push(`${id} changes but ${entry.id} does not list it in replaces`);
   for (const id of replaces)
     if (!changed.has(id)) differences.push(`${id} is listed in replaces but does not change`);
+  // An extending configuration may not replace anything the extended one added.
+  const extended = matrixExtended(scenario, entry);
+  if (extended) {
+    const prerequisite = matrixPrerequisite(scenario, entry);
+    const base = items(
+      scenarioSchema.parse(prerequisite ? patch(scenario, prerequisite.world) : scenario),
+    );
+    for (const id of replaces)
+      if (!base.has(id))
+        differences.push(`${id} was added by ${extended.id}; it may not be replaced`);
+  }
   // New script steps must keep the baseline order of the steps they surround.
   const order = (script: Scenario["script"]) =>
     script.map((step) => step.id).filter((id) => before.has(`step:${id}`));

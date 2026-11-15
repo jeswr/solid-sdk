@@ -127,6 +127,7 @@ import {
   advertisedConfigurations,
   matrixConfiguration,
   matrixPrerequisite,
+  matrixProfileChanges,
   matrixSink,
   matrixWorld,
   preferredConfiguration,
@@ -360,16 +361,12 @@ export async function runScenario(
   const configured = alternative
     ? scenarioSchema.parse(matrixWorld(scenario, alternative))
     : scenario;
-  // A prerequisite's profile entries apply first, then the configuration's own.
-  const prerequisiteProfile = alternative
-    ? matrixPrerequisite(scenario, alternative)?.profileChange
-    : undefined;
-  const configuredProfile =
-    alternative?.profileChange || prerequisiteProfile
-      ? domainProfileSchema.parse(
-          patch(patch(profile, prerequisiteProfile ?? {}), alternative?.profileChange ?? {}),
-        )
-      : profile;
+  // A prerequisite's profile entries apply first, then an extended configuration's (brief 31
+  // §2.9), then the configuration's own.
+  const profileChanges = alternative ? matrixProfileChanges(scenario, alternative) : [];
+  const configuredProfile = profileChanges.length
+    ? domainProfileSchema.parse(profileChanges.reduce((at, change) => patch(at, change), profile))
+    : profile;
   const paths = [
     {
       id: "main",
@@ -1331,6 +1328,8 @@ async function runPath(
       );
   }
   let forum: LocalForum | undefined;
+  /** Brief 31 §2.9: what each gateless host holds, by host party and effect key. */
+  const hosted = new Map<string, Map<string, string[]>>();
   if (profile.forum) {
     const declaration = profile.forum;
     const identity = required(parties.get(declaration.party)).identity;
@@ -1368,6 +1367,9 @@ async function runPath(
       now: () => now().toISOString(),
       responseSeconds: declaration.responseSeconds,
       observers: declaration.observers,
+      ...(declaration.publication
+        ? { publication: required(parties.get(declaration.publication)).identity }
+        : {}),
       sink: (e) => recorder.sink(declaration.party).emit(e),
     });
   }
@@ -2436,6 +2438,33 @@ async function runPath(
             ]
           : []),
         {
+          // Brief 31 §2.9: a host with no gate (a public web page or pod resource). It stores
+          // exactly the signed items it is sent and checks nothing; readers check each item.
+          id: "urn:scenario:host",
+          bindsParameters: true,
+          purposeScoped: true,
+          execute: async (key: string, params: JsonObject) => {
+            const items = Array.isArray(params.items) ? params.items.map(String) : [];
+            const ids = items.map((jws) => (decodeCompactPayload(jws) as { id?: unknown }).id);
+            if (digestOf(ids) !== digestOf(params.evidence))
+              return { conclusion: "not-executed" as const, reason: "items do not match evidence" };
+            const shelf = hosted.get(String(params.host)) ?? new Map<string, string[]>();
+            shelf.set(key, items);
+            hosted.set(String(params.host), shelf);
+            return {
+              conclusion: "completed" as const,
+              observed: { host: String(params.host), stored: items.length },
+            };
+          },
+          reconcile: async (key: string, params?: JsonObject) =>
+            hosted.get(String(params?.host))?.has(key)
+              ? { conclusion: "completed" as const, observed: { host: String(params?.host) } }
+              : {
+                  conclusion: "not-executed" as const,
+                  reason: "the host holds nothing for this key",
+                },
+        },
+        {
           id: "urn:scenario:effect",
           execute: async (_key, params) => ({ conclusion: "completed", observed: params }),
           reconcile: async () => ({
@@ -3074,6 +3103,7 @@ async function runPath(
                 ...(step.agreement
                   ? { agreement: runtime.agreementProof(template<string>(step.agreement)) }
                   : {}),
+                ...(step.persons ? { persons: step.persons } : {}),
                 at: now().toISOString(),
               }
             : {
@@ -3133,6 +3163,47 @@ async function runPath(
       }
       case "forum-audit":
         result = await required(forum).audit();
+        break;
+      case "host-publish": {
+        const host = required(parties.get(step.host));
+        const items = [
+          ...step.statements.map((id) => required(signed[id]).jws),
+          ...step.decisions.map((id) => required(required(forum).decisionFor(id))),
+        ];
+        const params = {
+          host: step.host,
+          evidence: items.map((jws) => String((decodeCompactPayload(jws) as { id?: unknown }).id)),
+          items,
+        };
+        const key = `urn:scenario:${scenario.id}:${step.id}`;
+        result = await runtime.runTask({
+          taskId: key,
+          kind: "publication",
+          plan: {
+            adapter: "urn:scenario:host",
+            key,
+            params,
+            activityType: "urn:activity:publication",
+            intent: {
+              action: "distribute",
+              operation: step.operation,
+              target: step.operation,
+              recipient: host.identity,
+              purpose: step.purpose,
+              conversation: key,
+              parameters: params,
+            },
+          },
+        });
+        break;
+      }
+      case "host-fetch":
+        // The host vouches for nothing: every item it serves goes through this agent's
+        // own five inbound checks.
+        result = await runtime.admitStatements(
+          [...(hosted.get(step.host)?.values() ?? [])].flat().map((jws) => ({ jws })),
+          { task, taskId: task, purpose: step.purpose },
+        );
         break;
       case "forum-decision":
         result = await runtime.admitStatements(

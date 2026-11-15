@@ -152,16 +152,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("trust-pinned-list"),
     "Only the principal’s scoped own list; no register fallback",
   ),
-  [alternativeWireId("accountability-reputation-post")]: {
-    ...localDefinition(
-      alternativeWireId("accountability-reputation-post"),
-      "Evidence-backed organisational reputation post — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
-    ],
-  },
+  [alternativeWireId("accountability-reputation-post")]: localDefinition(
+    alternativeWireId("accountability-reputation-post"),
+    "Sam's own statement and the ombudsman's signed decision on a public host; readers check each item",
+  ),
   [alternativeWireId("accountability-vendor-fault")]: localDefinition(
     alternativeWireId("accountability-vendor-fault"),
     "Record audit against the mandate in force, and a record-backed claim to the gate operator",

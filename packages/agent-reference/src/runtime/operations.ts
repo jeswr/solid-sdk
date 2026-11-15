@@ -260,6 +260,11 @@ export interface EffectAdapter {
   readonly bindsParameters?: boolean;
   /** A record release binds all actual parameters and includes runtime-owned disclosure labels. */
   readonly releasesRecord?: boolean;
+  /**
+   * Brief 31 §2.9: a release no counterpart asked for (a publication to a host with no gate).
+   * As for a record release, what it may disclose is the claims its declared purpose names.
+   */
+  readonly purposeScoped?: boolean;
   readonly id: string;
   execute(key: string, params: JsonObject): Promise<EffectResult>;
   /**

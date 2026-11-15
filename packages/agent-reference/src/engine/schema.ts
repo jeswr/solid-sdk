@@ -173,7 +173,13 @@ const baseDomainProfileSchema = z.strictObject({
   referenceAction: z.string().optional(),
   authorityChains: chainPolicySchema.optional(),
   forum: z
-    .strictObject({ party: slug, responseSeconds: z.number().positive(), observers: z.array(iri) })
+    .strictObject({
+      party: slug,
+      responseSeconds: z.number().positive(),
+      observers: z.array(iri),
+      // Brief 31 §2.9: the party whose IRI the forum's decision terms let a party publish to.
+      publication: slug.optional(),
+    })
     .optional(),
   agreementDeadlineSeconds: z.number().positive().optional(),
   singleUse: z
@@ -460,10 +466,26 @@ const step = z.discriminatedUnion("type", [
     route: z.literal("register").optional(),
     // The conversation whose recorded agreement the claim names by digest.
     agreement: json.optional(),
+    // Brief 31 §2.9: natural persons the claim names besides the claimant.
+    persons: z.array(iri).min(1).optional(),
   }),
   z.strictObject({ ...base, type: z.literal("forum-answer"), case: iri, segment: json }),
   z.strictObject({ ...base, type: z.literal("forum-audit") }),
   z.strictObject({ ...base, type: z.literal("forum-decision"), case: iri }),
+  // Brief 31 §2.9: an agent's outbound gate distributes signed items it holds to a host with
+  // no gate (a public web page or pod resource); `decisions` names forum cases.
+  z.strictObject({
+    ...base,
+    type: z.literal("host-publish"),
+    host: slug,
+    operation: iri,
+    purpose: iri,
+    statements: z.array(slug).default([]),
+    decisions: z.array(iri).default([]),
+  }),
+  // Brief 31 §2.9: an agent fetches every signed item a host holds and runs its own inbound
+  // checks on each; the host vouches for nothing.
+  z.strictObject({ ...base, type: z.literal("host-fetch"), host: slug, purpose: iri }),
   z.strictObject({
     ...base,
     type: z.literal("offgate-copy"),
@@ -684,6 +706,9 @@ const configurationOptions = LAYER_IDS.flatMap((layer) =>
         added: z.array(addedSegment).optional(),
         // Brief 31 §1: the one admitted combination, a prerequisite configuration.
         requires: slug.optional(),
+        // Brief 31 §2.9: the one same-layer configuration whose suite this one builds on. Its
+        // world (its own prerequisite first) applies before this patch; no further nesting.
+        extends: slug.optional(),
         // Brief 31 §2.1: profile entries only this configuration uses (keyed additions), so
         // baseline descriptions and traces stay unchanged.
         profileChange: object.optional(),

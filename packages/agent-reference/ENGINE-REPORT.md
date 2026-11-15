@@ -5082,3 +5082,110 @@ Labels alternatives: 108 rows, 94 runs, 5 disagrees, 9 blocked.
 
 **Follow-up (bead to file):** produce the claimed record range on the operator's request,
 with `record-anchor` and `record-segment`.
+
+### Brief 31 §2.9 `accountability-reputation-post`: decisions recorded and the post built
+
+**Decisions (coordinator, 15 Nov).**
+
+1. **`extends`, not a wider `requires`.**
+   - A configuration may extend exactly one configuration of the same layer whose suite it
+     builds on.
+   - Its world starts from the extended configuration's full world, which applies that
+     configuration's own `requires` first. Then its own patch applies.
+   - No further nesting: an extended configuration may not itself extend another.
+   - `requires` keeps its one-level, different-layer rule unchanged.
+   - C3's reference is the extended configuration's world. The extending configuration
+     may not replace anything the extended one added.
+   - `reputation-post` extends `accountability-regulator-claim`.
+2. **No public recipient class and no gate change.**
+   - The forum's signed decision terms permit distribution to the publication service's
+     own IRI. The bank's and payroll provider's terms stay as signed and never permit it.
+   - `post-about-a-person`: when the decision concerns a natural person, the forum's
+     decision terms prohibit distribution to the publication service. Sam's outbound
+     data-terms check then stops the post (prohibited).
+
+**Built (decision 1).**
+
+- **Code:**
+  - schema field `extends`;
+  - `matrixExtended`, `matrixReferenceWorld` and `matrixProfileChanges` in
+    `src/engine/matrix.ts`.
+- **How the parts use it:**
+  - `matrixWorld` builds on the extended world and re-advertises the extended
+    configuration's id as its own.
+  - `matrixPrerequisite` returns the extended configuration's prerequisite, so the layer
+    cell and the profile layering follow.
+  - Profile entries apply in order: prerequisite, extended, own.
+  - `patchDifferences` takes the extended world as its reference, and refuses a `replaces`
+    entry that names an item the extended configuration added.
+  - The confinement test compares an extending configuration with the extended one's main
+    run.
+- **Tests:** `test/configuration-extends.test.ts` covers three things:
+  - both patches apply in order;
+  - a second-level extends is refused;
+  - extends across layers, or beside `requires`, is refused.
+- **Forum machinery:** it is already keyed on the profile (`profile.forum`, from the
+  regulator claim's `profileChange`). An extending configuration inherits it, so no id
+  list changed.
+- **The cell:** `reputation-post` declares `extends: "accountability-regulator-claim"`.
+
+**Design call (coordinator, 15 Nov): option (a).** Under decision 2 the forum's terms permit
+distribution only to the publication service's IRI, so the publication service is a host
+with no gate, like a public web page or pod resource. It stores what it is sent and serves
+it unchanged. The reader's agent fetches the hosted signed items and runs its ordinary five
+inbound checks on each; the host vouches for nothing.
+
+**Built (the post).**
+
+- **Forum:** `profile.forum.publication` (optional) names the host party.
+  - With it, the decision terms add `distribute` with `recipient isAnyOf [host IRI]`.
+  - When the claim names natural persons besides the claimant (`persons`, an optional
+    field of the forum claim and the `forum-claim` step), the terms carry that rule as a
+    prohibition instead.
+  - Without the field the decision terms are unchanged (`use` only), so the regulator
+    claim's traces do not move.
+- **Steps:**
+  - `host-publish`: the agent's outbound gate distributes signed items it holds (scenario
+    statements, forum decisions) to the host's IRI as an ordinary effect (adapter
+    `urn:scenario:host`, parameters bound). The adapter refuses items whose ids differ from
+    the gate-checked evidence, then stores them.
+  - `host-fetch`: the agent admits every hosted item through `admitStatements`.
+- **Disclosure scope.** The gate's disclosure check had no source for what a publication
+  may carry (no counterpart offer), and stopped every post `missing-context`.
+  - A new effect-adapter flag, `purposeScoped`, gives a publication the same scope a record
+    release already has: the claims of its declared purpose (`urn:purpose:reputation`:
+    `reputation.review`, `reputation.reply`, `forum.decision`).
+  - The gate's code is unchanged; only the runtime's `recordRelease` signal is set for that
+    adapter. No check is weakened.
+- **Advertising.** `alternativeInstalled` advertises the reputation-post configuration only
+  under that configuration, like the regulator claim and vendor fault. Without this every
+  agent advertised it, and the identity-anonymous lookup broke (measured).
+- **World patch, all additive (C3 empty):**
+  - the host party `publication`, labelled in `standIns` as a stand-in for a public web
+    host;
+  - `post-reader` and its separately keyed `post-reader-agent`, with its own trust
+    sources for the forum, Sam and the lender, and an empty mandate;
+  - Sam's own `reputation.review` statement and the lender's `reputation.reply`, each
+    signed with terms that permit use and distribution;
+  - the steps `sam-review-held`, `publish-post` (asks Sam), `approve-post`,
+    `north-reply-held`, `publish-reply` (the lender's agent, on its own) and
+    `reader-fetch`, inside one added segment after the decision.
+- **Main path:**
+  - Sam's gate releases exactly the review and the decision to the host. The decision's
+    terms permit the host's IRI.
+  - The lender's reply is attached.
+  - The reader's agent admits all three items, with five checks on each.
+  - Confinement: C1 against the regulator claim's main run, C2, C3 and C5 are all empty.
+- **Branches:**
+  - `post-about-a-person` runs as registered: the claim names a fictional loan officer,
+    and Sam's gate stops the post at `data-terms`, `prohibited`, on the forum decision's
+    terms.
+  - `evidence-not-publishable` disagrees. Measured: `disclosure`, `excessive-scope`. The
+    balance statement is outside what the publication purpose names, and the disclosure
+    check runs before the bank's terms are read. Reading `evaluateItemTerms` (not measured),
+    the bank's `recipientMustBe` (a regulated lender) would give `not-authorised` there,
+    not `prohibited`.
+- **Tests:** `test/reputation-post-alternative.test.ts` covers two cases:
+  - the main path and both branches;
+  - a reader without a trust source for Sam's review refuses that hosted item and admits
+    the other two (the host vouches for nothing).

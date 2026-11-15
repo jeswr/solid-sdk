@@ -25,11 +25,36 @@ export function matrixConfiguration(
   return registry.configure(configuration);
 }
 
+/**
+ * Brief 31 §2.9: the one same-layer configuration this one extends, if it names one. The
+ * extended configuration may not itself extend another, and an extending configuration
+ * takes its prerequisite from the configuration it extends.
+ */
+export function matrixExtended(
+  scenario: Pick<Scenario, "configurations">,
+  entry: ScenarioConfiguration,
+): ScenarioConfiguration | undefined {
+  if (!entry.extends) return undefined;
+  const extended = scenario.configurations.find((c) => c.id === entry.extends);
+  if (!extended) throw new Error(`${entry.id}: unknown extended configuration ${entry.extends}`);
+  if (extended.extends || extended.id === entry.id)
+    throw new Error(`${entry.id}: an extended configuration may not itself extend another`);
+  if (Object.keys(extended.change)[0] !== Object.keys(entry.change)[0])
+    throw new Error(`${entry.id}: a configuration may extend only one of the same layer`);
+  if (entry.requires)
+    throw new Error(
+      `${entry.id}: an extending configuration takes the extended one's prerequisite`,
+    );
+  return extended;
+}
+
 /** Brief 31 §1: a configuration's single admitted prerequisite, if it names one. */
 export function matrixPrerequisite(
   scenario: Pick<Scenario, "configurations">,
   entry: ScenarioConfiguration,
 ): ScenarioConfiguration | undefined {
+  const extended = matrixExtended(scenario, entry);
+  if (extended) return matrixPrerequisite(scenario, extended);
   if (!entry.requires) return undefined;
   const prerequisite = scenario.configurations.find((c) => c.id === entry.requires);
   if (!prerequisite) throw new Error(`${entry.id}: unknown prerequisite ${entry.requires}`);
@@ -46,15 +71,16 @@ export function matrixPrerequisite(
  * added segment (brief 31 §1); transport configurations may add none.
  */
 export function matrixWorld(scenario: Scenario, entry: ScenarioConfiguration): Scenario {
+  const reference = matrixReferenceWorld(scenario, entry);
   const prerequisite = matrixPrerequisite(scenario, entry);
-  const reference = prerequisite ? patch(scenario, prerequisite.world) : scenario;
+  const extended = matrixExtended(scenario, entry);
   const advertised = {
     ...reference,
     parties: reference.parties.map((party) => ({
       ...party,
       // A prerequisite's added parties are not yet parsed, so their default list is absent.
       configurations: (party.configurations ?? []).map((id) =>
-        id === "baseline" || id === prerequisite?.id ? entry.id : id,
+        id === "baseline" || id === prerequisite?.id || id === extended?.id ? entry.id : id,
       ),
     })),
   };
@@ -62,6 +88,29 @@ export function matrixWorld(scenario: Scenario, entry: ScenarioConfiguration): S
   const problem = addedStepProblem(reference.script, world.script, entry);
   if (problem) throw new Error(`${entry.id}: ${problem}`);
   return world;
+}
+
+/**
+ * The world a configuration's own patch applies to: the extended configuration's full world
+ * (brief 31 §2.9), else the prerequisite's world, else the scenario.
+ */
+export function matrixReferenceWorld(scenario: Scenario, entry: ScenarioConfiguration): Scenario {
+  const extended = matrixExtended(scenario, entry);
+  if (extended) return matrixWorld(scenario, extended);
+  const prerequisite = matrixPrerequisite(scenario, entry);
+  return prerequisite ? patch(scenario, prerequisite.world) : scenario;
+}
+
+/** The profile entries a configuration runs with, in order: prerequisite, extended, own. */
+export function matrixProfileChanges(
+  scenario: Pick<Scenario, "configurations">,
+  entry: ScenarioConfiguration,
+): unknown[] {
+  return [
+    matrixPrerequisite(scenario, entry)?.profileChange,
+    matrixExtended(scenario, entry)?.profileChange,
+    entry.profileChange,
+  ].filter((change) => change !== undefined);
 }
 
 /** Where a patched script adds a step outside an added segment, or opens one wrongly. */

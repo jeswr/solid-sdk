@@ -73,6 +73,8 @@ const claimSchema = z.strictObject({
   agreement: z
     .strictObject({ digest: z.string(), offer: z.string(), acceptance: z.string() })
     .optional(),
+  // Brief 31 §2.9: natural persons the claim names besides the claimant (an employee).
+  persons: z.array(id).min(1).max(16).optional(),
   at: iso,
 });
 const answerSchema = z.strictObject({
@@ -118,6 +120,11 @@ export class LocalForum {
       now: () => string;
       responseSeconds: number;
       observers: string[];
+      /**
+       * Brief 31 §2.9: the publication service the forum's decision terms let a party pass
+       * the decision to. Absent, the decision terms permit use only.
+       */
+      publication?: string;
       sink: (e: TraceEventInput) => void;
     },
   ) {
@@ -163,6 +170,32 @@ export class LocalForum {
   decisionFor(id: string) {
     return this.cases()[id]?.decision;
   }
+  /**
+   * Brief 31 §2.9 (decision, 15 Nov): with a publication service, the decision may be passed
+   * to that service's own IRI and to nobody else; when the claim names a natural person
+   * besides the claimant, the terms prohibit passing it there instead.
+   */
+  private decisionTerms(c: Case) {
+    const target = `${c.id}:decision`;
+    const use = { type: "permission", action: "use", target };
+    const service = this.options.publication;
+    if (!service) return { id: `${c.id}:decision-terms`, permissions: [use] };
+    const toService = {
+      action: "distribute",
+      target,
+      constraints: [{ leftOperand: "recipient", operator: "isAnyOf", rightOperand: [service] }],
+    };
+    return c.claim.persons?.length
+      ? {
+          id: `${c.id}:decision-terms`,
+          permissions: [use],
+          prohibitions: [{ type: "prohibition", ...toService }],
+        }
+      : {
+          id: `${c.id}:decision-terms`,
+          permissions: [use, { type: "permission", ...toService }],
+        };
+  }
   private async decision(
     c: Case,
     reason: ReasonCode,
@@ -182,12 +215,7 @@ export class LocalForum {
       fault,
       point,
       settled,
-      terms: {
-        policy: {
-          id: `${c.id}:decision-terms`,
-          permissions: [{ type: "permission", action: "use", target: `${c.id}:decision` }],
-        },
-      },
+      terms: { policy: this.decisionTerms(c) },
     };
     c.decision = await signStatement(this.options.key, TYP.statement, statement);
     const cases = this.cases();

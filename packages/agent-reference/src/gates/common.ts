@@ -464,6 +464,9 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
     return ctx.configuration?.id === "identity-email-endpoint";
   if (id === alternativeWireId("accountability-vendor-fault"))
     return ctx.configuration?.id === "accountability-vendor-fault";
+  // Brief 31 §2.9: advertised only by the agents of the reputation-post configuration.
+  if (id === alternativeWireId("accountability-reputation-post"))
+    return ctx.configuration?.id === "accountability-reputation-post";
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

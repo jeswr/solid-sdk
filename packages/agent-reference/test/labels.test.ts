@@ -60,11 +60,13 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   // rows are removed, and withheld-claim-asked-for runs as a stop scoped to one proposal
   // (maintainer decisions, 15 Nov). Brief 32 runs vendor-fault: main and the gate-fault branch
   // run, fault-was-the-principals disagrees (Sam is asked before the record-backed stop).
-  expect(alternatives).toHaveLength(108);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(94);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(5);
+  // Brief 31 §2.9 runs reputation-post: main and post-about-a-person run,
+  // evidence-not-publishable disagrees (the disclosure check stops it before the terms).
+  expect(alternatives).toHaveLength(109);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(96);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(6);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(9);
+  expect(blocked).toHaveLength(7);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,

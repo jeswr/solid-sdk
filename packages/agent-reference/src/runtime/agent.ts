@@ -5409,9 +5409,9 @@ export class AgentRuntime {
     if (existing?.status === "concluded") return []; // idempotent: already done
     if (existing?.status === "attempting") return this.reconcileOne(existing);
     const planned = this.planEffect(ownerId, plan, basis);
-    this.recordReleaseDigest = this.effectAdapters.get(plan.adapter)?.releasesRecord
-      ? actionDigest(plan.intent)
-      : undefined;
+    const scoped = this.effectAdapters.get(plan.adapter);
+    this.recordReleaseDigest =
+      scoped?.releasesRecord || scoped?.purposeScoped ? actionDigest(plan.intent) : undefined;
     this.outbound.holdEmailContext(emailContext);
     const decision = this.authorise(plan.intent);
     this.outbound.holdEmailContext(undefined);

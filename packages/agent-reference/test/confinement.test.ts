@@ -11,7 +11,7 @@ import {
   patchDifferences,
 } from "../src/engine/confinement.js";
 import { loadCase } from "../src/engine/load.js";
-import { matrixPrerequisite, matrixWorld } from "../src/engine/matrix.js";
+import { matrixExtended, matrixPrerequisite, matrixWorld } from "../src/engine/matrix.js";
 import { patch, runScenario } from "../src/engine/run.js";
 import type { Scenario } from "../src/engine/schema.js";
 import { alternativeWireId, configurationById } from "../src/profile/configurations.js";
@@ -64,8 +64,9 @@ it("confines every scenario configuration (brief 31 C1 to C5) and preserves the 
       expect(patched, `${scenario.title}, ${entry.id} (C3):\n${patched.join("\n")}`).toEqual([]);
       const trace = await main(entry);
       if (!baseline || !trace) throw new Error(`${entry.id}: missing real configuration trace`);
-      // With a prerequisite the comparison is that configuration's own main run.
-      const prerequisite = matrixPrerequisite(scenario, entry);
+      // With a prerequisite the comparison is that configuration's own main run; with
+      // `extends`, the extended configuration's main run (brief 31 §2.9).
+      const prerequisite = matrixExtended(scenario, entry) ?? matrixPrerequisite(scenario, entry);
       const reference = prerequisite ? await main(prerequisite) : baseline;
       if (!reference) throw new Error(`${entry.id}: the prerequisite must run`);
       const layer = Object.keys(entry.change)[0] as LayerId;

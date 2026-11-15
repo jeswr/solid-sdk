@@ -35514,21 +35514,463 @@
       "change": {
         "accountability": "reputation-post"
       },
+      "extends": "accountability-regulator-claim",
+      "added": [
+        {
+          "segment": "lender-register-holds-entries",
+          "closes": {
+            "agent": "sam-agent",
+            "kind": "deliver",
+            "outcome": "admit"
+          }
+        },
+        {
+          "segment": "sam-anchor",
+          "closes": {
+            "agent": "sam-agent",
+            "kind": "deliver",
+            "outcome": "admit"
+          }
+        },
+        {
+          "segment": "sam-review-held"
+        }
+      ],
+      "profileChange": {
+        "forum": {
+          "party": "forum",
+          "responseSeconds": 3600,
+          "observers": [],
+          "publication": "publication"
+        },
+        "operations": {
+          "urn:op:publish-post": {
+            "id": "urn:op:publish-post",
+            "version": "0.1",
+            "label": "Publish a post to a public host",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:reputation"
+            ],
+            "requiresRepresentation": true
+          },
+          "urn:op:post-reply": {
+            "id": "urn:op:post-reply",
+            "version": "0.1",
+            "label": "Publish a reply to a post on a public host",
+            "pattern": "invoke",
+            "access": "represented",
+            "models": [],
+            "purposes": [
+              "urn:purpose:reputation"
+            ],
+            "requiresRepresentation": true
+          }
+        },
+        "claims": {
+          "reputation.review": {
+            "kind": "reputation.review",
+            "sources": [
+              "https://sam.example/#me"
+            ],
+            "methods": [
+              "self-asserted"
+            ],
+            "maxAgeDays": 30
+          },
+          "reputation.reply": {
+            "kind": "reputation.reply",
+            "sources": [
+              "https://northbank.example/#org"
+            ],
+            "methods": [
+              "self-asserted"
+            ],
+            "maxAgeDays": 30
+          }
+        },
+        "purposes": {
+          "urn:purpose:reputation": {
+            "id": "urn:purpose:reputation",
+            "claims": [
+              "reputation.review",
+              "reputation.reply",
+              "forum.decision"
+            ]
+          }
+        },
+        "labels": {
+          "urn:op:publish-post": "Publish a post to a public host",
+          "urn:op:post-reply": "Publish a reply to a post on a public host",
+          "urn:purpose:reputation": "Reputation",
+          "urn:fictional:public-post-host": "The fictional public post host"
+        }
+      },
       "world": {
-        "branches": [
+        "parties": {
+          "publication": {
+            "id": "publication",
+            "identity": "urn:fictional:public-post-host",
+            "name": "The fictional public post host",
+            "role": "source",
+            "runs": "issuer-only"
+          },
+          "post-reader": {
+            "id": "post-reader",
+            "identity": "urn:fictional:post-reader",
+            "name": "A fictional reader of the post",
+            "role": "principal",
+            "runs": "issuer-only"
+          },
+          "post-reader-agent": {
+            "id": "post-reader-agent",
+            "identity": "urn:fictional:post-reader-agent",
+            "actor": "urn:fictional:post-reader-agent:actor",
+            "name": "The reader’s agent",
+            "role": "agent",
+            "runs": "agent",
+            "actsFor": "post-reader",
+            "configurations": [
+              "accountability-reputation-post"
+            ]
+          }
+        },
+        "statements": {
+          "sam-review": {
+            "id": "sam-review",
+            "issuer": "sam",
+            "subject": "https://northbank.example/#org",
+            "kind": "reputation.review",
+            "value": {
+              "case": "urn:case:mortgage-fee",
+              "rating": 1,
+              "synthetic": true
+            },
+            "method": "self-asserted",
+            "asOf": "2026-11-13T12:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:sam-review",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:mortgage-main:sam-review"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:mortgage-main:sam-review"
+                  }
+                ]
+              }
+            }
+          },
+          "north-reply": {
+            "id": "north-reply",
+            "issuer": "north",
+            "subject": "https://sam.example/#me",
+            "kind": "reputation.reply",
+            "value": {
+              "case": "urn:case:mortgage-fee",
+              "review": "urn:scenario:mortgage-main:sam-review",
+              "synthetic": true
+            },
+            "method": "self-asserted",
+            "asOf": "2026-11-13T12:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:north-reply",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:mortgage-main:north-reply"
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:mortgage-main:north-reply"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "trust": {
+          "ownLists": {
+            "sam-agent": [
+              {
+                "party": "https://mortgage-index.example/#org",
+                "tasks": [
+                  "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+                ],
+                "note": "chosen product index"
+              },
+              {
+                "party": "https://harbourbank.example/#org",
+                "tasks": [
+                  "https://w3id.org/jeswr/awp#op/balance-statement"
+                ],
+                "note": "Sam's own bank"
+              },
+              {
+                "party": "urn:fictional:valuation-register",
+                "tasks": [
+                  "urn:op:valuer-lookup"
+                ]
+              },
+              {
+                "party": "urn:fictional:mossbridge-payment-desk",
+                "tasks": [
+                  "urn:op:payment"
+                ]
+              },
+              {
+                "party": "https://w3id.org/jeswr/awp#fixture/sector-register",
+                "tasks": [
+                  "urn:op:lender-lookup"
+                ],
+                "note": "the sector register Sam's agent asks about lenders"
+              },
+              {
+                "party": "urn:fictional:mortgage-ombudsman",
+                "tasks": [
+                  "urn:op:forum-claim"
+                ],
+                "note": "the dispute route the register names"
+              },
+              {
+                "party": "urn:fictional:public-post-host",
+                "tasks": [
+                  "urn:op:publish-post"
+                ],
+                "note": "the public host Sam chose for the post"
+              }
+            ],
+            "north-agent": [
+              {
+                "party": "https://sam.example/#me",
+                "tasks": [
+                  "urn:op:fee-notice"
+                ]
+              },
+              {
+                "party": "urn:fictional:mortgage-ombudsman",
+                "tasks": [
+                  "urn:op:forum-answer"
+                ]
+              },
+              {
+                "party": "urn:fictional:public-post-host",
+                "tasks": [
+                  "urn:op:post-reply"
+                ],
+                "note": "the public host carrying Sam's post"
+              }
+            ]
+          },
+          "sources": {
+            "sam-agent": {
+              "urn:source:sam-agent:own-review": {
+                "version": "1",
+                "source": "https://sam.example/#me",
+                "claimTypes": [
+                  "reputation.review"
+                ],
+                "subjects": "any"
+              }
+            },
+            "north-agent": {
+              "urn:source:north-agent:own-reply": {
+                "version": "1",
+                "source": "https://northbank.example/#org",
+                "claimTypes": [
+                  "reputation.reply"
+                ],
+                "subjects": "any"
+              }
+            },
+            "post-reader-agent": [
+              {
+                "id": "urn:source:post-reader-agent:forum-decision",
+                "version": "1",
+                "source": "urn:fictional:mortgage-ombudsman",
+                "claimTypes": [
+                  "forum.decision"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:post-reader-agent:review",
+                "version": "1",
+                "source": "https://sam.example/#me",
+                "claimTypes": [
+                  "reputation.review"
+                ],
+                "subjects": "any"
+              },
+              {
+                "id": "urn:source:post-reader-agent:reply",
+                "version": "1",
+                "source": "https://northbank.example/#org",
+                "claimTypes": [
+                  "reputation.reply"
+                ],
+                "subjects": "any"
+              }
+            ]
+          }
+        },
+        "mandates": {
+          "sam-agent": {
+            "withApproval": {
+              "urn:rule:distribute:publish-post": {
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:op:publish-post"
+              }
+            }
+          },
+          "north-agent": {
+            "autonomous": {
+              "urn:rule:distribute:post-reply": {
+                "type": "permission",
+                "action": "distribute",
+                "target": "urn:op:post-reply"
+              }
+            }
+          },
+          "post-reader-agent": {
+            "agent": "post-reader-agent",
+            "autonomous": [],
+            "withApproval": []
+          }
+        },
+        "script": {
+          "sam-review-held": {
+            "id": "sam-review-held",
+            "agent": "sam-agent",
+            "type": "admit",
+            "statements": [
+              "sam-review"
+            ],
+            "purpose": "urn:purpose:reputation",
+            "segment": "added",
+            "atStep": 46
+          },
+          "publish-post": {
+            "id": "publish-post",
+            "agent": "sam-agent",
+            "type": "host-publish",
+            "host": "publication",
+            "operation": "urn:op:publish-post",
+            "purpose": "urn:purpose:reputation",
+            "statements": [
+              "sam-review"
+            ],
+            "decisions": [
+              "urn:case:mortgage-fee"
+            ],
+            "atStep": 46
+          },
+          "approve-post": {
+            "id": "approve-post",
+            "agent": "sam-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Approve publishing your own statement and the ombudsman's signed decision to the public host.",
+            "atStep": 46
+          },
+          "north-reply-held": {
+            "id": "north-reply-held",
+            "agent": "north-agent",
+            "type": "admit",
+            "statements": [
+              "north-reply"
+            ],
+            "purpose": "urn:purpose:reputation",
+            "atStep": 47
+          },
+          "publish-reply": {
+            "id": "publish-reply",
+            "agent": "north-agent",
+            "type": "host-publish",
+            "host": "publication",
+            "operation": "urn:op:post-reply",
+            "purpose": "urn:purpose:reputation",
+            "statements": [
+              "north-reply"
+            ],
+            "atStep": 47
+          },
+          "reader-fetch": {
+            "id": "reader-fetch",
+            "agent": "post-reader-agent",
+            "type": "host-fetch",
+            "host": "publication",
+            "purpose": "urn:purpose:reputation",
+            "segmentEnd": "added",
+            "atStep": 48
+          }
+        },
+        "standIns": [
           {
+            "what": "The fictional public post host",
+            "replacedBy": "A stand-in for a public web host or pod resource with no gate: it stores the signed items it is sent and serves them unchanged. It checks and vouches for nothing; each reader's agent runs its own inbound checks on every item."
+          }
+        ],
+        "branches": {
+          "post-about-a-person": {
             "id": "post-about-a-person",
             "onlyUnder": "accountability-reputation-post",
-            "what": "A proposed public post names an individual employee and is prohibited.",
-            "change": {},
+            "what": "The claim names an individual employee of the lender, so the ombudsman's signed decision terms prohibit passing the decision to the public host; Sam's outbound gate stops the post at its data-terms check.",
+            "change": {
+              "script": {
+                "file-claim": {
+                  "persons": [
+                    "urn:fictional:north-loan-officer"
+                  ]
+                }
+              },
+              "stopAfter": "publish-post"
+            },
             "expect": {
               "outcome": "stop",
               "check": "data-terms",
               "reason": "prohibited"
             },
             "outline": []
+          },
+          "evidence-not-publishable": {
+            "id": "evidence-not-publishable",
+            "onlyUnder": "accountability-reputation-post",
+            "what": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached.",
+            "change": {
+              "script": {
+                "publish-post": {
+                  "statements": [
+                    "sam-review",
+                    "deposit"
+                  ]
+                }
+              },
+              "stopAfter": "publish-post"
+            },
+            "expect": {
+              "outcome": "stop",
+              "check": "disclosure",
+              "reason": "excessive-scope"
+            },
+            "catalogueExpected": {
+              "outcome": "stop",
+              "reason": "prohibited"
+            },
+            "outline": []
           }
-        ]
+        }
       }
     }
   ],

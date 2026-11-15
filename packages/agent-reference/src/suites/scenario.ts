@@ -10,7 +10,7 @@ export function scenarioRegistry() {
     name: "Evidence-backed organisational reputation post",
     record: "hash-chained-local",
     summary:
-      "Not run: regulator outcome, authorised public evidence, attached organisational reply and independent reader admission are required; the added exchanges violate accountability confinement.",
+      "After the regulator claim, Sam's agent publishes only Sam's own statement and the forum's signed decision to a host with no gate; the lender's signed reply is attached there, and a separately keyed reader's agent runs its own inbound checks on each item.",
   });
   registry.register({
     layer: "accountability",
