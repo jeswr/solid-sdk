@@ -18,6 +18,8 @@
     present: false,
     pair: null, // [leftId, rightId] kept stable while the same two parties are on stage
     lastIdx: -1,
+    chatMode: AX.store.get('ax-chat-mode') === 'messages' ? 'messages' : 'phone',
+    phoneTab: null, // { tab, at }: a screen the viewer picked, kept while the step stays put
   };
   var timer = null;
   var raf = null;
@@ -53,7 +55,9 @@
       '  <details class="cfg-layers" id="cfg-layers" open><summary><span>Configuration</span> <span class="cfg-name" id="cfg-name"></span></summary>' +
       '  <div class="cfg-grid">' + cfg + '</div></details>' +
       '</div>' +
-      '<aside class="chat" data-anchor="chat" aria-label="Principal chat"><details id="chat-details" open><summary>Sam\'s chat</summary><ol class="chat-list" id="chat-list"></ol></details></aside>' +
+      '<aside class="chat" data-anchor="chat" aria-label="The principal\'s side"><details id="chat-details" open><summary>Sam\'s phone</summary>' +
+      '<div class="chat-mode seg small" role="group" aria-label="Show the principal\'s side as"><button type="button" data-chat-mode="phone">Phone</button><button type="button" data-chat-mode="messages">Messages</button></div>' +
+      '<div class="phone-host" id="phone-host" data-anchor="phone"></div><ol class="chat-list" id="chat-list"></ol></details></aside>' +
       '<section class="stage" aria-label="Stage">' +
       '  <div class="parties" id="parties" data-anchor="stage.parties"></div>' +
       '  <div class="pay-choice" id="pay-choice" data-anchor="stage.payment" hidden></div>' +
@@ -90,7 +94,7 @@
     root.querySelector('.cfg-grid').style.setProperty('--cfg-cols', 'repeat(' + Math.ceil(AX.orderedLayers.length / 2) + ', minmax(0, 1fr))');
     if (window.innerWidth < 760) {
       root.querySelector('#cfg-layers').open = false;
-      root.querySelector('#chat-details').open = false;
+      if (S.chatMode !== 'phone') root.querySelector('#chat-details').open = false;
     }
     root.querySelector('#scenario').addEventListener('change', function (e) {
       stop();
@@ -131,6 +135,13 @@
       if (f) { S.rdfForm = f.dataset.rdfForm; renderInspector(); }
       if (e.target.closest('[data-rdf-context]')) { S.rdfContext = !S.rdfContext; renderInspector(); }
     });
+    root.querySelectorAll('[data-chat-mode]').forEach(function (b) {
+      b.addEventListener('click', function () { S.chatMode = b.dataset.chatMode; AX.store.set('ax-chat-mode', S.chatMode); if (S.trace) renderChat(); });
+    });
+    root.querySelector('#phone-host').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-ph-tab]');
+      if (b && S.trace) { S.phoneTab = { tab: b.dataset.phTab, at: S.idx }; renderChat(); }
+    });
     root.querySelector('#stage-figure').addEventListener('click', function (e) {
       if (e.target.closest('[data-retry-trace]')) E.apply(S.pending || {});
     });
@@ -167,7 +178,7 @@
       cancelAnimationFrame(raf);
       renderConfig();
       root.querySelector('#stage-figure').innerHTML = '<p class="empty" role="status">Loading trace: ' + esc(index.scenario.title) + '…</p>';
-      ['#chat-list', '#inspector', '#scrub', '#pos', '#caption', '#parties', '#legend'].forEach(function (id) { root.querySelector(id).innerHTML = ''; });
+      ['#chat-list', '#phone-host', '#inspector', '#scrub', '#pos', '#caption', '#parties', '#legend'].forEach(function (id) { root.querySelector(id).innerHTML = ''; });
       root.querySelector('#raw').hidden = true;
       root.querySelector('#pay-choice').hidden = true;
       root.querySelectorAll('.timeline button').forEach(function (b) { b.disabled = true; });
@@ -431,8 +442,23 @@
     var list = root.querySelector('#chat-list');
     var owner = principalName();
     var sum = root.querySelector('#chat-details summary');
-    if (sum) sum.textContent = owner === 'Principal' ? 'The principal\'s chat' : owner + '\'s chat';
     list.innerHTML = html || '<li class="chat-empty">' + esc(owner === 'Principal' ? 'This run has no conversation with a principal.' : 'The conversation with ' + owner.replace(/^The /, 'the ') + ' appears here as the agent works. In this run nothing was put to them.') + '</li>';
+    var phone = S.chatMode === 'phone';
+    root.querySelectorAll('[data-chat-mode]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.chatMode === S.chatMode)); });
+    list.hidden = phone;
+    var host = root.querySelector('#phone-host');
+    host.hidden = !phone;
+    if (sum) sum.textContent = owner === 'Principal' ? (phone ? 'The principal\'s phone' : 'The principal\'s chat') : owner.split(',')[0] + (phone ? '\'s phone' : '\'s chat');
+    if (phone) {
+      var model = AX.phone.model(t, S.idx, {
+        principal: owner,
+        agentName: chatAgentName(),
+        stepTitle: function (n) { return AX.stepTitle(t.scenario.id, n, t); },
+      });
+      var tab = S.phoneTab && S.phoneTab.at === S.idx ? S.phoneTab.tab : null;
+      AX.phone.render(host, model, { tab: tab });
+      return;
+    }
     var box = root.querySelector('.chat');
     box.scrollTop = box.scrollHeight;
   }

@@ -66,6 +66,7 @@
     h += '<div class="prose"><p>A way to look inside a working reference agent. The runs you can step through are real: the reference agent produced them, and each check you see is one it actually made. ';
     if (n.real) h += 'There are ' + n.real + ' recorded runs' + (n.useCases ? ' across ' + n.useCases + ' use cases' : '') + '. ';
     h += 'Everyone in them is fictional, and both sides of each exchange run the same code, so the runs show what the design does, not that separate products work together.</p>';
+    h += '<p>Beside each run, Sam\'s phone shows what the person sees: the chat with their agent, the rules it may follow on its own, and each request for approval, with what is asked, of whom and on what terms. Approving is confirmed with Face ID on the phone. The phone is drawn from the run\'s own records; the few prompts a run cannot record, such as the camera step of a face check, are marked as illustrative.</p>';
     h += '<p>It is a research preview. The specifications are drafts, and the reference agent has not had an outside security review.</p></div>';
 
     h += '<h2>Where to go next</h2><div class="cards home-guide">';
@@ -75,6 +76,7 @@
     h += '</div>';
     h += '<p class="start-links"><a class="btn primary" href="' + AX.buildHash('explore', {}) + '">Step through a real run</a>';
     if (AX.tour) h += '<button type="button" class="btn" id="home-tour">Take the guided tour</button>';
+    h += '<a class="btn" id="home-app" href="app/" hidden>Try the app</a>';
     h += '</p>';
     h += '</div>';
     root.innerHTML = h;
@@ -88,6 +90,13 @@
         if (p && p.catch) p.catch(function () {});
       });
     });
+    // The public site hosts the Errand app at app/ when it was built with it; elsewhere the
+    // link stays hidden.
+    var appLink = root.querySelector('#home-app');
+    if (appLink && window.fetch && /^https?:$/.test(location.protocol)) {
+      fetch('app/index.html').then(function (r) { return r.ok ? r.text() : ''; })
+        .then(function (text) { if (/<title>Errand<\/title>/.test(text)) appLink.hidden = false; }).catch(function () {});
+    }
     var tb = root.querySelector('#home-tour');
     if (tb) tb.addEventListener('click', function () { AX.tour.start(); });
   };
