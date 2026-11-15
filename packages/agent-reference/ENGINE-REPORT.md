@@ -5189,3 +5189,39 @@ inbound checks on each; the host vouches for nothing.
   - the main path and both branches;
   - a reader without a trust source for Sam's review refuses that hosted item and admits
     the other two (the host vouches for nothing).
+
+### Brief 31 §2.5 `meaning-plain-language-upgrade`: runs
+
+**Decisions (coordinator, 15 Nov).**
+- **A2: the signed description is the lender's signed statement about its agent.** It has the
+  profile-only kind `agent.description`, names the agent and its mailbox, and is attached
+  to the mailbox's reply. Sam's agent admits it through the ordinary statement admission,
+  so all five inbound checks run.
+- **A1 is deferred.** The agent's own signed `description` message is the stronger form,
+  but it changes the runtime's conversation rules: a description is valid today only as
+  the answer to a `describe`.
+- **B1: the step-down reason is `unsigned-not-allowed`.**
+
+**Built.**
+- **Mailbox binding.** A mailbox may name the agent it answers for (`mailboxes[].agent`).
+  `email-receive` takes `attachments`. The engine refuses an attachment its principal did
+  not sign, then admits the attachments only when the email itself was admitted.
+- **Structured-only mark.**
+  - `profile.email.structuredOnly` names the description kind. Under this configuration
+    only, `receiveEmail` refuses prose from any mailbox an admitted description names, at
+    the source check, with `unsigned-not-allowed`.
+  - The mark is the admitted fact in Sam's runtime memory, so it lasts for the journey.
+  - Without the field nothing changes: the oracle (baseline and email-endpoint) is equal.
+- **Reuse of the email-endpoint machinery.** The added segment before `apply` reuses it:
+  - the lender's signed `contact.mailbox` statement is admitted;
+  - the challenge email goes out after Sam approves the exact words;
+  - the reply carries the challenge and the attached description, which is admitted.
+- **Main path and confinement.** The baseline `describe-lender` exchange is unchanged.
+  C1, C2, C3 and C5 are empty.
+- **Advertising.** `alternativeInstalled` advertises the configuration only under itself.
+- **Branches (both run as registered):**
+  - `prose-as-evidence`: the reply arrives without the description. Sam's agent reads the
+    prose as `agent.description` and tries a read that the profile's `actionClaims`
+    requires it for. Result: `fitness`, ask-more, `structured-form-required`.
+  - `step-back-down`: a later prose email from the lender is refused at `source` with
+    `unsigned-not-allowed`.

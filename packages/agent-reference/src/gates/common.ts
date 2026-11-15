@@ -354,6 +354,8 @@ export interface GateContext {
     readonly pins: readonly string[];
     readonly from: string;
     readonly structuredReply: string;
+    /** Brief 31 §2.5: the claim kind whose admission marks a mailbox structured only. */
+    readonly structuredOnly?: string;
   };
   readonly sink?: TraceSink;
   readonly configuration?: Configuration;
@@ -464,6 +466,9 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
     return ctx.configuration?.id === "identity-email-endpoint";
   if (id === alternativeWireId("accountability-vendor-fault"))
     return ctx.configuration?.id === "accountability-vendor-fault";
+  // Brief 31 §2.5: advertised only by the agents of the plain-language-upgrade configuration.
+  if (id === alternativeWireId("meaning-plain-language-upgrade"))
+    return ctx.configuration?.id === "meaning-plain-language-upgrade";
   // Brief 31 §2.9: advertised only by the agents of the reputation-post configuration.
   if (id === alternativeWireId("accountability-reputation-post"))
     return ctx.configuration?.id === "accountability-reputation-post";

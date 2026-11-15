@@ -1913,6 +1913,9 @@ async function runPath(
             email: {
               from: profile.email.from,
               structuredReply: profile.email.structuredReply,
+              ...(profile.email.structuredOnly
+                ? { structuredOnly: profile.email.structuredOnly }
+                : {}),
               pins: emailPins,
             },
           }
@@ -2772,12 +2775,31 @@ async function runPath(
         const challenge = step.challenge ? emailChallenges.get(step.mailbox) : undefined;
         if (step.challenge && !challenge)
           throw new Error(`step ${step.id}: no challenge was sent to ${step.mailbox}`);
-        result = await runtime.receiveEmail({
+        const received = await runtime.receiveEmail({
           ...reply,
           ...(step.from ? { from: step.from } : {}),
           purpose: step.purpose,
           ...(challenge ? { challenge } : {}),
         });
+        result = received;
+        if (step.attachments?.length && received.ok) {
+          // Brief 31 §2.5: the mailbox answers for an agent; what its reply attaches must be
+          // signed by that agent's principal, and goes through the ordinary inbound checks.
+          const bound = scenario.mailboxes.find((m) => m.party === step.mailbox)?.agent;
+          const principal = bound ? parties.get(bound)?.actsFor : undefined;
+          for (const id of step.attachments)
+            if (!principal || scenario.statements.find((s) => s.id === id)?.issuer !== principal)
+              throw new Error(
+                `step ${step.id}: ${id} is not signed by the mailbox's agent's principal`,
+              );
+          result = {
+            email: received,
+            attachments: await runtime.admitStatements(
+              step.attachments.map((id) => required(signed[id])),
+              { task, taskId: task, purpose: step.purpose },
+            ),
+          };
+        }
         break;
       }
       case "email-inbox":

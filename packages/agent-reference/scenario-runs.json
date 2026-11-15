@@ -4752,8 +4752,327 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "meaning-plain-language-upgrade",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 103,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 110,
+          "agent": "sams-agent",
+          "outcome": "admit",
+          "reason": "fit-for-use"
+        },
+        {
+          "seq": 116,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 124,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 132,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 139,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 147,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 156,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 164,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 173,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 183,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "ask-more",
+          "reason": "assurance-insufficient"
+        },
+        {
+          "seq": 196,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 211,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 218,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 230,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 238,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 248,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 256,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 263,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 289,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 303,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 311,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 321,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 330,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 338,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 347,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 355,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 364,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 372,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 380,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 388,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 398,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 408,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 416,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 425,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 433,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 440,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 447,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 457,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 465,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 472,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 481,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 489,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 496,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 504,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 514,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 522,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 531,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 563,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 571,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 579,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 587,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 596,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 606,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 615,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 623,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 631,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--meaning-plain-language-upgrade.json"
     },
     {
       "scenario": "mortgage-main",
@@ -4761,9 +5080,41 @@
       "path": "prose-as-evidence",
       "settlement": "rdf-order",
       "configuration": "meaning-plain-language-upgrade",
-      "what": "Prose income is offered where structured evidence is required.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane."
+      "what": "The lender's reply arrives without its signed description. Sam's agent reads the prose as a description of the lender's agent and tries to rely on that reading; the outbound gate asks for the structured form from the source.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "structured-form-required",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "structured-form-required"
+      },
+      "consequences": [],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--prose-as-evidence--meaning-plain-language-upgrade.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "step-back-down",
+      "settlement": "rdf-order",
+      "configuration": "meaning-plain-language-upgrade",
+      "what": "Later in the journey the lender writes to Sam's agent in prose again. The lender is marked structured only since its signed description was admitted, so the email is refused before core context.",
+      "status": "runs",
+      "actual": {
+        "outcome": "refuse",
+        "reason": "unsigned-not-allowed",
+        "check": "source"
+      },
+      "expected": {
+        "outcome": "refuse",
+        "reason": "unsigned-not-allowed"
+      },
+      "consequences": [],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--step-back-down--meaning-plain-language-upgrade.json"
     },
     {
       "scenario": "mortgage-main",

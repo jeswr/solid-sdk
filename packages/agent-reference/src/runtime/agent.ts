@@ -1679,6 +1679,18 @@ export class AgentRuntime {
     return named && this.emailChallenges.get(nonce) === from && text.includes(nonce);
   }
 
+  /**
+   * Brief 31 §2.5: whether an admitted signed description (the configured claim kind) names
+   * this mailbox. The mark is this agent's own memory, so it lasts for the whole journey.
+   */
+  private structuredOnly(mailbox: string): boolean {
+    const kind = this.options.gates?.email?.structuredOnly;
+    if (!kind) return false;
+    return [...this.gateMemory.facts.values()].some(
+      (fact) => fact.claimType === kind && fact.statement?.mailbox === mailbox,
+    );
+  }
+
   /** Address-only prose never enters facts or instruction channels, whatever it says. */
   receiveEmail(input: { from: string; text: string; purpose: Iri; challenge?: string }) {
     return this.exclusive(async () => {
@@ -1705,6 +1717,27 @@ export class AgentRuntime {
         return fail("source-unknown");
       if (typeof input.text !== "string" || !input.text || Buffer.byteLength(input.text) > 32768)
         return fail("bounds-exceeded");
+      if (this.structuredOnly(input.from)) {
+        // Brief 31 §2.5: once a correspondent's signed description is admitted, it is marked
+        // structured only for the rest of the journey; prose from it never steps back down.
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "check",
+          check: "source",
+          verdict: "fail",
+          reason: "unsigned-not-allowed",
+          caption:
+            "This correspondent is marked structured only: its signed description was admitted, so unsigned prose from its mailbox is refused.",
+        });
+        sink?.emit({
+          part: "inbound-gate",
+          kind: "decision",
+          outcome: "refuse",
+          reason: "unsigned-not-allowed",
+          caption: "The email is refused before core context.",
+        });
+        return { ok: false as const, reason: "unsigned-not-allowed" as ReasonCode };
+      }
       if (input.challenge && !this.challengeAnswered(input.from, input.text, input.challenge)) {
         sink?.emit({
           part: "inbound-gate",

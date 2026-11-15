@@ -87,6 +87,9 @@ const baseDomainProfileSchema = z.strictObject({
     .strictObject({
       from: emailAddress,
       structuredReply: iri,
+      // Brief 31 §2.5: the claim kind of a correspondent's signed description; once one naming
+      // a mailbox is admitted, prose from that mailbox is refused for the rest of the journey.
+      structuredOnly: z.string().optional(),
       pins: z.array(
         z.strictObject({
           endpoint: emailAddress,
@@ -400,6 +403,8 @@ const step = z.discriminatedUnion("type", [
     from: emailAddress.optional(),
     // Accept the reply only if it answers this mailbox's latest challenge.
     challenge: z.boolean().optional(),
+    // Brief 31 §2.5: signed statements the reply attaches, admitted through the ordinary checks.
+    attachments: z.array(slug).optional(),
   }),
   z.strictObject({ ...base, type: z.literal("email-inbox"), mailbox: slug }),
   z.strictObject({
@@ -935,7 +940,16 @@ export const scenarioSchema = z.strictObject({
     )
     .default([]),
   mailboxes: z
-    .array(z.strictObject({ party: slug, address: emailAddress, replies: strings }))
+    .array(
+      z.strictObject({
+        party: slug,
+        address: emailAddress,
+        replies: strings,
+        // Brief 31 §2.5: the agent this mailbox also answers for; replies may attach statements
+        // its principal signed.
+        agent: slug.optional(),
+      }),
+    )
     .default([]),
   datasets: z
     .array(z.strictObject({ holder: slug, id: iri, rows: z.array(datasetRowSchema) }))

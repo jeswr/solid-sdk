@@ -9,17 +9,34 @@ import * as quality from "../src/gates/quality.js";
 
 const root = join(import.meta.dirname, "..");
 
-it("does not label an unsigned mailbox as a negotiated prose upgrade", async () => {
+// Brief 31 §2.5 (AUTHORED-BY Claude Opus 5.5): the lender's mailbox reply attaches its signed
+// description; Sam's agent admits it and refuses any later prose from that mailbox.
+it("upgrades a prose contact by the lender's signed description and never steps back down", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
   const paths = await runScenario(profile, scenario, {
     configuration: "meaning-plain-language-upgrade",
   });
-  expect(paths.map((path) => path.path)).toEqual(["main", "prose-as-evidence"]);
-  for (const path of paths) {
-    expect(path.trace).toBeUndefined();
-    expect(path.blocked).toContain("upgrade boundary is not implemented");
-  }
-});
+  expect(paths.map((path) => path.path)).toEqual(["main", "prose-as-evidence", "step-back-down"]);
+  const main = paths[0]?.trace;
+  if (!main) throw new Error("the main path must run");
+  const admitted = main.events.filter(
+    (e) => e.agent === "sams-agent" && e.kind === "decision" && e.addedBy && e.outcome === "admit",
+  );
+  expect(admitted.some((e) => e.caption.includes("agent description statement"))).toBe(true);
+  expect(main.events.some((e) => e.reason === "unsigned-not-allowed")).toBe(false);
+  expect(paths[1]?.actual).toMatchObject({
+    check: "fitness",
+    outcome: "ask-more",
+    reason: "structured-form-required",
+  });
+  expect(paths[1]?.disagrees).toBe(false);
+  expect(paths[2]?.actual).toMatchObject({
+    check: "source",
+    outcome: "refuse",
+    reason: "unsigned-not-allowed",
+  });
+  expect(paths[2]?.disagrees).toBe(false);
+}, 300_000);
 
 it("maps the payroll status through an accepted publisher and confines the journey to meaning", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");

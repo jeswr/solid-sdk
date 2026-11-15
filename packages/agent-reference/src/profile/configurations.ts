@@ -196,16 +196,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     alternativeWireId("meaning-registry-lookup"),
     "Signed employment code-list mapping lookup",
   ),
-  [alternativeWireId("meaning-plain-language-upgrade")]: {
-    ...localDefinition(
-      alternativeWireId("meaning-plain-language-upgrade"),
-      "Prose contact followed by structured exchange — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane.",
-    ],
-  },
+  [alternativeWireId("meaning-plain-language-upgrade")]: localDefinition(
+    alternativeWireId("meaning-plain-language-upgrade"),
+    "Prose contact upgraded by the correspondent's signed description; no later step down",
+  ),
   [alternativeWireId("authority-agent-registry")]: localDefinition(
     alternativeWireId("authority-agent-registry"),
     "Principal mandate checked against current signed registration",

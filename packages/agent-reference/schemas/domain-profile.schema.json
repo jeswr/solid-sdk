@@ -230,6 +230,9 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
         },
+        "structuredOnly": {
+          "type": "string"
+        },
         "pins": {
           "type": "array",
           "items": {
