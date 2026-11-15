@@ -57,12 +57,14 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   // 26e, settlement, 26c, 26d and 26f rows; brief 31 adds supplier-terms-hold and runs the
   // regulator claim (entry-withheld disagrees) and the email endpoint
   // (mailbox-reply-as-evidence disagrees). The reputation-score suite and its two blocked
-  // rows are removed (maintainer decision, 15 Nov).
-  expect(alternatives).toHaveLength(107);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(91);
+  // rows are removed, and withheld-claim-asked-for runs as a stop scoped to one proposal
+  // (maintainer decisions, 15 Nov). Brief 32 runs vendor-fault: main and the gate-fault branch
+  // run, fault-was-the-principals disagrees (Sam is asked before the record-backed stop).
+  expect(alternatives).toHaveLength(108);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(94);
   expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(5);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(11);
+  expect(blocked).toHaveLength(9);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,

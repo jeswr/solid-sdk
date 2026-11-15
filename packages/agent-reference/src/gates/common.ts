@@ -373,6 +373,8 @@ export interface GateContext {
   readonly claimLabel?: (statement: Readonly<Record<string, unknown>>) => string;
   readonly reliance?: RelianceProfile;
   readonly claimSources?: Readonly<Record<string, readonly Iri[]>>;
+  /** Brief 32: claim kinds an outgoing statement may carry only with the record's support. */
+  readonly recordBackedClaims?: readonly string[];
   /** Shared across conversations only when the hosting application declares one task. */
   readonly taskId?: Iri;
   readonly vocabulary?: ContentVocabulary;
@@ -460,6 +462,8 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
     return ctx.configuration?.id === "accountability-regulator-claim";
   if (id === alternativeWireId("identity-email-endpoint"))
     return ctx.configuration?.id === "identity-email-endpoint";
+  if (id === alternativeWireId("accountability-vendor-fault"))
+    return ctx.configuration?.id === "accountability-vendor-fault";
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

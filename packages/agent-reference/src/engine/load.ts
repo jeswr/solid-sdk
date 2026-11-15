@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { validateRules } from "../derive/rules.js";
+import { gateFaultPlacementProblem } from "./faulty-gate.js";
 import {
   type DomainProfile,
   domainProfileSchema,
@@ -31,8 +32,18 @@ export function loadCase(
   validateReferences(profile, scenario);
   return { profile, scenario };
 }
-export function validateReferences(profile: DomainProfile, scenario: Scenario): void {
+export function validateReferences(
+  profile: DomainProfile,
+  scenario: Scenario,
+  options: { readonly pathWorld?: boolean } = {},
+): void {
   validateRules(profile.rules.filter((r) => "template" in r));
+  // Brief 32: the faulty-gate stand-in may appear only in a vendor-fault branch's change. A
+  // path's world (the branch change applied) is checked by runPath instead.
+  const misplaced = gateFaultPlacementProblem(
+    options.pathWorld ? { ...scenario, gateFault: undefined } : scenario,
+  );
+  if (misplaced) throw new Error(misplaced);
   const unique = (values: readonly string[], label: string) => {
     if (new Set(values).size !== values.length) throw new Error(`duplicate ${label}`);
   };

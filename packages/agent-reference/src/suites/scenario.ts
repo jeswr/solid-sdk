@@ -18,7 +18,7 @@ export function scenarioRegistry() {
     name: "Fault claim against the gate operator",
     record: "hash-chained-local",
     summary:
-      "Not run: signed gate/core attribution and a fault-claim exchange are required; the added exchange cannot satisfy accountability confinement.",
+      "The agent audits its own record against the mandate in force at each release; a release found outside it lets the principal send a record-backed claim, naming the gate's operator from a signed component statement.",
   });
   registry.register({
     layer: "usage-control",

@@ -294,6 +294,7 @@ const FAULTS: readonly (readonly string[])[] = [
   ["agreementCredentialFault"],
   ["authorityFault"],
   ["mandateStatusFault"],
+  ["gateFault"],
   ["inject"],
   ["stopAfter"],
   ["solid", "fault"],

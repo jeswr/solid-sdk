@@ -115,6 +115,12 @@ import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
 import { decisionsOf, firstBranchDivergence } from "./compare.js";
+import {
+  FAULTY_GATE_CAPTION,
+  FAULTY_GATE_STAND_IN,
+  VENDOR_FAULT_CONFIGURATION,
+  writeFaultyRelease,
+} from "./faulty-gate.js";
 import { installHandler } from "./handlers.js";
 import { validateReferences } from "./load.js";
 import {
@@ -380,7 +386,7 @@ export async function runScenario(
   for (const path of paths) {
     const world = scenarioSchema.parse(patch(configured, path.change));
     if (configuredProfile.id !== world.profile) throw new Error("branch profile mismatch");
-    validateReferences(configuredProfile, world);
+    validateReferences(configuredProfile, world, { pathWorld: true });
     const pathProfile = domainProfileSchema.parse(
       patch(
         configuredProfile,
@@ -393,7 +399,7 @@ export async function runScenario(
       Object.assign(pathProfile, renameIdentities(pathProfile, world.identityNames));
       Object.assign(world, renameIdentities(world, world.identityNames));
     }
-    validateReferences(pathProfile, world);
+    validateReferences(pathProfile, world, { pathWorld: true });
     const combinationProblems = alternative
       ? scenarioRegistry().check({
           layers: {
@@ -449,7 +455,11 @@ export async function runScenario(
       path.id,
       options.commit ?? "unknown",
       tracked.registry,
-      { ...options, alternative },
+      {
+        ...options,
+        alternative,
+        ...("onlyUnder" in path && path.onlyUnder ? { onlyUnder: path.onlyUnder } : {}),
+      },
     );
     if (tracked.usedTestDouble() && !options.testOnly)
       throw new Error(
@@ -473,7 +483,12 @@ export async function runScenario(
         throw new Error(
           `${scenario.id}/${path.id}: expected ${path.expect.check}/${path.expect.reason} -> ${path.expect.outcome}`,
         );
-      if (path.expect.outcome === "stop" || path.expect.outcome === "refuse") {
+      // A stop scoped to one proposal (`continues`) lets the core go on with a narrower one,
+      // so only then is the guard against a later effect skipped.
+      if (
+        (path.expect.outcome === "stop" && !path.expect.continues) ||
+        path.expect.outcome === "refuse"
+      ) {
         if (
           trace.events
             .slice(decision?.seq ?? trace.events.length)
@@ -584,8 +599,19 @@ async function runPath(
     proofCache?: ProofCache;
     generateProofs?: boolean;
     alternative?: Scenario["configurations"][number];
+    onlyUnder?: string;
   },
 ): Promise<TraceFile> {
+  // Brief 32: the faulty-gate stand-in runs only on a branch under accountability-vendor-fault
+  // while that configuration is active.
+  if (
+    scenario.gateFault &&
+    (options.onlyUnder !== VENDOR_FAULT_CONFIGURATION ||
+      options.alternative?.id !== VENDOR_FAULT_CONFIGURATION)
+  )
+    throw new Error(
+      `${scenario.id}/${path}: the faulty-gate stand-in runs only on a branch under ${VENDOR_FAULT_CONFIGURATION}`,
+    );
   const registry = scenarioRegistry();
   const local =
     scenario.suites.meaning === "registry-lookup"
@@ -1976,6 +2002,7 @@ async function runPath(
           }));
         }),
       claimSources: Object.fromEntries(profile.claims.map((c) => [c.kind, c.sources])),
+      recordBackedClaims: profile.claims.filter((c) => c.recordBacked).map((c) => c.kind),
       ...(negotiated && deliberation && agent.id === negotiated.proposer
         ? {
             negotiatedMeaning: {
@@ -2515,6 +2542,22 @@ async function runPath(
     for (const out of result.outbound) queue.push({ from, out });
   };
   for (const [index, step] of scenario.script.entries()) {
+    if (scenario.gateFault?.at === step.id) {
+      const fault = scenario.gateFault;
+      const faulty = cast.get(fault.agent);
+      writeFaultyRelease({
+        ledger: required(ledgers.get(fault.agent)),
+        actor: faulty.identity.actor,
+        ...(faulty.identity.party ? { party: faulty.identity.party } : {}),
+        intent: resolveTemplate(fault.intent, variables()) as ActionIntent,
+        activityType: fault.activityType,
+        activity: `urn:scenario:${scenario.id}:faulty-gate-release`,
+        at: now().toISOString(),
+      });
+      recorder
+        .sink(parties.get(fault.agent)?.traceId ?? fault.agent)
+        .emit({ part: "outbound-gate", kind: "record", caption: FAULTY_GATE_CAPTION });
+    }
     if (agreementStatus) await agreementStatus.refresh();
     solidStep = step.id;
     if (authorizationServer) await authorizationServer.refreshStatus();
@@ -3635,6 +3678,9 @@ async function runPath(
       case "record":
         result = runtime.checkRecord(required(ledgers.get(step.agent)).entries());
         break;
+      case "record-audit":
+        result = await runtime.auditRecord();
+        break;
       case "read-reference": {
         const reference = template<ResourceReference>(step.reference);
         const holder = holders.get(reference.ref);
@@ -3757,6 +3803,7 @@ async function runPath(
     standIns: [
       ...profile.standIns,
       ...scenario.standIns,
+      ...(scenario.gateFault ? [FAULTY_GATE_STAND_IN] : []),
       ...(settlement.id === "rdf-order"
         ? []
         : [{ what: "Protocol HTTP and payment execution", replacedBy: HTTP_STAND_IN }]),

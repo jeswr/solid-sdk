@@ -375,6 +375,10 @@
               "independent"
             ],
             "additionalProperties": false
+          },
+          "recordBacked": {
+            "type": "boolean",
+            "const": true
           }
         },
         "required": [

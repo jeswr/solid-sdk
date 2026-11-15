@@ -98,6 +98,8 @@ type PrincipalUseVerdict = Omit<TermsVerdict, "verdict"> & {
 export interface OutboundDeps {
   readonly settlement?: SettlementSuite;
   readonly recordRelease?: (intent: ActionIntent) => boolean;
+  /** Brief 32: whether the agent's own record supports a record-backed outgoing statement. */
+  readonly recordBacks?: (claim: Readonly<Record<string, unknown>>, recipient: string) => boolean;
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
   readonly now: () => string;
   readonly mandate: () => OwnerMandate | undefined;
@@ -2410,6 +2412,15 @@ export class OutboundGate {
           }
         }
         if (!fact && claim.issuer !== this.deps.identity.party) {
+          this.stopEvidence(digest);
+          return finish("stop", "evidence-invalid");
+        }
+        // Brief 32: a record-backed claim leaves only with the record's support and only to
+        // the gate operator the admitted component statement names; this only tightens.
+        if (
+          this.deps.gate.recordBackedClaims?.includes(String(claim.claimType)) &&
+          !this.deps.recordBacks?.(claim, intent.recipient ?? "")
+        ) {
           this.stopEvidence(digest);
           return finish("stop", "evidence-invalid");
         }

@@ -66,3 +66,16 @@ it("withholds the requested private number, continues on permitted claims and re
     reason: "bad-signature",
   });
 }, 180_000);
+it("still refuses an effect after a stop unless the expectation says the stop is scoped to one proposal", async () => {
+  // Maintainer decision, 15 Nov: `continues` lets the core go on with a narrower proposal.
+  // Without it, a stop means the stopped agent sends nothing more.
+  const { profile, scenario } = loadCase(new URL("../", import.meta.url).pathname, "mortgage-main");
+  const entry = scenario.configurations.find((c) => c.id === "authenticity-selective-disclosure")!;
+  const branch = scenario.branches.find((b) => b.id === "withheld-claim-asked-for")!;
+  expect(branch.expect).toMatchObject({ outcome: "stop", continues: true });
+  const { continues: _continues, ...unscoped } = branch.expect!;
+  entry.world.branches = [{ ...branch, expect: unscoped }];
+  await expect(runScenario(profile, scenario, { configuration: entry.id })).rejects.toThrow(
+    "mortgage-main/withheld-claim-asked-for: an effect followed a stop",
+  );
+}, 180_000);

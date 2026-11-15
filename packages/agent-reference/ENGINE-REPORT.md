@@ -4952,13 +4952,133 @@ in principal review.
    - Manifest: 282 → 280 paths; 243 runs and 17 disagrees unchanged; 22 → 20 blocked.
    - The spec note on the accountability suites is written separately by the coordinator.
      This change does not touch it.
-2. **National insurance number (`withheld-claim-asked-for`): not applied, needs a design
-   call.**
-   - The run stops the optional extra disclosure (disclosure / excessive-scope) and then
-     continues on the allowed projection, ending with a final receipt.
-   - Setting the expectation to `stop` makes the engine throw "an effect followed a stop".
-     A `stop` expectation requires that the stopped agent sends nothing more.
-   - The row stays "disagrees" (expected go, actual stop) until one of two things is
-     chosen:
-     - end the run at the stop, which drops the receipt the test asserts;
-     - add an expectation for a stop scoped to one action.
+2. **National insurance number (`withheld-claim-asked-for`): a stop scoped to one
+   proposal.**
+   - This is Jesse's over-ask demo. The gate stops the optional extra disclosure
+     (disclosure / excessive-scope), and the lender proceeds on the allowed projection to
+     a final receipt. The run does not end at the stop.
+   - New optional expectation flag `continues: true`:
+     - the stop applies to that proposal only, and the core may go on with a narrower one;
+     - it is in the scenario schema, and catalogue expectations do not take it;
+     - the guard "an effect followed a stop" (`src/engine/run.ts`) is skipped only when
+       that path's expectation sets the flag.
+   - Without the flag, the guard still throws. A test in
+     `test/authenticity-selective-mortgage.test.ts` pins this, and the existing receipt
+     assertion stays.
+   - The branch expects `{check: disclosure, reason: excessive-scope, outcome: stop,
+     continues: true}`. Its row moves from "disagrees" to "runs"; only that row changed,
+     and the regenerated traces differed only in the commit field.
+   - Manifest after both decisions: 280 paths, 244 runs, 16 disagree, 20 blocked.
+   - Labels alternatives: 107 rows, 92 runs, 4 disagree, 11 blocked.
+
+## Brief 32 `accountability-vendor-fault`
+
+Built from `briefs/32-vendor-fault.md`. No dependency or vocabulary term was added, and no
+existing ledger record changes shape.
+
+**The three risks, measured first.**
+
+1. **Pairing by ledger order: holds.** On the baseline main path, every outbound `go` that
+   follows an `authorisation-decision` has a mandate `pass` and a `permit` decision.
+   - Sam's agent: 10 judged releases and 2 unjudged ones (a `describe` and the
+     item-released `deliver`).
+   - Every unjudged release across all 8 agents cites a mandate check with
+     `not-applicable` / `no-action`.
+   - So no unjudged release cites a mandate *judgement*. Each one does carry a mandate
+     check row, because every outbound gate run records one.
+   - Approved actions record `approval-required` and then `permit` for the same digest
+     before the release. The audit pairs the last decision.
+2. **`authorise` extraction: holds.** `mandateDecision` (evaluateIntent plus the standing
+   rules) is now one private method. The oracle stayed identical (164 paths).
+3. **HostCo identity collision: none.** An issuer-only `hostco` with sam-agent's operator
+   IRI leaves the baseline event prefix unchanged. Its statement passes all five inbound
+   checks.
+
+**Built.**
+
+- **Stand-in.**
+  - `src/engine/faulty-gate.ts`, called from the `run.ts` step loop, holds the stand-in.
+  - Schema field `gateFault`.
+  - Load guard: `validateReferences` refuses the field at the top level, in any
+    configuration world, and in any branch not under vendor-fault.
+  - Run guard: `runPath` refuses it unless the path is a branch under vendor-fault and
+    that configuration is active.
+  - `["gateFault"]` is added to `FAULTS`.
+  - The engine appends the `standIns` label.
+  - It writes 5 ledger entries marked `standIn: "faulty-gate"`, and emits one `record`
+    event with no check, verdict or outcome.
+  - `src/gates` and `src/runtime` do not mention it (tested).
+- **Audit.**
+  - The pure `auditReleases` is in `src/mechanisms/record-audit.ts`.
+  - `AgentRuntime.auditRecord()` re-evaluates each release with `mandateDecision` at the
+    recorded time. If the mandate digest the release names is not held, the release is
+    indeterminate. The audit never reads `standIn`.
+  - Step type `record-audit`.
+  - Events go on part `record`: one `evidence` check per release, one decision, and a
+    chat line to Sam.
+  - It appends a `record-audit` ledger entry: component statement, mandate, counts and
+    outside findings. The step result also lists `released`.
+- **Main path.**
+  - Party `hostco`, statement `sam-agent-components`, profile claim `agent.components`.
+  - Purpose `urn:purpose:redress`.
+  - Added segment `components-held` → `audit-record`.
+  - C1, C2 and C3 are empty.
+- **Record-backed rule.**
+  - New profile flag `recordBacked` and gate context `recordBackedClaims`.
+  - New gate dependency `recordBacks`. It requires a `record-audit` entry listing the
+    claimed digest as outside, and a recipient equal to the admitted component
+    statement's `gate.operatedBy`.
+  - Otherwise `stopEvidence` fires. The rule sits in the outbound credential loop and only
+    tightens.
+- **Operator and claim.**
+  - Parties `gate-operator` and `gate-operator-agent`; an introduction; own lists;
+    sources; Sam's `withApproval` rule; operation `urn:op:fault-claim`.
+  - Sam signs the claim with the owner key (`issue`, issuer `sam-agent`). The claim
+    carries:
+    - the action digest;
+    - the mandate;
+    - the component statement digest;
+    - the decision and release chain points;
+    - the hash of the audit entry.
+  - It travels by `start`, then `approve`, then the operator's `receive`. The operator
+    replies `deliver`.
+
+**Measured differences from the brief.**
+
+- **`fault-was-the-principals` disagrees.**
+  - The credential loop runs when the message is released after approval, not before the
+    approval ask. Sam is asked at `limits-approval`, approves, and only then the
+    record-backed rule stops the message: `evidence`, `evidence-invalid`, `stop`. Nothing
+    leaves.
+  - The registered stop is witnessed. The first failure is the approval ask
+    (ask-principal / approval-required / limits-approval), so the row is "disagrees".
+  - Stopping before the ask would mean checking evidence at intent release, which is a
+    design call.
+- **The operator's reply carries `{receipt: "received", claim: <claim id IRI>}`, not
+  `{status: "received", claim: <digest>}`.**
+  - A digest string and `status: "received"` are free text, and the operator's gate stops
+    free text (context-not-clear).
+  - `output.receipt` (code) and `output.claim` (identifier) are added through the
+    configuration's `profileChange.vocabulary`. The baseline `output.status` values are
+    unchanged.
+- **The claim message carries no contents**, for the same free-text reason. The
+  allegation travels in Sam's signed claim.
+- **Test 6:** "no approval is asked" does not hold, as above. The two stop cases, a finding
+  for another digest and an operator the component statement does not name, are tested.
+- **Not added:** a unit test that `evaluateIntent` answers `deny` / "no applicable grant"
+  for the stand-in's `transfer`. The fault branch shows the audit's recomputed outcome is
+  not inside (recorded `permit`, judged `not-authorised`).
+
+**Rows.** Manifest 280 → 281 paths:
+- 244 → 246 runs;
+- 16 → 17 disagrees;
+- 20 → 18 blocked.
+
+- main: runs, baseline outcome.
+- `gate-released-outside-mandate`: runs (ask-principal / evidence / not-authorised).
+- `fault-was-the-principals`: disagrees.
+
+Labels alternatives: 108 rows, 94 runs, 5 disagrees, 9 blocked.
+
+**Follow-up (bead to file):** produce the claimed record range on the operator's request,
+with `record-anchor` and `record-segment`.

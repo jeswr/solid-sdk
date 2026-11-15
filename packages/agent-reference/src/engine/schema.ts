@@ -113,6 +113,9 @@ const baseDomainProfileSchema = z.strictObject({
       corroboration: z
         .strictObject({ sources: z.number().int().min(2), independent: z.boolean() })
         .optional(),
+      // Brief 32: a statement of this kind may leave only when the agent's own record
+      // supports it (a record audit lists the claimed action as outside the mandate).
+      recordBacked: z.literal(true).optional(),
     }),
   ),
   purposes: z.array(z.strictObject({ id: iri, claims: strings })),
@@ -244,8 +247,11 @@ const expectation = z.strictObject({
   outcome: z.enum(["go", "stop", "ask-more", "ask-principal", "admit", "refuse"]),
   check: check,
   reason,
+  // A stop that applies to one proposal only: the core may go on with a narrower one (the
+  // over-ask demo). Only then may the stopped agent send further messages on this path.
+  continues: z.literal(true).optional(),
 });
-const catalogueExpectation = expectation.omit({ check: true });
+const catalogueExpectation = expectation.omit({ check: true, continues: true });
 const party = z.strictObject({
   id: slug,
   identity: iri,
@@ -641,6 +647,8 @@ const step = z.discriminatedUnion("type", [
     assessment: iri,
   }),
   z.strictObject({ ...base, type: z.literal("record") }),
+  // Brief 32: audit the agent's own record against the mandate in force at each release.
+  z.strictObject({ ...base, type: z.literal("record-audit") }),
   z.strictObject({
     ...base,
     type: z.literal("advance"),
@@ -745,6 +753,17 @@ export const scenarioSchema = z.strictObject({
       at: slug,
       purpose: z.enum(["suspension", "revocation"]),
       attempt: object.optional(),
+    })
+    .optional(),
+  // Brief 32: the faulty-gate stand-in. Only a branch under accountability-vendor-fault may
+  // set it (validateReferences and runPath refuse it anywhere else).
+  gateFault: z
+    .strictObject({
+      at: slug,
+      agent: slug,
+      kind: z.enum(["released-outside-mandate"]),
+      intent: object,
+      activityType: iri,
     })
     .optional(),
   paymentProviders: z

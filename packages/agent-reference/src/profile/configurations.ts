@@ -162,16 +162,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
       "Brief 31 section 2.9: the revised confinement rule admits added exchanges, so the post is unblocked after the regulator claim (section 2.3), with a narrower post. The bank's and the payroll provider's signed terms do not permit publication and nothing waives them (UC-9, AC-4), so the post may carry only Sam's own statement and the forum's signed decision. Not built: the regulator claim, a publication service party, a separately keyed reader agent whose inbound checks fetch the post and the lender's signed reply (the reader's inbound checks), and a public recipient class that terms can permit or prohibit. No post about an individual is published.",
     ],
   },
-  [alternativeWireId("accountability-vendor-fault")]: {
-    ...localDefinition(
-      alternativeWireId("accountability-vendor-fault"),
-      "Claim against the gate operator — not run",
-    ),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.8: deferred until a design is written. A main path may not run a faulty gate (confinement C3), and no existing fault stand-in releases an action outside the mandate: brief 20's injections cover settlement, document, evidence, authority, mandate-status and carriage faults only. Open questions: where a branch-only stand-in that bypasses the live outbound gate for one action sits, how it is labelled in standIns, and how it is kept off main paths; which ledger records the record audit treats as released actions, and whether it judges them against the mandate at release time; the claim kind and shape of the signed component statement naming who builds and who operates the gate and the core (CORE-L-13), and whether it needs vocabulary terms; and who signs the claim to the gate operator, its allegation, and what the operator's agent does on admission. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run.",
-    ],
-  },
+  [alternativeWireId("accountability-vendor-fault")]: localDefinition(
+    alternativeWireId("accountability-vendor-fault"),
+    "Record audit against the mandate in force, and a record-backed claim to the gate operator",
+  ),
   [alternativeWireId("usage-control-odrl-model-tighten")]: localDefinition(
     alternativeWireId("usage-control-odrl-model-tighten"),
     "ODRL rules followed by a model that can only narrow",

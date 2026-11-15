@@ -10133,14 +10133,14 @@
       "settlement": "rdf-order",
       "configuration": "authenticity-selective-disclosure",
       "what": "The lender asks optionally for the private national insurance number; the gate stops that extra disclosure and the lender proceeds on the allowed projection.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "stop",
         "reason": "excessive-scope",
         "check": "disclosure"
       },
       "expected": {
-        "outcome": "go",
+        "outcome": "stop",
         "reason": "excessive-scope"
       },
       "consequences": [
@@ -13104,8 +13104,323 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "accountability-vendor-fault",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.8: deferred until a design is written. A main path may not run a faulty gate (confinement C3), and no existing fault stand-in releases an action outside the mandate: brief 20's injections cover settlement, document, evidence, authority, mandate-status and carriage faults only. Open questions: where a branch-only stand-in that bypasses the live outbound gate for one action sits, how it is labelled in standIns, and how it is kept off main paths; which ledger records the record audit treats as released actions, and whether it judges them against the mandate at release time; the claim kind and shape of the signed component statement naming who builds and who operates the gate and the core (CORE-L-13), and whether it needs vocabulary terms; and who signs the claim to the gate operator, its allegation, and what the operator's agent does on admission. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 204,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 212,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 220,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 230,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 244,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 252,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 262,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 288,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 296,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 305,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 313,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 321,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 329,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 339,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 349,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 357,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 366,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 374,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 381,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 388,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 398,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 406,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 413,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 422,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 430,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 437,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 445,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 455,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 463,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 472,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 504,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 512,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 520,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 528,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 537,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 547,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 556,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 564,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 572,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 578,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 591,
+          "agent": "sams-agent",
+          "outcome": "go"
+        }
+      ],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--accountability-vendor-fault.json"
+    },
+    {
+      "scenario": "mortgage-main",
+      "useCase": "mortgage-in-principle",
+      "path": "gate-released-outside-mandate",
+      "settlement": "rdf-order",
+      "configuration": "accountability-vendor-fault",
+      "what": "A faulty-gate stand-in releases one order the mandate does not cover; the record audit finds it, Sam approves a record-backed claim and the gate operator's agent admits it.",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "not-authorised",
+        "check": "evidence"
+      },
+      "expected": {
+        "outcome": "ask-principal",
+        "reason": "not-authorised"
+      },
+      "consequences": [
+        {
+          "seq": 601,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 613,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 624,
+          "agent": "gate-operator-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 633,
+          "agent": "gate-operator-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 641,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 2,
+      "trace": "mortgage-main--gate-released-outside-mandate--accountability-vendor-fault.json"
     },
     {
       "scenario": "mortgage-main",
@@ -13114,8 +13429,26 @@
       "settlement": "rdf-order",
       "configuration": "accountability-vendor-fault",
       "what": "The action was inside the mandate; no supported claim against the gate vendor is produced.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.8: deferred until a design is written. A main path may not run a faulty gate (confinement C3), and no existing fault stand-in releases an action outside the mandate: brief 20's injections cover settlement, document, evidence, authority, mandate-status and carriage faults only. Open questions: where a branch-only stand-in that bypasses the live outbound gate for one action sits, how it is labelled in standIns, and how it is kept off main paths; which ledger records the record audit treats as released actions, and whether it judges them against the mandate at release time; the claim kind and shape of the signed component statement naming who builds and who operates the gate and the core (CORE-L-13), and whether it needs vocabulary terms; and who signs the claim to the gate operator, its allegation, and what the operator's agent does on admission. An ordinary refused out-of-mandate action is not evidence that a faulty gate released one; no live security gate is bypassed to fabricate a main run."
+      "status": "disagrees",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "evidence-invalid"
+      },
+      "consequences": [
+        {
+          "seq": 609,
+          "agent": "sams-agent",
+          "outcome": "stop",
+          "reason": "evidence-invalid"
+        }
+      ],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--fault-was-the-principals--accountability-vendor-fault.json"
     },
     {
       "scenario": "mortgage-main",

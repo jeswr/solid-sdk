@@ -72,6 +72,7 @@ import {
   verifyApproval,
 } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import { auditReleases } from "../mechanisms/record-audit.js";
 import {
   originalEnvelopeSchema,
   type ResourceReader,
@@ -359,6 +360,25 @@ class MessageReleaseError extends Error {
   }
 }
 
+/** Brief 32: what `auditRecord` found, for step templates and the fault claim. */
+export interface RecordAuditResult {
+  readonly ok: boolean;
+  readonly judged: number;
+  readonly inside: number;
+  readonly unjudged: number;
+  readonly outside: readonly {
+    readonly actionDigest: string;
+    readonly decision: { readonly seq: number; readonly hash: string };
+    readonly release: { readonly seq: number; readonly hash: string };
+  }[];
+  /** Every judged release in record order, with its verdict. */
+  readonly released: readonly { readonly actionDigest: string; readonly verdict: string }[];
+  readonly statement?: string;
+  readonly mandate?: { readonly id: string; readonly digest: string };
+  /** The `record-audit` entry's position and chain hash. */
+  readonly entry?: { readonly seq: number; readonly hash: string };
+}
+
 export class AgentRuntime {
   private readonly verifiedEmailPins = new Map<
     string,
@@ -415,6 +435,7 @@ export class AgentRuntime {
         identifiers: copyData(options.gates?.identifiers),
         purposes: copyData(options.gates?.purposes),
         claimSources: copyData(options.gates?.claimSources),
+        recordBackedClaims: copyData(options.gates?.recordBackedClaims ?? []),
         ...(options.gates?.reliance ? { reliance: copyData(options.gates.reliance) } : {}),
         principalLimits: copyData(options.gates?.principalLimits),
         rules: copyData(options.gates?.rules ?? []),
@@ -654,6 +675,7 @@ export class AgentRuntime {
       identity: this.identity,
       now: () => this.now(),
       recordRelease: (intent) => this.recordReleaseDigest === actionDigest(intent),
+      recordBacks: (claim, recipient) => this.recordBacks(claim, recipient),
       mandate: () =>
         this.mandate && !this.isRevoked(this.mandate) ? this.mandate.mandate : undefined,
       policyEngine: options.policyEngine,
@@ -2739,6 +2761,155 @@ export class AgentRuntime {
     });
   }
 
+  /**
+   * Brief 32 §3: audit this agent's own record. Every outbound release is re-evaluated at its
+   * recorded time against the mandate in force then (by the same mandate method `authorise`
+   * uses), never trusting the recorded outcome. All events go on part `record`, so the audit
+   * is not a gate run. A `record-audit` entry names the component statement in force, the
+   * mandate, the counts and each release found outside the mandate.
+   */
+  auditRecord(): Promise<RecordAuditResult> {
+    return this.exclusive(async () => {
+      const sink = this.options.gates?.sink;
+      const at = this.now();
+      const audit = auditReleases(this.ledger.entries(), (action, when, mandate) => {
+        if (!this.mandate || this.mandate.digest !== mandate.digest) return undefined;
+        this.reauthorising = true;
+        try {
+          return this.mandateDecision(action, when, new Map());
+        } finally {
+          this.reauthorising = false;
+        }
+      });
+      const component = [...this.gateMemory.facts.values()].find(
+        (fact) => fact.claimType === "agent.components",
+      )?.digest;
+      if (audit.chain === "broken") {
+        sink?.emit({
+          part: "record",
+          kind: "check",
+          check: "evidence",
+          verdict: "fail",
+          reason: "record-unavailable",
+          caption: "This agent's record does not verify, so its releases cannot be audited.",
+        });
+        sink?.emit({
+          part: "record",
+          kind: "decision",
+          outcome: "stop",
+          reason: "record-unavailable",
+          caption: "The audit stops: the record is not intact.",
+        });
+        return { ok: false, judged: 0, inside: 0, unjudged: 0, outside: [], released: [] };
+      }
+      for (const release of audit.judged)
+        sink?.emit({
+          part: "record",
+          kind: "check",
+          check: "evidence",
+          verdict:
+            release.verdict === "inside"
+              ? "pass"
+              : release.verdict === "outside"
+                ? "fail"
+                : "indeterminate",
+          reason: release.reason,
+          caption:
+            release.verdict === "inside"
+              ? `A ${release.action.action} action released at ${release.at} is within the mandate in force then.`
+              : release.verdict === "outside"
+                ? `A ${release.action.action} action released at ${release.at} is outside the mandate in force then: re-evaluated, the mandate does not allow it, although the record says it was permitted.`
+                : `A ${release.action.action} action released at ${release.at} cannot be judged: the mandate it names is not held.`,
+        });
+      if (audit.unjudged.length)
+        sink?.emit({
+          part: "record",
+          kind: "record",
+          caption: `${audit.unjudged.length} replies inside agreed exchanges carry no authorisation decision; they are reported, not judged.`,
+        });
+      const outside = audit.outside.filter((release) => release.verdict === "outside");
+      sink?.emit({
+        part: "record",
+        kind: "decision",
+        outcome: outside.length ? "ask-principal" : "go",
+        ...(outside.length ? { reason: "not-authorised" as const } : {}),
+        caption: outside.length
+          ? "The audit found a release outside the mandate. Sam decides whether to claim."
+          : "Every judged release is within the mandate in force when it was released.",
+      });
+      if (outside.length)
+        sink?.emit({
+          part: "principal",
+          kind: "record",
+          chat: {
+            who: "agent",
+            text: `Your agent's record shows ${outside.length === 1 ? "one action" : `${outside.length} actions`} released although your mandate did not allow ${outside.length === 1 ? "it" : "them"}: ${outside.map((release) => `a ${release.action.action} at ${release.at}`).join("; ")}. You can send a claim to the gate's operator.`,
+          },
+          caption: "The agent tells Sam what the audit found.",
+        });
+      const mandate = this.mandate
+        ? { id: this.mandate.mandate.id, digest: this.mandate.digest }
+        : undefined;
+      const findings = outside.map((release) => ({
+        actionDigest: release.actionDigest,
+        decision: release.decision,
+        release: release.release,
+      }));
+      this.record({
+        type: "record-audit",
+        ...(component ? { statement: component } : {}),
+        ...(mandate ? { mandate } : {}),
+        judged: audit.judged.length,
+        inside: audit.judged.length - audit.outside.length,
+        outside: findings,
+        indeterminate: audit.outside.length - outside.length,
+        unjudged: audit.unjudged.length,
+        at,
+      });
+      const entry = this.ledger.entries().at(-1);
+      return {
+        ok: true,
+        judged: audit.judged.length,
+        inside: audit.judged.length - audit.outside.length,
+        unjudged: audit.unjudged.length,
+        outside: findings,
+        released: audit.judged.map((release) => ({
+          actionDigest: release.actionDigest,
+          verdict: release.verdict,
+        })),
+        ...(component ? { statement: component } : {}),
+        ...(mandate ? { mandate } : {}),
+        ...(entry ? { entry: { seq: entry.seq, hash: entry.hash } } : {}),
+      };
+    });
+  }
+
+  /**
+   * Brief 32: does this agent's own record support an outgoing record-backed statement? A
+   * `record-audit` entry must list the claimed action digest as outside the mandate, and the
+   * recipient must be the gate operator an admitted component statement names.
+   */
+  private recordBacks(claim: Readonly<Record<string, unknown>>, recipient: string): boolean {
+    const action = claim.action;
+    if (typeof action !== "string") return false;
+    const found = this.ledger.entries().some((entry) => {
+      const record = entry.record as Record<string, unknown>;
+      return (
+        record.type === "record-audit" &&
+        Array.isArray(record.outside) &&
+        record.outside.some(
+          (release) => (release as { actionDigest?: unknown }).actionDigest === action,
+        )
+      );
+    });
+    const operator = [...this.gateMemory.facts.values()].some(
+      (fact) =>
+        fact.claimType === "agent.components" &&
+        (fact.statement?.gate as { operatedBy?: unknown } | undefined)?.operatedBy === recipient,
+    );
+    return found && operator;
+  }
+
   /** Check this agent's own record and show it in the trace. */
   checkRecord(entries: readonly LedgerEntry[]): {
     ok: boolean;
@@ -4460,6 +4631,36 @@ export class AgentRuntime {
       if (Date.parse(a.validUntil) > Date.parse(at) && (quiet || !this.state.usedApprovals[a.id]))
         approvals.set(digest, { id: a.id, decision: a.decision });
     }
+    const decision = this.mandateDecision(intent, at, approvals);
+    let effective = decision;
+    if (!quiet && !this.resuming) this.outbound.propose(intent, this.proposalOrigin);
+    this.reauthorising = quiet;
+    try {
+      effective = this.outbound.release(intent, decision).decision;
+    } finally {
+      this.reauthorising = false;
+    }
+    this.record({
+      ...effective,
+      originalDigests: this.gateMemory
+        .context(this.options.gates?.taskId ?? intent.conversation)
+        .filter((i) => i.kind === "reading")
+        .map((i) => i.statement?.originalDigest)
+        .filter((d) => typeof d === "string"),
+    });
+    this.decisions.push(effective);
+    return effective;
+  }
+
+  /**
+   * The mandate part of `authorise`: the owner mandate evaluated at `at`, then the standing
+   * rules. Brief 32: the record audit re-evaluates recorded releases with the same method.
+   */
+  private mandateDecision(
+    intent: ActionIntent,
+    at: string,
+    approvals: ReadonlyMap<string, { id: Iri; decision: "approve" | "deny" }>,
+  ): AuthorisationDecision {
     const revoked = this.mandate ? this.isRevoked(this.mandate) : false;
     let decision = evaluateIntent({
       loaded: this.mandate,
@@ -4488,24 +4689,7 @@ export class AgentRuntime {
         ...(standing.ok ? { basis: "autonomous", matchedRule: standing.rule.id } : {}),
       };
     }
-    let effective = decision;
-    if (!quiet && !this.resuming) this.outbound.propose(intent, this.proposalOrigin);
-    this.reauthorising = quiet;
-    try {
-      effective = this.outbound.release(intent, decision).decision;
-    } finally {
-      this.reauthorising = false;
-    }
-    this.record({
-      ...effective,
-      originalDigests: this.gateMemory
-        .context(this.options.gates?.taskId ?? intent.conversation)
-        .filter((i) => i.kind === "reading")
-        .map((i) => i.statement?.originalDigest)
-        .filter((d) => typeof d === "string"),
-    });
-    this.decisions.push(effective);
-    return effective;
+    return decision;
   }
 
   private standingAccess(
