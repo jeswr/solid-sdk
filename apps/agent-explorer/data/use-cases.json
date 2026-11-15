@@ -829,17 +829,28 @@
     {
      "path": "main",
      "label": "All fourteen steps (meaning-plain-language-upgrade)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "meaning-plain-language-upgrade",
-     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane.",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--meaning-plain-language-upgrade.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "prose-as-evidence",
-     "label": "Prose income is offered where structured evidence is required. (meaning-plain-language-upgrade)",
-     "status": "blocked",
+     "label": "The lender's reply arrives without its signed description. Sam's agent reads the prose as a description of the lender's agent and tries to rely on that reading; the outbound gate asks for the structured form from the source. (meaning-plain-language-upgrade)",
+     "status": "runs",
      "configuration": "meaning-plain-language-upgrade",
-     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.5: the revised confinement rule admits a prose opening as an added segment. Not built: a correspondent with both a mailbox and an agent (a mailbox binding for the lender's agent whose reply to a prose email attaches its signed description) and a lasting structured-only marking that refuses any later step down. The unsigned ScriptedMailbox has no correspondent agent or advertisement, so the upgrade boundary is not implemented; the change touches the runtime lane.",
+     "scenario": "mortgage-main--prose-as-evidence",
+     "traceFile": "mortgage-main--prose-as-evidence--meaning-plain-language-upgrade.json",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "step-back-down",
+     "label": "Later in the journey the lender writes to Sam's agent in prose again. The lender is marked structured only since its signed description was admitted, so the email is refused before core context. (meaning-plain-language-upgrade)",
+     "status": "runs",
+     "configuration": "meaning-plain-language-upgrade",
+     "scenario": "mortgage-main--step-back-down",
+     "traceFile": "mortgage-main--step-back-down--meaning-plain-language-upgrade.json",
      "mortgage": "mortgage-main"
     },
     {
