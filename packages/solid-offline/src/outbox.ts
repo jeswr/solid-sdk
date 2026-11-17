@@ -324,7 +324,8 @@ function validateTag(tag: unknown): asserts tag is string {
 
 /**
  * Enforce depth, value-count and byte budgets while copying; caller object key
- * enumeration is not bounded. Stored assertions must pass the byte cap before parsing.
+ * enumeration is not bounded. Stored envelopes are read by fixed field, and stored
+ * assertions must pass the byte cap before parsing.
  */
 function snapshotGuard(
   value: unknown,
@@ -339,20 +340,17 @@ function snapshotGuard(
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
     throw invalid();
+  // Read only the two fixed fields by descriptor. Stored envelopes (IndexedDB
+  // structured clones) are never enumerated before the assertion byte cap, and
+  // any other stored key is never read. Caller guards must have no other keys.
   const fields = new Map<string, unknown>();
-  for (const key in value) {
-    if (!Object.hasOwn(value, key)) continue;
-    if (fields.size >= 2) throw invalid();
+  for (const key of ['tag', 'assertions'] as const) {
     const property = Object.getOwnPropertyDescriptor(value, key);
-    if (
-      (key !== 'tag' && key !== 'assertions') ||
-      !property?.enumerable ||
-      !Object.hasOwn(property, 'value')
-    )
-      throw invalid();
+    if (!property) continue;
+    if (!property.enumerable || !Object.hasOwn(property, 'value')) throw invalid();
     fields.set(key, property.value);
   }
-  if (Reflect.ownKeys(value).length !== fields.size) throw invalid();
+  if (source === 'caller' && Reflect.ownKeys(value).length !== fields.size) throw invalid();
   const tag = fields.get('tag');
   validateTag(tag);
   let nodes = 0;

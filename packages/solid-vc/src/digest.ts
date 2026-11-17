@@ -32,13 +32,33 @@
 // partial acceptance.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
-import type { DatasetCore, Quad } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { canonicalNQuads } from "./canonicalize.js";
 import { credentialDocumentLoader } from "./context-loader.js";
 import { base58btcEncode } from "./multibase.js";
 
 /** The multihash code + length prefix for sha2-256 (0x12, 32 bytes). */
 const MULTIHASH_SHA2_256_PREFIX = Uint8Array.from([0x12, 0x20]);
+
+const RDF_DIR_LANG_STRING = "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString";
+
+/** RDFC-1.0 drops directional literals' language/direction: never hash them. */
+function refuseDirectionalLiterals(term: Term): void {
+  if (
+    term.termType === "Literal" &&
+    (term.direction || term.datatype.value === RDF_DIR_LANG_STRING)
+  ) {
+    throw new Error(
+      "@jeswr/solid-vc: refusing to digest a literal with a base direction or rdf:dirLangString " +
+        "datatype — RDFC-1.0 does not preserve its language and direction",
+    );
+  }
+  if (term.termType === "Quad") {
+    for (const component of [term.subject, term.predicate, term.object, term.graph]) {
+      refuseDirectionalLiterals(component);
+    }
+  }
+}
 
 /** Wrap raw SHA-256 octets as a multibase(base58btc)-encoded multihash. */
 function sha256Multihash(digest: Uint8Array): string {
@@ -52,8 +72,11 @@ function sha256Multihash(digest: Uint8Array): string {
  * The VCDM 2.0 `digestMultibase` of a set of RDF quads: multibase(base58btc) of
  * the sha2-256 multihash over the RDFC-1.0 canonical N-Quads. Deterministic —
  * quad order and blank-node labelling do not affect the result.
+ * Throws for literals with a base direction or rdf:dirLangString datatype:
+ * RDFC-1.0 cannot preserve their language and direction.
  */
 export async function digestQuads(quads: readonly Quad[]): Promise<string> {
+  for (const quad of quads) refuseDirectionalLiterals(quad);
   const canonical = await canonicalNQuads(quads);
   const digest = new Uint8Array(
     await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical)),
@@ -68,12 +91,14 @@ export async function digestQuads(quads: readonly Quad[]): Promise<string> {
  * reordered triples, different prefixes, different blank-node labels — produce
  * the SAME digest, and any graph change produces a different one.
  *
- * FAIL-CLOSED guards (both throw — a digest silently computed over nothing
+ * FAIL-CLOSED guards (all throw — a digest silently computed over nothing
  * would let an empty/unparseable "policy" be bound and later "verified"):
  *  - unparseable content → the parser's error propagates;
  *  - an EMPTY graph → throws (an authorization bound to zero triples is
  *    meaningless and almost certainly a caller bug — wrong content type or an
  *    empty fetch body).
+ *  - a literal with a base direction or rdf:dirLangString datatype → throws
+ *    (RDFC-1.0 loses its language and direction, merging distinct literals).
  */
 export async function digestRdfContent(
   content: string,

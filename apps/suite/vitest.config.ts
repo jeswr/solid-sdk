@@ -93,6 +93,7 @@ export default defineConfig({
         "src/apps/mail/lib/mime/**/*.ts",
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/drive/components/share-dialog.tsx",
+        "src/apps/drive/components/text-preview.tsx",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
         "src/apps/chat/lib/model/**/*.ts",

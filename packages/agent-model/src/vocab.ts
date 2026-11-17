@@ -100,6 +100,8 @@ export const TERM_DEFINITIONS = {
   acceptsConfiguration:
     "A configuration the agent accepts for interaction (subset of implemented).",
   accessMode: "public, represented, agreement, ...",
+  account:
+    "The account described by account-specific capability observations; conveys no authority.",
   action: "The agent:ActionIntent evaluated.",
   actionDigest: "Digest identifying the exact action (all consequential parameters).",
   activityType:
@@ -137,6 +139,8 @@ export const TERM_DEFINITIONS = {
   "basis/owner-approval":
     "owner-approval value in the basis concept scheme; an evidence classification, not a grant.",
   binding: "Transport binding identifier.",
+  grantedScopes:
+    "Ordered provider scope names reported by the daemon for the referenced account; informative, never permission to act.",
   bindingEndpoint: "Endpoint advertised for a binding.",
   bindingState: "Account connection state: none, setup-required, connected, error or disabled.",
   carriage: "Versioned metadata carriage profile identifier supported by the binding.",

@@ -188,6 +188,7 @@ test("3: changed terms refuse the old approval and enable a new approval", async
 test("4: deny records refusal without an external send", async ({ page }, info) => {
   await setup(page);
   await open(page, "approvals/send-reply");
+  await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeEnabled();
   await page.keyboard.press("d");
   await expect(page.getByText("Denied", { exact: true })).toBeVisible();
   const { daemon, proposal } = await proposalOnPod(page);

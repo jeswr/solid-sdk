@@ -5,5 +5,6 @@ export * from "./messages";
 export * from "./paths";
 export * from "./preferences";
 export * from "./rdf";
+export * from "./reactions";
 export * from "./rooms";
 export * from "./validation";

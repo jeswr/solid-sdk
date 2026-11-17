@@ -1,0 +1,248 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Download",
+      "typeIris": [
+        "https://schema.org/DataDownload"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "contentUrl",
+          "predicate": "https://schema.org/contentUrl",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "encodingFormat",
+          "predicate": "https://schema.org/encodingFormat",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "text/csv"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 1
+          }
+        },
+        {
+          "name": "subjectOf",
+          "predicate": "https://schema.org/subjectOf",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Descriptor",
+      "typeIris": [
+        "https://schema.org/Dataset"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "distribution",
+          "predicate": "https://schema.org/distribution",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "variableMeasured",
+          "predicate": "https://schema.org/variableMeasured",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Column",
+      "typeIris": [
+        "https://schema.org/PropertyValue"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "additionalType",
+          "predicate": "https://schema.org/additionalType",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "http://www.w3.org/2001/XMLSchema#string",
+            "http://www.w3.org/2001/XMLSchema#double",
+            "http://www.w3.org/2001/XMLSchema#dateTime"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "encodingFormat",
+          "predicate": "https://schema.org/encodingFormat",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "text",
+            "number",
+            "date-time"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workbook",
+      "typeIris": [
+        "https://schema.org/SpreadsheetDigitalDocument"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "creator",
+          "predicate": "http://purl.org/dc/terms/creator",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "encoding",
+          "predicate": "https://schema.org/encoding",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasPart",
+          "predicate": "https://schema.org/hasPart",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        }
+      ]
+    }
+  ]
+}

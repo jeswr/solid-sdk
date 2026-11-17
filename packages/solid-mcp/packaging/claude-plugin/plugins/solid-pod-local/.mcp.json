@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "solid-pod-local": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jeswr/solid-mcp"
+      ],
+      "env": {
+        "SOLID_MCP_POD_ROOT": "${SOLID_MCP_POD_ROOT}",
+        "SOLID_MCP_READONLY": "${SOLID_MCP_READONLY:-true}"
+      }
+    }
+  }
+}

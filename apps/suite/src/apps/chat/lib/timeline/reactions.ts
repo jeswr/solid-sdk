@@ -33,3 +33,21 @@ export function aggregateReactions(reactions: readonly Reaction[], me: string): 
     .sort(([a], [b]) => compareUniqueId(a, b))
     .map(([emoji, actors]) => ({ emoji, count: actors.size, reactedByMe: actors.has(me) }));
 }
+
+/** Chips shown per message; the rest collapse into a count so hostile data cannot flood a row. */
+export const MAX_REACTION_CHIPS = 20;
+/** The caller's own reactions first (so they can always be removed), then the most used. */
+export function visibleReactions(
+  summaries: readonly ReactionSummary[],
+  limit = MAX_REACTION_CHIPS,
+): { shown: ReactionSummary[]; hidden: number } {
+  const ranked = [...summaries].sort(
+    (a, b) => Number(b.reactedByMe) - Number(a.reactedByMe) || b.count - a.count,
+  );
+  const shown = ranked.slice(0, limit);
+  const kept = new Set(shown);
+  return {
+    shown: summaries.filter((summary) => kept.has(summary)),
+    hidden: ranked.length - shown.length,
+  };
+}

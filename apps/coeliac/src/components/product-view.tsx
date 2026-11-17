@@ -15,6 +15,7 @@ import {
 import { useMemo, useState } from "react";
 import { dataQualityNote, exposureDisplay, triggerLabel } from "@/lib/off/exposure-display";
 import { offProductToFoodItem, type OffProduct } from "@/lib/off/off";
+import { podErrorMessage } from "@/lib/pod/errors";
 import { useDiaryActions } from "@/lib/session/use-diary-actions";
 
 type Phase = "idle" | "saving" | "saved" | "error";
@@ -46,7 +47,7 @@ export function ProductView({
       await syncing;
     } catch (err) {
       setPhase("error");
-      setErrorMsg((err as Error).message);
+      setErrorMsg(podErrorMessage(err));
     }
   }
 

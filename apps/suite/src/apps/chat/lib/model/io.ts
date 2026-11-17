@@ -18,6 +18,7 @@ import {
 } from "./messages";
 import { dayPage, dayUrl, joinedRoomsUrl, roomContainer, roomIndex } from "./paths";
 import { ChatNode, NS, serializeChat } from "./rdf";
+import { appendReaction, appendUndo, type ReactionInput, type UndoInput } from "./reactions";
 import {
   buildRoom,
   buildRoomAcl,
@@ -202,6 +203,20 @@ export async function sendMessage(
     await ensureContainer(fetch, base, `${base}${year}/${month}/`);
     return { url, dataset, etag: await saveChat(fetch, base, url, dataset, condition) };
   }
+  const etag = await insertData(fetch, base, url, delta, condition);
+  return { url, dataset, etag };
+}
+/**
+ * The one append-only write: PATCH INSERT DATA of `delta` under a strong If-Match.
+ * Moving this onto StorageClient.patch is bead sst-c4xg.
+ */
+async function insertData(
+  fetch: typeof globalThis.fetch,
+  base: string,
+  url: string,
+  delta: Store,
+  condition: { ifMatch: string },
+): Promise<string | null> {
   const response = checked(
     await scoped(fetch, base)(url, {
       method: "PATCH",
@@ -209,7 +224,7 @@ export async function sendMessage(
       body: `INSERT DATA {\n${await serializeChat(delta, "application/n-triples")}\n}`,
     }),
   );
-  return { url, dataset, etag: response.headers.get("etag") };
+  return response.headers.get("etag");
 }
 export async function loadMessages(
   fetch: typeof globalThis.fetch,
@@ -226,6 +241,34 @@ export async function loadMessages(
     (a, b) => (a.published ?? "").localeCompare(b.published ?? "") || a.id.localeCompare(b.id),
   );
   return { documents, messages, next: page.next };
+}
+async function appendEvent(
+  fetch: typeof globalThis.fetch,
+  room: string,
+  message: string,
+  change: (dataset: Store) => Store | null,
+): Promise<ChatDocument> {
+  const url = messageResource(room, message);
+  const base = roomContainer(room);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const document = await optionalChat(fetch, base, url);
+      const delta = change(document.dataset);
+      if (!delta) return document;
+      const etag = await insertData(fetch, base, url, delta, {
+        ifMatch: strongEtag(document.etag),
+      });
+      return { url, dataset: new Store([...document.dataset, ...delta]), etag };
+    } catch (error) {
+      if (!(error instanceof ChatIoError && error.status === 412) || attempt === 1) throw error;
+    }
+  }
+}
+export function react(fetch: typeof globalThis.fetch, room: string, input: ReactionInput) {
+  return appendEvent(fetch, room, input.message, (dataset) => appendReaction(dataset, room, input));
+}
+export function unreact(fetch: typeof globalThis.fetch, room: string, input: UndoInput) {
+  return appendEvent(fetch, room, input.message, (dataset) => appendUndo(dataset, room, input));
 }
 async function mutate(
   fetch: typeof globalThis.fetch,

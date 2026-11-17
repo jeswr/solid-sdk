@@ -79,19 +79,18 @@ describe("useIssues live subscriptions", () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it.each([0, 6_000])("keeps refreshing with 40 staggered polling fallbacks and %i ms reads", async (readMs) => {
-    const { watchContainer } = await vi.importActual<typeof import("./notifications")>("./notifications");
+  it.each([0, 6_000])("keeps refreshing with 40 staggered SDK invalidations and %i ms reads", async (readMs) => {
     const initialIssues = Array.from({ length: 39 }, (_, index) => issue(`issue-${index}`));
     list.mockResolvedValue({ issues: initialIssues, canCreate: true });
-    watch.mockImplementation((topic, onChange, options) => {
+    watch.mockImplementation((_topic, onChange) => {
       const delay = (watch.mock.calls.length - 1) * 625;
-      const doFetch: typeof fetch = async (_url, init) => {
-        // Stagger discovery failures so the real watcher's 25-second poll
-        // timers keep invalidating the board less than 800 ms apart.
-        if (init?.method === "HEAD") await new Promise((resolve) => setTimeout(resolve, delay));
-        return new Response(null, { status: 404 });
-      };
-      return watchContainer(topic, onChange, { ...options, fetch: doFetch });
+      let interval: ReturnType<typeof setInterval> | undefined;
+      // Model staggered SDK change hints without depending on protocol internals.
+      const first = setTimeout(() => {
+        onChange();
+        interval = setInterval(onChange, 25_000);
+      }, 25_000 + delay);
+      return { close() { clearTimeout(first); clearInterval(interval); } };
     });
     const { result, unmount } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
     await act(async () => {});

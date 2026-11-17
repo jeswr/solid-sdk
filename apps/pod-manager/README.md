@@ -15,6 +15,19 @@ The HTTPS `/clientid.jsonld` route registers `/callback.html`. Dynamic registrat
 are allowed only in development on loopback, so use `pnpm dev` for local HTTP sign-in.
 Old app-local credentials are cleared on first startup after migration.
 
+## Live updates
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`@jeswr/pod-notifications`' shared `watchInvalidations` discovers the active view's storage and selects Solid
+WebSocket/StreamingHTTP, LWS push, legacy NSS or 30-second ETag/membership polling.
+Changes, first connection and missed-event resync reload the view through the existing
+500 ms debounce. The session's `podFetch` supplies authentication; discovered service,
+stream and socket endpoints remain on the topic's origin. Changing the view, signing out
+or unmounting aborts setup and closes the subscription, including best-effort deletion of
+safe Solid channel ids and LWS subscriptions. Foreign gateways and missing browser transports
+switch to polling without repeated discovery. If storage metadata cannot be discovered,
+periodic full-refresh hints retain 30-second refreshes of the already-readable view.
+
 ## Integrations (Connect sources)
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->

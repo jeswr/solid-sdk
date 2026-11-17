@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { renderTranscript } from "./transcript.js";
 
@@ -6,6 +7,19 @@ const DAY1 = "2026-10-24T12:00:00.000Z";
 const DAY2 = "2026-10-25T12:00:00.000Z";
 
 describe("renderTranscript", () => {
+  it("escapes and redacts account metadata like titles", () => {
+    const out = renderTranscript({
+      provider: "codex",
+      conversationId: "c",
+      title: "T",
+      account: "*Work* ghp_fixtureSecret",
+      channel: "hook",
+      messages: [],
+    });
+    expect(out).toContain("Account: \\*Work\\* \\[REDACTED TOKEN\\]");
+    expect(out).toContain("Channel: hook");
+    expect(out).not.toContain("ghp_fixtureSecret");
+  });
   it("renders a title, provenance line and one fenced section per message", () => {
     expect(
       renderTranscript({
@@ -71,6 +85,7 @@ describe("renderTranscript", () => {
   it.each([
     { provider: "other" },
     { conversationId: "a`b" },
+    { channel: "token=fixture-secret" },
     { messages: [{ role: "user\n# x", text: "t", createdAt: DAY1 }] },
   ])("rejects unvalidated library input %#", (override) => {
     expect(() =>

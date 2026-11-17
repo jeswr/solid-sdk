@@ -99,7 +99,9 @@
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
-    "@jeswr/solid-environment"
+    "@jeswr/solid-sheets",
+    "@jeswr/solid-environment",
+    "@jeswr/agent-consent"
   ],
   "applications": [
     {
@@ -195,6 +197,11 @@
     {
       "slug": "notification-relay",
       "name": "@jeswr/app-notification-relay",
+      "kind": "application"
+    },
+    {
+      "slug": "agent-chat",
+      "name": "@jeswr/app-agent-chat",
       "kind": "application"
     }
   ],

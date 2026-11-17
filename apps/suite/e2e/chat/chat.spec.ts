@@ -95,6 +95,47 @@ test("empty state and the new room dialog are accessible", async ({ page }, info
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page).toHaveURL("/chat");
 });
+test("searches messages and follows a highlighted result to the focused room message", async ({
+  page,
+}, info) => {
+  await createRoom(page, "Search room");
+  await send(page, "Garden plans for Saturday");
+  await send(page, "Bring a picnic blanket");
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  const navigation =
+    (page.viewportSize()?.width ?? 1280) < 1024
+      ? page.getByRole("dialog", { name: "Navigation", exact: true })
+      : page.getByRole("navigation", { name: "Conversations", exact: true });
+  const search = navigation.getByRole("searchbox", { name: "Search messages", exact: true });
+  await search.fill("garden");
+  await search.press("Enter");
+  await expect(page).toHaveURL(/\/chat\/search\?q=garden$/);
+  await expect(page.getByRole("heading", { name: "Search", level: 1, exact: true })).toBeVisible();
+  const results = page.getByRole("list", { name: "Search results", exact: true });
+  await expect(results.getByRole("link")).toHaveCount(1);
+  await expect(results.locator("mark")).toHaveText("Garden");
+  await expect(page.getByRole("main").getByRole("status")).toContainText("1 message in 1 room");
+  await expect(page.getByRole("main").getByRole("status")).not.toContainText("days");
+  await expect(
+    page.getByRole("searchbox", { name: "Search messages in joined rooms", exact: true }),
+  ).toHaveValue("garden");
+  await accessible(page);
+  await capture(page, info, "search");
+  await results.getByRole("link").click();
+  await expect(page).toHaveURL(/\/chat\/r\/[^?]+\?message=/);
+  const target = page.getByRole("article").filter({ hasText: "Garden plans for Saturday" });
+  await expect(target).toBeFocused();
+  await expect(target).toHaveAttribute("data-highlighted", "");
+  await accessible(page);
+  const badHint = new URL(page.url());
+  badHint.searchParams.set("message", "bad%message");
+  await page.goto(badHint.href);
+  await expect(
+    page.getByRole("heading", { name: "Search room", level: 1, exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeVisible();
+});
 test("create, append, edit, tombstone, turn into task, live sync and keyboard navigation", async ({
   page,
   context,
@@ -104,6 +145,27 @@ test("create, append, edit, tombstone, turn into task, live sync and keyboard na
   const first = await send(page, "First message");
   const second = await send(page, "Second message");
   await expect(page.getByRole("article")).toHaveCount(2);
+  await first.hover();
+  await first.getByRole("button", { name: "Add reaction", exact: true }).click();
+  await page.getByRole("menuitem", { name: "React with 👍", exact: true }).click();
+  const reaction = first.getByRole("button", { name: "👍 1 reaction, including you", exact: true });
+  await expect(reaction).toHaveAttribute("aria-pressed", "true");
+  await expect(reaction).toHaveText("👍 1");
+  // A reload proves reactions come from the day resource rather than local component state.
+  await page.reload();
+  await expect(reaction).toHaveAttribute("aria-pressed", "true");
+  await reaction.click();
+  await expect(reaction).toBeHidden();
+  // The actions menu also exposes the picker to keyboard users and restores focus on Escape.
+  const actions = first.getByRole("button", { name: "Message actions", exact: true });
+  await actions.focus();
+  await actions.press("ArrowDown");
+  const addReaction = page.getByRole("menuitem", { name: "Add reaction", exact: true });
+  await addReaction.focus();
+  await addReaction.press("ArrowRight");
+  await expect(page.getByRole("menuitem", { name: "React with 👍", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(actions).toBeFocused();
   await first.hover();
   await first.getByRole("button", { name: "Message actions" }).click();
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();

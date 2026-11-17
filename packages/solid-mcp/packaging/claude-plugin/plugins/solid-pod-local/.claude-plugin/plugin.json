@@ -1,0 +1,9 @@
+{
+  "name": "solid-pod-local",
+  "version": "0.2.0",
+  "description": "Local stdio Solid pod MCP tools. AUTHORED-BY Codex GPT-6.1-Sol",
+  "author": {
+    "name": "Jesse Wright"
+  },
+  "license": "MIT"
+}

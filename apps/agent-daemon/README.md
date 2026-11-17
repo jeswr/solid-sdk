@@ -14,6 +14,36 @@ an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
 
+`PodWorkspace` requires an injected Solid `storage: StorageClient` alongside `io` and
+`root`. Composition shares the one `createPodClient` result with notifications.
+Workspace reads, writes and container creation use that client; `io` remains the
+scope-checked transport seam for the legacy inbound importer. Snapshot writes keep
+their unconditional semantics (`ifMatch: '*'`), while index edits use the observed
+ETag and proposals use conditional creation. Non-Solid storage is refused at construction.
+Fixed destinations use the shared `createAt` helper, which rejects URL spellings that
+would change on name encoding before any create request (for example `x:y.ttl` and
+`x%3ay.ttl`; `x%3Ay.ttl` is accepted). Proposal IDs must pass the shared
+`isExactChildUrl` predicate for a direct `.ttl` child of `proposals/`; other IDs use a
+deterministic digest location. Cached IDs from older runs are repaired and saved before
+outbox projection, preserving replay without another Proposer call, but only when no
+earlier pass reached projection. Older releases accepted any `proposals/**.ttl` ID and
+projected into the outbox before auditing or publishing, so ledger evidence for the
+result's model calls or proposals, or a resource already at the legacy URL, means the
+outbox holds that legacy ID. The daemon then keeps it end to end (idempotent outbox
+replay, read-only confirmation of the published resource, same audit evidence) rather
+than adding a second outbox entry. If such a legacy proposal was never published it
+fails closed with `Legacy proposal already projected; manual migration needed`.
+A projection interrupted before any audit append or publication leaves no such evidence
+and cannot be detected from the daemon's side; recover it by reconciling the outbox.
+Only a taken name reported as Solid's remapped
+412 permits proposal replay or index-create retry; a real 409 remains a write failure.
+After a container-create conflict, a fresh HEAD must confirm the container exists.
+Read bounds and existing CLI error messages are retained.
+`createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
+that state, with request records and resource snapshots for offline assertions.
+Its named-create adapter forwards the SDK memory backend's name-taken 412 directly;
+collisions between resource and container paths retain 409.
+
 The deployment supplies the owner-discovered private Type Index URL (already linked
 from the owner's preferences document). Registration preserves existing RDF and
 uses ETags, retries at most three conflicts, and refuses unreadable indexes or
@@ -53,7 +83,8 @@ Heartbeat RDF is written at startup and every 60 seconds to
 
 The host must construct the executor with fresh, cryptographically verified owner
 controls, approvals and mandates: parsing RDF is insufficient. Its local HALT check
-must read `createLocalState(...).halted` on every gate pass. Wire/action validation,
+must read `createLocalState(...).halted` on every gate pass, and use its
+`assertNotHalted` as the control store's synchronous dispatch check. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
 executor obligations. `proposalWritten` runs before pod publication and must
 idempotently project proposals into the trusted outbox, returning the exact
@@ -78,7 +109,7 @@ provides atomic fsynced cursors and proposal results, local HALT and safe status
 Retain proposal results across cursor retries and process restarts. Use a dedicated
 private credential-store directory whose parent already exists.
 
-The `awp` executable dispatches `run`, `once`, `halt`, `status`, `accounts`,
+The `awp` executable dispatches `run`, `once`, `halt`, `resume`, `status`, `accounts`,
 `login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
 `audit <artifact> [--at <instant>]`
 and `install-launchd`. `createCliHost` connects those commands to a daemon or lazy composition factory,
@@ -106,6 +137,62 @@ composition; they never authenticate or send. Preloads
 must be inert until a command needs their capabilities; keep secrets out of argv,
 logs, plist arguments and source control. No deployment module is downloaded or
 loaded from pod data.
+
+## Stop and resume
+
+The settings button and status menu write an owner-signed Halt to `agent/control/`.
+The executor refuses every queued action on the next notification or reconciliation
+pass (at most 30 seconds by default). Revoking the current permission also refuses
+all actions. These checks run again before every send, including after token waits.
+
+`awp halt` atomically writes and fsyncs a mode-0600 `HALT` without taking a lock,
+so a crashed Resume lock holder cannot prevent a new stop. It uses the host's configured private state directory
+(on macOS, use `~/Library/Application Support/jeswr-agent`). Its presence overrides
+every signed Resume, and the executor checks it on every gate pass. Heartbeats
+continue every 60 seconds and report `running`, `paused` (no current valid permission),
+or `stopped` (signed Halt or local HALT). The UI accepts heartbeat state for two minutes;
+an active signed Halt continues to show Stopped even if the daemon is offline.
+When the daemon reports a stop with no signed Halt behind it (a local `awp halt`),
+the UI also offers Resume, which signs an owner Resume only after you type RESUME.
+The heartbeat state only decides whether the button is shown; it is never authority.
+
+`HALT` records its stop time (`halted <ISO time>`). The executor checks it before
+each dispatch, but the check and the send are not one atomic step across processes:
+a send that has already passed its final check can still go out after `awp halt`
+writes the file. A local stop guarantees that no new dispatch starts after it is
+visible, not that an in-flight send is recalled.
+
+To resume, confirm Resume in the UI, then run `awp resume` on the agent's computer
+if HALT exists. The host must supply `createCliHost({ resumeAuthority: {
+ownerWebId, controls } })`, using the executor's **owner-proof-verifying** control
+adapter. The command removes HALT only after a current verified Resume newer than
+the stop time recorded in the file (and its modification time), with no newer Halt,
+and fsyncs the directory. Authorisation is checked again while holding `halt.lock`,
+and a HALT without a readable recorded time is kept. Missing verification,
+expired/future statements, symlinks and a file replaced during verification fail
+closed. Clearing the file never replaces the executor's signed-control and
+permission checks. Resume is idempotent when the file is already absent, and reports
+whether it cleared a stop or found none. Resume serializes through `halt.lock`;
+the executor stays stopped while that lock exists. A Halt racing removal wins.
+After a crashed Resume, establish that the lock holder has stopped before removing
+the leftover `halt.lock`; `awp halt` remains available throughout recovery.
+
+The Resume must be signed **after** the local stop. Its browser timestamp is compared
+strictly with the later of HALT's recorded stop time and its modification time on
+the agent's computer. Clock skew between
+devices can delay or refuse resume; refusal is the safe direction. Correct the clocks
+and sign a new Resume if needed. The command also refuses future-dated statements.
+
+To unload the macOS service independently of pod access:
+
+```sh
+launchctl bootout gui/$UID/org.jeswr.agent
+```
+
+This stops the launchd job; it does not clear HALT or issue Resume. To load the
+installed job again, run
+`launchctl bootstrap gui/$UID "$HOME/Library/LaunchAgents/org.jeswr.agent.plist"`,
+then follow the resume steps.
 
 `install-launchd` asks before any writes. On macOS it creates
 `~/Library/LaunchAgents/org.jeswr.agent.plist` with KeepAlive, RunAtLoad, private

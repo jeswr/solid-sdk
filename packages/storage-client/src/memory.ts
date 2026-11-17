@@ -21,6 +21,7 @@ import { LiteralFrom, NamedNodeFrom, RequiredAs } from "@rdfjs/wrapper";
 import { Resource } from "@solid/object/solid";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode } from "./errors.js";
+import { exactCreateSegment } from "./exact-create.js";
 import { scoped } from "./http.js";
 import {
   isWithin,
@@ -815,6 +816,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       begin("POST", url, opts.signal);
       validateKeepalive("POST", url, body, opts.keepalive);
       if (isTrashEndpoint(client, url)) {
+        if (opts.exactUrl !== undefined) throw fail("unsupported", "POST", url, null);
         const command = trashCommand(body);
         const source = serviceUrl(
           client,
@@ -851,7 +853,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         return { url: dest, etag: node.etag, created: true };
       }
       mutable("POST", url);
-      const parent = container("POST", url);
+      if (opts.exactUrl === undefined) container("POST", url);
       const kind = opts.kind ?? "resource";
       if (
         kind === "resource" &&
@@ -859,11 +861,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       ) {
         throw new TypeError(`POST ${url}: contentType is required for a resource`);
       }
-      const name = nameFor("POST", url, opts.name);
+      if (lws && opts.exactUrl !== undefined) throw fail("unsupported", "POST", url, null);
+      const name = exactCreateSegment(url, opts) ?? nameFor("POST", url, opts.name);
       let target: string;
       if (!lws && name !== undefined) {
         target = `${url}${name}${kind === "container" ? "/" : ""}`;
-        if (nodes.has(target) || nodes.has(target.replace(/\/$/, "")) || nodes.has(`${target}/`)) {
+        if (nodes.has(target)) {
+          throw fail("conflict", "PUT", target, 412, { message: "name taken" });
+        }
+        if (nodes.has(target.replace(/\/$/, "")) || nodes.has(`${target}/`)) {
           throw fail("conflict", "PUT", target, 409, { message: `${target} already exists` });
         }
       } else {
@@ -875,6 +881,8 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           ? await toBytes(body, opts.signal, "POST", url)
           : new Uint8Array();
       throwIfAborted("POST", url, opts.signal);
+      if (opts.exactUrl !== undefined) ensureContainers("PUT", target);
+      const parent = container("POST", url);
       const created: Node = {
         url: target,
         kind,

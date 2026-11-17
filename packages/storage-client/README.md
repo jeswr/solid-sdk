@@ -16,7 +16,7 @@ Entry points:
 
 - `@jeswr/storage-client`: `createPodClient({ fetch, storage, capabilities?, backend?, clock?, signal? })`, the ADR-003 types (`StorageClient`, `ReadResult`, `Patch`, …), `StorageError` and `toStorageError`. The factory returns `{ storage, description, features }`, choosing Solid or LWS from discovery.
 - `@jeswr/storage-client/errors`: the error model, plus `storageErrorFrom(method, url, response)`, which reads at most 64 KiB of an RFC 9457 body.
-- `@jeswr/storage-client/helpers`: `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
+- `@jeswr/storage-client/helpers`: `createAt(client, url, body, options?)`, `isExactChildUrl(parent, url)`, `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
 - `@jeswr/storage-client/memory`: `createMemoryStorage({ protocol: 'solid' | 'lws', pageSize, moveResource, strictConditional })`, a full in-memory `StorageClient` for tests.
 - `@jeswr/storage-client/solid`: `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and `buildN3Patch({ inserts, deletes, where? })`. Solid moves use copy/delete emulation with rollback; emulated moves drop ACLs and do not copy describedby metadata. ACL-preserving moves use `movePreservingAccess` from `@jeswr/pod-access/roles` (SDK-APP-04): it requires destination caller Control and stages empty placeholders, verified own access, then content before conditional source deletion. See [pod-access move safety and recovery](../pod-access/README.md#moves-that-preserve-sharing).
 - `@jeswr/storage-client/lws`: `createLwsBackend({ fetch, root, storage?, features? })`, the LWS HTTP backend with scoped paging, conditional writes, and RFC 9264 metadata. `storage` defaults to `root`.
@@ -44,7 +44,32 @@ The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain u
 problem details; other operations retain their usual HTTP error mapping.
 
 All mutations except `create` require `ifMatch`. A name is exact on Solid and a hint on LWS.
+Solid `create(container, body, { exactUrl, contentType })` preserves a canonical direct child's
+URL spelling (for example `system:inbox.ttl`), sending `If-None-Match: *`. `exactUrl` is mutually
+exclusive with `name`; foreign, nested, query/fragment and kind-mismatched targets fail before
+I/O. With `kind: 'container'` the exact URL must end in `/`. LWS rejects this option as
+`unsupported`, retaining server-assigned identifiers. The memory backend enforces both policies and creates missing Solid parents only after
+accepting the body, matching exact PUT behavior.
 See [SKILL.md](SKILL.md) for app usage and fixture workflows.
+
+For a fixed Solid destination, use `createAt` from `./helpers`. It returns the backend's
+`WriteResult` and forwards `CreateOptions` except `name`, which it derives from the URL.
+Kind defaults to `resource`; containers require `{ kind: 'container' }` and a trailing slash.
+Before calling `create`, it checks that parent + `encodeURIComponent(decodedName)` (plus
+`/` for containers) equals the requested URL exactly. A literal `x:y.ttl` or lowercase
+`x%3ay.ttl` is refused with non-retryable `StorageError('bad-request')`; `x%3Ay.ttl` works.
+Malformed escapes, noncanonical URLs, queries/fragments and kind/slash mismatches are also
+refused before any request, and ordinary storage scope checks still apply.
+The pure `isExactChildUrl(parent, url)` predicate shares this validation for direct resource
+and trailing-slash container children of a canonical parent; malformed inputs return false.
+It checks URL spelling and containment, without checking service endpoints or permission.
+`createAt` also refuses children of the advertised trash endpoint with `bad-request` before
+calling `create`, preventing a fixed-destination create from becoming a trash command.
+LWS is refused with `StorageError('unsupported')` because its POST assigns the identifier.
+HTTP Solid uses named conditional PUT: a taken name propagates as `conflict` with status 412.
+Solid memory creation matches this with 412 and message `name taken` for an exact existing
+target; resource/container path collisions retain 409, distinct from an exact-name replay.
+The helper never retries or overwrites an existing resource.
 
 `head`, `list`, and `listAll` accept `{ revalidate: true }` to revalidate cached HTTP
 responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.

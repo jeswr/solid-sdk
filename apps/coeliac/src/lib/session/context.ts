@@ -1,14 +1,16 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The session/auth seam as a plain React context (DESIGN §1). Every data view
- * reads `authedFetch` / `publicFetch` / `webId` / `storageRoot` / `store` from
+ * reads `storage` / `publicFetch` / `webId` / `storageRoot` / `store` from
  * here, so the whole app is unit-testable by wrapping a component in a
- * `SessionContext.Provider` with a STUBBED fetch and a `MemoryKv`-backed store —
+ * `SessionContext.Provider` with SDK memory storage and a `MemoryKv`-backed store —
  * no reactive-auth, no server. The real wiring lives in the client
  * `SessionProvider`; this module carries no browser-only imports so tests import
  * it freely.
  */
 import { createContext, useContext } from "react";
+import type { PodStorage } from "../pod/client";
 import type { DiaryStore } from "../cache/diary-store";
 
 /** Coarse auth status driving the top-level shell (restoring → login/app). */
@@ -19,8 +21,8 @@ export interface SessionValue {
   status: SessionStatus;
   /** The authenticated WebID, or null when not signed in. */
   webId: string | null;
-  /** The session-bound authed fetch (pristine credential-free fetch before login). */
-  authedFetch: typeof globalThis.fetch;
+  /** One session client, resolved lazily so offline discovery can retry. */
+  storage: PodStorage | null;
   /** The pristine, credential-free fetch for foreign-origin reads (OFF). */
   publicFetch: typeof globalThis.fetch;
   /** The resolved pod storage root (container URL), or null before login. */
@@ -64,9 +66,9 @@ export interface SessionValue {
 export const anonymousSession: SessionValue = {
   status: "loading",
   webId: null,
-  authedFetch: (...a) => globalThis.fetch(...a),
   publicFetch: (...a) => globalThis.fetch(...a),
   storageRoot: null,
+  storage: null,
   store: null,
   purgeWarning: null,
   revokeWarning: null,

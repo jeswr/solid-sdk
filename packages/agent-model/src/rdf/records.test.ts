@@ -18,6 +18,32 @@ import { RdfResource } from "./resource.js";
 
 const string = fc.string({ maxLength: 80 });
 
+it("round-trips account-specific granted scopes while retaining old descriptors", async () => {
+  for (const grantedScopes of [
+    [],
+    ["Mail.Read", "https://www.googleapis.com/auth/gmail.readonly"],
+  ]) {
+    const descriptor = {
+      ...exampleRecords["channel-capability"],
+      account: exampleRecords.account.id,
+      grantedScopes,
+    };
+    expect(await recordFromTurtle(await recordToTurtle(descriptor), descriptor.id)).toEqual(
+      descriptor,
+    );
+  }
+  for (const invalid of [
+    { grantedScopes: ["Mail.Read"] },
+    { account: "invalid", grantedScopes: [] },
+    { account: exampleRecords.account.id, grantedScopes: [""] },
+    { account: exampleRecords.account.id, grantedScopes: [false] },
+    { account: exampleRecords.account.id, grantedScopes: Array(513).fill("scope") },
+  ])
+    expect(
+      podRecordSchema.safeParse({ ...exampleRecords["channel-capability"], ...invalid }).success,
+    ).toBe(false);
+});
+
 it("round-trips optional capability descriptions using dcterms:description", async () => {
   const capability = {
     ...exampleRecords["channel-capability"],

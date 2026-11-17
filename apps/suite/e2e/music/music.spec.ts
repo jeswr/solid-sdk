@@ -3,9 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 test.use({ locale: "en" });
 test.beforeEach(async ({ page }) => {
+  // Real app routes sit behind the shell session guard; remember the demo account.
+  await seedDemoSession(page);
   await page.route("**/__music-test-reset", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -356,4 +359,81 @@ test("imports Last.fm and ListenBrainz history once, keeping unknown songs by na
   await page.getByLabel("Choose export files", { exact: true }).setInputFiles(files);
   await page.getByRole("button", { name: "Import 3 listens", exact: true }).click();
   await expect(preview).toContainText("Added 0 listens. 3 listens were already in Music.");
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+function ownedWav() {
+  const rate = 8000;
+  const count = rate * 12;
+  const bytes = Buffer.alloc(44 + count * 2);
+  bytes.write("RIFF", 0);
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(1, 20);
+  bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(rate, 24);
+  bytes.writeUInt32LE(rate * 2, 28);
+  bytes.writeUInt16LE(2, 32);
+  bytes.writeUInt16LE(16, 34);
+  bytes.write("data", 36);
+  bytes.writeUInt32LE(count * 2, 40);
+  for (let i = 0; i < count; i++)
+    bytes.writeInt16LE(Math.round(Math.sin((i / rate) * Math.PI * 880) * 100), 44 + i * 2);
+  return bytes;
+}
+test("upload owned WAV, play, pause, keep playback between routes and manage queue", async ({
+  page,
+}, info) => {
+  await ready(page, "/music/tracks", "Tracks");
+  await page.getByRole("button", { name: "Add music files", exact: true }).click();
+  const upload = page.getByRole("dialog", { name: "Add music files", exact: true });
+  await upload.getByLabel("Choose audio files and lyrics").setInputFiles([
+    { name: "My chime.wav", mimeType: "audio/wav", buffer: ownedWav() },
+    {
+      name: "My chime.lrc",
+      mimeType: "text/plain",
+      buffer: Buffer.from("[00:00.00]A little chime\n[00:03.00]Your own music"),
+    },
+  ]);
+  await expect(upload.getByRole("status")).toContainText("Added 1 song");
+  await upload.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Your files", exact: true }).click();
+  const play = page
+    .getByRole("button", { name: "Play My chime", exact: true })
+    .filter({ visible: true });
+  await expect(play).toBeVisible();
+  await play.click();
+  const player = page.getByRole("region", { name: "Music player", exact: true });
+  await expect(player).toContainText("My chime");
+  const pause = player
+    .getByRole("button", { name: "Pause", exact: true })
+    .filter({ visible: true });
+  await expect(pause).toBeVisible();
+  await pause.click();
+  await expect(
+    player.getByRole("button", { name: "Play", exact: true }).filter({ visible: true }),
+  ).toBeVisible();
+  // Client navigation preserves the single media element and queue.
+  await player.getByRole("link", { name: "My chime", exact: true }).click();
+  await expect(player).toContainText("My chime");
+  await expect(page.locator("audio")).toHaveCount(1);
+  const expand = player.getByRole("button", { name: "Expand player", exact: true });
+  if (await expand.isVisible()) await expand.click();
+  await page
+    .getByRole("button", { name: "Open queue", exact: true })
+    .filter({ visible: true })
+    .click();
+  const queue = page.getByRole("dialog", { name: "Play queue", exact: true });
+  await expect(queue).toContainText("My chime");
+  await accessible(page);
+  await queue.getByRole("button", { name: "Clear queue", exact: true }).click();
+  await expect(queue).toContainText("Your queue is empty");
+  await queue.getByRole("button", { name: "Close", exact: true }).click();
+  if (await page.getByRole("dialog", { name: "Now playing", exact: true }).isVisible())
+    await page
+      .getByRole("dialog", { name: "Now playing", exact: true })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+  await capture(page, info, "owned-audio");
 });

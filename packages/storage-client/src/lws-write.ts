@@ -318,6 +318,12 @@ export function lwsWrites(
       });
     },
     async create(url, body, opts = {}) {
+      if (opts.exactUrl !== undefined)
+        throw new StorageError("unsupported", {
+          method: "POST",
+          url: target("POST", url),
+          message: "LWS creates use server-assigned identifiers",
+        });
       if (isTrashEndpoint(client(), url)) {
         return postTrash(client(), fetch, url, body, opts.signal, inspect, opts.keepalive);
       }

@@ -21,6 +21,8 @@ import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { playlistHref } from "../lib/navigation";
 import { MusicProvider, useMusic } from "../state/music-context";
+import { PlayerProvider } from "../state/player-context";
+import { MusicPlayer } from "./player";
 import { CreatePlaylist } from "./playlist-dialogs";
 
 const navigation = [
@@ -118,11 +120,14 @@ function Chrome({ children }: { children: ReactNode }) {
       search={{ placeholder: "Search in Music", action: "/music/search", scopeLabel: "in Music" }}
       actions={<Settings />}
     >
-      <div className="mus-content">
-        {children}
-        <p role="status" aria-live="polite" className={music.saving ? "mus-save" : "mus-sr-only"}>
-          {music.saving ? "Saving…" : music.notice}
-        </p>
+      <div className="mus-frame-body">
+        <div className="mus-content">
+          {children}
+          <p role="status" aria-live="polite" className={music.saving ? "mus-save" : "mus-sr-only"}>
+            {music.saving ? "Saving…" : music.notice}
+          </p>
+        </div>
+        <MusicPlayer />
       </div>
     </SuiteFrame>
   );
@@ -156,7 +161,9 @@ function SessionGate({ children }: { children: ReactNode }) {
       key={`${state.session.webId}-${state.session.storageUrl}`}
       session={state.session}
     >
-      <Chrome>{children}</Chrome>
+      <PlayerProvider session={state.session}>
+        <Chrome>{children}</Chrome>
+      </PlayerProvider>
     </MusicProvider>
   );
 }

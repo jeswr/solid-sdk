@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -19,7 +20,7 @@ import { ProductView } from "./product-view";
 type Phase = "scanning" | "resolving" | "resolved" | "notfound" | "error";
 
 export function ScanLog({ onLogged }: { onLogged?: () => void }) {
-  const { publicFetch, authedFetch, storageRoot, webId } = useSession();
+  const { publicFetch, storage, storageRoot, webId } = useSession();
   const [phase, setPhase] = useState<Phase>("scanning");
   const [resolved, setResolved] = useState<ResolvedProduct | null>(null);
   const [manualCode, setManualCode] = useState("");
@@ -35,7 +36,7 @@ export function ScanLog({ onLogged }: { onLogged?: () => void }) {
       setPhase("resolving");
       setErrorMsg(null);
       try {
-        const result = await resolveProduct(code, { publicFetch, authedFetch, storageRoot, webId });
+        const result = await resolveProduct(code, { publicFetch, storage, storageRoot, webId });
         if (!result.product.found) {
           setResolved(result);
           setPhase("notfound");
@@ -48,7 +49,7 @@ export function ScanLog({ onLogged }: { onLogged?: () => void }) {
         setPhase("error");
       }
     },
-    [publicFetch, authedFetch, storageRoot, webId],
+    [publicFetch, storage, storageRoot, webId],
   );
 
   const scanning = phase === "scanning";

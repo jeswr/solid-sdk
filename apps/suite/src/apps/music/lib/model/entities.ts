@@ -113,6 +113,22 @@ export class Album extends Recording {
 }
 
 export class Track extends Recording {
+  get contentUrl(): string | undefined {
+    return this.iris(`${S}contentUrl`)[0] ?? this.strings(`${S}contentUrl`)[0];
+  }
+  set contentUrl(value: string | undefined) {
+    const checked = value === undefined ? undefined : httpIri(value);
+    this.clear(`${S}contentUrl`);
+    this.writeIri(`${S}contentUrl`, checked);
+  }
+  get lyricsUrl(): string | undefined {
+    return this.iris(`${S}lyrics`)[0];
+  }
+  set lyricsUrl(value: string | undefined) {
+    const checked = value === undefined ? undefined : httpIri(value);
+    this.clear(`${S}lyrics`);
+    this.writeIri(`${S}lyrics`, checked);
+  }
   stampType(): this {
     return this.stamp(`${S}MusicRecording`, `${M}Track`);
   }

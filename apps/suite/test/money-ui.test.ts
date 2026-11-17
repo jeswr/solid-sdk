@@ -9,12 +9,14 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { must } from "./money/helpers";
 
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
+const navigation = vi.hoisted(() => ({ query: "q=Market" }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/money",
-  useSearchParams: () => new URLSearchParams("q=Market"),
+  useSearchParams: () => new URLSearchParams(navigation.query),
 }));
 
+import { BudgetScreen } from "../src/apps/money/components/budget";
 import { CategoriesScreen } from "../src/apps/money/components/categories";
 import { ImportScreen } from "../src/apps/money/components/import";
 import { LedgerScreen } from "../src/apps/money/components/ledger";
@@ -26,7 +28,9 @@ import {
 } from "../src/apps/money/components/money-forms";
 import { AccountsScreen } from "../src/apps/money/components/overview";
 import { SearchScreen } from "../src/apps/money/components/search";
+import { parseMoney as budgetAmount } from "../src/apps/money/lib/budget";
 import { createAccount } from "../src/apps/money/lib/data/accounts";
+import { loadBudgetHistory, saveBudgetAssignments } from "../src/apps/money/lib/data/budget";
 import { saveCategories } from "../src/apps/money/lib/data/categories";
 import { provision, storeOf } from "../src/apps/money/lib/data/container";
 import { commitImport, previewImport, suggestMapping } from "../src/apps/money/lib/data/import";
@@ -42,7 +46,10 @@ import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { openExtensionSession, STORAGE_CLASS } from "../src/lib/session/extension-pod-session";
 import type { PodSession } from "../src/lib/session/pod-session";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  navigation.query = "q=Market";
+});
 
 const requireSuite = createRequire(import.meta.url);
 const axe = createRequire(requireSuite.resolve("@axe-core/playwright"))("axe-core") as {
@@ -1144,4 +1151,255 @@ it("accepts ancestor container notifications and ignores unrelated URLs and path
   vi.useRealTimers();
   await f.app.unmount();
   expect(unsubscribe).toHaveBeenCalledOnce();
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+async function budgetDraft(host: HTMLElement, label: string, text: string) {
+  const input = must(
+    host.querySelector<HTMLInputElement>(`input[aria-label="Assigned to ${label} (GBP)"]`),
+  );
+  await act(async () => {
+    input.focus();
+    must(Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set).call(
+      input,
+      text,
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return input;
+}
+it("budgets by keyboard, cancels drafts, validates money, persists and announces overspending with no accessibility violations", async () => {
+  const f = await setup();
+  const month = money.today.slice(0, 7);
+  await addTransaction(f.session, "pay", {
+    account: f.id,
+    postingTime: money.today,
+    currency: "GBP",
+    amount: "100",
+    description: "Pay",
+  });
+  await bulkCategorise(f.session, [f.rowId], must(f.cats[1]).id);
+  await act(() => money.refresh());
+  await screen(f, h(BudgetScreen));
+  expect(f.app.host.querySelectorAll("h1")).toHaveLength(1);
+  expect(f.app.host.textContent).toContain("Assign money to categories to start budgeting");
+  const groceries = await budgetDraft(f.app.host, "Groceries", "10");
+  await key(groceries, "Enter");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.saving).toBe(false);
+    expect(money.budgets[0]?.assignments[0]?.amount.minor).toBe(1000);
+  });
+  expect(f.app.host.querySelector(".mon-budget-ready")?.textContent).toContain("£90.00");
+  const row = must(
+    Array.from(f.app.host.querySelectorAll("tbody tr")).find((row) =>
+      row.textContent?.includes("Groceries"),
+    ),
+  );
+  expect(row.textContent).toContain("-£10.00");
+  expect(row.textContent).toContain("Overspent");
+  expect((await loadBudgetHistory(f.session))[0]?.month).toBe(month);
+  await key(await budgetDraft(f.app.host, "Groceries", "500"), "Escape");
+  expect(groceries.value).toBe("10.00");
+  await key(await budgetDraft(f.app.host, "Groceries", "1.001"), "Enter");
+  expect(f.app.host.querySelector('[role="alert"]')?.textContent).toContain("exact amount");
+  await key(await budgetDraft(f.app.host, "Groceries", "200"), "Enter");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.budgets[0]?.assignments[0]?.amount.minor).toBe(20000);
+  });
+  expect(f.app.host.textContent).toContain("Over-assigned");
+  expect(
+    (await axe.run(f.app.host, { rules: { "color-contrast": { enabled: false } } })).violations,
+  ).toEqual([]);
+  await screen(f, h(AccountsScreen, { overviewPage: true }));
+  expect(f.app.host.querySelector('[aria-label="Budget this month"]')?.textContent).toContain(
+    "Over-assigned",
+  );
+  await f.app.unmount();
+  const remount = await mount(h(MoneyProvider, { session: f.session, children: h(BudgetScreen) }));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(
+      remount.host.querySelector<HTMLInputElement>(
+        'input[aria-label="Assigned to Groceries (GBP)"]',
+      )?.value,
+    ).toBe("200.00");
+  });
+});
+it("rolls back a failed budget assignment and keeps a retry path", async () => {
+  const f = await setup();
+  await screen(f, h(BudgetScreen));
+  f.intercept(async (input, init) =>
+    init?.method === "PUT" && String(input).endsWith(".ttl")
+      ? new Response(null, { status: 500 })
+      : f.pod.fetch(input, init),
+  );
+  await key(await budgetDraft(f.app.host, "Groceries", "30"), "Enter");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(f.app.host.querySelector('[role="alert"]')?.textContent).toContain("Couldn't save");
+  });
+  expect(money.budgets).toEqual([]);
+  expect(
+    f.app.host.querySelector<HTMLInputElement>('input[aria-label="Assigned to Groceries (GBP)"]')
+      ?.value,
+  ).toBe("0.00");
+  f.intercept(f.pod.fetch);
+  const input = await budgetDraft(f.app.host, "Groceries", "30");
+  await act(async () => input.blur());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.budgets[0]?.assignments[0]?.amount.minor).toBe(3000);
+  });
+});
+it("copies the previous month's assignments into an empty month", async () => {
+  const f = await setup();
+  const date = new Date(`${money.today.slice(0, 7)}-01T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  await saveBudgetAssignments(
+    f.session,
+    date.toISOString().slice(0, 7),
+    [{ categoryId: must(f.cats[1]).id, amount: budgetAmount("GBP", "80") }],
+    [],
+  );
+  await act(() => money.refresh());
+  await screen(f, h(BudgetScreen));
+  await click(button("Assign last month's amounts", f.app.host));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(
+      f.app.host.querySelector<HTMLInputElement>('input[aria-label="Assigned to Groceries (GBP)"]')
+        ?.value,
+    ).toBe("80.00");
+  });
+  expect(button("Assign last month's amounts", f.app.host).disabled).toBe(true);
+});
+it("copies last month's amounts after assignments have been cleared to zero", async () => {
+  const f = await setup();
+  const month = money.today.slice(0, 7);
+  const date = new Date(`${month}-01T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  const row = { categoryId: must(f.cats[1]).id, amount: budgetAmount("GBP", "80") };
+  await saveBudgetAssignments(f.session, date.toISOString().slice(0, 7), [row], []);
+  await saveBudgetAssignments(f.session, month, [{ ...row, amount: budgetAmount("GBP", "0") }], []);
+  await act(() => money.refresh());
+  await screen(f, h(BudgetScreen));
+  expect(button("Assign last month's amounts", f.app.host).disabled).toBe(false);
+  await click(button("Assign last month's amounts", f.app.host));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.budgets.find((file) => file.month === month)?.assignments[0]?.amount.minor).toBe(
+      8000,
+    );
+  });
+});
+it("gives removed categories unique assignment names", async () => {
+  const f = await setup();
+  const month = money.today.slice(0, 7);
+  await saveBudgetAssignments(
+    f.session,
+    month,
+    ["one", "two"].map((id) => ({
+      categoryId: `${f.session.storageUrl}money/categories.ttl#${id}`,
+      amount: budgetAmount("GBP", "10"),
+    })),
+    [],
+  );
+  await act(() => money.refresh());
+  await screen(f, h(BudgetScreen));
+  const removed = Array.from(
+    f.app.host.querySelectorAll<HTMLInputElement>(
+      'input[aria-label^="Assigned to Removed category"]',
+    ),
+  );
+  expect(removed).toHaveLength(2);
+  expect(new Set(removed.map((input) => input.getAttribute("aria-label"))).size).toBe(2);
+});
+it("shows retained income-category assignments so they can be cleared", async () => {
+  const f = await setup();
+  const month = money.today.slice(0, 7);
+  const income = { id: `${f.session.storageUrl}money/categories.ttl#income`, label: "Income" };
+  const salary = {
+    id: `${f.session.storageUrl}money/categories.ttl#salary`,
+    label: "Salary",
+    parent: income.id,
+  };
+  await saveCategories(f.session, () => [...f.cats, income, salary]);
+  await saveBudgetAssignments(
+    f.session,
+    month,
+    [{ categoryId: salary.id, amount: budgetAmount("GBP", "30") }],
+    [],
+  );
+  await act(() => money.refresh());
+  await screen(f, h(BudgetScreen));
+  expect(
+    f.app.host.querySelector<HTMLInputElement>('input[aria-label="Assigned to Salary (GBP)"]')
+      ?.value,
+  ).toBe("30.00");
+  await key(await budgetDraft(f.app.host, "Salary", "0"), "Enter");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(
+      money.budgets[0]?.assignments.find((row) => row.categoryId === salary.id)?.amount.minor,
+    ).toBe(0);
+  });
+  expect(f.app.host.querySelector(".mon-budget-ready")?.textContent).toContain("£0.00");
+});
+it("reflects future reservations and over-assignment in both the budget and Overview", async () => {
+  const f = await setup();
+  const future = new Date(`${money.today.slice(0, 7)}-01T00:00:00Z`);
+  future.setUTCMonth(future.getUTCMonth() + 1);
+  await addTransaction(f.session, "pay", {
+    account: f.id,
+    postingTime: money.today,
+    currency: "GBP",
+    amount: "500",
+    description: "Pay",
+  });
+  await saveBudgetAssignments(
+    f.session,
+    future.toISOString().slice(0, 7),
+    [{ categoryId: must(f.cats[1]).id, amount: budgetAmount("GBP", "600") }],
+    [],
+  );
+  await act(() => money.refresh());
+  await screen(f, h(BudgetScreen));
+  expect(f.app.host.querySelector(".mon-budget-ready")?.textContent).toContain("-£100.00");
+  expect(f.app.host.textContent).toContain("Over-assigned");
+  await screen(f, h(AccountsScreen, { overviewPage: true }));
+  const summary = f.app.host.querySelector('[aria-label="Budget this month"]');
+  expect(summary?.textContent).toContain("-£100.00");
+  expect(summary?.textContent).toContain("Over-assigned");
+});
+it.each([
+  "9999-12",
+  "0001-01",
+  "invalid",
+])("rejects out-of-range or invalid month %s and explains the fallback", async (month) => {
+  const f = await setup();
+  navigation.query = `m=${month}`;
+  await screen(f, h(BudgetScreen));
+  expect(f.app.host.textContent).toContain("Showing this month");
+  expect(f.app.host.querySelector('[aria-label="Budget month"]')?.textContent).toContain(
+    new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+      new Date(`${money.today.slice(0, 7)}-01T00:00:00Z`),
+    ),
+  );
+});
+it("isolates budget load errors from the ledger and retries the budget", async () => {
+  const f = await setup();
+  f.intercept(async (input, init) =>
+    String(input).endsWith("budgets/")
+      ? new Response(null, { status: 500 })
+      : f.pod.fetch(input, init),
+  );
+  await act(() => money.refresh());
+  expect(money.status).toBe("ready");
+  await screen(f, h(BudgetScreen));
+  expect(f.app.host.textContent).toContain("Couldn't calculate your budget");
+  f.intercept(f.pod.fetch);
+  await act(() => money.refresh());
+  expect(f.app.host.textContent).toContain("Assign money to categories to start budgeting");
 });

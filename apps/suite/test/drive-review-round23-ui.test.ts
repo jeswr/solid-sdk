@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -193,7 +194,11 @@ it.each([
         ? Promise.reject(new Error("Metadata temporarily unavailable"))
         : staleHead.promise,
   );
-  const read = vi.spyOn(drive.client, "read").mockResolvedValue(new Blob(["old"]));
+  const read = vi.spyOn(drive.client, "readVersion").mockResolvedValue({ body: new Blob(["old"]) });
+  // The non-editable text renderer still uses read; both paths share this GET seam.
+  vi.spyOn(drive.client, "read").mockImplementation(
+    async () => (await drive.client.readVersion(FILE)).body,
+  );
   // Start the delayed refresh before mounting: no new notification will help the preview.
   await act(async () => drive.invalidate(FILE));
   await openRow(FILE);
@@ -206,7 +211,7 @@ it.each([
   expect(fact("Size")).toBe("3 B");
   await act(async () => {
     refreshed = true;
-    read.mockResolvedValue(new Blob([body]));
+    read.mockResolvedValue({ body: new Blob([body]) });
     listing.resolve([latest]);
   });
   expect(view.host.querySelector('[aria-label="Refreshing"]')).toBeNull();
@@ -224,13 +229,13 @@ it("ignores a content read superseded by newer metadata for the same preview URL
   const view = await setup();
   const cached = await drive.client.stat(FILE);
   vi.spyOn(drive.client, "stat").mockRejectedValue(new Error("Metadata unavailable"));
-  const staleRead = deferred<Blob>();
-  vi.spyOn(drive.client, "read")
+  const staleRead = deferred<{ body: Blob }>();
+  vi.spyOn(drive.client, "readVersion")
     .mockReturnValueOnce(staleRead.promise)
-    .mockResolvedValue(new Blob(["replacement content"]));
+    .mockResolvedValue({ body: new Blob(["replacement content"]) });
   await view.render(tree(h(PreviewPage, { item: cached, parent: ROOT })));
   await view.render(tree(h(PreviewPage, { item: { ...cached, size: 19 }, parent: ROOT })));
   expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("replacement content");
-  await act(async () => staleRead.resolve(new Blob(["old"])));
+  await act(async () => staleRead.resolve({ body: new Blob(["old"]) }));
   expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("replacement content");
 });

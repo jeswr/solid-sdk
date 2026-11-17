@@ -9,7 +9,28 @@ import {
   verify,
 } from "node:crypto";
 
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 import { expect } from "vitest";
+
+class FixtureProfile extends TermWrapper {
+  get issuers() {
+    return SetFrom.subjectPredicate(
+      this,
+      "http://www.w3.org/ns/solid/terms#oidcIssuer",
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get storages() {
+    return SetFrom.subjectPredicate(
+      this,
+      "http://www.w3.org/ns/pim/space#storage",
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+}
 
 export const POD_ISSUER = "https://issuer.example/";
 export const POD_WEBID = "https://alice.example/profile#me";
@@ -140,14 +161,15 @@ export function podIssuer() {
       url.href === "https://alice.example/profile" ||
       url.href === "https://other.example/profile"
     ) {
-      const issuers =
-        controls.profileIssuers === 0
-          ? ""
-          : `<${POD_WEBID}> <http://www.w3.org/ns/solid/terms#oidcIssuer> <${controls.profileIssuer}> .`;
-      return new Response(
-        `${issuers}\n${controls.profileIssuers > 1 ? `<${POD_WEBID}> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://other-issuer.example/> .` : ""}\n<${POD_WEBID}> <http://www.w3.org/ns/pim/space#storage> <${POD_ROOT}> .`,
-        { status: controls.profileStatus, headers: { "content-type": "text/turtle" } },
-      );
+      const dataset = new Store();
+      const profile = new FixtureProfile(`${url.href}#me`, dataset, DataFactory);
+      if (controls.profileIssuers > 0) profile.issuers.add(controls.profileIssuer);
+      if (controls.profileIssuers > 1) profile.issuers.add("https://other-issuer.example/");
+      profile.storages.add(POD_ROOT);
+      return new Response(new Writer().quadsToString([...dataset]), {
+        status: controls.profileStatus,
+        headers: { "content-type": "text/turtle" },
+      });
     }
     if (url.href === `${POD_ISSUER}token`) {
       const checked = proof(request);

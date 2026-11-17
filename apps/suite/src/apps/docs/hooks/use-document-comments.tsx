@@ -16,6 +16,7 @@ import {
   DocumentCommentStore,
 } from "../lib/model/comments";
 import { docContainerUrls } from "../lib/model/layout";
+import { useCommentAuthors } from "./use-comment-authors";
 
 export function useDocumentComments(runtime: DocumentPersistence, editor: Editor | null) {
   const resource = runtime.stored?.url;
@@ -32,6 +33,7 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
   );
   const [open, setOpen] = useState(false);
   const [threads, setThreads] = useState<CommentThread[]>([]);
+  const authorName = useCommentAuthors(runtime.session, threads);
   const [active, setActive] = useState<string>();
   // A new object per highlight click, so re-clicking the active thread refocuses it.
   const [focusRequest, setFocusRequest] = useState<{ url: string }>();
@@ -200,6 +202,7 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
     sidebar: open ? (
       <CommentsSidebar
         threads={visible}
+        authorName={authorName}
         active={active}
         focusRequest={focusRequest}
         composer={composer}

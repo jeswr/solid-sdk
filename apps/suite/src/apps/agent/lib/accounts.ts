@@ -1,31 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { type Account, foldBindingControls } from "@jeswr/agent-model";
+import { type Account, accountBinding, foldBindingControls } from "@jeswr/agent-model";
 import { type AgentClient, createAgentClient, isLoaded, type Row, type Unreadable } from "./client";
 import type { ProfileSession } from "./profile";
 import { type DisplayControl, loadedRecords, readAccounts, readControl } from "./readers";
 import { createAgentSigner } from "./sign";
 import { createAgentVerifier } from "./verify";
 
-/** The inventory stores provider names; descriptors and mandates use binding identifiers. */
-export function accountBinding(account: Pick<Account, "channel" | "provider">): string {
-  if (account.channel === "email") {
-    if (["google", "google_workspace"].includes(account.provider)) return "gmail";
-    if (account.provider === "microsoft") return "graph-mail";
-  }
-  const aliases: Record<string, string> = {
-    microsoft_teams: "graph-teams",
-    phone_messages: "imessage",
-    matrix_bot: "matrix",
-    signal: "matrix",
-    whatsapp: "matrix",
-    github_notifications: "github",
-  };
-  return Object.hasOwn(aliases, account.channel)
-    ? (aliases[account.channel] as string)
-    : account.provider;
-}
+// Descriptor selection lives in the SDK so every consumer applies the same precedence.
+export {
+  accountBinding,
+  accountDescriptor,
+  accountDescriptorConflict,
+} from "@jeswr/agent-model";
 
 /** Only a plain profile name is placed in a command; secret-store references never leave the model. */
 export function accountLoginCommand(account: Pick<Account, "id" | "channel" | "credentialRef">) {

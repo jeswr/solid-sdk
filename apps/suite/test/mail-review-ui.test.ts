@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
   pathname: "/mail/inbox",
   account: "imported",
+  mode: "demo" as "demo" | "solid" | "extension",
   actions: { markRead: vi.fn(), star: vi.fn(), archive: vi.fn(), forRows: vi.fn() },
   setAccount: vi.fn(),
   invalidate: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("../src/apps/mail/state/mail-context", () => ({
     setAccount: mocks.setAccount,
     invalidate: mocks.invalidate,
     account: mocks.account,
+    session: { mode: mocks.mode },
   }),
   useMailActions: () => mocks.actions,
   useThread: () => ready(conversation),
@@ -80,6 +82,7 @@ beforeEach(() => {
   mocks.params = new URLSearchParams();
   mocks.pathname = "/mail/inbox";
   mocks.account = "imported";
+  mocks.mode = "demo";
   vi.stubGlobal("history", window.history);
   vi.stubGlobal("location", window.location);
   history.replaceState({}, "", "/mail/inbox");
@@ -108,6 +111,7 @@ beforeEach(() => {
         read: false,
         starred: false,
         draft: false,
+        demoSent: false,
         labels: [],
         attachments: [],
       },
@@ -429,4 +433,33 @@ it("uses envelope empty states with equal Button sizes and no skipped heading le
     ),
   ).toEqual(["default", "default"]);
   await view.unmount();
+});
+it.each([
+  "demo",
+  "solid",
+  "extension",
+] as const)("shows the not-delivered note only for app demo-sent messages in a %s session and restores its fixture", async (mode) => {
+  mocks.mode = mode;
+  const message = conversation.messages[0]!;
+  const originalLabels = message.labels;
+  const originalDemoSent = message.demoSent;
+  const view = await mount(h(ThreadView, { iri: conversation.iri }));
+  try {
+    message.labels = [`${client.root("imported")}folders/system:sent.ttl#it`];
+    message.demoSent = true;
+    await view.render(h(ThreadView, { iri: conversation.iri }));
+    expect(view.host.textContent?.includes("Sent from the demo pod. Not delivered.")).toBe(
+      mode === "demo",
+    );
+    // Imported Sent messages have the same label, but were already delivered.
+    message.demoSent = false;
+    await view.render(h(ThreadView, { iri: conversation.iri }));
+    expect(view.host.textContent).not.toContain("Sent from the demo pod. Not delivered.");
+  } finally {
+    message.labels = originalLabels;
+    message.demoSent = originalDemoSent;
+    await view.unmount();
+  }
+  expect(message.labels).toBe(originalLabels);
+  expect(message.demoSent).toBe(originalDemoSent);
 });

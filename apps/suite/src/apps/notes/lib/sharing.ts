@@ -4,6 +4,7 @@ import { shareRoleRank } from "../../../shell/lib/share-options";
 import {
   ShareError,
   type ShareRole,
+  type ShareWriteOptions,
   type SharingAdapter,
   type SharingState,
 } from "../../../shell/share/types";
@@ -165,7 +166,8 @@ export class NoteSharingAdapter implements SharingAdapter {
       throw failure ? failure.error : error;
     }
     if (!revoked(committed)) {
-      restore();
+      // An unchanged read cannot settle an errored PUT: it may still commit later.
+      // Keep the images pending until this key is successfully reconciled.
       throw failure ? failure.error : new ShareError("conflict");
     }
     await this.revokeImages(key, revoked, update);
@@ -174,7 +176,7 @@ export class NoteSharingAdapter implements SharingAdapter {
     url: string,
     webId: string,
     role: ShareRole | null,
-    opts?: { expires?: Date; purpose?: string },
+    opts?: ShareWriteOptions & { expires?: Date; purpose?: string },
   ) {
     this.writable(url);
     if ((role !== null && role !== "viewer" && role !== "editor") || opts?.expires || opts?.purpose)
@@ -184,6 +186,7 @@ export class NoteSharingAdapter implements SharingAdapter {
     const person = state.people.find((person) => person.webId === webId);
     if (person?.role === "owner" || person?.inherited) throw new ShareError("forbidden");
     if (role && (!person || shareRoleRank[role] > shareRoleRank[person.role])) {
+      if (opts?.narrowOnly) throw new ShareError("would-grant");
       await this.grantImages(
         {
           ...state,
@@ -206,7 +209,7 @@ export class NoteSharingAdapter implements SharingAdapter {
       );
     }
   }
-  async setGeneral(url: string, general: SharingState["general"]) {
+  async setGeneral(url: string, general: SharingState["general"], opts?: ShareWriteOptions) {
     this.writable(url);
     if (
       !["restricted", "link"].includes(general.mode) ||
@@ -220,6 +223,7 @@ export class NoteSharingAdapter implements SharingAdapter {
       (state.general.mode !== "link" ||
         shareRoleRank[general.role ?? "viewer"] > shareRoleRank[state.general.role ?? "viewer"])
     ) {
+      if (opts?.narrowOnly) throw new ShareError("would-grant");
       await this.grantImages({ ...state, general }, signal);
       await this.access.setGeneral(url, general);
     } else {

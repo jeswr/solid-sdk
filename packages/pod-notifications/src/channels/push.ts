@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { createPodClient, type PodClientOptions } from "@jeswr/storage-client";
+import { createPodClient, type PodClient, type PodClientOptions } from "@jeswr/storage-client";
 import { createChangeNormalizer } from "../normalise.js";
 import { isOnline, platform, runCleanups, systemTimers } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
@@ -13,7 +13,15 @@ import { registerRelay } from "./relay-registration.js";
 export interface PushChannelOptions extends NotificationsDependencies {
   topics: readonly string[];
   signal?: AbortSignal;
+  /** @internal Reuse the watcher's first discovery; reconnects always discover afresh. */
+  initialPod?: PodClient;
+  /** @internal Caller policy, evaluated on HTTP equivalents of socket URLs too. */
+  scope?: (url: string) => boolean;
+  /** @internal Switch to polling when discovery or URL policy makes push unusable. */
+  onUnavailable?: () => void;
 }
+
+class PushUnavailable extends Error {}
 
 /** Full jitter with the ADR's one-second floor; the exponential ceiling saturates at 60 s. */
 export function reconnectDelay(attempt: number, random: () => number): number {
@@ -23,7 +31,7 @@ export function reconnectDelay(attempt: number, random: () => number): number {
 
 // Each discovery gets a fresh cache, shared only between createPodClient's resolve/probe
 // calls. Reconnect must not reuse a still-fresh description from a previous channel.
-function discoveryCache(): NonNullable<PodClientOptions["capabilities"]> {
+export function discoveryCache(): NonNullable<PodClientOptions["capabilities"]> {
   type Cache = NonNullable<PodClientOptions["capabilities"]>;
   const records = new Map<string, Awaited<ReturnType<Cache["get"]>>>();
   let prefix: { root: string; id: string } | undefined;
@@ -69,8 +77,18 @@ export function createPushChannel(
   const eventSourceFactory: (url: string) => EventSourceLike =
     options.eventSourceFactory ?? ((url: string) => new EventSource(url));
   const insecure = options.allowInsecureLoopback === true;
-  const validate = (url: unknown, service?: string, socket = false) =>
-    validateChannelUrl(url, storage.root, service, socket, insecure);
+  const validate = (url: unknown, service?: string, socket = false) => {
+    try {
+      const validated = validateChannelUrl(url, storage.root, service, socket, insecure);
+      if (options.scope && !options.scope(validated.replace(/^ws/u, "http")))
+        throw new TypeError("Notification endpoint outside caller scope");
+      return validated;
+    } catch (error) {
+      if (options.onUnavailable) throw new PushUnavailable();
+      throw error;
+    }
+  };
+  let initialPod = options.initialPod;
   let stopped = false;
   let retry: unknown;
   let renewal: unknown;
@@ -121,6 +139,7 @@ export function createPushChannel(
         ...Array.from(subscriptions, (url) => () => removeSubscription(url)),
       ]);
     } finally {
+      initialPod = undefined;
       renewal = undefined;
       active = undefined;
       sockets.clear();
@@ -166,13 +185,16 @@ export function createPushChannel(
       return response;
     };
     try {
-      const pod = await createPodClient({
-        storage: storage.root,
-        fetch,
-        capabilities: discoveryCache(),
-        signal: request.signal,
-        clock: now,
-      });
+      const pod =
+        initialPod ??
+        (await createPodClient({
+          storage: storage.root,
+          fetch,
+          capabilities: discoveryCache(),
+          signal: request.signal,
+          clock: now,
+        }));
+      initialPod = undefined;
       if (!current()) return;
       const live = pod.features.liveUpdates;
       if (
@@ -181,7 +203,7 @@ export function createPushChannel(
         live.state !== "available" ||
         !live.detail.channels.includes(transport === "webhook-relay" ? "webhook" : transport)
       )
-        throw new Error("No notification subscription service");
+        throw new PushUnavailable();
       // The feature endpoint belongs to the preferred channel, which may be WebSocket.
       // SSE adapters must resolve their own service again on every discovery.
       const serviceEndpoint = eventStream
@@ -282,6 +304,7 @@ export function createPushChannel(
             },
             body: JSON.stringify(body),
           });
+          if ([404, 405, 410, 501].includes(response.status)) throw new PushUnavailable();
           if (!response.ok) throw new Error("Notification subscription failed");
           const channel: unknown = await response.json();
           if (typeof channel !== "object" || channel === null || Array.isArray(channel))
@@ -290,6 +313,24 @@ export function createPushChannel(
             const url = validate(channel.subscription, endpoint);
             if (current()) subscriptions.add(url);
             else removeSubscription(url);
+          }
+          if (protocol === "solid") {
+            // Solid channel ids are optional. Cleanup must never follow a foreign id
+            // or prevent an otherwise usable channel from receiving notifications.
+            try {
+              const id =
+                "id" in channel ? channel.id : "@id" in channel ? channel["@id"] : undefined;
+              const url = validateChannelUrl(id, storage.root, endpoint, false, insecure);
+              if (
+                new URL(url).origin === new URL(endpoint).origin &&
+                (!options.scope || options.scope(url))
+              ) {
+                if (current()) subscriptions.add(url);
+                else removeSubscription(url);
+              }
+            } catch {
+              // Expiry handles missing, malformed or unsafe channel ids.
+            }
           }
           if (!current()) return;
           if (relay && "expires" in channel) {
@@ -448,8 +489,11 @@ export function createPushChannel(
         });
         armHeartbeat();
       }
-    } catch {
-      if (current()) fail();
+    } catch (error) {
+      if (current()) {
+        if (error instanceof PushUnavailable && options.onUnavailable) options.onUnavailable();
+        else fail();
+      }
     }
   };
   const offline = () => {

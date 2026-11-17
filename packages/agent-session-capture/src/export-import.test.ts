@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
-import { ChatWriter } from "@jeswr/solid-chat-interop";
+import { ChatWriter, chatConversationId } from "@jeswr/solid-chat-interop";
 import { createChatPodPort } from "@jeswr/solid-mcp";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
@@ -62,6 +62,59 @@ afterEach(async () => {
 });
 
 describe("explicit imports with real ChatWriter and DPoP", () => {
+  it.each([
+    "chatgpt",
+    "claude",
+  ])("keeps two %s export accounts distinct and idempotent", async (provider) => {
+    await writeFile(source, await fixture(provider));
+    const args = [`${provider}-export`, source];
+    for (const account of ["Personal", "Work"]) {
+      expect(await runExportImport(args, { ...options, account })).toBe(0);
+      const before = new Map(transport.resources);
+      expect(await runExportImport(args, { ...options, account })).toBe(0);
+      expect(transport.resources).toEqual(before);
+      const sourceId = digest([`${provider}-export`, `${provider}-fixture-conversation`]);
+      const id = await chatConversationId(sourceId, account);
+      const body = transport.resources.get(
+        `${env.SOLID_MCP_POD_ROOT}private/chats/${provider}/${id}/_conversation.ttl`,
+      );
+      expect(body).toContain(account);
+      expect(body).toContain('"export"');
+    }
+    expect(
+      [...transport.resources.keys()].filter((url) => url.endsWith("_conversation.ttl")),
+    ).toHaveLength(2);
+    expect([...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url))).toHaveLength(
+      4,
+    );
+    // The old fixture identity is still byte-identical when no account is configured.
+    expect(await runExportImport(args, options)).toBe(0);
+    expect(
+      transport.resources.has(
+        `${env.SOLID_MCP_POD_ROOT}private/chats/${provider}/${digest([`${provider}-export`, `${provider}-fixture-conversation`])}/_conversation.ttl`,
+      ),
+    ).toBe(true);
+  });
+
+  it("uses configured export account and fails before network I/O on invalid labels", async () => {
+    await writeFile(source, await fixture("chatgpt"));
+    expect(
+      await runExportImport(["chatgpt-export", source], {
+        ...options,
+        env: { ...env, SOLID_MCP_ACCOUNT: "Work" },
+      }),
+    ).toBe(0);
+    expect([...transport.resources.values()].join("")).toContain('"Work"');
+    transport.requests.length = 0;
+    for (const account of [null, 7, "", "bad\u200baccount"])
+      expect(
+        await runExportImport(["chatgpt-export", source], {
+          ...options,
+          account: account as string,
+        }),
+      ).toBe(1);
+    expect(transport.requests).toEqual([]);
+  });
   it.each([
     "chatgpt",
     "claude",

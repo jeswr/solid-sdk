@@ -23,3 +23,14 @@ memory-mutex ownership markers. Never adopt a replaced lock or a weak validator.
 
 Internal dependencies must use workspace:*. Use fixtures and injected services in tests.
 Run lint, build, typecheck and test through pnpm. Do not deploy or publish from this task.
+
+Connector acceptance lives in `test/connectors.e2e.test.ts`; `test:e2e` runs it and the
+original CSS suite sequentially, while `test:e2e:connectors` selects it alone. Reuse
+`test/css.ts` for native browser forms, CSS controls, account seeding and TLS lifecycle.
+Discover endpoints from the protected-resource challenge/AS metadata, retain Claude's
+and ChatGPT's exact HTTPS callback URIs, and intercept callbacks before network access.
+Both CIMD and DCR are advertised and must pass. Keep metadata serving on local TLS,
+CSS behind the loopback-only Unix-socket proxy, and non-local client fetches refused.
+Search tests use generic notes outside private/pkg; do not expose protected PKG memory
+to satisfy generic search. Pin current agent/context listing behavior until sst-5ax.38,
+with its named acceptance todo. Use a shared issuer/key/store for wrong-audience tests.

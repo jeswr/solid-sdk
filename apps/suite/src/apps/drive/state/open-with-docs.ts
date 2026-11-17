@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
  * "Open with Docs" for one Drive item: the rules from `lib/open-with/docs`
@@ -21,6 +22,7 @@ import {
   skippedSummary,
 } from "../lib/open-with/docs";
 import { useDrive } from "./drive-context";
+import { useDriveUi } from "./ui";
 
 type ProbeSession = Parameters<typeof probeDocsWritable>[0];
 const probes = new WeakMap<ProbeSession, Promise<boolean | undefined>>();
@@ -72,6 +74,7 @@ function failureDescription(error: unknown): string {
 
 export function useOpenWithDocs(item: DriveItem | undefined): OpenWithDocsControl | undefined {
   const { session, invalidate } = useDrive();
+  const { mayLeavePreview } = useDriveUi();
   const router = useRouter();
   const connection = useNeedsConnection();
   const base = item && openWithDocsState(item, { storageUrl: session.storageUrl });
@@ -89,6 +92,7 @@ export function useOpenWithDocs(item: DriveItem | undefined): OpenWithDocsContro
   });
   if (!state) return undefined;
   const run = async () => {
+    if (!mayLeavePreview()) return;
     if (state.kind === "open") {
       router.push(state.href);
       return;
@@ -110,7 +114,7 @@ export function useOpenWithDocs(item: DriveItem | undefined): OpenWithDocsContro
           description: skippedSummary(result.skipped),
           duration: Number.POSITIVE_INFINITY,
         });
-      router.push(docsHref(result.url));
+      if (mayLeavePreview()) router.push(docsHref(result.url));
     } catch (error) {
       toast.dismiss(loading);
       toast.error(`Couldn't open ${item.name} with Docs`, {

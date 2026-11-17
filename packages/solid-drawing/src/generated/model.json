@@ -1,0 +1,121 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "draw": "https://jeswr.org/ns/drawing#",
+    "dct": "http://purl.org/dc/terms/",
+    "schema": "http://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Scene",
+      "typeIris": [
+        "https://jeswr.org/ns/drawing#Scene"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/drawing#Scene"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "about",
+          "predicate": "http://schema.org/about",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "wasGeneratedBy",
+          "predicate": "http://www.w3.org/ns/prov#wasGeneratedBy",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "sceneDocument",
+          "predicate": "https://jeswr.org/ns/drawing#sceneDocument",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/drawing#sceneDocument"
+          ],
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "schemaVersion",
+          "predicate": "https://jeswr.org/ns/drawing#schemaVersion",
+          "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/drawing#schemaVersion"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "thumbnail",
+          "predicate": "https://jeswr.org/ns/drawing#thumbnail",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/drawing#thumbnail"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "viewBackgroundColor",
+          "predicate": "https://jeswr.org/ns/drawing#viewBackgroundColor",
+          "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/drawing#viewBackgroundColor"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        }
+      ]
+    }
+  ]
+}

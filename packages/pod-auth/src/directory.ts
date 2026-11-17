@@ -33,12 +33,6 @@ export const KNOWN_PROVIDERS: readonly SolidProvider[] = Object.freeze(
       signUpUrl: "https://start.inrupt.com/",
     },
     {
-      id: "solidweb",
-      name: "solidweb.org",
-      issuer: "https://solidweb.org/",
-      description: "Free community pod host",
-    },
-    {
       id: "teamid",
       name: "teamid.live",
       issuer: "https://teamid.live/",

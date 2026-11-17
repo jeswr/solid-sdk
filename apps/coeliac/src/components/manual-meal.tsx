@@ -8,6 +8,7 @@
 "use client";
 import { type MealContext, MEAL_CONTEXTS } from "@jeswr/solid-health-diary";
 import { useState } from "react";
+import { podErrorMessage } from "@/lib/pod/errors";
 import { useDiaryActions } from "@/lib/session/use-diary-actions";
 
 type Phase = "idle" | "saving" | "saved" | "error";
@@ -50,7 +51,7 @@ export function ManualMeal({
       await syncing;
     } catch (err) {
       setPhase("error");
-      setErrorMsg((err as Error).message);
+      setErrorMsg(podErrorMessage(err));
     }
   }
 

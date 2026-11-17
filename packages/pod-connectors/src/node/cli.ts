@@ -5,6 +5,7 @@ import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -12,7 +13,8 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
-import { createFetchPodWriter } from "../core/pod-writer.js";
+import { adapterContainer } from "../core/pod-writer-policy.js";
+import { createStoragePodWriter } from "../core/storage-pod-writer.js";
 import type { ConnectorState, SourceAuth } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
@@ -178,10 +180,16 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     );
     const stateStore = createStateStore({ ...config, adapterId: command.id, fetch: podFetch });
     const previous = await stateStore.read();
-    const podWriter = createFetchPodWriter({
-      ...config,
-      adapterId: command.id,
-      fetch: podFetch,
+    const storage = createSolidBackend({ fetch: podFetch, root: config.podRoot });
+    const podWriter = createStoragePodWriter({
+      storage,
+      container: adapterContainer(command.id, config.podRoot),
+      webId: config.webId,
+      typeIndex: {
+        profileDocumentUrl: config.profileDocumentUrl,
+        storageFor: (url) =>
+          createSolidBackend({ fetch: podFetch, root: `${new URL(url).origin}/` }),
+      },
       ...(options.signal && { signal: options.signal }),
     });
     let sourceAuth = options.sourceAuth;

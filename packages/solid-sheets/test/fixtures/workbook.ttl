@@ -1,0 +1,22 @@
+@prefix schema: <https://schema.org/>.
+@prefix dct: <http://purl.org/dc/terms/>.
+
+<https://pod.example/alice/sheets/budget/index.ttl#it> a schema:SpreadsheetDigitalDocument, schema:Dataset;
+    dct:title "Budget \"2026\"\n\U0001f343";
+    dct:created "2026-10-24T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    dct:modified "2026-10-25T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    dct:creator <https://pod.example/alice/profile/card#me>;
+    schema:encoding <https://pod.example/alice/sheets/budget/workbook.json>;
+    schema:hasPart <https://pod.example/alice/sheets/budget/sheets/1.csv>, <https://pod.example/alice/sheets/budget/sheets/2.csv>.
+<https://pod.example/alice/sheets/budget/sheets/1.csv> a schema:DataDownload;
+    schema:name "Income";
+    schema:encodingFormat "text/csv";
+    schema:contentUrl <https://pod.example/alice/sheets/budget/sheets/1.csv>;
+    schema:subjectOf <https://pod.example/alice/sheets/budget/sheets/1.jsonld>;
+    schema:position 1.
+<https://pod.example/alice/sheets/budget/sheets/2.csv> a schema:DataDownload;
+    schema:name "Costs";
+    schema:encodingFormat "text/csv";
+    schema:contentUrl <https://pod.example/alice/sheets/budget/sheets/2.csv>;
+    schema:subjectOf <https://pod.example/alice/sheets/budget/sheets/2.jsonld>;
+    schema:position 2.

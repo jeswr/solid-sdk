@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
   Badge,
   Button,
+  ProvenanceBadge,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -27,6 +28,8 @@ import {
   type AccountPatch,
   AccountSettingsQueue,
   accountBinding,
+  accountDescriptor,
+  accountDescriptorConflict,
   accountLoginCommand,
   persistAccountPatch,
   readAccountSettings,
@@ -67,6 +70,27 @@ const NAMES: Record<string, string> = {
   atproto: "Bluesky",
   email_proxy: "Email notifications",
 };
+const LOGOS: Record<string, string> = {
+  google: "google",
+  google_workspace: "google",
+  gmail: "google",
+  microsoft: "microsoft",
+  "graph-mail": "microsoft",
+  "graph-teams": "microsoft",
+  slack: "slack",
+  matrix: "matrix",
+  matrix_bridge: "matrix",
+  matrix_bot: "matrix",
+  github: "github",
+  discord: "discord",
+  atproto: "bluesky",
+  bluesky: "bluesky",
+  mastodon: "mastodon",
+  apple: "apple",
+  telegram: "telegram",
+  x: "x",
+  email_proxy: "email",
+};
 function displayName(value: string) {
   return (
     (Object.hasOwn(NAMES, value) ? NAMES[value] : undefined) ??
@@ -83,7 +107,7 @@ export function AccountCapabilities({
   descriptor?: ChannelCapability | undefined;
 }) {
   return descriptor ? (
-    <table>
+    <table className="agent-capabilities">
       <caption>Capabilities</caption>
       <tbody>
         {[
@@ -128,11 +152,13 @@ export function AccountCapabilities({
 function AccountCard({
   account,
   descriptor,
+  descriptorConflict = false,
   detail,
   sendAllowed,
 }: {
   account: Account;
   descriptor?: ChannelCapability | undefined;
+  descriptorConflict?: boolean;
   detail: boolean;
   sendAllowed: boolean;
 }) {
@@ -192,18 +218,29 @@ function AccountCard({
   return (
     <article className="agent-card" data-agent-account>
       <h3>{label}</h3>
-      <p>
-        {displayName(account.provider)}
-        {account.organisation ? ` · ${account.organisation}` : ""}
-      </p>
+      <ProvenanceBadge
+        className="agent-provider"
+        source={displayName(account.provider)}
+        {...(Object.hasOwn(LOGOS, account.provider)
+          ? { logoSrc: `/agent/providers/${LOGOS[account.provider]}.svg` }
+          : {})}
+      />
+      {account.organisation && <p>{account.organisation}</p>}
       <Badge variant="secondary">{LABELS[current.bindingState]}</Badge>
       {account.channelHandleHash && (
         <Badge variant="outline">Account hash: {account.channelHandleHash.slice(0, 16)}</Badge>
       )}
       {account.inventory?.identityConflicts.length ? (
-        <p role="alert" className="agent-banner">
-          Two different handles recorded. Pick one on the agent's computer.
-        </p>
+        <div className="agent-banner">
+          <p>Two different handles recorded — pick one</p>
+          <details>
+            <summary>How to resolve this</summary>
+            <p>
+              On the agent's computer, review the source registry, keep the handle you recognise,
+              then import it again. Only you can make this choice.
+            </p>
+          </details>
+        </div>
       ) : null}
       <div className="agent-restrictions">
         {(["read", "triage", "draft", "send"] as const).map((name) => {
@@ -226,7 +263,7 @@ function AccountCard({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users can reveal the disabled switch explanation */}
-                      <span tabIndex={0} title={SEND_TIP}>
+                      <span className="agent-disabled" tabIndex={0} title={SEND_TIP}>
                         {toggle}
                       </span>
                     </TooltipTrigger>
@@ -252,9 +289,33 @@ function AccountCard({
       </Button>
       {detail ? (
         <>
+          {descriptorConflict && (
+            <p className="agent-banner">
+              The agent recorded conflicting details for this account, so none are shown.
+            </p>
+          )}
           <AccountCapabilities descriptor={descriptor} />
-          <h3>Scopes granted</h3>
-          <p>No scopes recorded by the agent.</p>
+          <h4>Scopes granted</h4>
+          {descriptor?.grantedScopes === undefined ? (
+            <p>No scopes recorded by the agent.</p>
+          ) : descriptor.grantedScopes.length === 0 ? (
+            <p>No scopes granted.</p>
+          ) : (
+            <details>
+              <summary>Technical details</summary>
+              <p>
+                {new Set(descriptor.grantedScopes).size} permission
+                {new Set(descriptor.grantedScopes).size === 1 ? "" : "s"} granted by the provider.
+              </p>
+              <ul className="agent-scopes">
+                {[...new Set(descriptor.grantedScopes)].map((scope) => (
+                  <li key={scope}>
+                    <code>{scope}</code>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <Button
             ref={disconnectButton}
             variant="outline"
@@ -391,17 +452,15 @@ export function AccountsScreen({ id }: { id?: string }) {
               {rows
                 .filter((row) => row.channel === channel)
                 .map((row) => {
-                  const descriptor =
-                    descriptors.status === "ready"
-                      ? loadedRecords(descriptors.data).find(
-                          (d) => d.binding === accountBinding(row),
-                        )
-                      : undefined;
+                  const recorded =
+                    descriptors.status === "ready" ? loadedRecords(descriptors.data) : [];
+                  const descriptor = accountDescriptor(row, recorded);
                   return (
                     <AccountCard
                       key={`${session.webId}:${row.id}`}
                       account={row}
                       descriptor={descriptor}
+                      descriptorConflict={accountDescriptorConflict(row, recorded)}
                       detail={!!id}
                       sendAllowed={
                         evaluated?.policy === policy &&

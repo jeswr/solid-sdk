@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Money model (MON-00)
 
@@ -31,3 +32,44 @@ The caller provisions the money container and its accounts/, transactions/ and s
 `importStatement(store, importId, accountId, currency, statement)` accepts mapped CSV, OFX/QFX text, or `{ format: "pdf", file, adapter }` with an injected `PdfStatementAdapter`. The referenced PM adapter has no PDF parser: the injected adapter must extract inert MON-L1 `ImportedTransaction` rows. All rows validate before writes. The original is stored under `statements/<importId>.<format>` before any shard writes, and every transaction receives `prov:wasDerivedFrom` pointing to it. Row IDs derive from the caller's stable import ID, statement format and row index, so distinct originals cannot overwrite each other's rows. Currency mismatches fail before storage. Account ID selection is explicit; OFX account numbers are not treated as pod IRIs. Imports containing multiple source account IDs, including a known ID mixed with unidentified rows, fail before any request; export each account separately. Repeated statement sections for the same source account are accepted. Category label resolution and duplicate-review UI stay in MON-01; the importer does not guess category IRIs or automatically drop duplicate purchases.
 
 A statement import can span several shards. Solid has no cross-document transaction: a later conflict propagates and leaves the original plus already saved shards intact. Reusing an existing statement ID fails its create precondition instead of replacing provenance. The caller can inspect the original and deterministic row IDs to review/recover partial imports; no automatic retry or rollback is claimed.
+
+## Monthly budgets
+
+`budget.ts` adds typed wrapper accessors for `money/budgets/YYYY-MM.ttl`. Each shard has one
+`fin:Budget` at `#budget`, `schema:temporalCoverage` naming its month, and `schema:hasPart`
+links to assignment nodes. Each assignment uses `schema:about` for the existing
+`fin:BudgetCategory` IRI and the existing `fin:hasMonetaryAmount` accessor for a
+`fin:MonetaryAmount` (`schema:value` decimal and `schema:currency`). The finance sector
+has no assignment membership/category predicates, so these standard schema.org terms
+express those links without adding vocabulary. Assignments are unique by category/currency.
+Unknown RDF is retained. Writes upsert assignments by category/currency, updating existing
+nodes in place regardless of which program created them. Unmentioned assignment links are
+retained, so no assignment nodes are orphaned; clear an assignment by setting its amount to
+zero. Amount nodes use the shared-money protection described above.
+
+The data adapter discovers shards from `budgets/`, or loads an explicit inclusive month range
+(404 means no assignments). It runs the existing envelope engine from the earliest recorded
+budget or transaction month (or the selected month if earlier) through the later of the selected
+month and the latest stored budget month, inserting empty months. Income is counted only in its
+own month. Ready to assign is the minimum unassigned pool per currency over the selected month
+and every later computed month, while envelopes retain the selected month's values. Later
+assignments reduce an earlier month's pool only to the extent that later income cannot cover
+them; later income or releases cannot hide an earlier shortfall. This applies to both the budget
+page and Overview; negative pools show over-assignment. Selection extends from 12 months before
+the earlier of today and the earliest recorded budget/transaction month through 12 months after
+the later of today and the latest recorded month. Today stays within the bounds even when all
+records are future-dated. Out-of-range links show this month with an explanation.
+Opening pools and envelopes are zero; point-in-time account balance snapshots are not treated
+as income.
+Both positive and negative envelope balances roll forward. Transfers are excluded. Categories
+named Income (case insensitive) and their descendants are income categories; their signed
+activity represents income/reversals. All other category IRIs, including deleted categories,
+receive signed spending/refunds in their own envelopes. Retained income-category assignments
+and removed categories are visible and editable in the other/removed section.
+Uncategorised positive amounts are income; uncategorised outflows are flagged for categorisation
+and excluded from envelope totals until assigned a category. Currencies supported by the budget
+engine stay separate; unsupported currencies or inexact stored amounts produce an explicit error.
+Patches compare the edited envelopes with their displayed values, retain other assignments,
+and use strong ETags/create preconditions. On 412 only an already fulfilled intent succeeds;
+other changes are surfaced without overwriting them. Copying a month requires a target whose
+assignments are absent or all zero; any concurrent nonzero assignment still prevents copying.

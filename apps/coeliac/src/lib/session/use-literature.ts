@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -43,7 +44,7 @@ export interface LiteratureState {
 }
 
 export function useLiterature(): LiteratureState {
-  const { publicFetch, authedFetch, storageRoot, webId, store } = useSession();
+  const { publicFetch, storage, storageRoot, webId, store } = useSession();
   const [state, setState] = useState<Omit<LiteratureState, "refresh">>({
     ranked: [],
     hitCount: 0,
@@ -59,8 +60,8 @@ export function useLiterature(): LiteratureState {
     // 1) Offline-first: paint from the pod cache if present.
     let cached: LiteraturePayload | undefined;
     let cacheFresh = false;
-    if (storageRoot) {
-      const env = await readKnowledgeCache<LiteraturePayload>(authedFetch, storageRoot, CACHE_SLUG);
+    if (storageRoot && storage) {
+      const env = await readKnowledgeCache<LiteraturePayload>(storage, storageRoot, CACHE_SLUG);
       cached = env?.data;
       cacheFresh = !!env && !isStale(env, new Date());
       if (cached) {
@@ -93,8 +94,8 @@ export function useLiterature(): LiteratureState {
         error: null,
         fromCache: false,
       });
-      if (storageRoot && webId) {
-        void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, payload);
+      if (storageRoot && webId && storage) {
+        void writeKnowledgeCache(storage, storageRoot, webId, CACHE_SLUG, payload);
       }
       return;
     } catch (epmcErr) {
@@ -109,8 +110,8 @@ export function useLiterature(): LiteratureState {
             error: null,
             fromCache: false,
           });
-          if (storageRoot && webId) {
-            void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, {
+          if (storageRoot && webId && storage) {
+            void writeKnowledgeCache(storage, storageRoot, webId, CACHE_SLUG, {
               hitCount: results.length,
               results,
             });
@@ -127,7 +128,7 @@ export function useLiterature(): LiteratureState {
         error: cached ? null : `Couldn't reach the research index (${(epmcErr as Error).message}).`,
       }));
     }
-  }, [publicFetch, authedFetch, storageRoot, webId, store]);
+  }, [publicFetch, storage, storageRoot, webId, store]);
 
   useEffect(() => {
     void load();

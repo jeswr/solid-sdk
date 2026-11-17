@@ -121,6 +121,8 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       ...exampleRecords["channel-capability"],
       id: id(`descriptors/${binding}.ttl`),
       binding,
+      account: id(`accounts/${binding}.ttl`),
+      grantedScopes: binding === "gmail" ? ["https://www.googleapis.com/auth/gmail.readonly"] : [],
       credentialState: binding === "gmail" ? "connected" : "setup-required",
       lastIngest: at(-45_000),
     });

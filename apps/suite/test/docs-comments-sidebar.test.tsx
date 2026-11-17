@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 import { Editor, EditorContent, getSchema } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import { DataFactory, Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   act,
@@ -12,6 +13,8 @@ import {
   screen,
   waitFor,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
+import { saveChat } from "../src/apps/chat/lib/model/io";
+import { ChatNode, NS } from "../src/apps/chat/lib/model/rdf";
 import {
   type CommentActions,
   CommentComposer,
@@ -76,7 +79,14 @@ beforeEach(() => {
     stored: { url: resource },
     online: true,
     readOnly: true,
-    session: { webId, storageUrl: "https://pod.example/", displayName: "Alice", fetch: pod.fetch },
+    session: {
+      mode: "solid",
+      webId,
+      storageUrl: "https://pod.example/",
+      displayName: "Alice",
+      fetch: pod.fetch,
+      publicFetch: vi.fn().mockResolvedValue(new Response(null, { status: 404 })),
+    },
   } as unknown as DocumentPersistence;
   root = {
     url: "https://pod.example/docs/plan/comments/one.ttl",
@@ -111,6 +121,25 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+it("shows profile names for comment authors and replies, retaining the WebID as a description", async () => {
+  const profile = new Store();
+  new ChatNode(webId, profile, DataFactory).setText(`${NS.FOAF}name`, "Alice Profile");
+  await saveChat(runtime.session.fetch, runtime.session.storageUrl, webId, profile, {
+    ifNoneMatch: "*",
+  });
+  vi.spyOn(DocumentCommentStore.prototype, "list").mockResolvedValue([
+    { ...thread, replies: [{ ...root, url: "reply", kind: "reply" }] },
+  ]);
+  render(<Harness />);
+  fireEvent.click(button("Comments (0 open)"));
+  await waitFor(() => expect(screen.getAllByText("Alice Profile")).toHaveLength(2));
+  for (const author of screen.getAllByText("Alice Profile")) {
+    expect(author.title).toBe(webId);
+    expect(author.getAttribute("aria-description")).toBe(webId);
+  }
+  expect(screen.getByRole("article").getAttribute("aria-label")).toBe("Alice Profile: word");
+  expect(screen.queryByText(webId, { exact: true })).toBeNull();
+});
 it("creates, highlights and persists a comment on a read-only document; replies, edits, resolves and reopens", async () => {
   const view = render(<Harness />);
   const before = runtime.doc.store.clients.size;
@@ -123,7 +152,7 @@ it("creates, highlights and persists a comment on a read-only document; replies,
   expect(screen.queryByLabelText("Add comment")).toBeNull();
   expect(editor.view.dom.querySelector(".docs-comment-anchor")?.textContent).toBe("word");
   expect(runtime.doc.store.clients.size).toBe(before);
-  expect(button("Comments (1 open)")).toBeTruthy();
+  expect(button("Comments, 1 open")).toBeTruthy();
   fireEvent.click(button("Reply to thread"));
   fireEvent.change(screen.getByLabelText("Reply"), { target: { value: "Agreed" } });
   fireEvent.click(button("Reply"));
@@ -135,7 +164,7 @@ it("creates, highlights and persists a comment on a read-only document; replies,
   await screen.findByText("Updated reply");
   fireEvent.click(button("Resolve"));
   await waitFor(() => expect(screen.queryByRole("article")).toBeNull());
-  expect(button("Comments (0 open)")).toBeTruthy();
+  expect(button("Comments, 0 open")).toBeTruthy();
   expect(editor.view.dom.querySelector(".docs-comment-anchor")).toBeNull();
   fireEvent.click(screen.getByLabelText("Show resolved"));
   await screen.findByText("Resolved");
@@ -143,7 +172,7 @@ it("creates, highlights and persists a comment on a read-only document; replies,
   fireEvent.click(button("Reopen"));
   await waitFor(() => expect(screen.queryByText("Resolved")).toBeNull());
   fireEvent.click(button("Close comments"));
-  fireEvent.click(button("Comments (1 open)"));
+  fireEvent.click(button("Comments, 1 open"));
   await screen.findByText("Discuss");
   fireEvent.click(button("word"));
   expect(editor.state.selection.from).toBe(8);
@@ -155,23 +184,23 @@ it("creates, highlights and persists a comment on a read-only document; replies,
   await screen.findByText("No comments yet");
   view.unmount();
   render(<Harness />);
-  fireEvent.click(button("Comments (0 open)"));
+  fireEvent.click(button("Comments, 0 open"));
   await screen.findByText("No comments yet");
 });
 it("activates from highlights, follows edits, labels orphan threads, and supports Escape and focus restoration", async () => {
   vi.spyOn(DocumentCommentStore.prototype, "list").mockResolvedValue([thread]);
   render(<Harness />);
-  await waitFor(() => expect(button("Comments (1 open)")).toBeTruthy());
+  await waitFor(() => expect(button("Comments, 1 open")).toBeTruthy());
   await act(async () => commentKey.getState(editor.state)?.activate?.(root.url));
-  const article = await screen.findByRole("article", { name: `${webId}: word` });
+  const article = await screen.findByRole("article", { name: "pod.example: word" });
   expect(article).toBe(document.activeElement);
   fireEvent.keyDown(article, { key: "a" });
   fireEvent.keyDown(article, { key: "Escape" });
   expect(screen.queryByRole("complementary")).toBeNull();
-  button("Comments (1 open)").focus();
-  fireEvent.click(button("Comments (1 open)"));
-  fireEvent.click(button("Comments (1 open)"));
-  expect(document.activeElement).toBe(button("Comments (1 open)"));
+  button("Comments, 1 open").focus();
+  fireEvent.click(button("Comments, 1 open"));
+  fireEvent.click(button("Comments, 1 open"));
+  expect(document.activeElement).toBe(button("Comments, 1 open"));
   fireEvent.click(button("Add comment"));
   fireEvent.keyDown(screen.getByLabelText("Add comment"), { key: "Escape" });
   expect(screen.queryByLabelText("Add comment")).toBeNull();
@@ -240,8 +269,8 @@ it("refreshes on open, focus and visible polling, retains rows on failures, and 
   const list = vi.spyOn(DocumentCommentStore.prototype, "list").mockResolvedValue([thread]);
   const interval = vi.spyOn(window, "setInterval");
   const view = render(<Harness />);
-  await waitFor(() => expect(button("Comments (1 open)")).toBeTruthy());
-  fireEvent.click(button("Comments (1 open)"));
+  await waitFor(() => expect(button("Comments, 1 open")).toBeTruthy());
+  fireEvent.click(button("Comments, 1 open"));
   await screen.findByText("Discuss");
   const tick = interval.mock.calls.findLast(([, time]) => time === 30_000)?.[0] as () => void;
   const before = list.mock.calls.length;
@@ -285,7 +314,7 @@ it("renders without an editor and handles roots without anchors", async () => {
     .spyOn(DocumentCommentStore.prototype, "list")
     .mockResolvedValue([{ root: { ...root, anchor: undefined }, replies: [] }, thread]);
   const view = render(<Harness target={null} />);
-  fireEvent.click(button("Comments (0 open)"));
+  fireEvent.click(button("Comments, 0 open"));
   expect(list).not.toHaveBeenCalled();
   view.rerender(<Harness />);
   await screen.findByText("Original text was deleted");
@@ -343,6 +372,7 @@ it("supports pure sidebar replies, resolved threads by another author and menu E
   };
   const props = {
     threads: [{ root: { ...root, resolved: true, creator: "Bob" }, replies: [] }],
+    authorName: (creator: string) => creator,
     active: undefined,
     composer: undefined,
     reason: undefined,

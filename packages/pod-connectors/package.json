@@ -341,8 +341,9 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
-    "@jeswr/solid-dpop": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

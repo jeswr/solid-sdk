@@ -47,14 +47,6 @@ export const PROV = "http://www.w3.org/ns/prov#";
  */
 export const TIME = "http://www.w3.org/2006/time#";
 /**
- * Solid Notifications Protocol vocabulary — used to discover a server's
- * notification subscription services from its storage description doc
- * (F10, server-agnostic): `notify:subscription` (a description subject →
- * a subscription-service resource) and `notify:channelType` (the channel
- * type a subscription service implements, e.g. `notify:WebSocketChannel2023`).
- */
-export const NOTIFY = "http://www.w3.org/ns/solid/notifications#";
-/**
  * W3C Linked Data Platform — `ldp:inbox` (the WebID → LDN inbox container link),
  * `ldp:contains` (an LDP container → its members). The LDN inbox view reads
  * `ldp:inbox` off the profile and lists the inbox container's `ldp:contains`
@@ -131,7 +123,6 @@ export const xsd = (local: string) => `${XSD}${local}`;
 export const skos = (local: string) => `${SKOS}${local}`;
 export const prov = (local: string) => `${PROV}${local}`;
 export const time = (local: string) => `${TIME}${local}`;
-export const notify = (local: string) => `${NOTIFY}${local}`;
 export const ldp = (local: string) => `${LDP}${local}`;
 export const as = (local: string) => `${AS}${local}`;
 

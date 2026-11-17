@@ -17,6 +17,7 @@ describe("MCP mirror artifacts", () => {
       "@jeswr/solid-memory",
     ];
     const mirror = rewriteManifest(manifest, new Map(external.map((name) => [name, sha])));
+    expect(mirror.mcpName).toBe("io.github.jeswr/solid-mcp");
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/mcp-oauth");
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/pkg-memory");
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/storage-client");

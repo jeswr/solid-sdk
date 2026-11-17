@@ -3266,6 +3266,8 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async upgrade(request: Request, forceRefresh = false): Promise<Request> {
     let session = this.#getSession();
+    // The captured platform URL is immutable; only live session state can change
+    // across the refresh/signing awaits below.
     const href = requestHref(request);
     // Defense in depth: re-check the origin here too, so even a direct/forced
     // `upgrade` (bypassing `matches`) never attaches the token cross-origin.
@@ -3283,29 +3285,41 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // credential after sign-out / across accounts (the roborev finding). Return the
       // original request unauthenticated when the session changed/disappeared.
       const current = this.#getSession();
-      if (current !== session || requestHref(request) !== href || !this.#allowed(current, href)) {
+      if (current !== session || !this.#allowed(current, href)) {
         return request;
       }
       session = current;
     }
-    const headers = new Headers(request.headers);
-    headers.set(
-      "DPoP",
-      await DPoP.generateProof(
-        session.dpopKey,
-        // RFC 9449 §4.2: the `htu` claim is the request URI WITHOUT query + fragment.
-        // Pass a normalized htu (query/hash stripped) so a protected request like
-        // `…?q=…#frag` produces a valid proof the RS will accept.
-        htuOf(href),
-        request.method,
-        // RFC 9449 §8: embed the resource server's cached `nonce` (from a prior
-        // `use_dpop_nonce` 401 / a rotated `DPoP-Nonce` response header) so a server
-        // that REQUIRES a nonce accepts the proof; `undefined` for servers that don't.
-        this.#nonceFor(href),
-        session.accessToken,
-      ),
+    // Refresh replaces these fields in place. Bind proof and header to one pair.
+    const { accessToken, dpopKey } = session;
+    const proof = await DPoP.generateProof(
+      dpopKey,
+      // RFC 9449 §4.2: the `htu` claim is the request URI WITHOUT query + fragment.
+      // Pass a normalized htu (query/hash stripped) so a protected request like
+      // `…?q=…#frag` produces a valid proof the RS will accept.
+      htuOf(href),
+      request.method,
+      // RFC 9449 §8: embed the resource server's cached `nonce` (from a prior
+      // `use_dpop_nonce` 401 / a rotated `DPoP-Nonce` response header) so a server
+      // that REQUIRES a nonce accepts the proof; `undefined` for servers that don't.
+      this.#nonceFor(href),
+      accessToken,
     );
-    headers.set("Authorization", `DPoP ${session.accessToken}`);
+    // Signing also yields: logout, account switching, or a changed origin policy
+    // must prevent credentials from being attached when the proof completes.
+    // A concurrent same-session refresh also invalidates the captured pair. Return
+    // the original request without SDK credentials instead of a re-sign/retry loop.
+    if (
+      this.#getSession() !== session ||
+      session.accessToken !== accessToken ||
+      session.dpopKey !== dpopKey ||
+      !this.#allowed(session, href)
+    ) {
+      return request;
+    }
+    const headers = new Headers(request.headers);
+    headers.set("DPoP", proof);
+    headers.set("Authorization", `DPoP ${accessToken}`);
     let upgraded = deriveRequest(request, { headers });
     // Header guards can discard attempted credentials during construction. Only
     // surviving headers require manual redirects; otherwise keep caller policy.

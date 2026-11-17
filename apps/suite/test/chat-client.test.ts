@@ -10,8 +10,10 @@ import {
   leaveRoom,
   loadChat,
   NS,
+  react,
   readDate,
   readJoinedRooms,
+  readReactions,
   readRoom,
   removeJoinedRoom,
   saveChat,
@@ -122,6 +124,98 @@ it("re-reads and retries a commutative append exactly once on a real stale valid
     init?.method === "PATCH" ? new Response(null, { status: 500 }) : pod.fetch(input, init);
   await expect(new ChatClient(unavailable, ROOT, ME).send(room.url, "No")).rejects.toMatchObject({
     status: 500,
+  });
+});
+it("toggles all of my matching Likes while counting each person once and preserving other emoji", async () => {
+  const room = await client.createRoom({ name: "Reactions", members: [BOB] });
+  const message = await client.send(room.url, "React to this");
+  expect(message.reactions).toEqual([]);
+  await client.react(room.url, message.id, "👍");
+  await react(pod.fetch, room.url, {
+    id: "duplicate-like",
+    message: message.id,
+    actor: ME,
+    emoji: "👍",
+    at: NOW,
+  });
+  const bob = new ChatClient(pod.fetch, ROOT, BOB);
+  await bob.react(room.url, message.id, "👍");
+  await client.react(room.url, message.id, "❤️");
+  const reactions = async (reader = client) =>
+    (await reader.messages(room.url)).messages[0]?.reactions;
+  expect(await reactions()).toEqual([
+    { emoji: "❤️", count: 1, reactedByMe: true },
+    { emoji: "👍", count: 2, reactedByMe: true },
+  ]);
+  expect(await reactions(bob)).toEqual([
+    { emoji: "❤️", count: 1, reactedByMe: false },
+    { emoji: "👍", count: 2, reactedByMe: true },
+  ]);
+  await client.react(room.url, message.id, "👍");
+  expect(await reactions()).toEqual([
+    { emoji: "❤️", count: 1, reactedByMe: true },
+    { emoji: "👍", count: 1, reactedByMe: false },
+  ]);
+  const document = await loadChat(pod.fetch, room.url, message.id.split("#")[0] as string);
+  expect(
+    readReactions(document.dataset)
+      .get(message.id)
+      ?.filter((reaction) => reaction.actorId === ME && reaction.emoji === "👍"),
+  ).toEqual([]);
+  await bob.react(room.url, message.id, "👍");
+  await client.react(room.url, message.id, "❤️");
+  expect(await reactions()).toEqual([]);
+  await client.react(room.url, message.id, "👍");
+  expect(await reactions()).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
+});
+it("never lets forged triples in one day replace another day's reactions", async () => {
+  const room = await client.createRoom({ name: "Two days", members: [] });
+  const earlier = new Date(NOW.getTime() - 86_400_000);
+  const first = await client.send(room.url, "Day one", { at: earlier });
+  const second = await client.send(room.url, "Day two", { at: NOW });
+  await client.react(room.url, second.id, "👍");
+  const day = first.id.split("#")[0] as string;
+  const document = await loadChat(pod.fetch, room.url, day);
+  const reaction = `${second.id.split("#")[0]}#reaction-forged`;
+  const like = new ChatNode(reaction, document.dataset, DataFactory);
+  like.types.add(`${NS.AS}Like`);
+  like.setIri(`${NS.AS}object`, second.id);
+  like.setIri(`${NS.AS}attributedTo`, BOB);
+  like.setText(`${NS.AS}content`, "🎉");
+  like.setDate(`${NS.AS}published`, NOW);
+  for (const q of (await loadChat(pod.fetch, room.url, second.id.split("#")[0] as string)).dataset)
+    if (q.subject.value === second.id) document.dataset.add(q);
+  await saveChat(pod.fetch, room.url, day, document.dataset, { ifMatch: document.etag as string });
+  const { messages } = await client.messages(room.url);
+  const copies = messages.filter((message) => message.id === second.id);
+  expect(copies.length).toBeGreaterThan(0);
+  for (const copy of copies)
+    expect(copy.reactions).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
+});
+it("refuses reactions on missing, tombstoned and foreign-deleted messages, and propagates read failures", async () => {
+  const room = await client.createRoom({ name: "Deleted reactions", members: [] });
+  const message = await client.send(room.url, "Soon gone");
+  await client.react(room.url, message.id, "👍");
+  await client.remove(room.url, message.id);
+  const fetch = vi.fn(pod.fetch);
+  const fresh = new ChatClient(fetch, ROOT, ME);
+  await expect(fresh.react(room.url, message.id, "👍")).rejects.toBeInstanceOf(ChatClientError);
+  expect(fetch.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+  await expect(
+    fresh.react(room.url, message.id.replace(/#[^#]+$/, "#unknown"), "👍"),
+  ).rejects.toMatchObject({ code: "missing-message" });
+  await expect(
+    fresh.react(room.url, `${room.url}2026/10/01.ttl#missing`, "👍"),
+  ).rejects.toMatchObject({ code: "missing-message" });
+  const failing = new ChatClient(async () => new Response(null, { status: 503 }), ROOT, ME);
+  await expect(failing.react(room.url, message.id, "👍")).rejects.toMatchObject({ status: 503 });
+  const foreign = await client.send(room.url, "Foreign deletion");
+  const day = foreign.id.split("#")[0] as string;
+  const document = await loadChat(pod.fetch, room.url, day);
+  new ChatNode(foreign.id, document.dataset, DataFactory).setDate(`${NS.SCHEMA}dateDeleted`, NOW);
+  await saveChat(pod.fetch, room.url, day, document.dataset, { ifMatch: document.etag as string });
+  await expect(fresh.react(room.url, foreign.id, "👍")).rejects.toMatchObject({
+    code: "missing-message",
   });
 });
 it("rejects non-own and unknown edits/deletes before any fetch; others become linked personal tasks", async () => {
@@ -327,6 +421,7 @@ it("never calls the authenticated transport outside the storage origin and path,
     await expect(scoped.room(url)).rejects.toThrow();
     await expect(scoped.messages(url)).rejects.toThrow();
     await expect(scoped.send(url, "no credentials")).rejects.toThrow();
+    await expect(scoped.react(url, `${url}2026/11/01.ttl#message`, "👍")).rejects.toThrow();
     await expect(scoped.files(url)).rejects.toThrow();
   }
   expect(fetch).not.toHaveBeenCalled();

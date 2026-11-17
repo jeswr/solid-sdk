@@ -6,6 +6,8 @@ export { runFileImport } from "./core/file-import.js";
 export { runImport } from "./core/import-runner.js";
 /** Construct a writer with the host's authenticated Pod fetch. */
 export { createFetchPodWriter } from "./core/pod-writer.js";
+/** Conditional storage-client-backed Pod writer. */
+export { createStoragePodWriter, type StoragePodWriterOptions } from "./core/storage-pod-writer.js";
 export type { CliOptions } from "./node/cli.js";
 export { EXIT_CODES, parseImportArgs, runCli } from "./node/cli.js";
 export type { NodeConfig, NodeConnectorConfig } from "./node/config.js";

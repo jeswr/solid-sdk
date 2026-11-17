@@ -1,0 +1,140 @@
+{
+  "manifest_version": "0.3",
+  "name": "solid-mcp",
+  "display_name": "Solid Pod",
+  "version": "0.2.0",
+  "description": "Scoped Solid pod tools, conversation archives and purpose-limited personal context.",
+  "author": {
+    "name": "Jesse Wright"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/cli.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/cli.js"
+      ],
+      "env": {
+        "SOLID_MCP_POD_ROOT": "${user_config.SOLID_MCP_POD_ROOT}",
+        "SOLID_MCP_READONLY": "${user_config.SOLID_MCP_READONLY}",
+        "SOLID_MCP_CLIENT_ID": "${user_config.SOLID_MCP_CLIENT_ID}",
+        "SOLID_MCP_CLIENT_SECRET": "${user_config.SOLID_MCP_CLIENT_SECRET}",
+        "SOLID_MCP_OIDC_ISSUER": "${user_config.SOLID_MCP_OIDC_ISSUER}"
+      }
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "node": ">=24"
+    }
+  },
+  "tools": [
+    {
+      "name": "address_get"
+    },
+    {
+      "name": "chat_export"
+    },
+    {
+      "name": "chat_get"
+    },
+    {
+      "name": "chat_list"
+    },
+    {
+      "name": "chat_save"
+    },
+    {
+      "name": "context_read"
+    },
+    {
+      "name": "fetch"
+    },
+    {
+      "name": "health_query"
+    },
+    {
+      "name": "memory_forget"
+    },
+    {
+      "name": "memory_recall"
+    },
+    {
+      "name": "memory_remember"
+    },
+    {
+      "name": "pod_list"
+    },
+    {
+      "name": "pod_read"
+    },
+    {
+      "name": "pod_write"
+    },
+    {
+      "name": "profile_get"
+    },
+    {
+      "name": "search"
+    },
+    {
+      "name": "solid_list"
+    },
+    {
+      "name": "solid_read"
+    },
+    {
+      "name": "solid_search"
+    },
+    {
+      "name": "solid_write"
+    }
+  ],
+  "tools_generated": false,
+  "user_config": {
+    "SOLID_MCP_POD_ROOT": {
+      "type": "string",
+      "title": "Pod root",
+      "description": "Required absolute pod/container URL ending in /.",
+      "required": true,
+      "sensitive": false
+    },
+    "SOLID_MCP_READONLY": {
+      "type": "boolean",
+      "title": "Read only",
+      "description": "Defaults to true. Set false explicitly to enable writes.",
+      "required": false,
+      "sensitive": false,
+      "default": true
+    },
+    "SOLID_MCP_CLIENT_ID": {
+      "type": "string",
+      "title": "CSS credential ID",
+      "description": "CSS client-credentials token id. Supply with secret and issuer or token URL.",
+      "required": true,
+      "sensitive": true
+    },
+    "SOLID_MCP_CLIENT_SECRET": {
+      "type": "string",
+      "title": "CSS credential secret",
+      "description": "CSS client-credentials token secret. Supply with ID and issuer or token URL.",
+      "required": true,
+      "sensitive": true
+    },
+    "SOLID_MCP_OIDC_ISSUER": {
+      "type": "string",
+      "title": "OIDC issuer",
+      "description": "Issuer for discovery. With any auth setting, credentials and issuer or token URL are required.",
+      "required": true,
+      "sensitive": false
+    }
+  },
+  "_meta": {
+    "io.github.jeswr": {
+      "provenance": "AUTHORED-BY Codex GPT-6.1-Sol",
+      "status": "prepared-not-published"
+    }
+  }
+}

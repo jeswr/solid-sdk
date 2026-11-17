@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { type StorageClient, StorageError } from '@jeswr/storage-client';
 import { createMemoryStorage } from '@jeswr/storage-client/memory';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import { DataFactory } from 'n3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -843,6 +843,85 @@ describe('guard validation', () => {
     expect(JSON.stringify(outbox.pending())).not.toContain(secret);
   });
 
+  it('never enumerates stored guard envelopes during hydration', async () => {
+    const original = box();
+    await enqueue(original);
+    original.close();
+    const enumerated: string[] = [];
+    const watch = (target: object, name: string) =>
+      new Proxy(target, {
+        ownKeys(inner) {
+          enumerated.push(name);
+          return Reflect.ownKeys(inner);
+        },
+      });
+    // Proxies cannot be structured-cloned, so only hydration (which persists nothing
+    // for bound records) sees them; delivery is covered by the extra-keys test below.
+    const getAll = IDBObjectStore.prototype.getAll;
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore['getAll']>
+    ) {
+      const request = getAll.apply(this, args);
+      const result = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'result');
+      Object.defineProperty(request, 'result', {
+        get() {
+          const records = result?.get?.call(request) as TestStoredItem[];
+          return records.map((record) => ({
+            ...record,
+            guard: watch(record.guard, 'guard'),
+            item: { ...record.item, guard: watch(record.item.guard, 'item.guard') },
+          }));
+        },
+        set(value: unknown) {
+          result?.set?.call(request, value);
+        },
+      });
+      return request;
+    });
+    try {
+      const outbox = box();
+      await outbox.ready;
+      expect(spy).toHaveBeenCalled();
+      expect(outbox.pending()).toMatchObject([{ guard: { tag }, blocked: 'no-delegate' }]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(enumerated).toEqual([]);
+  });
+
+  it('reads stored guard envelopes by fixed field without enumerating extra keys', async () => {
+    const original = box();
+    await enqueue(original);
+    const extras = Object.fromEntries(
+      Array.from({ length: 20_000 }, (_, i) => [`extra${i}`, 'private-extra']),
+    );
+    await stored((record) => {
+      Object.assign(record.guard, extras);
+      Object.assign(record.item.guard, extras);
+    });
+    original.close();
+    const ownKeys = vi.spyOn(Reflect, 'ownKeys');
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>(async (delivery) => {
+      expect(delivery.assertions).toEqual(guard.assertions);
+      expect(JSON.stringify(delivery)).not.toContain('private-extra');
+    });
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    expect(outbox.pending()[0]?.guard).toEqual({ tag });
+    expect(
+      ownKeys.mock.calls.some(
+        ([target]) => typeof target === 'object' && target !== null && 'extra0' in target,
+      ),
+    ).toBe(false);
+    ownKeys.mockRestore();
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(delegate).toHaveBeenCalledTimes(1);
+    expect(outbox.pending()).toEqual([]);
+  });
+
   it.each([
     (record: TestStoredItem) => {
       record.guard.tag = 'INVALID';
@@ -887,6 +966,18 @@ describe('guard validation', () => {
     },
     (record: TestStoredItem) => {
       Reflect.deleteProperty(record.item, 'guard');
+    },
+    (record: TestStoredItem) => {
+      Reflect.deleteProperty(record.guard, 'tag');
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.item, { guard: {} });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record, { guard: [tag] });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record, { guard: new Map([['tag', tag]]) });
     },
   ])('quarantines tampered persisted guards during hydration and retry: %s', async (tamper) => {
     const original = box();

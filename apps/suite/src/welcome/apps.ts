@@ -18,6 +18,7 @@ const descriptions: Record<AppSlug, string> = {
   money: "Review accounts, transactions and budgets.",
   health: "Explore your health records and trends.",
   permissions: "Decide who can see and use your things.",
+  agent: "Work with an assistant and review its requests.",
 };
 
 export const welcomeApps = appRegistry.map((app) => ({

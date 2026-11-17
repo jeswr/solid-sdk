@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 /**
  * @jeswr/solid-api-auth — the public, framework-free core surface.
@@ -44,3 +45,11 @@ export {
   TokenBucketRateLimiter,
   verifyRequest,
 } from "./core.js";
+
+export { createIssuerKeyResolver, type IssuerKeyResolverOptions } from "./issuer-keys.js";
+export {
+  createResourceTokenVerifier,
+  type ResourceIdentity,
+  type ResourceReplayStore,
+  type ResourceTokenVerifierOptions,
+} from "./resource-token.js";

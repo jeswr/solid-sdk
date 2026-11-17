@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Resolve a product for a barcode: OFF live first (freshest), pod cache as the
@@ -5,12 +6,13 @@
  * lookup (DESIGN §5.2/§6). The barcode is the only thing sent to OFF — never any
  * health data.
  */
+import type { PodStorage } from "../pod/client";
 import { readOffCache, writeOffCache } from "./cache";
 import { lookupProduct, type OffProduct } from "./off";
 
 export interface ResolveContext {
   publicFetch: typeof globalThis.fetch;
-  authedFetch: typeof globalThis.fetch;
+  storage: PodStorage | null;
   storageRoot: string | null;
   /** The pod owner WebID — required to write-through the owner-only-ACL'd cache. */
   webId: string | null;
@@ -34,13 +36,13 @@ export async function resolveProduct(
 ): Promise<ResolvedProduct> {
   try {
     const product = await lookupProduct(barcode, ctx.publicFetch);
-    if (product.found && ctx.storageRoot && ctx.webId) {
-      void writeOffCache(ctx.authedFetch, ctx.storageRoot, ctx.webId, product);
+    if (product.found && ctx.storageRoot && ctx.webId && ctx.storage) {
+      void writeOffCache(ctx.storage, ctx.storageRoot, ctx.webId, product);
     }
     return { product, source: "off" };
   } catch (err) {
-    if (ctx.storageRoot) {
-      const cached = await readOffCache(ctx.authedFetch, ctx.storageRoot, barcode);
+    if (ctx.storageRoot && ctx.storage) {
+      const cached = await readOffCache(ctx.storage, ctx.storageRoot, barcode);
       if (cached) return { product: cached, source: "cache" };
     }
     throw err;

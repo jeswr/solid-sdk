@@ -44,6 +44,62 @@ await access.revoke(resourceUrl, grant.id!);
 `request` support LWS access-request services; other protocols return `unsupported`.
 `./testing` remains reserved.
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+## Checking owner-only storage
+
+```ts
+import { checkOwnerOnly } from '@jeswr/pod-access';
+
+const result = await checkOwnerOnly({ storage, url: containerUrl, ownerWebId,
+  acpDialect: 'css' }); // ACP dialect must come from trusted deployment knowledge.
+if (!result.private) throw new Error('Choose a private container');
+```
+
+`checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOnlyResult>` reads raw effective
+permissions, before the lossy roles projection. Its result is `{ private: true }` or
+`{ private: false, reasons: OwnerOnlyReason[] }`. Each reason contains `subject` (`public`,
+`authenticated`, `agent` other than the owner, `group`, `origin/client-scoped`, or `unknown`),
+`modes` (lowercase access modes), and `reason` (`non-owner`, `unknown`, `unrepresentable`,
+`unsupported-model`, or `not-storage-root`). No policy text, principal identifiers or error messages are returned.
+The only allowed owner is the exact supplied WebID; listing another owner is non-owner access.
+
+The function uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
+inputs as `createAccessClient`, plus `url` and `ownerWebId`. It follows advertised access
+links within `storage.root`, including ESS query-addressed ACRs. WAC uses the resource's own
+ACL or the nearest existing ancestor ACL's defaults after explicit 404s. ACP adds ancestor
+member policies through the storage root. Containers also check their own member defaults;
+this covers default access to newly stored children, without traversing existing children or
+their overriding access documents. The walk is bounded to 64 resources, and each access
+document to 1 MiB of streamed bytes and 10,000 quads; larger documents refuse with `unknown`.
+Access documents are read with `storage.read` and parsed by `@jeswr/fetch-rdf`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Policies above `storage.root` are never examined, and `storage.root` is caller-supplied (apps
+may build a storage client over a sub-root). So whenever the walk reaches `storage.root`, its
+revalidated HEAD must advertise `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`;
+otherwise the check refuses with `not-storage-root`. ACP always reaches the root, so ACP checks
+need a storage client rooted at the real pim:Storage. WAC reaches it only when no nearer ACL
+exists, because the nearest existing ACL is authoritative.
+Each access document needs a usable ETag matching a revalidated HEAD; missing or changed
+validators refuse with `unknown`, so stale cached RDF cannot establish privacy. Only a
+revalidated WAC HEAD 404 permits inheritance; a later GET 404 refuses instead.
+
+Every non-owner grant is refused, including partial modes such as Control-only, Write-only,
+Append-only and public Read+Append. Write implies Append in the offline readers' diagnostics.
+Groups and conditional non-owner grants are refused without fetching their identifiers.
+Denials and exclusions never cancel a reported grant. Owners may hold any supported modes.
+Unknown modes (including Solid Delete), legacy WAC defaults without an established dialect,
+unknown constructs, parser complexity limits, unsupported ESS matcher shapes, any omitted
+ACP grants, and an `acl:accessTo`, `acl:default` or `acp:resource` target that names the checked
+resource only after URL normalisation (scheme or host case, default port) return `unrepresentable`. Empty or unreadable documents, missing ACRs, discovery
+failures and network errors return `unknown`; a WAC 404 permits inheritance only if a readable
+governing ACL is found. LWS and unavailable/none access models return `unsupported-model`.
+This intentionally conservative check can refuse policies that are actually private.
+
+This is a read-time observation of the advertised access documents. Concurrent policy changes
+can race a later write; it does not establish the caller's ability to write, validate server
+enforcement, or promise transactional protection for existing descendants.
+
 ## Solid discovery and conditional edits
 
 The client discovers the associated access document from HEAD: `rel="acl"` for WAC and ACP.
