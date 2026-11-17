@@ -225,8 +225,10 @@ export function ScopedSharing({
     };
   }, [session, resource, retry]);
 
-  const show = (fresh: ScopedSharingSnapshot, message: string) => {
-    if (scopesMatch(fresh)) onMatched(message);
+  // Hand back only after a write made the scopes match. A save that wrote nothing would
+  // reopen this same editor; one that landed differently keeps its error in view here.
+  const show = (fresh: ScopedSharingSnapshot, message: string, handOff: boolean) => {
+    if (handOff && scopesMatch(fresh)) onMatched(message);
     else setSnapshot(fresh);
     setAnnouncement(message);
   };
@@ -239,13 +241,13 @@ export function ScopedSharing({
     try {
       const { snapshot: fresh, changed } = await applyScopedSharing(session, snapshot, selection);
       if (changed) onSaved();
-      show(fresh, changed ? "Sharing saved" : "Sharing already up to date");
+      show(fresh, changed ? "Sharing saved" : "Sharing already up to date", changed);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
       if (reason instanceof ScopedSharingIncompleteError) {
         // Part of the selection may be stored: show the reloaded access, never "saved".
         onSaved();
-        show(reason.snapshot, "Sharing not saved as chosen");
+        show(reason.snapshot, "Sharing not saved as chosen", false);
       } else if (reason instanceof SharingRefreshError) {
         setSnapshot(undefined);
         onSaved();
@@ -265,7 +267,10 @@ export function ScopedSharing({
 
   // The SDK keeps the caller's Control on both scopes, and owner rows are read-only here, so
   // without ownership of the items inside no save can succeed.
-  const blocked = saving || !!disabledReason || !snapshot?.canManage || !snapshot.ownsContents;
+  const blocked = saving || !!disabledReason || !snapshot?.canManage;
+  // Owner rows are read-only and the SDK keeps the caller's Control on both scopes, so without
+  // ownership of the items inside only aligning them to this folder can succeed.
+  const edits = blocked || !snapshot?.ownsContents;
   return (
     <div className="su-stack" aria-busy={saving}>
       <p role="note" className="su-muted">
@@ -296,8 +301,8 @@ export function ScopedSharing({
           )}
           {snapshot.canManage && !snapshot.ownsContents && (
             <p className="su-muted" role="status">
-              You don't own the items inside this folder, so its sharing can't be changed here. Ask
-              an owner of those items.
+              You don't own the items inside this folder. You can make them match this folder;
+              other changes need ownership of both.
             </p>
           )}
           <div className="su-wrap">
@@ -310,7 +315,7 @@ export function ScopedSharing({
             </Button>
             <Button
               variant="outline"
-              disabled={blocked}
+              disabled={edits}
               onClick={() => void save({ folder: snapshot.contents, contents: snapshot.contents })}
             >
               Make this folder match items inside
@@ -322,7 +327,7 @@ export function ScopedSharing({
               scope={scope}
               state={snapshot[scope]}
               webId={session.webId}
-              blocked={blocked}
+              blocked={edits}
               onChange={(next) =>
                 void save(
                   scope === "folder"

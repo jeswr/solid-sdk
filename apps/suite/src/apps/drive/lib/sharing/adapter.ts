@@ -533,8 +533,7 @@ function scopeGrants(
   };
   const plan = toGrants(session, view, selection);
   // setScopedGrants takes the full set, so an omitted principal is removed directly. An
-  // unchanged scope is still sent: its raw modes may differ from its roles (Write without
-  // Append, say), and the SDK rewrites only rules whose modes differ from the roles given.
+  // unchanged scope is sent as read; the SDK writes nothing when no scope's roles change.
   return plan ? plan.grants : snapshot.grants[scope];
 }
 

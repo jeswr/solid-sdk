@@ -334,18 +334,58 @@ it("says when a save had nothing to change, without refreshing the listing", asy
   await screen.findByText("Sharing already up to date");
   expect(onSaved).not.toHaveBeenCalled();
   expect(screen.getByRole("region", { name: "Items inside" })).toBeTruthy();
+  // Nothing was written, so the editor stays rather than reopening itself.
+  expect(load).toHaveBeenCalledTimes(1);
 });
 
-it("keeps every edit disabled when the items inside belong to someone else", async () => {
+it("only offers aligning the items inside when the user doesn't own them", async () => {
   loadScoped.mockResolvedValue(scoped({ ownsContents: false }));
+  apply.mockImplementationOnce(saves);
   show();
   await editor();
   expect(screen.getByText(/You don't own the items inside this folder/)).toBeTruthy();
-  for (const button of screen.getAllByRole("button", { name: /^Make / }))
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+  const reverse = screen.getByRole("button", { name: "Make this folder match items inside" });
+  expect((reverse as HTMLButtonElement).disabled).toBe(true);
   expect(
     (screen.getByLabelText(`Role for ${BOB} on items inside`) as HTMLSelectElement).disabled,
   ).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
+  await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+  expect(apply.mock.calls[0]?.[2]).toEqual({ folder, contents: folder });
+});
+
+it("keeps a save that landed differently in the editor, even when the scopes now match", async () => {
+  apply.mockRejectedValueOnce(
+    new ScopedSharingIncompleteError(scoped({ contents: folder }), [`${BOB} (items inside)`]),
+  );
+  show();
+  await editor();
+  fireEvent.click(screen.getByRole("button", { name: "Make this folder match items inside" }));
+  await screen.findByText(/Sharing wasn't saved as chosen for/);
+  expect(screen.getByRole("region", { name: "Items inside" })).toBeTruthy();
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+it("returns focus after a scoped save, and to Done after handing back", async () => {
+  apply.mockImplementationOnce(async (_s, snapshot) => ({ snapshot, changed: false }));
+  show();
+  await editor();
+  const reverse = screen.getByRole("button", { name: "Make this folder match items inside" });
+  reverse.focus();
+  fireEvent.click(reverse);
+  // Browsers drop focus from a control disabled while it saves.
+  reverse.blur();
+  await screen.findByText("Sharing already up to date");
+  await waitFor(() => expect(document.activeElement).toBe(reverse));
+  load.mockResolvedValue(ordinary);
+  apply.mockImplementationOnce(saves);
+  const match = screen.getByRole("button", { name: "Make items inside match this folder" });
+  match.focus();
+  fireEvent.click(match);
+  await screen.findByRole("region", { name: "People with access" });
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Done" })),
+  );
 });
 
 it("keeps the dialog open while a scoped save is in flight", async () => {

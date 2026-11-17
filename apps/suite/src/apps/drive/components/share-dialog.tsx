@@ -120,6 +120,13 @@ export function ShareDialog({
         if (live) {
           setSnapshot(value);
           setLoading(false);
+          // The scope-aware editor's controls are gone after a handoff; keep focus in the dialog.
+          if (
+            matched.current &&
+            (document.activeElement === document.body ||
+              document.activeElement?.getAttribute("role") === "dialog")
+          )
+            done.current?.focus();
           setAnnouncement(matched.current);
           matched.current = "";
         }
@@ -251,9 +258,14 @@ export function ShareDialog({
             onSaved={onSaved}
             onMatched={(message) => {
               matched.current = message;
+              setAnnouncement("");
               setRetry((n) => n + 1);
             }}
-            onSavingChange={setSaving}
+            onSavingChange={(value) => {
+              // Restore focus after a scoped save as after an ordinary one.
+              if (value) focusAfterSave.current = document.activeElement as HTMLElement | null;
+              setSaving(value);
+            }}
           />
         )}
         {!loading && state && (
@@ -412,9 +424,9 @@ export function ShareDialog({
             </p>
           </div>
         )}
-        {/* The scope-aware editor announces its own saves. */}
+        {/* The scope-aware editor announces its own saves; this region keeps the rest. */}
         <p role="status" className="su-muted">
-          {scoped ? "" : saving ? "Saving sharing…" : announcement}
+          {saving && !scoped ? "Saving sharing…" : announcement}
         </p>
         <DialogFooter>
           <Button

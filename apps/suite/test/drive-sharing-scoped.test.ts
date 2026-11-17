@@ -159,14 +159,29 @@ it("fails closed when one scope grants access its roles would drop", async () =>
   await expect(loadScopedSharing(env.session, FOLDER)).rejects.toThrow(UNMAPPED);
 });
 
-it("marks a folder whose items inside its owner doesn't own", async () => {
+it("lets an owner of the folder alone align the items inside to it", async () => {
   const env = await setup(ALICE, (doc) => {
     authorization(doc, ALICE, ["Read", "Write", "Control"]);
-    inside(doc, BOB, ["Read", "Write", "Control"]);
+    inside(doc, BOB, ["Read", "Write"]);
   });
   const scoped = await loadScopedSharing(env.session, FOLDER);
   expect(scoped.canManage).toBe(true);
   expect(scoped.ownsContents).toBe(false);
+  const { snapshot, changed } = await applyScopedSharing(env.session, scoped, {
+    folder: scoped.folder,
+    contents: scoped.folder,
+  });
+  expect(changed).toBe(true);
+  expect(roles(snapshot.contents)).toEqual([[[ALICE, "owner"]], "none"]);
+  // Another owner inside is read-only here, so aligning over them is refused before writing.
+  const other = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]);
+    inside(doc, BOB, ["Read", "Write", "Control"]);
+  });
+  const owned = await loadScopedSharing(other.session, FOLDER);
+  await expect(
+    applyScopedSharing(other.session, owned, { folder: owned.folder, contents: owned.folder }),
+  ).rejects.toThrow("Owner rows are read-only");
 });
 
 it("refuses a stale save, and a save by someone who can't manage the folder", async () => {
