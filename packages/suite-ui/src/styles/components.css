@@ -108,7 +108,10 @@
 }
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {
-  width: min(420px, calc(100% - 32px));
+  width: min(420px, calc(100vw - 32px));
+  /* Never wider than the viewport. Consumers that set their own width keep it. */
+  max-inline-size: calc(100vw - 32px);
+  min-inline-size: 0;
 }
 [data-slot="sheet-content"] {
   border-radius: var(--radius-xl);
@@ -1236,6 +1239,11 @@
   border: 0;
   border-left: 1px solid var(--border);
   border-radius: 0;
+}
+.suite-item-details[data-variant="embedded"] {
+  border: 0;
+  padding: 0;
+  background: transparent;
 }
 .suite-pod-meter h3 {
   font-size: var(--text-sm);

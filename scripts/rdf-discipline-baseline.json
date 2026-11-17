@@ -17,9 +17,6 @@
   "apps/coeliac/src/lib/community/share-rdf.ts": {
     "rdf-factory": 6
   },
-  "apps/coeliac/src/lib/pod/type-index.ts": {
-    "rdf-factory": 1
-  },
   "apps/issues/scripts/dev.mjs": {
     "rdf-literal": 1
   },

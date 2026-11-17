@@ -7,6 +7,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { createWebIdKeyResolver } from "@jeswr/solid-vc";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { archivePartition, readArchive } from "../src/apps/agent/lib/archive";
 import { createAgentClient, isLoaded } from "../src/apps/agent/lib/client";
 import { collection } from "../src/apps/agent/lib/collections";
 import { archivedMessages, archiveView } from "../src/apps/agent/lib/inbox";
@@ -485,23 +486,26 @@ describe("signed approvals and controls", () => {
       }),
     ).toEqual({ invalid: "malformed" });
   });
-  it("signs Archive into archive/, apart from authority controls, and hides only verified owner archives", async () => {
+  it("signs Archive into its UTC month, apart from authority controls, and hides only verified owner archives", async () => {
     const { session, client } = await fixture();
     await setupApprovalKey(session);
     const signer = createAgentSigner(session, client, () => now);
     const target = `${client.paths.inbox}gmail/gmail/message-1.ttl`;
     const authority = (await readControl(client)).length;
     const archive = await signer.signControl("Archive", { target });
-    expect(archive.id.startsWith(client.paths.archive)).toBe(true);
+    expect(new URL(".", archive.id).href).toBe(archivePartition(client, now));
+    expect(archive.id.split("/").at(-1)).toMatch(
+      new RegExp(`^${now.getTime()}-Archive-[0-9a-f-]+\\.trig$`),
+    );
     expect(Date.parse(archive.expires) - now.getTime()).toBe(365 * 86400000);
     await expect(signer.signControl("Archive")).rejects.toThrow(/target/);
     // Authority reads (status pill, executor) never page through archive volume.
     expect(await readControl(client)).toHaveLength(authority);
     const verified = loadedRecords(
-      await readControl(
+      await readArchive(
         client,
         createAgentVerifier(session, () => now),
-        client.paths.archive,
+        now,
       ),
     );
     expect(verified.map((c) => [c.kind, c.target, c.verification])).toEqual([
@@ -527,10 +531,10 @@ describe("signed approvals and controls", () => {
     await setupApprovalKey(session);
     const target = `${client.paths.inbox}gmail/gmail/message-1.ttl`;
     await createAgentSigner(session, client, () => now).signControl("Archive", { target });
-    const rows = await readControl(
+    const rows = await readArchive(
       client,
       createAgentVerifier(session, () => now),
-      client.paths.archive,
+      now,
     );
     const at = now.getTime();
     expect(archiveView({ status: "loading" }, DEMO_WEBID, at)).toEqual({ status: "loading" });
@@ -729,11 +733,50 @@ describe("approval key revocation", () => {
     }
     for (const lapsed of [connect, resume])
       expect(ids.some((id) => id.startsWith(lapsed.id.replace(/\.trig$/, "")))).toBe(false);
-    const archived = await verified(client, session, client.paths.archive, later);
+    const archived = loadedRecords(
+      await readArchive(
+        client,
+        createAgentVerifier(session, () => later),
+        later,
+      ),
+    ).filter((c) => c.verification === "verified");
     expect(archived.map((c) => [c.kind, c.target])).toEqual([["Archive", target]]);
     expect(archived[0]?.createdAt).toBe(archive.createdAt);
     expect(archived[0]?.createdAt).not.toBe(later.toISOString());
     expect(archived[0]?.id.startsWith(archive.id.replace(/\.trig$/, ""))).toBe(true);
+  });
+
+  it("re-signs an older partitioned Archive in the original partition with a verifiable proof", async () => {
+    const { session, client } = await fixture();
+    await setupApprovalKey(session);
+    const old = localStorage.getItem(PREF) as string;
+    const createdAt = new Date("2026-09-30T23:59:59Z");
+    const original = await createAgentSigner(session, client, () => createdAt).signControl(
+      "Archive",
+      { target },
+    );
+    const container = archivePartition(client, createdAt);
+    expect(original.id.startsWith(container)).toBe(true);
+    await setupApprovalKey(session);
+    const device = localStorage.getItem(PREF) as string;
+    expect(await revocationImpact(client, session, old, now)).toMatchObject({ statements: 1 });
+    expect(await revokeApprovalKey(client, session, old, () => now)).toEqual({ resigned: 1 });
+    const verifier = createAgentVerifier(session, () => now);
+    const rows = loadedRecords(await readArchive(client, verifier, now));
+    const copy = rows.find((row) => row.verification === "verified");
+    if (!copy) throw new Error("Missing re-signed archive");
+    expect(copy).toEqual({
+      ...original,
+      id: expect.stringMatching(/\.resigned-[0-9a-f-]+\.trig$/),
+      verification: "verified",
+    });
+    expect(new URL(".", copy.id).href).toBe(container);
+    expect(copy.id.startsWith(`${original.id.replace(/\.trig$/, "")}.resigned-`)).toBe(true);
+    expect(rows.find((row) => row.id === original.id)?.verification).not.toBe("verified");
+    const document = await client.graph(copy.id);
+    expect(await verifier.verifyControl(document.text, copy.id)).toBe("verified");
+    expect(document.text).toContain(device);
+    expect(await client.list(archivePartition(client, now))).toHaveLength(0);
   });
 
   it("refuses this device's key, unknown keys, an unready device and an off-storage profile", async () => {
@@ -835,14 +878,30 @@ describe("approval key revocation", () => {
     );
   });
 
-  it("fails closed when the control listing is incomplete", async () => {
+  it.each([
+    "control",
+    "archive",
+    "partition",
+  ] as const)("fails closed when the %s listing is incomplete", async (source) => {
     const { session, client, old } = await twoDevices();
+    const capped = source === "partition" ? archivePartition(client, now) : client.paths[source];
+    const list = client.list;
     vi.spyOn(client, "list").mockImplementation(async (container) =>
-      Array.from({ length: 5001 }, (_, i) => ({ url: `${container}${i}.trig`, container: false })),
+      container === capped
+        ? Array.from({ length: 5001 }, (_, i) => ({
+            url: `${container}${i}.trig`,
+            container: false,
+          }))
+        : list(container),
     );
-    await expect(revokeApprovalKey(client, session, old)).rejects.toThrow(
+    await expect(revocationImpact(client, session, old, now)).rejects.toThrow(
       /too many agent controls/,
     );
+    await expect(
+      source === "control"
+        ? revokeApprovalKey(client, session, old)
+        : revokeApprovalKey(client, session, old, () => now),
+    ).rejects.toThrow(/too many agent controls/);
     expect(
       await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(old, DEMO_WEBID),
     ).toBe(true);

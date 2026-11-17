@@ -1,9 +1,12 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Offline logging + reconcile + owner-only ACL — the outbox behaviour behind UX
  * invariants #2/#3 and the "all writes owner-only" acceptance.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { recordingStorage } from "../../../test/storage";
+import { StorageError } from "@jeswr/storage-client";
+import { beforeEach, describe, expect, it } from "vitest";
 import { DiaryStore } from "../cache/diary-store";
 import { MemoryKv } from "../cache/kv";
 import { resetDiaryReadyMemo } from "../pod/pod-fs";
@@ -14,42 +17,47 @@ import { flushOutbox } from "./sync";
 const ROOT = "https://alice.example/";
 const WEBID = "https://alice.example/profile/card#me";
 
-interface Scenario {
-  fetch: typeof globalThis.fetch;
-  puts: () => { url: string; body?: string }[];
-  failMealPut: { current: boolean };
-}
-
-/** A fetch that can be toggled to fail meal PUTs (simulate offline). */
-function scenario(): Scenario {
-  const puts: { url: string; body?: string }[] = [];
+/** SDK memory storage with a switchable offline meal write. */
+function scenario() {
   const failMealPut = { current: false };
-  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input.toString();
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (method === "HEAD") return new Response(null, { status: 200 });
-    if (method === "PUT") {
-      const body = typeof init?.body === "string" ? init.body : undefined;
-      const isMeal = url.includes("/meals/");
-      if (isMeal && failMealPut.current) throw new TypeError("Failed to fetch");
-      puts.push({ url, body });
-      return new Response("", { status: 201 });
+  const r = recordingStorage(ROOT, (call) => {
+    if (call.method === "PUT" && call.url.includes("/meals/") && failMealPut.current) {
+      throw new TypeError("Failed to fetch");
     }
-    return new Response("", { status: 200 });
-  }) as unknown as typeof globalThis.fetch;
-  return { fetch, puts: () => puts, failMealPut };
+  });
+  return { ...r, failMealPut };
 }
 
 beforeEach(() => resetDiaryReadyMemo());
 
 describe("flushOutbox", () => {
+  it.each([
+    [new StorageError("network", { url: ROOT, method: "HEAD" }), "Failed to fetch"],
+    [new StorageError("scope", { url: ROOT, method: "HEAD" }), "Storage location is outside this pod"],
+    [Object.assign(new Error(`Discovery failed at ${ROOT}`), {
+      name: "CapabilitiesError", code: "description-unreachable", url: ROOT,
+    }), "Couldn't discover pod storage"],
+    [Object.assign(new Error(`Discovery failed at ${ROOT}`), {
+      name: "CapabilitiesError", code: "network", url: ROOT,
+    }), "Failed to fetch"],
+  ])("stores a short sync error for a status-less SDK failure (%s)", async (failure, message) => {
+    const store = new DiaryStore(new MemoryKv(), WEBID);
+    const meal = newMealRecord({ storageRoot: ROOT, items: [{ name: "Rice" }] });
+    await store.putMeal(meal);
+    const storage = async () => { throw failure; };
+    expect(await flushOutbox({ storage, webId: WEBID, storageRoot: ROOT }, store)).toEqual({
+      synced: 0, failed: 1,
+    });
+    expect((await store.pending()).meals[0]).toMatchObject({ sync: "error", error: message });
+  });
+
   it("syncs a pending meal to the pod, ACL-first, owner-only", async () => {
     const s = scenario();
     const store = new DiaryStore(new MemoryKv(), WEBID);
     const meal = newMealRecord({ storageRoot: ROOT, items: [{ name: "Porridge" }] });
     await store.putMeal(meal);
 
-    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const result = await flushOutbox({ storage: s.storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(result).toEqual({ synced: 1, failed: 0 });
 
     const urls = s.puts().map((p) => p.url);
@@ -72,7 +80,7 @@ describe("flushOutbox", () => {
 
     // Offline: the meal PUT fails.
     s.failMealPut.current = true;
-    const offline = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const offline = await flushOutbox({ storage: s.storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(offline.failed).toBe(1);
     let pending = await store.pending();
     expect(pending.meals).toHaveLength(1);
@@ -81,7 +89,7 @@ describe("flushOutbox", () => {
     // Reconnect: a re-flush succeeds — the log was never lost.
     resetDiaryReadyMemo();
     s.failMealPut.current = false;
-    const online = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const online = await flushOutbox({ storage: s.storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(online.synced).toBe(1);
     pending = await store.pending();
     expect(pending.meals).toHaveLength(0);
@@ -92,7 +100,7 @@ describe("flushOutbox", () => {
     const store = new DiaryStore(new MemoryKv(), WEBID);
     const symptom = newSymptomRecord({ storageRoot: ROOT, symptomType: "bloating", severity: 6 });
     await store.putSymptom(symptom);
-    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const result = await flushOutbox({ storage: s.storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(result.synced).toBe(1);
     expect(s.puts().some((p) => p.url === symptom.url)).toBe(true);
   });
@@ -112,7 +120,7 @@ describe("flushOutbox", () => {
     );
     await store.putConclusion(conc);
 
-    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const result = await flushOutbox({ storage: s.storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(result.synced).toBe(2);
     const urls = s.puts().map((p) => p.url);
     expect(urls).toContain(proto.url);
@@ -126,14 +134,9 @@ describe("flushOutbox", () => {
   });
 
   it("defers a conclusion whose source protocol has NOT synced (no orphan confirmed conclusion)", async () => {
-    // A fetch that fails every protocol PUT (protocol never lands on the pod).
-    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = input.toString();
-      const method = (init?.method ?? "GET").toUpperCase();
-      if (method === "HEAD") return new Response(null, { status: 200 });
-      if (method === "PUT" && url.includes("/protocols/")) throw new TypeError("Failed to fetch");
-      return new Response("", { status: 201 });
-    }) as unknown as typeof globalThis.fetch;
+    const { storage } = recordingStorage(ROOT, (call) => {
+      if (call.method === "PUT" && call.url.includes("/protocols/")) throw new TypeError("Failed to fetch");
+    });
 
     const store = new DiaryStore(new MemoryKv(), WEBID);
     const proto = newProtocolRecord(
@@ -148,7 +151,7 @@ describe("flushOutbox", () => {
     );
     await store.putConclusion(conc);
 
-    const result = await flushOutbox({ authedFetch: fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const result = await flushOutbox({ storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(result.failed).toBe(1); // the protocol PUT failed
     // The conclusion was DEFERRED (not synced, not failed) — still pending for retry.
     const pending = await store.pending();
@@ -177,7 +180,7 @@ describe("flushOutbox", () => {
       sync: "pending",
     });
 
-    const result = await flushOutbox({ authedFetch: s.fetch, webId: WEBID, storageRoot: ROOT }, store);
+    const result = await flushOutbox({ storage: s.storage, webId: WEBID, storageRoot: ROOT }, store);
     expect(result.synced).toBe(1);
     const urls = s.puts().map((p) => p.url);
     const summaryUrl = `${ROOT}health/diary/genetics/summary.ttl`;

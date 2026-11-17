@@ -57,9 +57,10 @@ const appExpectations = [
   ["publish", "globe", 215],
   ["trips", "plane", 237],
   ["ask", "message-circle-question-mark", 30],
+  ["agent", "bot", 205],
 ] as const;
 describe("§3 app mapping", () => {
-  it("contains exactly the twenty-nine specified apps", () =>
+  it("contains every specified app and the suite agent", () =>
     expect(Object.keys(APP_ICONS)).toEqual(appExpectations.map(([id]) => id)));
   for (const [app, glyph, hue] of appExpectations)
     it(`${app}: glyph, hue, geometry and accessible sizes`, async () => {

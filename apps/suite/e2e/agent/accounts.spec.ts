@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
+import { recordToTurtle } from "@jeswr/agent-model";
+import { exampleRecords } from "@jeswr/agent-model/testing";
 import { expect, type Page, test } from "@playwright/test";
 import { importRegistry } from "../../../../packages/agent-registry/src/importer";
 import { parseRegistryYaml } from "../../../../packages/agent-registry/src/inventory";
@@ -69,6 +71,7 @@ async function setup(page: Page) {
 }
 
 async function inspect(page: Page, screenshot: string) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const result = await new AxeBuilder({ page }).analyze();
   expect(
     result.violations.filter((row) => row.impact === "serious" || row.impact === "critical"),
@@ -88,9 +91,33 @@ test("8: registry accounts stay private, show conflicts and write verified owner
   expect(fixture.report.imported).toBe(29);
   await page.goto("/agent/accounts");
   await expect(page.locator("[data-agent-account]")).toHaveCount(29);
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-agent-account] img")
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0,
+          ),
+        ),
+    )
+    .toBe(true);
   await expect(
-    page.getByText("Two different handles recorded. Pick one on the agent's computer.").first(),
+    page.getByText("Two different handles recorded — pick one", { exact: true }).first(),
   ).toBeVisible();
+  const conflicts = loadedRecords(await readAccounts(fixture.client)).filter(
+    (row) => row.inventory?.identityConflicts.length,
+  );
+  expect(conflicts.length).toBeGreaterThan(0);
+  // A static warning row, not a live alert, so several conflicts don't each interrupt.
+  await expect(page.locator(".agent-banner[role='alert']")).toHaveCount(0);
+  const warning = page
+    .locator(".agent-banner")
+    .filter({ hasText: "Two different handles recorded — pick one" })
+    .first();
+  await warning.getByText("How to resolve this", { exact: true }).click();
+  await expect(warning).toContainText("Only you can make this choice.");
   const account = fixture.report.settings.connections.find(
     (row) => row.channel === "email" && row.provider === "google",
   );
@@ -105,7 +132,11 @@ test("8: registry accounts stay private, show conflicts and write verified owner
     card.locator(`[title="Your permissions don't let the agent send on this account yet"]`),
   ).toBeVisible();
   const read = card.getByRole("switch", { name: /^Read for/ });
-  await read.click();
+  for (const name of ["Read", "Triage", "Draft", "Send"]) {
+    await expect(card.getByRole("switch", { name: new RegExp(`^${name} for`) })).not.toBeChecked();
+  }
+  await read.focus();
+  await page.keyboard.press("Space");
   await expect(read).toBeChecked();
   await expect
     .poll(async () => {
@@ -142,15 +173,46 @@ test("8: registry accounts stay private, show conflicts and write verified owner
     expect(await page.content()).not.toContain(privateValue);
   await inspect(page, `account-connect-${info.project.name}`);
   await sheet.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(card.getByRole("button", { name: "Connect…", exact: true })).toBeFocused();
   await card.getByRole("link", { name: /^View / }).click();
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
   await inspect(page, `account-disconnect-${info.project.name}`);
+  await page.getByRole("alertdialog").getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Disconnect", exact: true })).toBeFocused();
+  expect(
+    loadedRecords(await readControl(fixture.client)).some(
+      (row) =>
+        row.target === `${fixture.client.paths.accounts}${account?.id}.ttl` &&
+        row.bindingState === "disabled",
+    ),
+  ).toBe(false);
+  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await page
     .getByRole("alertdialog")
     .getByRole("button", { name: "Disconnect", exact: true })
     .click();
   await expect(page.getByText("Disabled", { exact: true })).toBeVisible();
+  await expect
+    .poll(async () =>
+      loadedRecords(
+        await readControl(
+          fixture.client,
+          createAgentVerifier({ fetch: fixture.fetch, webId: DEMO_WEBID }),
+        ),
+      ).find(
+        (row) =>
+          row.target === `${fixture.client.paths.accounts}${account?.id}.ttl` &&
+          row.bindingState === "disabled",
+      ),
+    )
+    .toMatchObject({ kind: "SetBindingState", verification: "verified", binding: "gmail" });
+  await expect(page.getByRole("button", { name: "Connect…", exact: true })).toBeFocused();
+  expect(
+    loadedRecords(await readAccounts(fixture.client)).filter(
+      (row) => row.inventory?.identityConflicts.length,
+    ),
+  ).toEqual(conflicts);
 });
 
 test("8: Send becomes available only after verified permissions name its binding", async ({
@@ -171,5 +233,92 @@ test("8: Send becomes available only after verified permissions name its binding
   await expect(page.getByText("Your permissions have been saved.", { exact: true })).toBeVisible();
   await page.goto("/agent/accounts/gmail");
   await expect(send).toBeEnabled();
+  await send.focus();
+  await page.keyboard.press("Space");
+  await expect(send).toBeChecked();
+  for (const name of ["Triage", "Draft"]) {
+    const toggle = page.getByRole("switch", { name: `${name} for Personal Gmail`, exact: true });
+    // Seeded triage is already enabled. Exercise both directions through the signed path.
+    const value = (await toggle.getAttribute("aria-checked")) !== "true";
+    await toggle.click();
+    await expect
+      .poll(async () =>
+        loadedRecords(
+          await readControl(
+            daemon.client,
+            createAgentVerifier({ fetch: daemon.fetch, webId: DEMO_WEBID }),
+          ),
+        ).some(
+          (row) =>
+            row.target === `${daemon.client.paths.accounts}gmail.ttl` &&
+            row.verification === "verified" &&
+            row.restrictions?.[name === "Triage" ? "triage" : "draft"] === value,
+        ),
+      )
+      .toBe(true);
+  }
+  await expect
+    .poll(async () =>
+      loadedRecords(
+        await readControl(
+          daemon.client,
+          createAgentVerifier({ fetch: daemon.fetch, webId: DEMO_WEBID }),
+        ),
+      ).some(
+        (row) =>
+          row.target === `${daemon.client.paths.accounts}gmail.ttl` &&
+          row.verification === "verified" &&
+          row.restrictions?.send === true,
+      ),
+    )
+    .toBe(true);
   await inspect(page, `account-send-allowed-${info.project.name}`);
+});
+
+test("12: account details show account-specific scopes and copy the exact host command with keyboard focus restored", async ({
+  page,
+  context,
+}, info) => {
+  await setup(page);
+  const daemon = daemonDouble(page);
+  // Replace the seeded descriptor: two records for one account would be shown as a conflict.
+  const descriptor = {
+    ...exampleRecords["channel-capability"],
+    id: `${daemon.client.paths.descriptors}gmail.ttl`,
+    binding: "gmail",
+    account: `${daemon.client.paths.accounts}gmail.ttl`,
+    grantedScopes: ["https://www.googleapis.com/auth/gmail.readonly", "mail.".repeat(80)],
+  };
+  const seeded = await daemon.client.graph(descriptor.id);
+  await daemon.client.replace(
+    descriptor.id,
+    await recordToTurtle(descriptor),
+    seeded.etag as string,
+  );
+  await page.goto("/agent/accounts/gmail");
+  await expect(page.getByRole("heading", { name: "Scopes granted", exact: true })).toBeVisible();
+  await page.getByText("Technical details", { exact: true }).click();
+  await expect(page.locator(".agent-scopes")).toBeVisible();
+  await expect(page.locator(".agent-scopes li")).toHaveText(descriptor.grantedScopes);
+  await expect(
+    page.getByRole("row", { name: "Can carry structured data Yes", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row", { name: "End-to-end encrypted No", exact: true }),
+  ).toBeVisible();
+  await inspect(page, `account-detail-${info.project.name}`);
+  const connect = page.getByRole("button", { name: "Connect…", exact: true });
+  await connect.focus();
+  await page.keyboard.press("Enter");
+  const sheet = page.getByRole("dialog");
+  await expect(sheet.locator("code")).toHaveText("awp login test-profile");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await sheet.getByRole("button", { name: "Copy command", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("awp login test-profile");
+  await page.keyboard.press("Escape");
+  await expect(connect).toBeFocused();
+  await page.reload();
+  await expect(page.locator(".agent-scopes li")).toHaveText(descriptor.grantedScopes);
 });

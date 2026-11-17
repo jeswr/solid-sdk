@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
   Bookmark,
+  Bot,
   Calendar,
   ChartLine,
   ChefHat,
@@ -68,6 +69,7 @@ export const APP_ICONS = {
     hue: 30,
     icon: MessageCircleQuestionMark,
   },
+  agent: { label: "Agent", glyph: "bot", hue: 205, icon: Bot },
 } as const;
 export type AppId = keyof typeof APP_ICONS;
 export type AppIconProps = {

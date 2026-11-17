@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The Drive screens' storage seam. Screens and operations only see
  * {@link DriveClient}; this module implements it over Solid LDP with an
@@ -9,8 +10,9 @@
  * implementation swaps and the interface stays.
  */
 
-import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { fetchRdf, parseRdf, RdfFetchError, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
+import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { resolveContentType } from "../files/resolve-content-type";
@@ -54,7 +56,7 @@ import {
 import { containerVersions } from "./container-versions";
 import { DriveDeletePendingError, deletionControl, isDeletionFailure } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
-import { containerData, containsGraph, relocate, sameGraph } from "./rdf";
+import { containerData, containsGraph, isomorphicGraph, relocate, sameGraph } from "./rdf";
 import { sourceOperation } from "./source-operations";
 
 export type { ContainerPolicy } from "./ancestors";
@@ -148,6 +150,10 @@ export interface DriveClient {
   readVersion(url: string): Promise<{
     body: Blob;
     etag?: string;
+    /** The GET's Content-Type, including its declared charset. */
+    contentType?: string;
+    /** The GET's effective user write permission, when advertised. */
+    writable?: boolean;
     readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   }>;
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
@@ -239,6 +245,7 @@ export type DriveErrorKind =
   | "failed"
   | "invalid-listing"
   | "missing-validator"
+  | "upload-not-certified"
   | "partial-failure"
   | "invalid-trash-record";
 
@@ -253,6 +260,35 @@ export class DriveError extends Error {
   }
 }
 
+/** The PUT succeeded without a receipt and its stored content could not be verified. */
+export class DriveUploadError extends DriveError {
+  constructor(
+    url: string,
+    readonly tooLarge: boolean,
+  ) {
+    super("upload-not-certified", 409, url);
+    this.name = "DriveUploadError";
+    this.message = tooLarge
+      ? "Your storage didn't confirm this upload, and the file is too large to check. Try a smaller file or a different storage."
+      : "Your storage didn't confirm this upload, and the stored file couldn't be verified. Check your storage before retrying.";
+  }
+}
+
+// Read-back is a fallback for servers without PUT receipts. Bound graph parsing and
+// isomorphism to 5 MiB of sent RDF; other sent bodies may be at most 100 MiB.
+export const RDF_READ_BACK_LIMIT = 5 * 1024 * 1024;
+export const BYTE_READ_BACK_LIMIT = 100 * 1024 * 1024;
+const RDF_MEDIA_TYPES = new Set<string>([
+  ...SUPPORTED_RDF_MEDIA_TYPES,
+  // parseRdf currently rejects these; keep them on the RDF path to fail closed.
+  "text/n3",
+  "application/rdf+xml",
+]);
+const mediaType = (value: string | null) => value?.split(";")[0]?.trim().toLowerCase();
+const isRdf = (contentType: string | null) => RDF_MEDIA_TYPES.has(mediaType(contentType) ?? "");
+const readBackTooLarge = (sent: Blob | string, contentType: string) =>
+  new Blob([sent]).size > (isRdf(contentType) ? RDF_READ_BACK_LIMIT : BYTE_READ_BACK_LIMIT);
+
 export function isMissingItem(error: unknown): boolean {
   return error instanceof DriveError && (error.status === 404 || error.status === 410);
 }
@@ -266,6 +302,8 @@ export class DrivePartialFailureError extends DriveError {
     readonly unverifiedSources: readonly string[],
     readonly retainedDestinations: readonly string[],
     override readonly cause: unknown,
+    /** Preserve the upload's verification failure if retaining recovery copies also fails. */
+    readonly uploadFailure?: DriveUploadError,
   ) {
     super("partial-failure", 409, url);
     this.name = "DrivePartialFailureError";
@@ -703,6 +741,11 @@ export function createSolidDriveClient(options: {
     return {
       body,
       ...(etag ? { etag } : {}),
+      ...(response.headers.has("content-type")
+        ? { contentType: response.headers.get("content-type") as string }
+        : {}),
+      writable:
+        parseWacAllow(response.headers.get("wac-allow") ?? "")?.user.includes("write") ?? false,
       verifyHeaders: access.captureEndpoint(url, response.headers),
     };
   };
@@ -793,6 +836,7 @@ export function createSolidDriveClient(options: {
     policy: OwnAccess,
     copies: readonly { body: Blob | string; type: string }[],
     demo = false,
+    uploadFailure?: DriveUploadError,
   ): Promise<string[]> => {
     const webId = owner ?? policyOwner(policy);
     if (!webId && !demo) throw new DriveAccessError("Recovery owner unavailable");
@@ -903,6 +947,7 @@ export function createSolidDriveClient(options: {
           ]),
         ],
         cause,
+        uploadFailure,
       );
     }
     return retained;
@@ -910,9 +955,10 @@ export function createSolidDriveClient(options: {
 
   // Some servers (Community Solid Server 7) answer a successful PUT with 201 or
   // 205 and no ETag (sst-2vvz). A read-back validator certifies that the stored
-  // representation is exactly what this flight sent (same media type, same bytes),
-  // but another writer could have stored identical bytes in between. So it is NOT a
-  // PUT receipt: it may serve as If-Match for the next write and as the identity
+  // representation matches what this flight sent (isomorphic RDF, or the same media
+  // type and bytes for other files), but another writer could have stored identical
+  // content in between. So it is NOT a PUT receipt: it may serve as If-Match for
+  // the next write and as the identity
   // for a non-destructive post-write check, never for compensation, rollback,
   // cleanup or any captured resource identity. Any failure means "not certified".
   const readBackValidator = async (
@@ -920,18 +966,31 @@ export function createSolidDriveClient(options: {
     sent: Blob | string,
     contentType: string,
   ): Promise<string | undefined> => {
-    const mediaType = (value: string | null) => value?.split(";")[0]?.trim().toLowerCase();
+    if (readBackTooLarge(sent, contentType)) return undefined;
+    const rdf = isRdf(contentType);
     try {
-      const current = await http(url, { cache: "no-store" });
+      const current = await http(url, {
+        cache: "no-store",
+        ...(rdf ? { headers: { accept: contentType } } : {}),
+      });
       const etag = current.headers.get("etag");
+      const responseType = current.headers.get("content-type");
       if (
         !current.ok ||
         !etag ||
-        etag.startsWith("W/") ||
-        mediaType(current.headers.get("content-type")) !== mediaType(contentType)
+        !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag) ||
+        (rdf ? !isRdf(responseType) : mediaType(responseType) !== mediaType(contentType))
       ) {
         await current.body?.cancel();
         return undefined;
+      }
+      if (rdf) {
+        // Parse the response stream with a byte budget too: reserialization may expand
+        // a small upload. The same base resolves relative IRIs in either syntax.
+        const options = { baseIRI: url, maxBytes: RDF_READ_BACK_LIMIT };
+        const actual = await parseRdf(current.body ?? "", responseType, options);
+        const expected = await parseRdf(await new Response(sent).text(), contentType, options);
+        return isomorphicGraph(expected, actual) ? etag : undefined;
       }
       const expected = new Uint8Array(await new Response(sent).arrayBuffer());
       // Compare incrementally and stop at the first mismatch or excess byte.
@@ -1057,6 +1116,7 @@ export function createSolidDriveClient(options: {
     }
     let response: Response;
     let readBack: string | undefined;
+    let readBackFailure: DriveUploadError | undefined;
     const compensation = new Compensation(async () => {
       const receipt = response.headers.get("etag");
       if (!receipt || receipt.startsWith("W/")) {
@@ -1071,13 +1131,14 @@ export function createSolidDriveClient(options: {
             { body: init.body, type: init.headers["content-type"] },
           ],
           !(binding as AccessBinding).source.etag,
+          readBackFailure,
         );
         throw new DrivePartialFailureError(
           url,
           [],
           [],
           retained,
-          new DriveError("missing-validator", 409, url),
+          readBackFailure ?? new DriveError("missing-validator", 409, url),
         );
       }
       const etag = receipt;
@@ -1179,8 +1240,15 @@ export function createSolidDriveClient(options: {
       error: (status, url) => errorFor(status === 404 || status === 410 ? 412 : status, url),
       response: async (response) => {
         await ensureOk(response, url);
-        if (!creating && !strongEtag(response.headers.get("etag")))
+        if (!creating && !strongEtag(response.headers.get("etag"))) {
           readBack = await readBackValidator(url, init.body, init.headers["content-type"]);
+          // Transfers keep their receipt-only missing-validator failure semantics.
+          if (!readBack && !verifyAccess)
+            readBackFailure = new DriveUploadError(
+              url,
+              readBackTooLarge(init.body, init.headers["content-type"]),
+            );
+        }
         if (headers.get("if-none-match") === "*") access.recordCreation(url, response.headers);
         effects.onWritten?.(response);
         return response;
@@ -1196,6 +1264,7 @@ export function createSolidDriveClient(options: {
       // armed until this PUT's own receipt survives every post-write await.
       // A read-back validator may stand in for this non-destructive check only; the
       // compensation above still sees no receipt and keeps its retain-only path.
+      if (readBackFailure) throw readBackFailure;
       if (!creating)
         await checkResourceIdentity(
           url,

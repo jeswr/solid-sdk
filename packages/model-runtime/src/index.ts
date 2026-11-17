@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
 /**
  * `@jeswr/model-runtime` — the ONE audited generic runtime for the
@@ -70,5 +71,10 @@ export {
   type Model,
   type ModelEntity,
 } from "./model.js";
-
+export {
+  createParseScope,
+  type ParseOptions,
+  type ParseScope,
+  type ParseScopeOptions,
+} from "./parse-scope.js";
 export { assertSerializedQuads, assertWritableQuads } from "./rdf.js";

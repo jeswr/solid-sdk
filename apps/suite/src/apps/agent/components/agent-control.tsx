@@ -21,6 +21,7 @@ import { useApprovalDevice } from "./approval-key-setup-sheet";
 export function AgentControl({
   stopped,
   unknown = false,
+  localStop = false,
   link = false,
   trigger,
   triggerLabel,
@@ -28,6 +29,11 @@ export function AgentControl({
 }: {
   stopped: boolean;
   unknown?: boolean;
+  /**
+   * The agent reports a stop that has no signed owner Halt (for example `awp halt` on its
+   * computer). Resume is offered alongside Stop; it still needs a signed, confirmed Resume.
+   */
+  localStop?: boolean;
   link?: boolean;
   trigger?: ReactNode;
   triggerLabel?: string;
@@ -40,7 +46,10 @@ export function AgentControl({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const label = stopped ? "Resume" : "Stop the agent";
+  // An extra Resume, never derived from unsigned state alone: confirming it signs a Resume.
+  const extraResume = !stopped && (unknown || localStop);
   const begin = (resume: boolean) =>
     void device.requireKey(() => {
       setResume(resume);
@@ -71,19 +80,32 @@ export function AgentControl({
       {trigger ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" aria-label={triggerLabel}>
+            <Button ref={triggerRef} variant="ghost" aria-label={triggerLabel}>
               {trigger}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem onSelect={() => begin(stopped)}>{label}</DropdownMenuItem>
-            {unknown && <DropdownMenuItem onSelect={() => begin(true)}>Resume</DropdownMenuItem>}
+            {extraResume && (
+              <DropdownMenuItem onSelect={() => begin(true)}>Resume</DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <Button variant={link ? "link" : "outline"} onClick={() => begin(stopped)}>
-          {label}
-        </Button>
+        <>
+          <Button
+            ref={triggerRef}
+            variant={link ? "link" : "outline"}
+            onClick={() => begin(stopped)}
+          >
+            {label}
+          </Button>
+          {extraResume && (
+            <Button variant={link ? "link" : "outline"} onClick={() => begin(true)}>
+              Resume
+            </Button>
+          )}
+        </>
       )}
       <AlertDialog
         open={open}
@@ -91,7 +113,14 @@ export function AgentControl({
           if (!busy) setOpen(value);
         }}
       >
-        <AlertDialogContent className="agent-app">
+        <AlertDialogContent
+          className="agent-app"
+          aria-busy={busy}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          }}
+        >
           <AlertDialogTitle>{resume ? "Resume your agent" : "Stop the agent"}</AlertDialogTitle>
           <AlertDialogDescription>
             {resume
@@ -100,6 +129,12 @@ export function AgentControl({
           </AlertDialogDescription>
           {resume && (
             <>
+              {localStop && !stopped && (
+                <p>
+                  Your agent says it was stopped on its computer. Resuming here records that you
+                  want it running again.
+                </p>
+              )}
               <p>
                 If you also stopped it on the agent's computer, run <code>awp resume</code> there.
               </p>
@@ -116,6 +151,7 @@ export function AgentControl({
           <div className="agent-row">
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <Button
+              aria-busy={busy}
               disabled={busy || (resume && confirmation !== "RESUME")}
               onClick={() => void confirm()}
             >

@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:extension": "playwright test --config tests/extension/playwright.config.ts"
+    "test:e2e:extension": "playwright test --config tests/extension/playwright.config.ts",
+    "test:e2e:live": "playwright test --config tests/live/playwright.config.ts"
   },
   "dependencies": {
     "@jeswr/app-shell": "workspace:*",

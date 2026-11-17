@@ -33,6 +33,7 @@ export const descriptions: Record<AppSlug, string> = {
   publish: "Publish pages and simple sites from your pod.",
   trips: "Gather bookings into trip plans automatically.",
   ask: "Ask questions about your pod and get answers with sources.",
+  agent: "Work with an assistant and review its requests.",
 };
 
 /** Placeholder apps are listed so people see what is coming, but never as something to try yet. */

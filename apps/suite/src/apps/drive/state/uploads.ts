@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
@@ -13,7 +14,12 @@ import { DriveOperationInProgressError } from "../lib/client/source-operations";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DriveAccessError } from "../lib/client/access";
 import type { DriveClient, DriveItem } from "../lib/client/client";
-import { DriveError, DrivePartialFailureError, parentOf } from "../lib/client/client";
+import {
+  DriveError,
+  DrivePartialFailureError,
+  DriveUploadError,
+  parentOf,
+} from "../lib/client/client";
 import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { type ConflictChoice, childUrl, uploadFile } from "../lib/operations/operations";
 import { normalizeUploadName } from "../lib/upload";
@@ -135,8 +141,12 @@ function savedJobs(prefix: string): SavedJob[] {
 }
 
 function describe(error: unknown): string {
-  if (error instanceof DrivePartialFailureError)
-    return `Upload failed. Recovery copies retained at: ${error.retainedDestinations.join(", ")}. Check these locations before retrying.`;
+  if (error instanceof DrivePartialFailureError) {
+    const uploadFailure =
+      error.uploadFailure ?? (error.cause instanceof DriveUploadError ? error.cause : undefined);
+    return `${uploadFailure?.message ?? "Upload failed."} Recovery copies retained at: ${error.retainedDestinations.join(", ")}. Check these locations before retrying.`;
+  }
+  if (error instanceof DriveUploadError) return error.message;
   if (
     error instanceof DriveDeletePendingError ||
     error instanceof DriveOperationInProgressError ||

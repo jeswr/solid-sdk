@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Pod cache for the knowledge integrations (§3.5). Caches ONLY the PUBLIC
@@ -11,6 +12,7 @@
  * invariant). Best-effort throughout: a cache read/write failure never blocks a
  * fetch or a render.
  */
+import { type PodStorage, resolvePodStorage } from "../pod/client";
 import { knowledgeCacheUrl } from "../pod/layout";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 
@@ -35,15 +37,14 @@ export function isStale(envelope: { fetchedAt: string }, now: Date, maxAgeMs = D
  * unreadable / malformed. Never throws.
  */
 export async function readKnowledgeCache<T>(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   slug: string,
 ): Promise<KnowledgeCacheEnvelope<T> | undefined> {
   try {
     const url = knowledgeCacheUrl(storageRoot, slug);
-    const res = await authedFetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) return undefined;
-    const body = (await res.json()) as unknown;
+    const res = await (await resolvePodStorage(storage)).read(url, { accept: "application/json" });
+    const body = JSON.parse(await res.text()) as unknown;
     if (!body || typeof body !== "object") return undefined;
     const env = body as Record<string, unknown>;
     if (typeof env.fetchedAt !== "string" || !("data" in env)) return undefined;
@@ -60,7 +61,7 @@ export async function readKnowledgeCache<T>(
  * unprotected resource. Only ever writes PUBLIC data — never health/genetic data.
  */
 export async function writeKnowledgeCache<T>(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   ownerWebId: string,
   slug: string,
@@ -68,10 +69,10 @@ export async function writeKnowledgeCache<T>(
   now: Date = new Date(),
 ): Promise<void> {
   try {
-    await ensureDiaryReady(authedFetch, storageRoot, ownerWebId);
+    await ensureDiaryReady(storage, storageRoot, ownerWebId);
     const url = knowledgeCacheUrl(storageRoot, slug);
     const envelope: KnowledgeCacheEnvelope<T> = { fetchedAt: now.toISOString(), data };
-    await putResource(authedFetch, url, JSON.stringify(envelope), "application/json");
+    await putResource(storage, url, JSON.stringify(envelope), "application/json");
   } catch {
     // caching is a nicety — never break the flow
   }

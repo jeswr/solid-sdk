@@ -16,6 +16,10 @@
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
     },
+    "./accounts": {
+      "types": "./dist/accounts.d.ts",
+      "default": "./dist/accounts.js"
+    },
     "./node": {
       "types": "./dist/node.d.ts",
       "default": "./dist/node.js"

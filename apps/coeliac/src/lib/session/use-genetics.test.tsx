@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Direct hook-level tests for the fail-closed consent guardrail and the on-device
@@ -29,7 +30,7 @@ function mountHook() {
     webId: "https://alice.example/profile/card#me",
     storageRoot: "https://alice.example/",
     store,
-    authedFetch: fetchMock.fetch,
+    storage: fetchMock.storage,
     publicFetch: fetchMock.fetch,
   };
   const ref: { current?: GeneticsState & GeneticsActions } = {};

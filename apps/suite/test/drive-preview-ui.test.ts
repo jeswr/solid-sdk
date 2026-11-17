@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { useState } from "react";
@@ -9,6 +10,7 @@ import { act, click, deferred, h, mount } from "./drive-ui-dom";
 const { client, ui } = vi.hoisted(() => ({
   client: {
     read: vi.fn(),
+    readVersion: vi.fn(async () => ({ body: await client.read() })),
     readRdf: vi.fn(),
     stat: vi.fn().mockRejectedValue(new Error("Metadata unavailable")),
   },
@@ -32,7 +34,7 @@ vi.mock("../src/apps/drive/state/drive-context", () => ({
 vi.mock("../src/apps/drive/state/ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   useDriveActions: () => ({ download: vi.fn(), starred: new Set() }),
-  useDriveUi: ui,
+  useDriveUi: () => ({ registerPreviewGuard: () => () => {}, ...ui() }),
 }));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
 /**
  * Emit the generated artifacts (design §7): model.json (the verified projection),
@@ -215,7 +216,7 @@ function entityDts(entity: AnyManifestEntity): string {
     `  ) => ${name}Wrapper;\n` +
     `  subject(resourceUrl: string): string;\n` +
     `  build(resourceUrl: string, data: ${name}Data): Store;\n` +
-    `  parse(resourceUrl: string, dataset: DatasetCore): ${name}Data | undefined;\n` +
+    `  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): ${name}Data | undefined;\n` +
     `  serialize(resourceUrl: string, data: ${name}Data): Promise<string>;\n` +
     `  storeToTurtle(store: Store): Promise<string>;\n` +
     `  parseDocument(\n` +
@@ -285,7 +286,7 @@ export function emitModelDts(manifest: ModelManifest, nodeViews?: NodeViews): st
   return (
     `${GENERATED_HEADER}` +
     `import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";\n` +
-    `import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";\n` +
+    `import type { EntityWrapper, ModelManifest, ParseOptions } from "@jeswr/model-runtime";\n` +
     `import type { Store } from "n3";\n\n` +
     `${entityBlocks}\n` +
     `${nodeViewsDts(nodeViews)}\n` +

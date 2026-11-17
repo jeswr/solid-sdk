@@ -125,6 +125,8 @@ export interface OidcSessionOptions {
 
   /** Revoke known or explicitly cataloged refresh tokens on {@link OidcSession.forget} when supported. @defaultValue true */
   readonly revokeOnForget?: boolean;
+  /** Cancel pending revocation requests and their deadlines when the owning instance is disposed. */
+  readonly revocationSignal?: AbortSignal;
 
   /** Keep durable refresh credentials on transient failures; clear on invalid_grant and persist rotations. */
   readonly preserveRefreshOnFailure?: boolean;
@@ -152,8 +154,8 @@ const revocationTimeoutMs = 5_000;
  *   consumed at most once across requests, tabs and workers sharing the storage partition.
  * - With a session store, the durable record is the only refresh token ever used; memory copies only
  *   serve unexpired access tokens.
- * - Records are removed before their refresh token is consumed and replacements are written durable-first,
- *   so a crash or failed write costs a new authorization instead of leaving a spent or unpersisted token.
+ * - Replacements are written durable-first. Preservation mode replaces a rotated record in one write;
+ *   a failed replacement removes the consumed credential rather than leaving a spent refresh token.
  * - Every entry is stamped with the fence generation; entries from before a logout are never used.
  */
 export class OidcSession {
@@ -452,12 +454,18 @@ export class OidcSession {
         async () => {
           signal.throwIfAborted();
           this.#keys.add(key);
-          await store.removeItem(key);
-          await store.setItem(key, {
-            ...record,
-            created: Date.now(),
-            refreshToken: processed.refresh_token ?? record.refreshToken,
-          });
+          try {
+            // Replace in one write: readers must not mistake rotation for a missing session.
+            await store.setItem(key, {
+              ...record,
+              created: Date.now(),
+              refreshToken: processed.refresh_token ?? record.refreshToken,
+            });
+          } catch (error) {
+            // A failed replacement cannot retain the already-consumed refresh token.
+            await store.removeItem(key);
+            throw error;
+          }
         },
         signal,
       );
@@ -588,13 +596,22 @@ export class OidcSession {
   async #revoke(record: RefreshSessionRecord): Promise<void> {
     const as = record.authorizationServer;
     if (as.revocation_endpoint === undefined) return;
+    this.#options.revocationSignal?.throwIfAborted();
     const controller = new AbortController();
-    const { promise: timeout, reject } = Promise.withResolvers<never>();
+    const signal = AbortSignal.any([
+      controller.signal,
+      ...(this.#options.revocationSignal === undefined ? [] : [this.#options.revocationSignal]),
+    ]);
+    const { promise: cancelled, reject } = Promise.withResolvers<never>();
     const timer = setTimeout(() => {
       const error = new DOMException("Token revocation timed out", "TimeoutError");
       controller.abort(error);
-      reject(error);
     }, revocationTimeoutMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
     try {
       // Race the whole operation: injected transports and stalled response bodies may ignore abort.
       await Promise.race([
@@ -605,15 +622,16 @@ export class OidcSession {
             clientAuthFor(as.issuer, record.client, this.#options.serverQuirks ?? true),
             record.refreshToken,
             {
-              ...oauthOptions(this.#options.http, controller.signal),
+              ...oauthOptions(this.#options.http, signal),
               additionalParameters: { token_type_hint: "refresh_token" },
             },
           )
           .then(oauth.processRevocationResponse),
-        timeout,
+        cancelled,
       ]);
     } finally {
       clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
     }
   }
 

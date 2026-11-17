@@ -1,0 +1,32 @@
+{
+  "shapesBase": "https://jeswr.org/ns/drawing/shapes#",
+  "prefixes": {
+    "draw": "https://jeswr.org/ns/drawing#",
+    "dct": "http://purl.org/dc/terms/",
+    "schema": "http://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://jeswr.org/ns/drawing#Scene",
+      "name": "Scene",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "title": {
+          "sanitizeText": false
+        },
+        "schemaVersion": {
+          "sanitizeText": false
+        },
+        "viewBackgroundColor": {
+          "sanitizeText": false
+        }
+      }
+    }
+  ]
+}

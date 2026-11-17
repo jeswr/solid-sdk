@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Vocabulary IRIs for the chat-interop reconciler — namespace bases plus the
  * exact predicate/class IRIs of the three chat shapes this package reconciles.
@@ -101,6 +102,8 @@ export const SIOC_CONTENT = `${SIOC}content`;
 export const SIOC_HAS_REPLY = `${SIOC}has_reply`;
 /** `foaf:maker` — the LongChat author WebID. */
 export const FOAF_MAKER = `${FOAF}maker`;
+/** `foaf:accountName` — an owner-chosen account label. */
+export const FOAF_ACCOUNT_NAME = `${FOAF}accountName`;
 /** `meeting:LongChat` — the SolidOS chat channel class (stamped on a room). */
 export const MEETING_LONG_CHAT = `${MEETING}LongChat`;
 /** `schema:Message` — the schema.org message class (also stamped on a LongChat message). */
@@ -114,6 +117,8 @@ export const DCT_CREATED = `${DCT}created`;
 export const DCT_CREATOR = `${DCT}creator`;
 /** `dct:title` — the room/task title. */
 export const DCT_TITLE = `${DCT}title`;
+/** `dct:type` — the capture channel literal. */
+export const DCT_TYPE = `${DCT}type`;
 /** `dct:isReplacedBy` — the edit pointer: a message superseded by another resource. */
 export const DCT_IS_REPLACED_BY = `${DCT}isReplacedBy`;
 
@@ -125,6 +130,12 @@ export const PROV_WAS_ATTRIBUTED_TO = `${PROV}wasAttributedTo`;
 export const PROV_WAS_GENERATED_BY = `${PROV}wasGeneratedBy`;
 /** `prov:wasDerivedFrom` — the source IRI the message was derived/imported from. */
 export const PROV_WAS_DERIVED_FROM = `${PROV}wasDerivedFrom`;
+/** `prov:generatedAtTime` — first writer creation time (xsd:dateTime). */
+export const PROV_GENERATED_AT_TIME = `${PROV}generatedAtTime`;
+/** `prov:Agent` — the account responsible for a conversation. */
+export const PROV_AGENT = `${PROV}Agent`;
+/** `prov:Activity` — the conversation capture activity. */
+export const PROV_ACTIVITY = `${PROV}Activity`;
 
 // --- wf:Task overlay terms (re-exported from @jeswr/solid-task-model) ---------
 // The shared task model is the single source of truth for these IRIs; we re-export

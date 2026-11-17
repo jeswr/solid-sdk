@@ -33,6 +33,17 @@ record IDs and authority references remain absolute IRIs.
 
 Channel capabilities may include a `description` for provider limitations. It maps
 to `dcterms:description` and grants no permission to send.
+An optional `account` reference (`agent:account`) identifies account-specific observations.
+`grantedScopes` (`agent:grantedScopes`, an ordered sequence of provider scope names) requires
+that reference. An absent list means unreported; an empty list means no grants. These daemon
+observations convey no permission to act. Descriptors without an account remain binding-wide;
+consumers must never apply another account's scopes or last ingest time to the current account.
+`accountDescriptorCandidates`, `accountDescriptor` and `accountDescriptorConflict` apply
+that rule: account-specific descriptors for the account's binding win, binding-wide ones are
+the fallback, and several candidates are a conflict rather than a silent choice.
+`accountBinding` maps an inventory channel and provider to the binding identifier.
+These fields extend the hand-written RDF mappings; generating the agent records is tracked
+by bead sst-n9iw.
 
 Accounts expose `channelHandleHash`; intents expose `recipientHash`. Callers compute
 salted hashes before constructing records. No handle-resolution or send operation exists.

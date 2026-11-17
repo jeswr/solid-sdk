@@ -99,6 +99,8 @@ export interface WriteOptions {
   signal?: AbortSignal;
 }
 export interface CreateOptions {
+  /** Solid only: exact direct child URL, preserving path spelling. Mutually exclusive with name. */
+  exactUrl?: string;
   /** Required for kind 'resource'. */
   contentType?: string;
   /** Default 'resource'. */

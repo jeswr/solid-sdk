@@ -9,11 +9,14 @@ import { metadataUrl } from "@jeswr/mcp-oauth/metadata";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
+/** Authentication could not check a required dependency; retry without a new login. */
+export class TemporarilyUnavailable extends Error {}
+
 /** Authentication and server construction belong to the application, not the transport. */
 export interface McpHttpOptions<Principal> {
   /** Return a NEW server bound to this principal's pod session on every call. */
   server: (principal: Principal) => McpServer | Promise<McpServer>;
-  /** Verify the MCP resource token; return null/undefined/false or throw on failure. */
+  /** Verify the token; TemporarilyUnavailable requests a retry, other failures reject it. */
   authenticate: (
     request: Request,
   ) => Principal | null | undefined | false | Promise<Principal | null | undefined | false>;
@@ -166,7 +169,12 @@ export function createMcpHttpHandler<Principal>(
     let principal: Principal | null | undefined | false;
     try {
       principal = await options.authenticate(request);
-    } catch {
+    } catch (error) {
+      if (error instanceof TemporarilyUnavailable) {
+        const response = errorResponse(503, "Temporarily unavailable");
+        response.headers.set("Retry-After", "5");
+        return response;
+      }
       principal = null;
     }
     if (principal === null || principal === undefined || principal === false) {
@@ -222,7 +230,7 @@ export function createMcpHttpHandler<Principal>(
       response.headers.set("Access-Control-Allow-Origin", origin);
       response.headers.set(
         "Access-Control-Expose-Headers",
-        "WWW-Authenticate, MCP-Protocol-Version",
+        "WWW-Authenticate, MCP-Protocol-Version, Retry-After",
       );
     }
     return response;

@@ -328,6 +328,50 @@ test("issuer picker reads a slotted WebID and restores controls after profile er
   assert.equal((await pending).href, "https://issuer.example/");
 });
 
+test("issuer picker discards a fully read profile when the request aborts before it applies", async () => {
+  const picker = new IdpPicker();
+  picker.webIdPicker = { getWebId: async () => new URL("https://alice.example/#me") };
+  picker.connectedCallback();
+  const controller = new AbortController();
+  const pending = picker.getIssuer(
+    new Request("https://pod.example/private", { signal: controller.signal }),
+  );
+  const rejected = assert.rejects(pending, /navigation/);
+  const input = picker.node("input");
+  input.value = "https://typed.example/";
+  const focus = vi.spyOn(input, "focus");
+  picker.http = {
+    fetch: async () => {
+      const response = new Response(
+        "<https://alice.example/#me> <http://www.w3.org/ns/solid/terms#oidcIssuer> <https://issuer.example/> .",
+      );
+      const body = response.body;
+      // The body is delivered and parsed in full; the abort lands as the reader is released, i.e.
+      // after every in-read cancellation check, so only the picker's own post-lookup check sees it.
+      Object.defineProperty(response, "body", {
+        value: {
+          getReader: () => {
+            const reader = body.getReader();
+            return {
+              read: () => reader.read(),
+              cancel: (reason) => reader.cancel(reason),
+              releaseLock: () => {
+                reader.releaseLock();
+                controller.abort(new Error("navigation"));
+              },
+            };
+          },
+        },
+      });
+      return response;
+    },
+  };
+  await picker.node("#webid").emit("click");
+  await rejected;
+  assert.equal(input.value, "https://typed.example/", "the late issuer is not applied");
+  assert.equal(focus.mock.calls.length, 0);
+});
+
 for (const end of ["cancel", "abort", "confirm"]) {
   for (const stage of ["webid", "profile", "profile-body", "profile-error"]) {
     test(`issuer picker ignores stale ${stage} completion after ${end}`, async () => {

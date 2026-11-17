@@ -141,13 +141,17 @@ The shadcn source provenance and MIT notice are in [THIRD_PARTY_NOTICES.md](THIR
 and Resizable. Controls inherit `--control-h` / `--control-h-sm`; focus is a 2px ring
 with a 2px offset. Menus, dialogs and sheets use the suite surface/elevation tokens.
 
+Keep `CommandEmpty` inside `CommandList`. It renders the no-match message as a disabled
+option so the listbox retains its required accessible child, without becoming a cmdk
+keyboard selection target. The shell command palette uses this same component.
+
 Use `IconButton label="Add item"` for an icon-only action. Its required nonblank label
 supplies both `aria-label` and the hover/focus tooltip. Disabled icon buttons remain
 focusable with `aria-disabled` so the label stays discoverable, and suppress activation.
 The package's AST lint test rejects literal icon-size Button usages without both a name
 and Tooltip. Prefer IconButton for dynamically selected icon sizes as well.
 
-Atoms: `AppIcon app size` (15 apps, 32/40/48); `FileTypeIcon contentType name size`
+Atoms: `AppIcon app size` (16 apps including Agent, 32/40/48); `FileTypeIcon contentType name size`
 (with optional `thumbnailSrc`); `ProvenanceBadge source logoSrc` (root-relative local
 logos, letter fallback on absence/error); native `Kbd`; labelled live `StatusDot`; and
 `CountBadge count` (nonnegative safe integers, visible zero, 99+ cap, full accessible count).
@@ -326,8 +330,10 @@ link URL policy is unchanged. Custom registry renderers receive the resolver too
 `ItemDetails` is the content of the details pane: metadata, an actions slot, and the
 structural result of `share.get`. Pass `ownerId` to exclude the owner from the people
 count, resolved names in `people`, and `onManageAccess` to open the consuming screen's
-share dialog. Render it inside the shell's `DetailsPane` (`@jeswr/suite-ui/shell`), which
-owns the responsive pane or sheet; the consumer owns loading, refresh and errors.
+share dialog. Use `variant="embedded"` inside the shell's `DetailsPane`
+(`@jeswr/suite-ui/shell`) to remove ItemDetails' own border, padding and background.
+Its default `variant="standalone"` keeps the standalone presentation. The shell owns
+the responsive pane or sheet; the consumer owns loading, refresh and errors.
 `PodMeter` takes usage in bytes and an optional quota; absent quota never implies a
 percentage. All three accept `ContentSurfaceState` for loading, empty and classified errors.
 Its error branch accepts `actions: ErrorRecovery`, `accessRequests`, and `retryAfterMs`,
@@ -340,6 +346,10 @@ Upload and preview components use the separately exported `SurfaceState`.
 Import `@jeswr/suite-ui/styles/navigation.css` after the token, theme and density styles.
 `AppRail`, `AppLauncher`, and `BottomTabBar` take `currentApp` and an optional `apps`
 registry. Each registry entry supplies its native navigation path and optional Create actions.
+`suiteApps` includes every implemented suite app, including Agent. All three components use
+`visibleNavigationApps(apps, showBacklog)` for admission; `showBacklog` defaults to
+`NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1"` and can be passed explicitly by the host shell.
+Visible backlog apps retain the launcher's separate Coming soon group.
 The desktop rail is 56px from 768px; the mobile bar uses Home, Drive, Docs, Tasks and More.
 Bell, offline and account controls are named slots on `AppRail`; the account menu itself
 belongs to the shell lane.
@@ -386,6 +396,20 @@ Apps that own details visibility can supply `details.open` and `details.onOpenCh
 Shell close buttons, shortcuts and sheet dismissal update that controlled state;
 the saved details preference is ignored. Explicitly opened app details take priority
 over the sidebar sheet on narrow viewports.
+
+Supply rich details through `ShellFrame.details.children`, for example:
+
+```tsx
+details={{
+  title: "File details",
+  children: <ItemDetails variant="embedded" title={file.name} metadata={metadata} />,
+}}
+```
+
+`DetailsPane` supplies the outer padding and the desktop slot supplies the border.
+The same children render inside the right-hand modal sheet below 1024px, with focus
+trapping, Escape dismissal and focus restoration to the details toggle. Keep the
+embedded variant on mobile too; it needs no additional border, surface or padding.
 The package performs no storage or network writes; the dev fixtures use a browser
 storage adapter until SDK-APP-11 is available. Bracket shortcuts ignore editable
 fields, modified/composing events and unrelated dialogs. Sheets trap focus and

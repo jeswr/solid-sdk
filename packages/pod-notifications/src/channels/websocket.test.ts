@@ -445,6 +445,84 @@ test("late LWS subscribe after close is deleted without opening a socket", async
   expect(f.timers.pending).toBe(0);
 });
 
+test.each(["id", "@id"])("Solid retains a safe %s for best-effort DELETE on close", async (key) => {
+  const f = fixture();
+  const id = `${f.root}channel`;
+  f.channel({ [key]: id, receiveFrom: "wss://pod.example/socket" });
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  expect(f.sockets).toHaveLength(1);
+  await sub.close();
+  expect(f.deletes().map(([url]) => url)).toEqual([id]);
+  expect(f.deletes()[0]?.[1]).toEqual({ method: "DELETE", redirect: "error" });
+});
+
+test.each([
+  null,
+  {},
+  "https://user:secret@pod.example/channel",
+  "https://foreign.example/channel",
+  "https://pod.example/channel#fragment",
+])("Solid ignores an unsafe optional channel id: %j", async (id) => {
+  const f = fixture();
+  f.channel({ id, receiveFrom: "wss://pod.example/socket" });
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  expect(f.sockets).toHaveLength(1);
+  await sub.close();
+  expect(f.deletes()).toHaveLength(0);
+});
+
+test("Solid deletes only channel ids on the subscription service origin", async () => {
+  const f = fixture();
+  f.service("https://gateway.example/subscribe");
+  f.channel({ id: `${f.root}channel`, receiveFrom: "wss://pod.example/socket" });
+  const sub = await f.client.subscribe([f.root]);
+  await f.timers.advanceBy(0);
+  expect(f.sockets).toHaveLength(1);
+  await sub.close();
+  expect(f.deletes()).toHaveLength(0);
+});
+
+test.each([true, false])("Solid channel cleanup respects caller scope (%s)", async (allowed) => {
+  const f = fixture();
+  f.channel({ id: `${f.root}channel`, receiveFrom: "wss://pod.example/socket" });
+  const sub = createWebSocket2023Channel({
+    ...f.deps,
+    topics: [f.root],
+    scope: (url) => allowed || url !== `${f.root}channel`,
+  });
+  await f.timers.advanceBy(0);
+  expect(f.sockets).toHaveLength(1);
+  await sub.close();
+  expect(f.deletes()).toHaveLength(allowed ? 1 : 0);
+});
+
+test("late Solid subscribe after close deletes its channel without opening a socket", async () => {
+  const f = fixture();
+  const base = f.fetch.getMockImplementation() as typeof globalThis.fetch;
+  const entered = Promise.withResolvers<void>();
+  const pending = Promise.withResolvers<Response>();
+  f.fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "POST") {
+      entered.resolve();
+      return pending.promise;
+    }
+    return base(input, init);
+  });
+  const sub = await f.client.subscribe([f.root]);
+  const tick = f.timers.advanceBy(0);
+  await entered.promise;
+  await sub.close();
+  pending.resolve(
+    Response.json({ id: `${f.root}late-channel`, receiveFrom: "wss://pod.example/late" }),
+  );
+  await tick;
+  expect(f.deletes()).toHaveLength(1);
+  expect(f.sockets).toHaveLength(0);
+  expect(f.timers.pending).toBe(0);
+});
+
 test.each([
   null,
   [],

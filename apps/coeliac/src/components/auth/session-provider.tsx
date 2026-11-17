@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -10,13 +11,15 @@
  * prerendering never touches `customElements.define`.
  *
  * All of this is exposed to the app ONLY through the plain `SessionContext`
- * (`@/lib/session/context`), so views stay testable with a stubbed fetch.
+ * (`@/lib/session/context`), so views stay testable with SDK memory storage.
  */
 import type { LoginController, SessionChangeDetail } from "@jeswr/solid-elements/react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DiaryStore } from "@/lib/cache/diary-store";
 import { defaultKv } from "@/lib/cache/kv";
 import { flushOutbox } from "@/lib/diary/sync";
+import { createSessionStorage } from "@/lib/pod/client";
+import { podErrorMessage } from "@/lib/pod/errors";
 import { ensureDiaryReady, resetDiaryReadyMemo } from "@/lib/pod/pod-fs";
 import { podRootFallback, resolveStorageRoot } from "@/lib/pod/storage";
 import { registerDiaryTypes } from "@/lib/pod/type-index";
@@ -36,6 +39,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const controllerRef = useRef<LoginController | null>(null);
   const [controller, setController] = useState<LoginController | null>(null);
   const [value, setValue] = useState<SessionValue>(() => ({ ...anonymousSession }));
+  // Bind asynchronous warnings to the store that started registration so an old
+  // account's late failure cannot appear in another account's session.
+  const [registrationWarning, setRegistrationWarning] = useState<{
+    store: DiaryStore; message: string;
+  } | null>(null);
   const valueRef = useRef(value);
   // The store of the just-departed account whose logout purge FAILED — retained
   // (only for that case) so "Clear local data" can re-attempt the purge after the
@@ -59,6 +67,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       storageRoot = podRootFallback(webId);
     }
+    const storage = createSessionStorage(authedFetch, storageRoot);
     const store = new DiaryStore(defaultKv(), webId);
     // A successful (re)activation clears BOTH stale logout warnings + the retained store
     // (the session is now genuinely live under a fresh credential, so neither the
@@ -68,7 +77,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ...v,
       status: "authed",
       webId,
-      authedFetch,
+      storage,
       publicFetch,
       storageRoot,
       store,
@@ -78,17 +87,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Background provisioning — never blocks the UI; each step is best-effort.
     void (async () => {
       try {
-        await ensureDiaryReady(authedFetch, storageRoot, webId);
+        await ensureDiaryReady(storage, storageRoot, webId);
       } catch {
         /* provisioned lazily on first write */
       }
       try {
-        await registerDiaryTypes(authedFetch, { webId, storageRoot });
-      } catch {
-        /* interop nicety */
+        await registerDiaryTypes(storage, { webId, storageRoot, fetch: authedFetch });
+      } catch (error) {
+        setRegistrationWarning({ store,
+          message: `Couldn't register your diary for discovery by other apps: ${podErrorMessage(error)}. Meal and symptom logging remain available.`,
+        });
       }
       try {
-        await flushOutbox({ authedFetch, webId, storageRoot }, store);
+        await flushOutbox({ storage, webId, storageRoot }, store);
       } catch {
         /* retried on reconnect */
       }
@@ -107,14 +118,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     const c = controllerRef.current;
-    const { store, webId, storageRoot, authedFetch, status } = valueRef.current;
+    const { store, webId, storageRoot, storage, status } = valueRef.current;
     resetDiaryReadyMemo();
     // Best-effort final flush (online only) BEFORE the credential is revoked, then
     // a MANDATORY purge of the WebID-scoped private health cache so no logged/read
     // data survives on a shared device. Extracted + unit-tested in session/logout.
     const flush =
-      store && webId && storageRoot && status === "authed"
-        ? () => flushOutbox({ authedFetch, webId, storageRoot }, store)
+      store && webId && storageRoot && storage && status === "authed"
+        ? () => flushOutbox({ storage, webId, storageRoot }, store)
         : undefined;
     const outcome = await runSecureLogout({
       store,
@@ -189,8 +200,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const reconcile = useCallback(async () => {
     const v = valueRef.current;
-    if (!v.store || !v.webId || !v.storageRoot) return;
-    await flushOutbox({ authedFetch: v.authedFetch, webId: v.webId, storageRoot: v.storageRoot }, v.store);
+    if (!v.store || !v.webId || !v.storageRoot || !v.storage) return;
+    await flushOutbox({ storage: v.storage, webId: v.webId, storageRoot: v.storageRoot }, v.store);
   }, []);
 
   // Merge the stable callbacks into the context value during render (react-hooks
@@ -277,7 +288,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       {value.status === "loading" ? (
         <RestoringSplash />
       ) : value.status === "authed" ? (
-        children
+        <>
+          {registrationWarning?.store === value.store ? (
+            <p role="alert">{registrationWarning.message}</p>
+          ) : null}
+          {children}
+        </>
       ) : (
         <>
           {value.revokeWarning !== null ? (

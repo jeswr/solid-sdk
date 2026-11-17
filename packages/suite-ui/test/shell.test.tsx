@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ItemDetails } from "../src/components/item-details.js";
 import {
   DetailsPane,
   defaultShellPreferences,
@@ -224,6 +225,24 @@ describe("shell layout", () => {
     expect(screen.getByRole("link", { name: "Skip to main content" }).getAttribute("href")).toBe(
       "#main-content",
     );
+    await accessible();
+  });
+  it.each([
+    true,
+    false,
+  ])("embeds ItemDetails in the responsive details region (desktop=%s)", async (wide) => {
+    desktop = wide;
+    render(
+      <Frame
+        initial={{ sidebarOpen: false, detailsOpen: true }}
+        detailsContent={<ItemDetails variant="embedded" title="Budget content" />}
+      />,
+    );
+    const pane = await screen.findByRole("complementary", { name: "Budget" });
+    const details = within(pane).getByRole("region", { name: "Details" });
+    expect(details.getAttribute("data-variant")).toBe("embedded");
+    expect(within(details).getByRole("heading", { name: "Budget content" })).toBeTruthy();
+    expect(Boolean(pane.closest('[role="dialog"]'))).toBe(!wide);
     await accessible();
   });
   it("toggles both regions with brackets, exposes choices to the preference consumer and remounts them", async () => {

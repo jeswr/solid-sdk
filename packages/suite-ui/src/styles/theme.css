@@ -126,6 +126,9 @@
   --color-app-ask: var(--app-ask);
   --color-app-ask-soft: var(--app-ask-soft);
   --color-presence-ask: var(--presence-ask);
+  --color-app-agent: var(--app-agent);
+  --color-app-agent-soft: var(--app-agent-soft);
+  --color-presence-agent: var(--presence-agent);
   --color-glyph: var(--glyph);
   --color-project-red: var(--project-red);
   --color-project-orange: var(--project-orange);

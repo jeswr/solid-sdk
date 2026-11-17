@@ -27,6 +27,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
   const pod = createMemoryPod();
   const workspace = new PodWorkspace({
     io: pod.io,
+    storage: pod.storage,
     root,
     ownerWebId: owner,
     privateTypeIndex: `${root}privateTypeIndex.ttl`,

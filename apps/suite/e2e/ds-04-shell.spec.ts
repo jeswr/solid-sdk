@@ -38,6 +38,7 @@ const fixtures: Record<string, string[]> = {
   "sidebar-nav": ["ready"],
   "details-pane": [
     "ready",
+    "embedded",
     "loading",
     "first-use",
     "filtered",
@@ -60,9 +61,33 @@ for (const [route, states] of Object.entries(fixtures)) {
         const toggle = page.getByRole("button", { name: "Toggle details pane" });
         if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
         await expect(page.getByRole("complementary")).toBeVisible();
+        if (state === "embedded") {
+          const content = page.getByRole("region", { name: "Details", exact: true });
+          await expect(content).toHaveCSS("padding", "0px");
+          await expect(content).toHaveCSS("border-left-width", "0px");
+        }
         await capture(page, info, `details-pane-${state}-open`);
       }
       await reflow(page);
+      if (state === "embedded") {
+        const sheet = page.getByRole("dialog", { name: "Details", exact: true });
+        // The responsive default closes desktop details at the breakpoint. Wait for the
+        // toggle to settle before deciding, so a mid-animation sheet isn't toggled closed.
+        const toggle = page.getByRole("button", { name: "Toggle details pane" });
+        await expect(toggle).toHaveAttribute("aria-expanded", /^(true|false)$/);
+        await expect(async () => {
+          const before = await toggle.getAttribute("aria-expanded");
+          await page.waitForTimeout(250);
+          expect(await toggle.getAttribute("aria-expanded")).toBe(before);
+        }).toPass();
+        if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+        await expect(sheet).toBeVisible();
+        const content = sheet.getByRole("region", { name: "Details", exact: true });
+        await expect(content).toHaveCSS("padding", "0px");
+        await expect(content).toHaveCSS("border-left-width", "0px");
+        const pane = sheet.getByRole("complementary");
+        await expect(pane).toHaveCSS("padding", "16px");
+      }
     });
   }
 }

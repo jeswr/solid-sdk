@@ -109,7 +109,6 @@ it("ignores unsafe home configuration and uses the shared directory fallback", (
   expect(signInProviders().map((p) => p.id)).toEqual([
     "solidcommunity",
     "inrupt",
-    "solidweb",
     "teamid",
   ]);
 });

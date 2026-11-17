@@ -23,6 +23,7 @@
     "@jeswr/solid-health-diary": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/solid-session-restore": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@lit/react": "^1.0.8",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

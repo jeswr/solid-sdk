@@ -120,6 +120,13 @@ export interface AuthorizationServerOptions {
   resource: string;
   podSessions: PodSessionProvider;
   consent(context: ConsentContext): Promise<boolean>;
+  /** Awaited after grant persistence, before code storage; failure revokes the pod session. */
+  grantCreated?(event: {
+    grant: Readonly<Grant>;
+    client: Readonly<Client>;
+    redirectUri: string;
+    issuedAt: number;
+  }): Promise<void>;
   stores?: OAuthStores;
   signingKey?: SigningKey;
   scopes?: readonly string[];

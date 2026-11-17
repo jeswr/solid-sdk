@@ -33,4 +33,5 @@ export const feedbackApps: readonly { slug: AppSlug; name: string }[] = [
   { slug: "publish", name: "Publish" },
   { slug: "trips", name: "Trips" },
   { slug: "ask", name: "Ask" },
+  { slug: "agent", name: "Agent" },
 ];

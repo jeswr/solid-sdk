@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Small shared RDF I/O helpers for the pod layer: serialise a whole dataset to
@@ -6,7 +7,8 @@
  */
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { Writer } from "n3";
-import { PodWriteError } from "./pod-fs";
+import { type PodStorage, resolvePodStorage } from "./client";
+import { podWriteError } from "./pod-fs";
 
 /** Serialise every quad in a dataset to a Turtle string (via `n3.Writer`). */
 export function datasetToTurtle(dataset: DatasetCore): Promise<string> {
@@ -19,18 +21,20 @@ export function datasetToTurtle(dataset: DatasetCore): Promise<string> {
 
 /**
  * Conditional PUT for read-modify-write. Sends `If-Match: <etag>` when an etag is
- * known (optimistic-concurrency); a `412` is surfaced so the caller can re-fetch
- * and re-apply (type-index skill). Throws {@link PodWriteError} on other non-2xx.
+ * known; otherwise uses the SDK wildcard to retain unconditional Solid upserts.
+ * A `412` is surfaced so the caller can re-fetch and re-apply (type-index skill).
+ * Throws `PodWriteError` on HTTP failures.
  */
 export async function conditionalPut(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   url: string,
   body: string,
   etag: string | null,
   contentType = "text/turtle",
 ): Promise<void> {
-  const headers: Record<string, string> = { "content-type": contentType };
-  if (etag) headers["if-match"] = etag;
-  const res = await authedFetch(url, { method: "PUT", headers, body });
-  if (!res.ok) throw new PodWriteError(url, res.status);
+  try {
+    await (await resolvePodStorage(storage)).write(url, body, { contentType, ifMatch: etag || "*" });
+  } catch (error) {
+    throw podWriteError(url, error);
+  }
 }

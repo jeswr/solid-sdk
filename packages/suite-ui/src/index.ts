@@ -108,6 +108,7 @@ export {
   defaultRailPins,
   type NavigationApp,
   suiteApps,
+  visibleNavigationApps,
 } from "./navigation/apps.js";
 export { BottomTabBar } from "./navigation/bottom-tab-bar.js";
 export {

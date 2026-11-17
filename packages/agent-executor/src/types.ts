@@ -118,6 +118,8 @@ export interface ControlStore {
   listVerified(ownerWebId: string): Promise<readonly ControlStatement[]>;
   /** Check the local HALT file on EVERY gate pass; errors fail closed. */
   haltFileExists(): Promise<boolean>;
+  /** Synchronous local-file check at the final dispatch fence; throw on halt or read failure. */
+  assertNotHalted(): void;
 }
 export interface Clock {
   now(): Date;

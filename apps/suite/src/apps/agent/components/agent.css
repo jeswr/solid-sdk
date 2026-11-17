@@ -152,6 +152,25 @@
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-2);
 }
+.agent-app .agent-scopes {
+  min-width: 0;
+  padding-inline-start: var(--space-4);
+  overflow-wrap: anywhere;
+}
+.dark .agent-app .agent-provider img {
+  filter: invert(1);
+}
+.agent-app .agent-capabilities {
+  width: 100%;
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
+.agent-app .agent-capabilities th,
+.agent-app .agent-capabilities td {
+  text-align: start;
+  vertical-align: top;
+  padding: var(--space-2);
+}
 .agent-app .agent-disabled {
   display: inline-flex;
   cursor: help;

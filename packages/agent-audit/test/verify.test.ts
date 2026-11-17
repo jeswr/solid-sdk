@@ -59,6 +59,33 @@ describe("verifyRange", () => {
       scope: AUDIT_SCOPE,
     });
   });
+  it("uses one validated snapshot of the head, even if the caller's object changes or throws", () => {
+    const last = entries.at(-1) as AuditEntry;
+    let reads = 0;
+    // Valid on the first read, then claims an earlier seq and a different hash.
+    const changing = {
+      get seq() {
+        return reads++ === 0 ? last.seq : 2;
+      },
+      get hash() {
+        return reads > 1 ? digestOf("other") : last.hash;
+      },
+    };
+    expect(verifyRange(entries, changing).ok).toBe(true);
+    const throwing = {
+      get seq(): number {
+        throw new Error("hostile head");
+      },
+      hash: last.hash,
+    };
+    expect(verifyRange(entries, throwing)).toEqual({
+      ok: false,
+      problem: "Malformed head",
+      firstBadSeq: undefined,
+      scope: AUDIT_SCOPE,
+    });
+    expect(verifyLatestRange(entries, throwing).problem).toBe("Malformed head");
+  });
   it("checks a matching head and reports a wrong head or entries past the head", () => {
     const last = entries.at(-1) as AuditEntry;
     expect(verifyRange(entries, last).ok).toBe(true);

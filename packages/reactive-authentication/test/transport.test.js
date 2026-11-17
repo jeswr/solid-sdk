@@ -4,7 +4,7 @@ import { DataFactory, Writer } from "n3";
 import { test } from "vitest";
 import { discoverLwsAuthorizationServer } from "../src/lws/tokenExchange.js";
 import { ClientIdClientProvider } from "../src/mod.js";
-import { secureFetch } from "../src/transport.js";
+import { secureDocumentFetch, secureFetch } from "../src/transport.js";
 import { issuersFromWebId } from "../src/webId.js";
 import { insecure, serve, transport } from "./helpers/http.js";
 
@@ -133,4 +133,30 @@ test("client document follows HTTPS redirects and validates the configured clien
     new ClientIdClientProvider(new URL(clientId), moved).getClient({}, redirectUri, signal),
     /client_id does not match/,
   );
+});
+
+test("public document retrieval without a caller signal sends no signal and still succeeds", async () => {
+  const inits = [];
+  const http = {
+    fetch: async (url, init) => {
+      inits.push(init);
+      return new URL(url).pathname === "/start"
+        ? new Response(null, { status: 302, headers: { location: "/doc" } })
+        : new Response("document", { headers: { "content-type": "text/plain" } });
+    },
+  };
+  const { response, url } = await secureDocumentFetch(
+    new URL("https://docs.example/start#fragment"),
+    "text/plain",
+    undefined,
+    http,
+  );
+  assert.equal(url.href, "https://docs.example/doc");
+  assert.equal(await response.text(), "document");
+  assert.equal(inits.length, 2, "the redirect hop is followed");
+  for (const init of inits) {
+    assert.equal("signal" in init, false, "no signal is attached when none was supplied");
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.redirect, "manual");
+  }
 });

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Cache an OFF product in the pod as an RDF `diet:FoodItem` document
@@ -8,8 +9,8 @@
  * a lookup or a log.
  */
 import { FoodItem, foodItemSubject, parseFoodItem } from "@jeswr/solid-health-diary";
-import { fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
+import { type PodStorage, resolvePodStorage } from "../pod/client";
 import { offCacheUrl } from "../pod/layout";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 import { datasetToTurtle } from "../pod/rdf-io";
@@ -41,16 +42,16 @@ export async function serializeOffCache(url: string, product: OffProduct): Promi
  * invariant, DESIGN §9). `ensureDiaryReady` is memoised, so this is cheap.
  */
 export async function writeOffCache(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   ownerWebId: string,
   product: OffProduct,
 ): Promise<void> {
   if (!product.found) return;
   try {
-    await ensureDiaryReady(authedFetch, storageRoot, ownerWebId);
+    await ensureDiaryReady(storage, storageRoot, ownerWebId);
     const url = offCacheUrl(storageRoot, product.barcode);
-    await putResource(authedFetch, url, await serializeOffCache(url, product));
+    await putResource(storage, url, await serializeOffCache(url, product));
   } catch {
     // caching is a nicety — never break the flow
   }
@@ -63,13 +64,13 @@ export async function writeOffCache(
  * completeness) is not cached and is empty on the offline path.
  */
 export async function readOffCache(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   barcode: string,
 ): Promise<OffProduct | undefined> {
   try {
     const url = offCacheUrl(storageRoot, barcode);
-    const { dataset } = await fetchRdf(url, { fetch: authedFetch });
+    const { dataset } = await (await resolvePodStorage(storage)).readRdf(url);
     const fi = parseFoodItem(foodItemSubject(url, 0), dataset);
     if (!fi) return undefined;
     return {

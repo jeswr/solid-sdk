@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'apps/agent-daemon/**'
+      - 'apps/mcp-server/**'
       - 'packages/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -15,6 +16,10 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/agent-daemon-container.yml'
   workflow_dispatch:
+# A new push to a PR supersedes its queued or running image check.
+concurrency:
+  group: agent-daemon-container-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -48,6 +53,21 @@ jobs:
         run: docker build -f apps/agent-daemon/Containerfile --target css-test -t agent-daemon:css .
       - name: Run A-012 CSS flow and cloud regressions on distroless Node 24
         run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges agent-daemon:css
+  mcp-connectors-css:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build MCP server and workspace dependencies
+        run: pnpm exec turbo run build --filter=@jeswr/app-mcp-server...
+      - name: Exercise CSS SDK and Claude/ChatGPT connector profiles
+        run: pnpm --filter @jeswr/app-mcp-server run test:e2e
   bicep:
     runs-on: ubuntu-latest
     steps:

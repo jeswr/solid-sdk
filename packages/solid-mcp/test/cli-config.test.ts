@@ -21,6 +21,16 @@ async function file(value: unknown, mode = 0o600) {
 }
 
 describe("CLI config", () => {
+  it("reads and normalizes account config and its environment override", async () => {
+    await file({ podRoot: POD, account: " Work " });
+    expect((await loadCliConfig({}, home)).account).toBe("Work");
+    expect((await loadCliConfig({ SOLID_MCP_ACCOUNT: " Cafe\u0301 " }, home)).account).toBe("Café");
+    await expect(loadCliConfig({ SOLID_MCP_ACCOUNT: "" }, home)).rejects.toThrow(
+      "Invalid chat account label",
+    );
+    await file({ podRoot: POD, account: 3 });
+    await expect(loadCliConfig({}, home)).rejects.toThrow("Invalid chat account label");
+  });
   it("keeps anonymous mode and read-only defaults when no auth is configured", async () => {
     expect(await loadCliConfig({ SOLID_MCP_POD_ROOT: POD }, home)).toMatchObject({
       podRoot: POD,

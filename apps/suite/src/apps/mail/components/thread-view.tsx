@@ -72,6 +72,7 @@ function MessageCard({
   last: boolean;
   expandAll: boolean | undefined;
 }) {
+  const { session } = useMail();
   const { resolvedTheme } = useTheme();
   const colorScheme = resolvedTheme === "dark" ? "dark" : "light";
   const [open, setOpen] = useState(last || !message.read);
@@ -156,6 +157,9 @@ function MessageCard({
                 </details>
               )}
             </>
+          )}
+          {session.mode === "demo" && message.demoSent && (
+            <p className="mail-muted">Sent from the demo pod. Not delivered.</p>
           )}
           {message.draft && (
             <p className="mail-draft-note">

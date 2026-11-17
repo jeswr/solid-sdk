@@ -1,184 +1,93 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
-/**
- * Typed build / serialise / parse helpers for a `draw:Scene` descriptor.
- *
- * A scene descriptor is the small RDF document that DESCRIBES a drawing without
- * touching the canvas: it carries the title/timestamps/version/background and,
- * crucially, points at the byte-exact `.excalidraw` JSON resource via
- * `draw:sceneDocument`. The canvas JSON is an OPAQUE blob stored as its own
- * resource — this package never parses or shreds it into triples.
- *
- * **RDF discipline (the suite house rule).** Quads are built through the rdf-js
- * `DataFactory` and an `n3.Store`, serialised with `@jeswr/rdf-serialize`, and
- * parsed with `@jeswr/fetch-rdf`'s `parseRdf` (the suite's vetted parser). NOTHING
- * here hand-concatenates triple strings, and there is no bespoke RDF parser. This
- * mirrors how `@jeswr/solid-task-model` (`Task` in `src/task.ts`) and
- * `solid-issues` build their RDF.
- */
-
+/** Public scene API over the generated drawing model; the canvas remains opaque. */
+import { isSafeAbsoluteIri, isXsdDateTime, literalMapper, tryRead } from "@jeswr/model-runtime";
 import { serialize } from "@jeswr/rdf-serialize";
-import type { DatasetCore, NamedNode, Quad_Object } from "@rdfjs/types";
-import { DataFactory, type Quad, Store } from "n3";
+import type { DatasetCore, NamedNode, DataFactory as RdfDataFactory, Term } from "@rdfjs/types";
+import { LiteralAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, type Quad, type Store } from "n3";
+import model, { entities, type SceneData as GeneratedSceneData } from "./generated/model.js";
 import { safeHttpIri, safeSubjectBaseIri } from "./iri.js";
-import {
-  DCT_CREATED,
-  DCT_MODIFIED,
-  DCT_TITLE,
-  DRAW,
-  DRAW_SCENE,
-  DRAW_SCENE_DOCUMENT,
-  DRAW_SCHEMA_VERSION,
-  DRAW_THUMBNAIL,
-  DRAW_VIEW_BACKGROUND_COLOR,
-  LEGACY_DRAW_NS,
-  PREFIXES,
-  PROV_WAS_GENERATED_BY,
-  RDF_TYPE,
-  SCHEMA_ABOUT,
-  XSD_DATE_TIME,
-  XSD_STRING,
-} from "./vocab.js";
+import { PREFIXES, XSD_DATE_TIME } from "./vocab.js";
 
-const { namedNode, literal, quad } = DataFactory;
+const scene = entities.Scene;
+const sceneManifest = model.manifest.entities.find((entity) => entity.name === scene.name);
+if (sceneManifest === undefined || sceneManifest.kind === "composite") {
+  throw new TypeError("Expected a flat Scene entity in the generated drawing model");
+}
+const sceneFields = sceneManifest.fields;
+const { namedNode } = DataFactory;
+// The generic mapper erases its input type; xsd:dateTime's writer accepts Dates.
+const timestampFrom = literalMapper(XSD_DATE_TIME.value).from as (
+  value: Date,
+  factory: RdfDataFactory,
+) => Term;
+const hasTimestampZone = (value: string): boolean => /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
 
-/**
- * The plain-data shape of a drawing scene descriptor. Only `sceneDocument` is
- * required (a scene is meaningless without the canvas it points at); every other
- * field is optional metadata.
- */
-export interface SceneData {
-  /**
-   * The IRI of the byte-exact `.excalidraw` JSON resource (the opaque canvas
-   * blob). Required — REQUIRED `draw:sceneDocument`.
-   */
-  sceneDocument: string;
-  /** Human-readable title — `dct:title`. */
-  title?: string;
-  /** Creation time — `dct:created` (serialised as `xsd:dateTime`). */
+/** Scene descriptor data; timestamp strings are the public adapter over generated Dates. */
+export interface SceneData extends Omit<GeneratedSceneData, "created" | "modified"> {
+  /** Creation time, serialized as xsd:dateTime. */
   created?: string;
-  /** Last-modified time — `dct:modified` (serialised as `xsd:dateTime`). */
+  /** Last-modified time, serialized as xsd:dateTime. */
   modified?: string;
-  /** Excalidraw scene-format version — `draw:schemaVersion` (a plain literal). */
-  schemaVersion?: string;
-  /** Canvas background colour — `draw:viewBackgroundColor` (a plain literal). */
-  viewBackgroundColor?: string;
-  /** IRI of a thumbnail image resource — `draw:thumbnail`. */
-  thumbnail?: string;
-  /** IRI of the real-world subject the drawing depicts — `schema:about`. */
-  about?: string;
-  /** IRI of the activity/agent that produced the scene — `prov:wasGeneratedBy`. */
-  wasGeneratedBy?: string;
 }
 
-/**
- * The canonical subject IRI for a scene stored at `resourceUrl`. Conventionally
- * the descriptor lives in the same document and is named with the `#it` fragment,
- * matching how the suite models name their primary subject.
- *
- * **IRI safety (FAIL CLOSED).** `resourceUrl` is caller-supplied and potentially
- * hostile, and it flows unguarded into `namedNode()` — which `n3.Writer` emits
- * verbatim between `<…>` WITHOUT escaping — so a `resourceUrl` carrying a Turtle
- * IRI-ref delimiter (`>`, space, `<`, …) would break out of the serialised subject
- * and inject arbitrary triples into EVERY document built from it. The subject is
- * REQUIRED and there is no safe "drop", so it is routed through
- * {@link safeSubjectBaseIri}: the value must be a parseable absolute http(s) IRI
- * (else this THROWS — a scene MUST have a valid subject, never an injectable/empty
- * one), and its EXACT lexeme is preserved (RDF identity is lexical — no `URL.href`
- * canonicalisation) with only the Turtle-forbidden characters percent-encoded. The
- * fixed, trusted `#it` fragment is appended AFTER the base is escaped.
- *
- * @throws {TypeError} when `resourceUrl` is not a parseable absolute http(s) IRI.
- */
-export function sceneSubject(resourceUrl: string): NamedNode {
+/** Preserve lexical escaping and the required http(s) subject policy in iri.ts. */
+function sceneBase(resourceUrl: string): string {
   const base = safeSubjectBaseIri(resourceUrl);
-  if (base === undefined) {
-    throw new TypeError(
-      "sceneSubject: `resourceUrl` must be a valid absolute http(s) IRI (it is the scene subject) — got an unparseable or non-http(s) value",
-    );
-  }
-  return namedNode(`${base}#it`);
+  if (base === undefined) throw new TypeError("resourceUrl must be a valid absolute http(s) IRI");
+  return base;
 }
 
-/** An `xsd:dateTime` literal for a timestamp string. */
-function dateTime(value: string): Quad_Object {
-  return literal(value, XSD_DATE_TIME);
+/** The conventional scene subject, with the existing required-subject guard. */
+export function sceneSubject(resourceUrl: string): NamedNode {
+  return namedNode(scene.subject(sceneBase(resourceUrl)));
+}
+
+/** Validate XSD timestamps and interpret absent zones as UTC, independent of the host. */
+function date(value: string | undefined): Date | undefined {
+  if (typeof value !== "string" || !isXsdDateTime(value)) return undefined;
+  // XSD expanded/negative years need ECMAScript's signed six-digit spelling.
+  const yearEnd = value.indexOf("-", value.startsWith("-") ? 1 : 0);
+  const year = Number(value.slice(0, yearEnd));
+  if (!Number.isSafeInteger(year) || Math.abs(year) > 275760 || Object.is(year, -0)) {
+    return undefined;
+  }
+  const jsYear =
+    year < 0 || year > 9999
+      ? `${year < 0 ? "-" : "+"}${String(Math.abs(year)).padStart(6, "0")}`
+      : String(year).padStart(4, "0");
+  const lexical = jsYear + value.slice(yearEnd);
+  const parsed = new Date(hasTimestampZone(value) ? lexical : `${lexical}Z`);
+  return Number.isFinite(parsed.getTime()) ? parsed : undefined;
 }
 
 /**
- * Build a fresh `n3.Store` holding one `draw:Scene` rooted at
- * `${resourceUrl}#it`. The store is the value the `n3.Writer` serialises; pass
- * it to {@link storeToTurtle} (or {@link serializeScene} does both).
- *
- * **IRI safety.** Every IRI — the subject AND every IRI field — is caller-supplied
- * and potentially hostile, and `n3.Writer` does NOT escape IRIs (see
- * {@link safeHttpIri}), so each is routed through a guard before `namedNode()` —
- * otherwise a `>` or space in the value would break out of the serialised `<…>` and
- * inject arbitrary triples. The REQUIRED scene SUBJECT (`resourceUrl`) goes through
- * {@link sceneSubject} → `safeSubjectBaseIri` (validate absolute http(s), preserve
- * the exact lexeme, escape Turtle-forbidden chars) and FAILS CLOSED — an
- * unparseable/non-http(s) `resourceUrl` throws. Optional IRI fields whose value is
- * not a valid http(s) IRI are DROPPED (the triple is omitted); the REQUIRED
- * `sceneDocument` cannot be dropped, so an invalid/hostile value makes `buildScene`
- * throw a `TypeError` rather than emit an unsafe/attacker-chosen link.
- *
- * @throws {TypeError} when `resourceUrl` is not a parseable absolute http(s) IRI
- *   (invalid scene subject) or `data.sceneDocument` is not a parseable http(s) IRI —
- *   a deliberate departure from a total contract: a scene with no valid subject or
- *   canvas link is invalid input, and writing the raw value would be a
- *   triple-injection sink.
+ * SHACL cannot express lexical escaping or the public required-link throw policy.
+ * Keep those here; omit scheme guards in config to preserve exact RDF IRI identity.
  */
-export function buildScene(resourceUrl: string, data: SceneData): Store {
-  const subject = sceneSubject(resourceUrl);
-  const store = new Store();
-
-  // Required: the link to the byte-exact .excalidraw JSON blob. An unparseable or
-  // non-http(s) sceneDocument is invalid AND an IRI-injection vector — reject rather
-  // than write it raw (n3.Writer would emit it verbatim between `<…>`).
+function generatedData(data: SceneData): GeneratedSceneData {
   const sceneDocument = safeHttpIri(data.sceneDocument);
-  if (sceneDocument === undefined) {
-    throw new TypeError(
-      "buildScene: `sceneDocument` must be a valid http(s) IRI (got an unparseable or non-http(s) value)",
-    );
-  }
-
-  store.addQuad(quad(subject, RDF_TYPE, DRAW_SCENE));
-  store.addQuad(quad(subject, DRAW_SCENE_DOCUMENT, namedNode(sceneDocument)));
-
-  if (data.title !== undefined) {
-    store.addQuad(quad(subject, DCT_TITLE, literal(data.title)));
-  }
-  if (data.created !== undefined) {
-    store.addQuad(quad(subject, DCT_CREATED, dateTime(data.created)));
-  }
-  if (data.modified !== undefined) {
-    store.addQuad(quad(subject, DCT_MODIFIED, dateTime(data.modified)));
-  }
-  if (data.schemaVersion !== undefined) {
-    store.addQuad(quad(subject, DRAW_SCHEMA_VERSION, literal(data.schemaVersion)));
-  }
-  if (data.viewBackgroundColor !== undefined) {
-    store.addQuad(quad(subject, DRAW_VIEW_BACKGROUND_COLOR, literal(data.viewBackgroundColor)));
-  }
-  // Optional IRI fields: drop any that is not a valid (Turtle-safe) http(s) IRI —
-  // a hostile value must never reach `namedNode()` unescaped (IRI-injection).
-  const thumbnail = safeHttpIri(data.thumbnail);
-  if (thumbnail !== undefined) {
-    store.addQuad(quad(subject, DRAW_THUMBNAIL, namedNode(thumbnail)));
-  }
-  const about = safeHttpIri(data.about);
-  if (about !== undefined) {
-    store.addQuad(quad(subject, SCHEMA_ABOUT, namedNode(about)));
-  }
-  const wasGeneratedBy = safeHttpIri(data.wasGeneratedBy);
-  if (wasGeneratedBy !== undefined) {
-    store.addQuad(quad(subject, PROV_WAS_GENERATED_BY, namedNode(wasGeneratedBy)));
-  }
-
-  return store;
+  if (!isSafeAbsoluteIri(sceneDocument))
+    throw new TypeError("sceneDocument must be a safe http(s) IRI");
+  return {
+    ...data,
+    sceneDocument,
+    thumbnail: safeHttpIri(data.thumbnail),
+    about: safeHttpIri(data.about),
+    wasGeneratedBy: safeHttpIri(data.wasGeneratedBy),
+    created: date(data.created),
+    modified: date(data.modified),
+  };
 }
 
-/** Serialise any `n3.Store` to Turtle with the model's prefixes. */
+/** Build all scene fields through the generated entity and its datatype guards. */
+export function buildScene(resourceUrl: string, data: SceneData): Store {
+  return scene.build(sceneBase(resourceUrl), generatedData(data));
+}
+
+/** Preserve generic Store serialization, including unrelated and legacy terms. */
 export function storeToTurtle(store: Store): Promise<string> {
   return serialize([...store], {
     format: "text/turtle",
@@ -187,153 +96,84 @@ export function storeToTurtle(store: Store): Promise<string> {
   });
 }
 
-/**
- * Serialise a scene to Turtle with the model's prefixes.
- *
- * `async` so that a synchronous failure in {@link buildScene} (an invalid required
- * `sceneDocument`) surfaces as a REJECTED promise, not a synchronous throw — a
- * `Promise`-returning function should never throw before it returns.
- */
+/** Invalid required inputs reject the returned promise, as in the original API. */
 export async function serializeScene(resourceUrl: string, data: SceneData): Promise<string> {
-  return storeToTurtle(buildScene(resourceUrl, data));
+  return scene.serialize(sceneBase(resourceUrl), generatedData(data));
 }
 
 /**
- * The SINGLE object of `(subject, predicate, ?)` when there is EXACTLY ONE — else
- * `undefined`. Every property in the SHACL shape is `maxCount 1`, so a predicate
- * that appears zero or two-plus times is malformed; the parser returns `undefined`
- * for it (the field is dropped) rather than silently picking the first of several.
- * This keeps the parsed `SceneData` a graph that would PASS the bundled shape —
- * never a half-trusted record built from a graph the shape rejects.
- */
-function exactlyOne(
-  dataset: DatasetCore,
-  subject: NamedNode,
-  predicate: NamedNode,
-): Quad_Object | undefined {
-  const predicates = [predicate];
-  if (predicate.value.startsWith(DRAW)) {
-    predicates.push(namedNode(`${LEGACY_DRAW_NS}${predicate.value.slice(DRAW.length)}`));
-  }
-  // Apply cardinality across both aliases. Identical RDF terms agree; distinct
-  // values remain ambiguous, including a valid IRI paired with a legacy literal.
-  let object: Quad_Object | undefined;
-  for (const candidate of predicates) {
-    const matches = dataset.match(subject, candidate, null, null);
-    if (matches.size > 1) return undefined;
-    for (const q of matches) {
-      if (object !== undefined && !object.equals(q.object)) return undefined;
-      object = q.object;
-    }
-  }
-  return object;
-}
-
-/** The exactly-one IRI value of `(subject, predicate, ?)` (a NamedNode), else undefined. */
-function exactlyOneIri(
-  dataset: DatasetCore,
-  subject: NamedNode,
-  predicate: NamedNode,
-): string | undefined {
-  const obj = exactlyOne(dataset, subject, predicate);
-  return obj?.termType === "NamedNode" ? obj.value : undefined;
-}
-
-/**
- * The exactly-one literal lexical value of `(subject, predicate, ?)`, else
- * undefined. When `datatype` is given the literal's datatype IRI must match it
- * (the shape's `sh:datatype` rule) — e.g. a `dct:created "yesterday"` (a plain
- * `xsd:string`, not `xsd:dateTime`) is rejected, mirroring the SHACL rejection.
- */
-function exactlyOneLiteral(
-  dataset: DatasetCore,
-  subject: NamedNode,
-  predicate: NamedNode,
-  datatype?: NamedNode,
-): string | undefined {
-  const obj = exactlyOne(dataset, subject, predicate);
-  if (obj?.termType !== "Literal") return undefined;
-  if (datatype !== undefined && obj.datatype.value !== datatype.value) return undefined;
-  return obj.value;
-}
-
-function setIfDefined<K extends keyof SceneData>(
-  data: SceneData,
-  key: K,
-  value: SceneData[K] | undefined,
-): void {
-  if (value !== undefined) data[key] = value;
-}
-
-/**
- * Read a `draw:Scene` descriptor out of an already-parsed RDF dataset.
- *
- * Returns `undefined` when the `${resourceUrl}#it` subject is not a `draw:Scene`
- * OR does not carry EXACTLY ONE `draw:sceneDocument` IRI — a scene with no canvas
- * link, a non-IRI link, or TWO links is not a valid scene (the SHACL shape
- * enforces the same `minCount 1, maxCount 1`), so it is reported as absent rather
- * than parsed into a record that points at an ambiguous / attacker-chosen canvas.
- *
- * Every OPTIONAL field is read through the same exact-one + nodeKind/datatype
- * checks the bundled SHACL shape declares (each property is `maxCount 1`;
- * `dct:created`/`dct:modified` are `xsd:dateTime`; thumbnail/about/provenance are
- * IRIs). A field whose value would FAIL the shape — duplicated, wrong nodeKind, or
- * (for the timestamps) the wrong datatype — is DROPPED, so the returned `SceneData`
- * is always a graph the shape would accept rather than a half-trusted record built
- * from one the shape rejects.
+ * The drawing oracle counts singleton values across aliases, whereas runtime aliases
+ * prefer canonical values. Alias IRIs and fields come from generated metadata.
  */
 export function parseScene(resourceUrl: string, dataset: DatasetCore): SceneData | undefined {
   const subject = sceneSubject(resourceUrl);
-
-  const isScene =
-    dataset.match(subject, RDF_TYPE, DRAW_SCENE, null).size > 0 ||
-    dataset.match(subject, RDF_TYPE, namedNode(`${LEGACY_DRAW_NS}Scene`), null).size > 0;
-  if (!isScene) return undefined;
-
-  const sceneDocument = exactlyOneIri(dataset, subject, DRAW_SCENE_DOCUMENT);
-  if (sceneDocument === undefined) return undefined;
-
-  const data: SceneData = { sceneDocument };
-  setIfDefined(data, "title", exactlyOneLiteral(dataset, subject, DCT_TITLE, XSD_STRING));
-  setIfDefined(data, "created", exactlyOneLiteral(dataset, subject, DCT_CREATED, XSD_DATE_TIME));
-  setIfDefined(data, "modified", exactlyOneLiteral(dataset, subject, DCT_MODIFIED, XSD_DATE_TIME));
-  setIfDefined(data, "schemaVersion", exactlyOneLiteral(dataset, subject, DRAW_SCHEMA_VERSION));
-  setIfDefined(
-    data,
-    "viewBackgroundColor",
-    exactlyOneLiteral(dataset, subject, DRAW_VIEW_BACKGROUND_COLOR),
-  );
-  setIfDefined(data, "thumbnail", exactlyOneIri(dataset, subject, DRAW_THUMBNAIL));
-  setIfDefined(data, "about", exactlyOneIri(dataset, subject, SCHEMA_ABOUT));
-  setIfDefined(data, "wasGeneratedBy", exactlyOneIri(dataset, subject, PROV_WAS_GENERATED_BY));
+  const conflicts: (keyof SceneData)[] = [];
+  const carried: Partial<Pick<SceneData, "schemaVersion" | "viewBackgroundColor">> = {};
+  const zoneless: Partial<Pick<SceneData, "created" | "modified">> = {};
+  const view = new TermWrapper(subject, dataset, DataFactory);
+  for (const field of sceneFields) {
+    let object: Term | undefined;
+    for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
+      const matches = dataset.match(subject, namedNode(predicate));
+      for (const q of matches) {
+        if (matches.size > 1 || (object !== undefined && !object.equals(q.object))) {
+          if (field.guards?.requiredFailClosed) return undefined;
+          conflicts.push(field.name as keyof SceneData);
+        }
+        object = q.object;
+      }
+    }
+    // Closed admission requires a datatype. The published model allows ANY literal
+    // for these two fields; retain its lexical read through this minimal typed view.
+    if (
+      (field.name === "schemaVersion" || field.name === "viewBackgroundColor") &&
+      object?.termType === "Literal"
+    ) {
+      for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
+        carried[field.name] ??= tryRead(() =>
+          OptionalFrom.subjectPredicate(view, predicate, LiteralAs.string),
+        );
+      }
+    }
+    if (
+      (field.name === "created" || field.name === "modified") &&
+      object?.termType === "Literal" &&
+      object.datatype.equals(XSD_DATE_TIME)
+    ) {
+      const lexical = tryRead(() =>
+        OptionalFrom.subjectPredicate(view, field.predicate, LiteralAs.string),
+      );
+      if (lexical !== undefined && !hasTimestampZone(lexical)) zoneless[field.name] = lexical;
+    }
+  }
+  const core = scene.parse(sceneBase(resourceUrl), dataset);
+  if (core === undefined) return undefined;
+  // Keep optional keys absent and timestamps as strings in the public API.
+  const { created, modified, ...fields } = core;
+  const data: SceneData = { ...fields };
+  for (const key of ["schemaVersion", "viewBackgroundColor"] as const) {
+    if (data[key] === undefined && carried[key] !== undefined) data[key] = carried[key];
+  }
+  for (const [key, value] of [
+    ["created", created],
+    ["modified", modified],
+  ] as const) {
+    // The runtime Date used local time for zoneless literals; re-read their lexical value.
+    const parsed = zoneless[key] === undefined ? value : date(zoneless[key]);
+    if (parsed !== undefined) data[key] = timestampFrom(parsed, DataFactory).value;
+  }
+  for (const key of conflicts) delete data[key];
   return data;
 }
 
-/**
- * Parse a Turtle / JSON-LD body into a scene descriptor, dispatching on
- * `contentType` via `@jeswr/fetch-rdf`'s `parseRdf` (the suite's vetted RDF
- * parser — never a bespoke one). Returns `undefined` if the document holds no
- * valid `draw:Scene` at `${url}#it`.
- *
- * @param url         - the resource URL (base IRI for relative refs + to locate
- *   the `#it` subject).
- * @param body        - the raw response body.
- * @param contentType - the `Content-Type` header value (null ⇒ text/turtle, per
- *   the Solid Protocol §5.2 default).
- */
+/** Parse through fetch-rdf, including null Content-Type's existing Turtle default. */
 export async function parseSceneTtl(
   url: string,
   body: string,
   contentType: string | null = "text/turtle",
 ): Promise<SceneData | undefined> {
-  // Coalesce BEFORE parsing: callers routinely pass `Response.headers.get(
-  // "content-type")`, which is `null` for a header-less response, so honour the
-  // documented "⇒ text/turtle" default here rather than leaning on parseRdf.
-  const resolvedContentType = contentType ?? "text/turtle";
-  // Lazy import keeps the (Node-targeted) fetch-rdf dep off any pure-parse path a
-  // consumer might tree-shake, matching how the suite apps import it.
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  const dataset = (await parseRdf(body, resolvedContentType, { baseIRI: url })) as DatasetCore;
+  const dataset = await parseRdf(body, contentType ?? "text/turtle", { baseIRI: url });
   return parseScene(url, dataset);
 }
 

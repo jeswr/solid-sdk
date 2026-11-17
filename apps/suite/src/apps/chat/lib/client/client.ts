@@ -37,6 +37,16 @@ import {
   unreact,
 } from "../model";
 import { copyMessageTask, loadProfileName, loadRoomFiles } from "../model/extras";
+import {
+  evaluateQuery,
+  MAX_MESSAGE_FIELD_LENGTH,
+  MAX_MESSAGE_ID_LENGTH,
+  MAX_MESSAGE_TEXT_LENGTH,
+  MAX_MESSAGES,
+  parseQuery,
+  type SearchMessage,
+  type SearchSnippet,
+} from "../search";
 import { aggregateReactions, type ReactionSummary } from "../timeline";
 import { PreferencesStore } from "./preferences-store";
 
@@ -54,6 +64,33 @@ export interface Message extends ChatMessage {
   deleted: boolean;
   edited: boolean;
   reactions: ReactionSummary[];
+}
+export interface ChatSearchOptions {
+  days?: number;
+  maxRooms?: number;
+  timeZone: string;
+  signal?: AbortSignal | undefined;
+}
+/** A searched room; direct messages carry their members so the UI can name the other person. */
+export interface ChatSearchRoom {
+  url: string;
+  name: string;
+  isDirect: boolean;
+  members: string[];
+}
+export interface ChatSearchResult {
+  results: {
+    room: ChatSearchRoom;
+    message: Message;
+    snippet: SearchSnippet;
+    score: number;
+  }[];
+  searchedRooms: number;
+  skipped: ChatSearchRoom[];
+  truncated: boolean;
+  truncationReasons: ("rooms" | "days" | "results" | "records")[];
+  searchedDays: number;
+  droppedRecords: number;
 }
 export class ChatClientError extends Error {
   override name = "ChatClientError";
@@ -97,16 +134,31 @@ function slug(name: string): string {
       .replace(/-$/, "") || "room"
   );
 }
+/** Attach cancellation without changing the RDF model's fetch seam. */
+function abortableFetch(
+  fetch: typeof globalThis.fetch,
+  signal?: AbortSignal,
+): typeof globalThis.fetch {
+  if (!signal) return fetch;
+  return (input, init) => {
+    signal.throwIfAborted();
+    // The RDF model never passes its own signal, so this one is the only one.
+    return fetch(input, { ...init, signal });
+  };
+}
 export class ChatClient {
   readonly fetch: typeof globalThis.fetch;
   readonly preferences: PreferencesStore;
   private readonly known = new Map<string, Message>();
   private readonly profiles = new Map<string, Promise<string>>();
+  private readonly resolvedNames = new Map<string, string>();
+  private joinedCache: JoinedRoom[] | undefined;
   constructor(
     fetch: typeof globalThis.fetch,
     readonly storageUrl: string,
     readonly webId: string,
     private readonly publicFetch: typeof globalThis.fetch = globalThis.fetch,
+    displayName?: string,
   ) {
     this.fetch = createPodScopedFetch(roomContainer(storageUrl), {
       fetch: refuseRedirects(fetch),
@@ -114,24 +166,52 @@ export class ChatClient {
     });
     httpIri(webId);
     this.preferences = new PreferencesStore(this.fetch, storageUrl);
+    if (displayName) this.resolvedNames.set(webId, displayName);
   }
   canOpen(url: string): boolean {
     return isWithinPodScope(this.storageUrl, url);
   }
-  async joinedRooms(): Promise<JoinedRoom[]> {
-    const { rooms } = await loadRooms(this.fetch, this.storageUrl);
-    return Promise.all(
-      rooms.map(async (url) => {
-        try {
-          return await this.room(url);
-        } catch (error) {
-          return { url, error };
+  async joinedRooms({
+    signal,
+    cached = false,
+  }: {
+    signal?: AbortSignal | undefined;
+    cached?: boolean;
+  } = {}): Promise<JoinedRoom[]> {
+    signal?.throwIfAborted();
+    const { rooms } = await loadRooms(abortableFetch(this.fetch, signal), this.storageUrl).catch(
+      (error: unknown) => {
+        signal?.throwIfAborted();
+        throw error;
+      },
+    );
+    const joined: JoinedRoom[] = [];
+    let cursor = 0;
+    // Metadata reads share the same four-request bound as message loading.
+    await Promise.all(
+      Array.from({ length: Math.min(4, rooms.length) }, async () => {
+        while (cursor < rooms.length) {
+          signal?.throwIfAborted();
+          const index = cursor++;
+          const url = rooms[index] as string;
+          try {
+            joined[index] =
+              (cached &&
+                this.joinedCache?.find((room) => room.url === url && !("error" in room))) ||
+              (await this.room(url, { signal }));
+          } catch (error) {
+            signal?.throwIfAborted();
+            joined[index] = { url, error };
+          }
         }
       }),
     );
+    this.joinedCache = joined;
+    return joined;
   }
-  async room(url: string): Promise<Room> {
-    const { room } = await loadRoom(this.fetch, url);
+  async room(url: string, { signal }: { signal?: AbortSignal | undefined } = {}): Promise<Room> {
+    signal?.throwIfAborted();
+    const { room } = await loadRoom(abortableFetch(this.fetch, signal), url);
     if (!room) throw new ChatModelError("invalid-input");
     return roomResult(url, room);
   }
@@ -149,14 +229,173 @@ export class ChatClient {
       before = new Date(),
       days = 7,
       since = new Date("1970-01-01T00:00:00Z"),
-    }: { before?: Date; days?: number; since?: Date } = {},
+      signal,
+    }: {
+      before?: Date;
+      days?: number;
+      since?: Date | undefined;
+      signal?: AbortSignal | undefined;
+    } = {},
   ) {
-    const page = await loadMessages(this.fetch, url, before, since, days);
+    const page = await loadMessages(abortableFetch(this.fetch, signal), url, before, since, days);
     const reactions = new Map<string, Reaction[]>();
     for (const document of page.documents)
       for (const [message, found] of readReactions(document.dataset, document.url))
         reactions.set(message, [...(reactions.get(message) ?? []), ...found]);
     return { messages: this.remember(page.messages, reactions), next: page.next };
+  }
+  async search(
+    source: string,
+    { days = 30, maxRooms = 50, timeZone, signal }: ChatSearchOptions,
+  ): Promise<ChatSearchResult> {
+    const parsed = parseQuery(source);
+    evaluateQuery(parsed, [], timeZone);
+    if (!Number.isSafeInteger(days) || days < 1 || !Number.isSafeInteger(maxRooms) || maxRooms < 1)
+      throw new ChatModelError("invalid-input");
+    signal?.throwIfAborted();
+    const joined = await this.joinedRooms({ signal, cached: true });
+    const budget = Math.min(days, 366);
+    const query = {
+      ...parsed,
+      terms: parsed.terms.map((term) => {
+        if (term.type !== "filter" || term.field !== "in") return term;
+        const wanted = term.value.toLowerCase();
+        // A room by its name, or a direct message by the other person's resolved name.
+        const room = joined.find(
+          (room) =>
+            !("error" in room) &&
+            (room.name.toLowerCase() === wanted ||
+              (room.isDirect &&
+                room.members.some(
+                  (member) =>
+                    member !== this.webId &&
+                    this.resolvedNames.get(member)?.toLowerCase() === wanted,
+                ))),
+        );
+        return room ? { ...term, value: room.url } : term;
+      }),
+    };
+    // Room names can expand to a much longer (or malformed) IRI. Validate again before reads.
+    evaluateQuery(query, [], timeZone);
+    const included = query.terms.filter(
+      (term) => term.type === "filter" && term.field === "in" && !term.negated,
+    );
+    const eligible = joined.filter((room) => included.every((term) => term.value === room.url));
+    const rooms = included.length ? eligible : eligible.slice(0, maxRooms);
+    const reasons = new Set<ChatSearchResult["truncationReasons"][number]>();
+    if (rooms.length < eligible.length) reasons.add("rooms");
+    const result: ChatSearchResult = {
+      results: [],
+      searchedRooms: 0,
+      skipped: [],
+      truncated: false,
+      truncationReasons: [],
+      searchedDays: budget,
+      droppedRecords: 0,
+    };
+    const pages: { messages: Message[]; next: Date | null }[] = [];
+    const before = new Date();
+    let cursor = 0;
+    const skipped = new Set<number>();
+    await Promise.all(
+      Array.from({ length: Math.min(4, rooms.length) }, async () => {
+        while (cursor < rooms.length) {
+          signal?.throwIfAborted();
+          const index = cursor++;
+          const room = rooms[index] as JoinedRoom;
+          try {
+            if ("error" in room) throw room.error;
+            const created = room.created ? new Date(room.created) : new Date(NaN);
+            const since =
+              Number.isFinite(created.getTime()) &&
+              created.getUTCFullYear() >= 1 &&
+              created.getUTCFullYear() <= 9999 &&
+              created.getTime() <= before.getTime()
+                ? created
+                : undefined;
+            const page = await this.messages(room.url, { before, days: budget, since, signal });
+            signal?.throwIfAborted();
+            pages[index] = page;
+            result.searchedRooms++;
+            if (page.next) reasons.add("days");
+          } catch {
+            signal?.throwIfAborted();
+            skipped.add(index);
+          }
+        }
+      }),
+    );
+    const snapshot = new Map<
+      string,
+      { room: ChatSearchRoom; message: Message; record: SearchMessage }
+    >();
+    // Merge in listed order, independent of request completion. A nested owning container wins.
+    rooms.forEach((room, index) => {
+      const summary: ChatSearchRoom =
+        "error" in room
+          ? { url: room.url, name: room.url, isDirect: false, members: [] }
+          : { url: room.url, name: room.name, isDirect: room.isDirect, members: room.members };
+      if (skipped.has(index)) result.skipped.push(summary);
+      for (const message of pages[index]?.messages ?? []) {
+        if (message.deleted || message.tombstone || message.deletedAt !== undefined) continue;
+        const createdAt = message.published ? Date.parse(message.published) : 0;
+        const author = message.author ?? "unknown";
+        try {
+          if (
+            message.id.length > MAX_MESSAGE_ID_LENGTH ||
+            room.url.length > MAX_MESSAGE_ID_LENGTH ||
+            !message.id.isWellFormed() ||
+            !room.url.isWellFormed() ||
+            !isWithinPodScope(room.url, httpIri(message.id)) ||
+            message.content.length > MAX_MESSAGE_TEXT_LENGTH ||
+            author.length > MAX_MESSAGE_FIELD_LENGTH ||
+            !author.trim() ||
+            !Number.isSafeInteger(createdAt) ||
+            createdAt < -62_135_596_800_000 ||
+            createdAt > 253_402_300_799_999
+          )
+            throw new ChatModelError("invalid-input");
+        } catch {
+          result.droppedRecords++;
+          continue;
+        }
+        const previous = snapshot.get(message.id);
+        if (previous && previous.room.url.length >= room.url.length) continue;
+        if (!previous && snapshot.size >= MAX_MESSAGES) {
+          reasons.add("records");
+          result.droppedRecords++;
+          continue;
+        }
+        const record: SearchMessage = {
+          id: message.id,
+          roomId: room.url,
+          authorWebId: author.toWellFormed(),
+          authorName: (this.resolvedNames.get(author) ?? message.author ?? "Unknown author")
+            .slice(0, MAX_MESSAGE_FIELD_LENGTH)
+            .toWellFormed(),
+          text: message.content.toWellFormed(),
+          createdAt,
+          hasAttachment: false,
+          inReplyTo: null,
+        };
+        snapshot.set(message.id, { room: summary, message, record });
+      }
+    });
+    const matches = evaluateQuery(
+      query,
+      [...snapshot.values()].map(({ record }) => record),
+      timeZone,
+    );
+    if (matches.length > 200) reasons.add("results");
+    result.results = matches.slice(0, 200).map(({ message, snippet, score }) => {
+      const entry = snapshot.get(message.id) as NonNullable<ReturnType<typeof snapshot.get>>;
+      return { room: entry.room, message: entry.message, snippet, score };
+    });
+    result.truncationReasons = (["rooms", "days", "results", "records"] as const).filter((reason) =>
+      reasons.has(reason),
+    );
+    result.truncated = result.truncationReasons.length > 0;
+    return result;
   }
   async send(
     room: string,
@@ -353,6 +592,7 @@ export class ChatClient {
     }
   }
   async join(url: string): Promise<void> {
+    this.joinedCache = undefined;
     try {
       await saveJoinedRoom(this.fetch, this.storageUrl, url);
     } catch (error) {
@@ -362,6 +602,7 @@ export class ChatClient {
     }
   }
   async leave(url: string): Promise<void> {
+    this.joinedCache = undefined;
     await removeJoinedRoom(this.fetch, this.storageUrl, url);
   }
   async unreadCounts(rooms: readonly { url: string }[]): Promise<Record<string, number>> {
@@ -408,6 +649,10 @@ export class ChatClient {
       pending = loadProfileName(this.fetch, this.publicFetch, this.storageUrl, webId).catch(() => {
         const url = new URL(webId);
         return `${url.host}${url.pathname}${url.hash}`;
+      });
+      pending = pending.then((name) => {
+        this.resolvedNames.set(webId, name);
+        return name;
       });
       this.profiles.set(webId, pending);
     }

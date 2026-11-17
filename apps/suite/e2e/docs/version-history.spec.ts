@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { expect, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 test.beforeEach(async ({ page }) => {
+  // App routes sit behind the shell session guard; start signed in to the demo account.
+  await seedDemoSession(page);
   await page.route("**/__docs-history-reset", (route) =>
     route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Reset demo</title>" }),
   );

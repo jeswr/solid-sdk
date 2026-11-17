@@ -16,3 +16,6 @@ coverage/
 # Playwright screenshots / traces written by lanes and e2e runs
 /artifacts/
 .pages/
+
+# AUTHORED-BY Codex GPT-6.1-Sol — local MCPB preparation artifacts
+/packages/solid-mcp/packaging/out/

@@ -10,6 +10,7 @@
 import { isEmergencySymptomType, type SymptomType, SYMPTOM_TYPES } from "@jeswr/solid-health-diary";
 import { useState } from "react";
 import { triggerLabel } from "@/lib/off/exposure-display";
+import { podErrorMessage } from "@/lib/pod/errors";
 import { useDiaryActions } from "@/lib/session/use-diary-actions";
 import { EmergencyRail } from "./emergency-rail";
 
@@ -35,7 +36,7 @@ export function SymptomQuickLog({ onLogged }: { onLogged?: () => void }) {
       await syncing;
     } catch (err) {
       setPhase("error");
-      setErrorMsg((err as Error).message);
+      setErrorMsg(podErrorMessage(err));
     }
   }
 

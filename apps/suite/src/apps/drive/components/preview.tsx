@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -35,6 +36,7 @@ import Link from "next/link";
 import {
   type MouseEventHandler,
   type ReactNode,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -44,6 +46,7 @@ import { encodeRef } from "@/lib/refs";
 import { AppHeading } from "@/shell/app-frame";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { resolveContentType } from "../lib/files/resolve-content-type";
+import { decodePreviewText } from "../lib/files/text";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useOpenWithDocs } from "../state/open-with-docs";
@@ -54,6 +57,7 @@ import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
 import { NativePdfHandoff } from "./native-pdf";
 import { ProtectionBanner } from "./protection-banner";
+import { type PreviewText, TextPreview } from "./text-preview";
 
 const TEXT_LIMIT = 1024 * 1024;
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -62,7 +66,7 @@ type Loaded =
   | { status: "loading" }
   | { status: "error" }
   | { status: "blob"; url: string }
-  | { status: "text"; text: string; truncated: boolean }
+  | ({ status: "text" } & PreviewText)
   | { status: "rdf"; quads: Quad[] }
   // The native shell hands PDFs to the platform viewer instead of reading them here (E5).
   | { status: "handoff" };
@@ -114,7 +118,7 @@ function useLoadedFile(
   client: DriveClient,
   item: DriveItem,
   metadataStatus: "loading" | "ready" | "error" | undefined,
-): Loaded {
+): { state: Loaded; reload: () => void } {
   const kind = filePreviewKind(item);
   const handoff = kind === "pdf" && process.env.NEXT_PUBLIC_SUITE_TARGET === "native";
   const recordOpen = useRecordSharedOpen();
@@ -123,6 +127,8 @@ function useLoadedFile(
     item.etag && metadataStatus !== undefined ? undefined : item.url,
   );
   const [state, setState] = useState<Loaded>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
+  const reload = useCallback(() => setAttempt((current) => current + 1), []);
   // The body is keyed by URL + activation. Metadata refreshes can reload bytes,
   // but only the first successful load in this opening writes the preference.
   const recorded = useRef(false);
@@ -161,13 +167,23 @@ function useLoadedFile(
         const result = await client.readRdf(item.url);
         return result ? { status: "rdf", quads: [...result.dataset] } : { status: "error" };
       }
-      const blob = await client.read(item.url);
+      const type = resolveContentType(item.name, item.contentType);
+      const editableType = type === "text/plain" || type === "text/markdown";
+      const versioned = editableType ? await client.readVersion(item.url) : undefined;
+      const blob = versioned ? versioned.body : await client.read(item.url);
       if (kind === "text" || kind === "markdown" || kind === "csv") {
         const slice = blob.size > TEXT_LIMIT ? blob.slice(0, TEXT_LIMIT) : blob;
         return {
           status: "text",
-          text: await slice.text(),
+          ...decodePreviewText(
+            new Uint8Array(await slice.arrayBuffer()),
+            versioned?.contentType ?? blob.type,
+          ),
           truncated: blob.size > TEXT_LIMIT,
+          etag: versioned?.etag,
+          writable: versioned?.writable,
+          verifyHeaders: versioned?.verifyHeaders,
+          contentType: (blob.type || type)?.split(";")[0]?.trim().toLowerCase(),
         } as const;
       }
       let media = blob;
@@ -207,8 +223,9 @@ function useLoadedFile(
     recordOpen,
     metadataStatus,
     item.protectionRequired,
+    attempt,
   ]);
-  return state;
+  return { state, reload };
 }
 
 function RdfSummary({ quads }: { quads: Quad[] }) {
@@ -257,11 +274,35 @@ export function PreviewBody({
   item: DriveItem;
   metadataStatus?: "loading" | "ready" | "error";
 }) {
-  const { client } = useDrive();
+  const { client, session } = useDrive();
   const actions = useDriveActions();
-  const loaded = useLoadedFile(client, item, metadataStatus);
+  const { state: loaded, reload } = useLoadedFile(client, item, metadataStatus);
+  const [textEditing, setTextEditing] = useState(false);
   const kind = filePreviewKind(item);
   if (item.protectionRequired) return <ProtectionBanner key={item.url} item={item} />;
+  const type = resolveContentType(item.name, item.contentType);
+  const textType = type === "text/plain" || type === "text/markdown";
+  if (textType || textEditing)
+    return (
+      <TextPreview
+        key={`${session.webId}:${item.url}`}
+        item={item}
+        value={loaded.status === "text" ? loaded : undefined}
+        reload={reload}
+        onEditingChange={setTextEditing}
+        resourceChanged={!textType}
+        fallback={
+          loaded.status === "loading" ? (
+            <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />
+          ) : (
+            <div className="drv-state">
+              <h2>Can't preview this file</h2>
+              <Button onClick={() => void actions.download(item)}>Download</Button>
+            </div>
+          )
+        }
+      />
+    );
   if (loaded.status === "loading")
     return <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />;
   if (loaded.status === "error") {
@@ -446,7 +487,7 @@ function consumesEscape(event: KeyboardEvent): boolean {
     if (!(target instanceof Element)) return false;
     if (
       target.closest(
-        'audio, video, input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="menu"], dialog[open]',
+        'audio, video, input, select, textarea, [data-drive-text-editor], [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="menu"], dialog[open]',
       )
     )
       return true;
@@ -577,6 +618,7 @@ export function PreviewPage({
   parent: string | undefined;
 }) {
   const { driveRoot } = useDrive();
+  const { mayLeavePreview } = useDriveUi();
   const { item = initial, status } = useLiveResource(initial);
   const back = !parent || parent === driveRoot ? "/drive/my" : `/drive/f/${encodeRef(parent)}`;
   return (
@@ -590,7 +632,14 @@ export function PreviewPage({
       <PreviewHeader
         item={item}
         leading={
-          <Link href={back} className="drv-back" aria-label="Back to folder">
+          <Link
+            href={back}
+            className="drv-back"
+            aria-label="Back to folder"
+            onClick={(event) => {
+              if (!mayLeavePreview()) event.preventDefault();
+            }}
+          >
             <ArrowLeft aria-hidden="true" size={18} />
           </Link>
         }

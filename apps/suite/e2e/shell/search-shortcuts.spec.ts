@@ -160,7 +160,7 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
   await expect(dialog.getByRole("group", { name: "Go to" })).toBeVisible();
   await expect(dialog.getByRole("group", { name: "Create" })).toBeVisible();
   await expect(dialog.getByRole("group", { name: "Recent" })).toBeVisible();
-  await expect(dialog.getByRole("option", { name: /Calendar/ })).toHaveCount(0);
+  await expect(dialog.getByRole("option", { name: /^Calendar/ })).toBeVisible();
   await capture(page, info, "palette");
   const input = dialog.getByRole("combobox");
   await input.fill("New document");
@@ -169,6 +169,10 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
   await expect(trigger).toBeFocused();
   await page.keyboard.press("Control+k");
   await input.fill("a unique search");
+  await expect(
+    dialog.getByRole("option", { name: "No matching actions", exact: true }),
+  ).toHaveAttribute("aria-disabled", "true");
+  await accessible(page);
   await input.press("Enter");
   await expect(page.getByText("Palette search for a unique search", { exact: true })).toBeVisible();
   await trigger.click();
@@ -176,6 +180,54 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
 });
+
+test("palette hides an explicit backlog app unless backlog is enabled", async ({ page }) => {
+  await ready(page, "command-palette");
+  const state = page.getByLabel("Fixture state");
+  const trigger = page.getByRole("button", { name: "Open command palette" });
+  const dialog = page.getByRole("dialog", { name: "Command palette" });
+  await state.selectOption("backlog");
+  await trigger.click();
+  await expect(dialog.getByRole("option", { name: /^Calendar/ })).toHaveCount(0);
+  await expect(dialog.getByRole("option", { name: /^Drive/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await state.selectOption("backlog-visible");
+  await trigger.click();
+  await expect(dialog.getByRole("option", { name: /^Calendar/ })).toBeVisible();
+});
+
+for (const [component, triggerName, dialogName] of [
+  ["command-palette", "Open command palette", "Command palette"],
+  ["shortcut-help", "Show keyboard shortcuts", "Keyboard shortcuts"],
+] as const) {
+  test(`${component} stays within the viewport when resized while open`, async ({ page }) => {
+    await ready(page, component);
+    await page.getByRole("button", { name: triggerName }).click();
+    const dialog = page.getByRole("dialog", { name: dialogName });
+    await expect(dialog).toBeVisible();
+    for (const width of [320, 1280, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(width);
+      await expect
+        .poll(() =>
+          dialog.evaluate((el) => {
+            const bounds = el.getBoundingClientRect();
+            return (
+              bounds.left >= 15.5 &&
+              bounds.right <= window.innerWidth - 15.5 &&
+              el.scrollWidth <= el.clientWidth
+            );
+          }),
+        )
+        .toBe(true);
+      await accessible(page);
+    }
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: triggerName })).toBeFocused();
+  });
+}
 
 test("palette Enter navigates to Drive", async ({ page }) => {
   await signInDemo(page);

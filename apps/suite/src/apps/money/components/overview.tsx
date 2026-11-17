@@ -7,6 +7,7 @@ import { useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { overview } from "../lib/data/overview";
 import { useMoney } from "../state/money-context";
+import { BudgetSummary } from "./budget";
 import { AccountDialog, Amount } from "./money-forms";
 export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolean }) {
   const money = useMoney();
@@ -36,6 +37,7 @@ export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolea
           </Button>
         </div>
       </header>
+      {overviewPage && <BudgetSummary />}
       {!money.accounts.length ? (
         <section className="mon-panel">
           <h2>Get started</h2>

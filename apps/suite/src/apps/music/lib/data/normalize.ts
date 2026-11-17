@@ -53,6 +53,7 @@ export function normalizeLibrary(
     title: display(album.title, "Untitled"),
     credits: credits(album.artists),
     trackIds: album.tracks,
+    imageUrl: album.imageUrl,
   }));
   const albumById = new Map(sourceAlbums.map((album) => [album.id, album]));
   const albumsByTrack = new Map<string, typeof sourceAlbums>();
@@ -102,8 +103,10 @@ export function normalizeLibrary(
       albumId: primary.id,
       albumTitle: primary.title,
       loved: track.loved,
-      imageUrl: track.imageUrl,
+      imageUrl: track.imageUrl ?? albumById.get(primary.id)?.imageUrl,
       sourceUrl: track.sourceUrl,
+      contentUrl: track.contentUrl,
+      lyricsUrl: track.lyricsUrl,
       durationSeconds:
         track.durationSeconds === undefined ? undefined : Math.floor(track.durationSeconds),
       ...optionalPosition("discNumber", track.strings(`${S}discNumber`)),
@@ -116,7 +119,7 @@ export function normalizeLibrary(
     for (const album of memberships.values()) {
       let group = albumMembers.get(album.id);
       if (!group) {
-        group = { ...album, trackIds: [], tracks: [] };
+        group = { ...album, imageUrl: undefined, trackIds: [], tracks: [] };
         albumMembers.set(album.id, group);
       }
       group.tracks.push({ ...normalized, albumId: album.id, albumTitle: album.title });

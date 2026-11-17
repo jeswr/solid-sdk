@@ -146,6 +146,10 @@ test("launcher keyboard navigation, filter, native Enter navigation and Create",
   const trigger = page.getByRole("button", { name: "Apps", exact: true });
   await trigger.focus();
   await page.keyboard.press("Enter");
+  const launcher = page.getByRole("dialog", { name: "Apps", exact: true });
+  await expect(launcher.getByRole("link", { name: "Calendar", exact: true })).toBeVisible();
+  await expect(launcher.getByRole("link", { name: "Chat", exact: true })).toBeVisible();
+  await expect(launcher.getByRole("link", { name: "Agent", exact: true })).toBeVisible();
   await expect(page.getByRole("searchbox")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Home", exact: true })).toBeFocused();
@@ -155,6 +159,7 @@ test("launcher keyboard navigation, filter, native Enter navigation and Create",
   await expect(page.getByRole("link", { name: "Permissions", exact: true })).toBeFocused();
   await page.keyboard.type("docs");
   await expect(page.getByRole("searchbox")).toHaveValue("docs");
+  await expect(launcher.getByRole("link")).toHaveCount(1);
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("link", { name: "Docs", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
@@ -197,6 +202,7 @@ test("backlog remains hidden unless the flag is 1, then opens as a separate grou
   page,
 }, info) => {
   await page.goto("/dev/components/app-launcher");
+  await page.getByLabel("Fixture state").selectOption("backlog");
   await page.getByRole("button", { name: "Apps", exact: true }).click();
   if (process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1") {
     await expect(page.locator(".suite-coming-soon")).not.toHaveAttribute("open", "");

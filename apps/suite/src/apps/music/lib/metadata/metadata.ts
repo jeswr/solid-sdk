@@ -138,3 +138,14 @@ function id3Number(
   }
   return null;
 }
+
+/** Read embedded bytes without exposing the parser's native tags to the upload layer. */
+export async function extractAudioCover(buffer: ArrayBuffer) {
+  const { common } = await parseBuffer(normalizeId3v23(new Uint8Array(buffer)), undefined, {
+    maxMemoryAllocation,
+  });
+  const picture = common.picture?.find((item) =>
+    ["image/jpeg", "image/png", "image/webp"].includes(item.format),
+  );
+  return picture ? { type: picture.format, bytes: new Uint8Array(picture.data) } : undefined;
+}

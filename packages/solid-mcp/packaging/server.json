@@ -1,0 +1,91 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jeswr/solid-mcp",
+  "title": "Solid Pod",
+  "description": "Scoped Solid pod tools, conversation archives and purpose-limited personal context.",
+  "version": "0.2.0",
+  "repository": {
+    "url": "https://github.com/jeswr/solid-sdk",
+    "source": "github",
+    "subfolder": "packages/solid-mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@jeswr/solid-mcp",
+      "version": "0.2.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SOLID_MCP_POD_ROOT",
+          "description": "Required absolute pod/container URL ending in /.",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "SOLID_MCP_WEBID",
+          "description": "Optional owner WebID; needed for chat and personal tools.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "SOLID_MCP_READONLY",
+          "description": "Defaults to true. Set false explicitly to enable writes.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "true",
+          "format": "boolean",
+          "choices": [
+            "true",
+            "false"
+          ]
+        },
+        {
+          "name": "SOLID_MCP_CLIENT_ID",
+          "description": "CSS client-credentials token id. Supply with secret and issuer or token URL.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "SOLID_MCP_CLIENT_SECRET",
+          "description": "CSS client-credentials token secret. Supply with ID and issuer or token URL.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "SOLID_MCP_OIDC_ISSUER",
+          "description": "Issuer for discovery. With any auth setting, credentials and issuer or token URL are required.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "SOLID_MCP_TOKEN_URL",
+          "description": "Optional explicit token endpoint URL; overrides discovery. This is an endpoint, not a token.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp",
+      "variables": {
+        "host": {
+          "description": "The operator's deployment of apps/mcp-server.",
+          "isRequired": true
+        }
+      }
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "provenance": "AUTHORED-BY Codex GPT-6.1-Sol",
+      "status": "prepared-not-published"
+    }
+  }
+}

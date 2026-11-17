@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
-import { ChatWriter } from "@jeswr/solid-chat-interop";
+import { ChatWriter, normalizeChatAccount } from "@jeswr/solid-chat-interop";
 import { createChatPodPort, createCliFetch, loadCliConfig } from "@jeswr/solid-mcp";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { homedir } from "os";
@@ -9,7 +9,13 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { discoverRollouts } from "./discovery.js";
 import { isIgnored, queueDirectory, readRegular } from "./io.js";
-import { digest, parseClaudeTranscript, parseCodexTranscript, record } from "./parsers.js";
+import {
+  conversationAccount,
+  digest,
+  parseClaudeTranscript,
+  parseCodexTranscript,
+  record,
+} from "./parsers.js";
 import { enqueue, replay, sequenceConversation } from "./queue.js";
 
 /** Injectable process boundaries; production callers may omit all options. */
@@ -26,6 +32,8 @@ export interface CaptureOptions {
   stdin?: AsyncIterable<string | Uint8Array>;
   /** May shorten the budget for embedding/tests; cannot extend the 10-second maximum. */
   budgetMs?: number;
+  /** Owner-chosen source account label; overrides the shared MCP account configuration. */
+  account?: string;
 }
 
 function timestamp(value: string): number {
@@ -76,7 +84,14 @@ async function capture(args: string[], options: CaptureOptions, signal: AbortSig
   if (await isIgnored(projects, signal)) return;
   const config = await loadCliConfig(options.env ?? process.env, home);
   if (config.readOnly || !config.clientId || !config.webId) return;
-  const target = { podRoot: new URL(config.podRoot).href, webId: config.webId };
+  const account = normalizeChatAccount(
+    options.account === undefined ? config.account : options.account,
+  );
+  const target = {
+    podRoot: new URL(config.podRoot).href,
+    webId: config.webId,
+    ...(account === undefined ? {} : { account: digest(["chat-account-v1", account]) }),
+  };
   const directory = await queueDirectory(home);
   const httpTransport =
     options.fetch ??
@@ -125,11 +140,14 @@ async function capture(args: string[], options: CaptureOptions, signal: AbortSig
     try {
       const text = await readRegular(path, signal);
       const parsed =
-        command === "claude" ? parseClaudeTranscript(text, path) : parseCodexTranscript(text, path);
+        command === "claude"
+          ? parseClaudeTranscript(text, path, { account })
+          : parseCodexTranscript(text, path, { account });
       if (
         command === "codex" &&
         notify["thread-id"] !== undefined &&
-        parsed.conversation.conversationId !== digest(["codex", notify["thread-id"]])
+        parsed.conversation.conversationId !==
+          conversationAccount(digest(["codex", notify["thread-id"]]), account).conversationId
       )
         continue;
       if (

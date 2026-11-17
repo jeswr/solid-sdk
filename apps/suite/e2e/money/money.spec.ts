@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { must } from "../../test/money/helpers";
+import { seedDemoSession } from "../demo-session";
 
 const fixture = fileURLToPath(new URL("./fixtures/statement.csv", import.meta.url));
 test.use({ locale: "en-GB" });
 test.beforeEach(async ({ page }) => {
+  // Real app routes sit behind the shell session guard; remember the demo account.
+  await seedDemoSession(page);
   await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
   await page.route("**/__drive-test-reset", (route) =>
     route.fulfill({
@@ -417,4 +420,69 @@ test("rules file matching transactions and are ordered, edited and deleted", asy
   // Rules persist in the pod.
   await page.reload();
   await expect(page.locator(".mon-rule")).toHaveText([/Description contains “Weekend”.*Fun/]);
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+test("monthly envelopes save by keyboard, persist, roll forward and copy into an empty month", async ({
+  page,
+}, info) => {
+  await page.goto("/money");
+  const summary = page.getByRole("region", { name: "Budget this month", exact: true });
+  await expect(summary).toContainText("Ready to assign");
+  await summary.getByRole("link", { name: "Open budget", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Budget", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Budget month", exact: true })).toContainText(
+    "November 2026",
+  );
+  const currency = page.getByRole("region", { name: "Budget in GBP", exact: true });
+  const ready = currency.locator(".mon-budget-ready h2");
+  const groceries = currency.getByRole("textbox", {
+    name: "Assigned to Groceries (GBP)",
+    exact: true,
+  });
+  // `has` is matched inside each row, so the inner locator must not be rooted at the region.
+  const foodRow = currency.getByRole("row").filter({
+    has: page.getByRole("textbox", { name: "Assigned to Groceries (GBP)", exact: true }),
+  });
+  const available = foodRow.locator('td[data-label="Available"] .mon-amount');
+  const minor = (text: string) => BigInt(text.replace(/[^0-9-]/g, ""));
+  const readyBefore = minor(await ready.innerText());
+  const availableBefore = minor(await available.innerText());
+  await expect(groceries).toHaveValue("250.00");
+  await groceries.focus();
+  await groceries.fill("275.00");
+  await groceries.press("Enter");
+  await expect(groceries).toHaveValue("275.00");
+  await expect(page.locator(".mon-save")).toHaveText("Saved to your pod");
+  expect(minor(await ready.innerText())).toBe(readyBefore - BigInt(2500));
+  expect(minor(await available.innerText())).toBe(availableBefore + BigInt(2500));
+  await groceries.fill("9999.00");
+  await groceries.press("Escape");
+  await expect(groceries).toHaveValue("275.00");
+  await page.reload();
+  await expect(groceries).toHaveValue("275.00");
+  expect(minor(await available.innerText())).toBe(availableBefore + BigInt(2500));
+  await shot(page, info, "budget");
+  await page.getByRole("button", { name: "Next month", exact: true }).click();
+  await expect(page).toHaveURL(/\/money\/budget\?m=2026-12/);
+  await expect(
+    page.getByText("Assign money to categories to start budgeting", { exact: true }),
+  ).toBeVisible();
+  await expect(groceries).toHaveValue("0.00");
+  expect(minor(await available.innerText())).toBe(availableBefore + BigInt(2500));
+  await page.getByRole("button", { name: "Assign last month's amounts", exact: true }).click();
+  await expect(groceries).toHaveValue("275.00");
+  await expect(page.locator(".mon-save")).toHaveText("Saved to your pod");
+  await expect(
+    page.getByRole("button", { name: "Assign last month's amounts", exact: true }),
+  ).toBeDisabled();
+  await page.reload();
+  await expect(groceries).toHaveValue("275.00");
+  await page.getByRole("button", { name: "Previous month", exact: true }).click();
+  await expect(page).toHaveURL(/\/money\/budget\?m=2026-11/);
+  await expect(groceries).toHaveValue("275.00");
+  await page.getByRole("link", { name: "This month", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Budget month", exact: true })).toContainText(
+    "November 2026",
+  );
 });
