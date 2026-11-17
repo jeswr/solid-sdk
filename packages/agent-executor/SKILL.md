@@ -17,8 +17,10 @@ change, and recheck authority after asynchronous lookup/token waits. Supply the
 required synchronous io.assertAuthority fence to bindings: it checks the shared
 revision and latest authority deadlines through the request-local beforeDispatch hook,
 after all binding and transport awaits (including inner DNS and body buffering),
-immediately before underlying fetch/delivery with no intervening await. Pre-delivery gate refusals
-settle as not-sent; preserve prior resend uncertainty and acknowledgements for
+immediately before underlying fetch/delivery with no intervening await. The fence
+also runs the required synchronous ControlStore.assertNotHalted check (only ENOENT
+means clear), so local HALT changes during transport waits need no polling notification.
+Pre-delivery gate refusals settle as not-sent; preserve prior resend uncertainty and acknowledgements for
 requests already issued. The host must call
 onApprovalChange for every detected approval-store change to invalidate in-flight snapshots
 and re-evaluate queued items. Only verified owner
