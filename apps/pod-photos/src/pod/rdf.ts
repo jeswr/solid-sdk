@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * The app's ONE way to GET, serialise, write and delete pod RDF — composed
@@ -27,8 +28,7 @@ export const REVALIDATE_HEADERS = { 'cache-control': 'no-cache' } as const;
  * contract as `fetchRdf` (errors propagate as `RdfFetchError`; keep the
  * returned `etag` for conditional writes).
  *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch runs.
+ * @param fetchImpl - authenticated transport; omit for unauthenticated global fetch.
  */
 export function freshRdf(url: string, fetchImpl?: typeof fetch): ReturnType<typeof fetchRdf> {
   return fetchRdf(
@@ -57,7 +57,7 @@ export interface WriteResourceOptions {
   etag?: string | null;
   /** Send `If-None-Match: *` — create only, never overwrite (412 if it exists). */
   createOnly?: boolean;
-  /** Test-only override; **omit in production** so the auth-patched global runs. */
+  /** Authenticated transport; omit for unauthenticated global fetch. */
   fetchImpl?: typeof fetch;
   /** Optional Turtle prefix map for readable documents. */
   prefixes?: Record<string, string>;
@@ -99,7 +99,7 @@ export async function writeResource(
  * only an auth/other failure that would also block the item write propagates.
  *
  * @param containerUrl - the container URL (must end in `/`).
- * @param fetchImpl - test-only override; **omit in production** so auth runs.
+ * @param fetchImpl - authenticated transport; omit for unauthenticated global fetch.
  */
 export async function ensureContainer(
   containerUrl: string,

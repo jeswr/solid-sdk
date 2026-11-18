@@ -16,8 +16,7 @@ declare module "@jeswr/pod-photos/ui" {
     /** The container URL to open first (the gallery root). */
     rootUrl: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * The authenticated fetch for pod reads. Omit to use unauthenticated global fetch.
      */
     fetch?: typeof fetch;
     /** Optional heading rendered above the gallery. */
@@ -62,8 +61,7 @@ declare module "@jeswr/pod-photos" {
 
   /**
    * Fetch + parse a pod RDF document, always revalidating any cached copy.
-   * `fetchImpl` is a test-only override; omit it in production so the
-   * auth-patched global fetch runs.
+   * Pass the session's authenticated `fetchImpl` for private reads; omit for public fetch.
    */
   export function freshRdf(
     url: string,
