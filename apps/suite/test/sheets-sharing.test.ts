@@ -69,7 +69,7 @@ describe("workbook container sharing", () => {
     });
     await expect(reader.open(book.container)).rejects.toThrow();
     await expect(reader.openShared(book.container)).rejects.toThrow(
-      "opening private workbooks shared from another pod is not supported yet",
+      "This spreadsheet is private. You need access from its owner's pod to open it.",
     );
     expect((await readerFetch(`${book.container}workbook.json`)).status).toBe(403);
     await adapter.setGeneral(book.container, { mode: "link", role: "viewer" });

@@ -33,10 +33,12 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { OpenWithAccount } from "@/components/open-with-account";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
 import type { SaveStatus } from "../lib/autosave";
 import {
+  PrivateWorkbookError,
   type SheetEngine,
   type Snapshot,
   type SnapshotSaved,
@@ -295,6 +297,11 @@ export function SheetEditor({ container }: { container: string }) {
       <div className="sht-state" role="alert">
         <h1>Couldn't open this spreadsheet</h1>
         {state.error instanceof WorkbookLinkError && <p>{state.error.message}</p>}
+        {state.error instanceof PrivateWorkbookError &&
+          state.error.reason === "private" &&
+          state.openWithAccount && (
+            <OpenWithAccount url={container} kind="spreadsheet" open={state.openWithAccount} />
+          )}
         <Button onClick={state.retryOpen}>Retry</Button>
         <Link href="/sheets">Back to spreadsheets</Link>
       </div>

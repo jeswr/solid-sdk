@@ -13,6 +13,7 @@ import type {
   WorkbookVersion,
 } from "../contract";
 import {
+  PrivateWorkbookError,
   WorkbookConflictError,
   WorkbookLinkError,
   WorkbookNotFoundError,
@@ -181,19 +182,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     return read(checked(container));
   }
 
-  async function openShared(container: string): Promise<OpenedWorkbook> {
+  async function openShared(
+    container: string,
+    shared: { account?: boolean } = {},
+  ): Promise<OpenedWorkbook> {
     const url = assertSharedWorkbook(root, container);
-    // Sessions cannot authorize a foreign workbook. Public reads never use session
-    // credentials, and the storage transport bounds them to this URL with no redirects.
-    const anonymous: typeof fetch = (input, init) =>
-      publicFetch(input, { ...init, credentials: "omit" });
+    // Public reads never use session credentials. An account read relies on the session's
+    // grant for this container. Either way the storage transport bounds reads to this URL
+    // with no redirects, and the workbook stays view-only.
+    const transport: typeof fetch = shared.account
+      ? options.fetch
+      : (input, init) => publicFetch(input, { ...init, credentials: "omit" });
     try {
-      return await read(url, createSheetStorage(anonymous, url), true);
+      return await read(url, createSheetStorage(transport, url), true);
     } catch (error) {
       if (error instanceof WorkbookNotFoundError && error.reason === "forbidden")
-        throw new WorkbookLinkError(
-          "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
-        );
+        throw new PrivateWorkbookError(shared.account ? "denied" : "private");
       if (error instanceof RedirectRefusedError)
         throw new WorkbookLinkError(
           "This shared spreadsheet redirects to another address. Open a direct workbook link.",
@@ -406,6 +410,11 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     },
     open,
     openShared,
+    ...(options.grantResource && {
+      grantShared: async (container: string) => {
+        await options.grantResource?.(assertSharedWorkbook(root, container));
+      },
+    }),
     save,
     rename,
     async copy(container, title) {

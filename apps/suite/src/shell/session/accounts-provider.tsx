@@ -51,6 +51,8 @@ export interface AccountsContextValue {
   signOutAll(): Promise<void>;
   reauth(): Promise<SuiteAccount>;
   fetch: typeof fetch;
+  /** Present when the active account can open resources shared from other storages. */
+  grantResource?(url: string): Promise<void>;
 }
 
 export function AccountsProvider({
@@ -250,6 +252,16 @@ export function AccountsProvider({
       throw new Error("Sign in to continue");
     return backend.fetchFor(account)(input, init);
   };
+  const activeBackend = active ? sessions.current.get(active.id) : undefined;
+  const grantResource = activeBackend?.grantResource
+    ? async (url: string) => {
+        const account = current.current.accounts.find((a) => a.id === current.current.activeId);
+        const backend = account && sessions.current.get(account.id);
+        if (!account || !backend?.grantResource || currentStatus.current !== "ready")
+          throw new Error("Sign in to continue");
+        await backend.grantResource(account, url);
+      }
+    : undefined;
   return (
     <AccountsContext.Provider
       value={{
@@ -271,6 +283,7 @@ export function AccountsProvider({
         signOutAll,
         reauth,
         fetch: authenticatedFetch,
+        ...(grantResource && { grantResource }),
       }}
     >
       {children}

@@ -74,14 +74,36 @@ it("reads public notes anonymously as view only with their shared labels and rem
   vi.spyOn(globalThis, "fetch").mockImplementation(fetch);
   expect((await readSharedNote(REF, POD)).note.readOnly).toBe(true);
 });
-it.each([401, 403])("explains private foreign notes are unsupported on %s", async (status) => {
-  await expect(
-    readSharedNote(
-      REF,
-      POD,
-      vi.fn(async () => new Response(null, { status })),
-    ),
-  ).rejects.toThrow("opening private notes shared from another pod is not supported yet");
+it.each([
+  401, 403,
+])("explains private foreign notes on %s, anonymously or with the account", async (status) => {
+  const denied = vi.fn(async () => new Response(null, { status }));
+  await expect(readSharedNote(REF, POD, denied)).rejects.toMatchObject({
+    reason: "private",
+    message: "This note is private. You need access from its owner's pod to open it.",
+  });
+  await expect(readSharedNote(REF, POD, vi.fn(), denied)).rejects.toMatchObject({
+    reason: "denied",
+    message: "Your account doesn't have access to this note. Ask its owner to share it with you.",
+  });
+});
+it("reads a granted note through the account, still view only and without redirects", async () => {
+  const body = await serializeTurtle(buildNote(URL, { title: "Private", body: "<p>Hi</p>" }));
+  const anonymous = vi.fn();
+  const account = vi.fn(
+    async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
+  );
+  const { note } = await readSharedNote(REF, POD, anonymous, account);
+  expect(note).toMatchObject({ title: "Private", readOnly: true });
+  expect(anonymous).not.toHaveBeenCalled();
+  expect(account).toHaveBeenCalledExactlyOnceWith(
+    URL,
+    expect.objectContaining({ credentials: "omit", redirect: "manual" }),
+  );
+  const moved = vi.fn(
+    async () => new Response(null, { status: 302, headers: { location: `${URL}.other` } }),
+  );
+  await expect(readSharedNote(REF, POD, anonymous, moved)).rejects.toThrow("redirects");
 });
 it("refuses redirects and missing note bodies and propagates storage failures", async () => {
   await expect(

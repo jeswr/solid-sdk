@@ -108,6 +108,7 @@ export default defineConfig({
         "src/apps/photos/lib/albums/**/*.ts",
         "src/apps/notes/lib/**/*.ts",
         "src/apps/notes/components/{share-note,shared-note}.tsx",
+        "src/components/open-with-account.tsx",
         "src/apps/notes/lib/organise/**/*.ts",
         "src/apps/notes/lib/convert/**/*.ts",
         "src/apps/notes/lib/keep/**/*.ts",

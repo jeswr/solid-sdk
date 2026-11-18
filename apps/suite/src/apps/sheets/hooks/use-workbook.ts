@@ -16,12 +16,17 @@ export function useWorkbook(container: string) {
   const [attempt, setAttempt] = useState(0);
   const writer = useRef<ReturnType<typeof pendingSaves.acquire> | undefined>(undefined);
   const own = container.startsWith(service.root) && directChild(service.root, container);
+  // The shared container this account has been granted, after the reader's consent click.
+  const [granted, setGranted] = useState<string>();
+  const account = granted === container;
   const open = useCallback(async () => {
     return {
-      opened: await (own ? service.open(container) : service.openShared(container)),
+      opened: await (own
+        ? service.open(container)
+        : service.openShared(container, account ? { account } : undefined)),
       shared: !own,
     };
-  }, [container, service, own]);
+  }, [container, service, own, account]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries opening the workbook
   useEffect(() => {
@@ -108,5 +113,14 @@ export function useWorkbook(container: string) {
     flush: () => writer.current?.flush(),
     discard: () => writer.current?.discard(),
     retryOpen: () => setAttempt((value) => value + 1),
+    /** Present for a shared workbook the account may be able to open; call from the consent click. */
+    openWithAccount:
+      !own && service.grantShared
+        ? async () => {
+            await service.grantShared?.(container);
+            setGranted(container);
+            setAttempt((value) => value + 1);
+          }
+        : undefined,
   };
 }

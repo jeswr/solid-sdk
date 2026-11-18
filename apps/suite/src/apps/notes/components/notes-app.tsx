@@ -156,7 +156,14 @@ function SessionGate({ children }: { children: ReactNode }) {
       if (link.foreign)
         return (
           <SuiteFrame app="notes" sidebar={null}>
-            <SharedNote reference={reference} podRoot={root} />
+            <SharedNote
+              reference={reference}
+              podRoot={root}
+              {...(state.session.mode === "solid" &&
+                state.session.grantResource && {
+                  account: { fetch: state.session.fetch, grant: state.session.grantResource },
+                })}
+            />
           </SuiteFrame>
         );
     } catch (error) {
