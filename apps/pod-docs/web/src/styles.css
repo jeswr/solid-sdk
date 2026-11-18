@@ -12,7 +12,12 @@
    scan). The path is relative to THIS file. */
 @import "tailwindcss";
 @import "@jeswr/app-shell/styles.css";
+@import "@jeswr/suite-ui/styles/tokens.css";
+@import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
 @source "../node_modules/@jeswr/app-shell/dist";
+@source "../node_modules/@jeswr/suite-ui/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
    names (--bg/--ink/…). Map them onto the app-shell OKLCH tokens so the WHOLE

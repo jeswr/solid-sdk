@@ -18,7 +18,7 @@ declare module "@jeswr/pod-mail/ui" {
     mailboxUrl: string;
     /**
      * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-     * (patched by @solid/reactive-authentication in a real session).
+     * (public by default); pass the session's auth.fetch for private data.
      */
     fetch?: typeof fetch;
     /** Optional heading rendered above the inbox. */

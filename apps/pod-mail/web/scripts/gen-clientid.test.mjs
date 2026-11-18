@@ -94,25 +94,13 @@ describe("resolveOriginValue — origin precedence", () => {
 });
 
 describe("clientIdDocument — redirect_uris", () => {
-  const ORIGIN = "https://mail.example";
-
-  it("registers BOTH the popup callback AND the app root (autologin redirect target)", () => {
-    const doc = clientIdDocument(ORIGIN);
-    // The autologin full-page redirect uses `${origin}/` as its redirect_uri; a
-    // compliant OP rejects an unregistered redirect_uri, so the app root MUST be
-    // registered alongside the popup callback or autologin fails entirely.
-    expect(doc.redirect_uris).toContain(`${ORIGIN}/`);
-    expect(doc.redirect_uris).toContain(`${ORIGIN}/callback.html`);
-  });
-
-  it("client_id is the dereferenceable clientid.jsonld URL on this origin (byte-exact)", () => {
-    expect(clientIdDocument(ORIGIN).client_id).toBe(`${ORIGIN}/clientid.jsonld`);
-  });
-
-  it("is a public browser client (token_endpoint_auth_method none, no secret)", () => {
-    const doc = clientIdDocument(ORIGIN);
-    expect(doc.token_endpoint_auth_method).toBe("none");
+  it("registers only the popup callback.html redirect target", () => {
+    const doc = clientIdDocument("https://mail.example");
+    expect(doc.redirect_uris).toEqual(["https://mail.example/callback.html"]);
     expect(doc).not.toHaveProperty("client_secret");
+    // client_id is byte-exact the served URL, and the doc stays a public client.
+    expect(doc.client_id).toBe("https://mail.example/clientid.jsonld");
+    expect(doc.token_endpoint_auth_method).toBe("none");
   });
 });
 
@@ -136,10 +124,7 @@ describe("GitHub Pages client identity", () => {
     const doc = clientIdDocument("https://jeswr.github.io", "/solid-sdk/pod-mail/");
     expect(doc.client_id).toBe("https://jeswr.github.io/solid-sdk/pod-mail/clientid.jsonld");
     expect(doc.client_uri).toBe("https://jeswr.github.io/solid-sdk/pod-mail/");
-    expect(doc.redirect_uris).toEqual([
-      "https://jeswr.github.io/solid-sdk/pod-mail/callback.html",
-      "https://jeswr.github.io/solid-sdk/pod-mail/",
-    ]);
+    expect(doc.redirect_uris).toEqual(["https://jeswr.github.io/solid-sdk/pod-mail/callback.html"]);
   });
   it.each([
     "https://other.example/",

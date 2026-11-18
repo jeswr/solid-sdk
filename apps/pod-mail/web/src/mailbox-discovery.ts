@@ -122,7 +122,7 @@ async function mailContainerFromIndex(
  * `profileDataset` is the already-fetched WebID profile dataset (the host reads
  * it once for the session); we read the Type-Index pointer off it via a typed
  * accessor rather than re-fetching. `fetchImpl` is the authenticated fetch (omit
- * to use the auth-patched global).
+ * to use the public global fetch).
  */
 export async function discoverMailbox(
   webId: string,
