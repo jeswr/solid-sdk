@@ -107,7 +107,8 @@
     "@jeswr/site-executor",
     "@jeswr/test-shop",
     "@jeswr/site-profiler",
-    "@jeswr/webarena-bench"
+    "@jeswr/webarena-bench",
+    "@jeswr/agent-consent"
   ],
   "applications": [
     {
@@ -203,6 +204,11 @@
     {
       "slug": "notification-relay",
       "name": "@jeswr/app-notification-relay",
+      "kind": "application"
+    },
+    {
+      "slug": "agent-chat",
+      "name": "@jeswr/app-agent-chat",
       "kind": "application"
     }
   ],
