@@ -16,44 +16,59 @@ the host wires **auth + a music base**.
 
 ```
 index.html → src/main.tsx
-  └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
+  └─ <SessionProvider>            (@jeswr/app-session/react)
        └─ <App>                   (src/App.tsx)
-            ├─ logged out → <LoginScreen>          (WebID-first login)
+            ├─ logged out → <LoginScreen>          (@jeswr/app-session/react → SignInCard)
             └─ logged in  → <MusicLibrary          (@jeswr/pod-music/ui)
-                              base={musicBase} />
+                              base={musicBase} fetch={fetch} />
 ```
 
 ### Auth (standalone, no server)
 
-`src/auth/*` is copied **verbatim** from the hardened `pod-docs/web` host shell —
-it went through two roborev rounds (cross-user-leak fix, StrictMode
-auth-flow-holder, generation-fenced `reset()`, per-probe login proof). Do not
-re-derive it. `SessionProvider`:
+Music uses `@jeswr/app-session` for its page-lifetime `@jeswr/pod-auth` core,
+React session provider and shared `LoginScreen` / `SignInCard`, the same path as
+Pod Docs and Pod Drive. `src/auth/pod-auth.ts` supplies the app identity,
+redirect URL, development flag, app name and exact legacy cleanup keys. Recent accounts appear
+first; users can also enter an address, choose the home provider or another listed
+provider, or enter a custom provider address. Addresses are resolved through a
+pristine public fetch. A WebID with several providers asks the user to choose a
+provider explicitly.
 
-1. snapshots the pristine `globalThis.fetch` (for the pre-popup public profile
-   read, so it can never recurse on a 401);
-2. **dynamically** imports `@solid/reactive-authentication` (so the browser-only
-   custom element + oauth stack never evaluate at module-eval / SSR time —
-   verified by the build: `customElements.define` is `0` in the main bundle);
-3. builds a `WebIdDPoPTokenProvider` bound to this origin's **static Client
-   Identifier Document** at `${origin}/clientid.jsonld`, so the consent screen
-   shows "Pod Music";
-4. calls `manager.registerGlobally()` — **this is what patches the global
-   `fetch`** (the 0.1.3 constructor does NOT).
+The core restores once on mount, including React StrictMode replay, and owns all
+credentials, persistence and logout. `auth.fetch` is passed explicitly to
+`MusicStore` discovery and `MusicLibrary`; global fetch stays public. The default automatic credential
+boundary uses only the authenticated WebID's advertised storage roots. Public
+profile reads for the display name, avatar and pod root use the pristine public
+transport.
 
-Once patched, every plain `fetch()` — including the ones inside `@jeswr/fetch-rdf`
-and the `@jeswr/pod-music` data layer — transparently upgrades on a 401 with a
-DPoP token. So `<MusicLibrary>` is mounted with **no `fetch` prop**.
+The popup element is lazily registered from `@jeswr/reactive-authentication/registerElements`.
+A StrictMode-safe holder adapts its disposable result to the full callback URL.
+`allowInsecureLoopback` and pod-auth's dynamic client registration are enabled only
+in a development build (`npm run dev`) whose hostname is localhost, 127.0.0.0/8 or
+::1; every other build uses the HTTPS `clientid.jsonld`, so `vite preview` over HTTP
+cannot sign in. Silent `prompt=none` re-authentication during restore is declined
+(no popup without a click). The popup supports cancellation; errors use plain
+messages without raw protocol details. On first load the app removes the
+`pod-music:pss.autologin.flow` and `pod-music:autologin-attempted` sessionStorage
+markers, the `pod-music:remembered-account` localStorage pointer, and the
+`pod-music:sessions` IndexedDB database left by builds before pod-auth. These
+key lists go to `SessionProvider`, which uses the package's `clearLegacyCredentials`.
+Other apps' storage and the Music theme preference are preserved.
+
+A `#autologin/<encoded-webid>` deep link adds a one-click account row and is
+removed from the address bar. It never opens a popup or redirects without a click.
+Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the music base is resolved
 
 `<MusicLibrary base />` needs the music library **container** (the data layer
 derives `tracks/`/`albums/`/`playlists/` directly under `base`), NOT a bare pod
-root. `src/auth/session-derivation.ts` resolves it in two steps:
+root. The shared package derives the pod root; `src/music-base.ts` resolves
+the Music container:
 
 - **pod root** = the first `pim:storage` advertised on the WebID profile, else the
-  WebID origin (`scheme://host/`). A banner tells the user when the fallback is
-  used.
+  WebID origin (`scheme://host/`). A banner explains that this fallback can
+  show only public music: the credential boundary grants no access to it.
 - **music base** = via the data layer's Type-Index helper
   `MusicStore.findTrackContainers(webId)` — the parent of a container registered
   for `mo:Track`. When there is no registration (no profile link / no entry / a
@@ -74,8 +89,10 @@ from a single `APP_ORIGIN` env, written into `public/` before every build:
 - `public/callback.html` — the OAuth popup → opener post-back, targeting the
   message at **our origin only** (`postMessage(href, "${origin}")`), never `"*"`.
 
-Both are git-ignored (the script + `APP_ORIGIN` are the source of truth) and
-copied by Vite into `dist/` at the root.
+The development artifacts are committed and regenerated from the script +
+`APP_ORIGIN` before each build. Vite copies them into `dist/`. Set
+`CLIENT_BASE_PATH=/solid-sdk/pod-music/` for a GitHub Pages identity under that base;
+only `callback.html` is a permitted redirect.
 
 > `ignore-scripts=true` (supply-chain hardening) means npm lifecycle hooks do NOT
 > run — so the generator is chained INLINE in the `build`/`dev` scripts
@@ -85,8 +102,8 @@ copied by Vite into `dist/` at the root.
 
 ```bash
 # Dev (defaults APP_ORIGIN to http://localhost:5173):
-npm install
-npm run dev
+pnpm install --offline
+pnpm --filter @jeswr/pod-music-web dev
 
 # Production build for the music subdomain:
 APP_ORIGIN=https://music.solid-test.jeswr.org npm run build
@@ -94,7 +111,7 @@ APP_ORIGIN=https://music.solid-test.jeswr.org npm run build
 #       dist/index.html
 #       dist/clientid.jsonld          (client_id = that origin)
 #       dist/callback.html            (postMessage target = that origin)
-#       dist/assets/*.js, *.css       (hashed; reactive-auth code-split into a
+#       dist/assets/*.js, *.css       (hashed; the popup element code-split into a
 #                                      lazily-imported chunk)
 ```
 
@@ -104,7 +121,7 @@ library's **TypeScript source directly** — no pre-built `dist/ui` is required.
 
 Gates: `npm run lint` (Biome), `npm run typecheck` (tsc — the library source is
 NOT re-typechecked here; `src/pod-music-ui.d.ts` declares the consumed surface),
-`npm test` (vitest — the copied auth tests + the music-base derivation test),
+`npm test` (Vitest — app adapter, shared-session integration and music-base tests),
 `npm run build`.
 
 ## Env
@@ -113,4 +130,14 @@ NOT re-typechecked here; `src/pod-music-ui.d.ts` declares the consumed surface),
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod. |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | Shared sign-in card | `https://idp.solid-test.jeswr.org` | Home provider offered first. |
+| `VITE_HOME_IDP_NAME` | Shared sign-in card | Provider host | Optional home-provider label. |
+| `VITE_KNOWN_PROVIDERS` | Shared sign-in card | Shared directory | Comma-separated HTTPS provider URLs. |
+
+## End-to-end sign-in
+
+`npm run test:e2e` starts the pinned local CSS and Vite host, seeds a private
+track library, signs in through the real popup, and verifies that the library
+lists the tracks while ambient `fetch` still receives 401/403. It requires the
+CSS package and Playwright Chromium to be available locally. The offline gate
+only typechecks this harness; it does not run it.
