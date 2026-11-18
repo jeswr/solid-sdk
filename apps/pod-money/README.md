@@ -67,8 +67,8 @@ for the caller to re-read and retry.
 ```ts
 import { MoneyStore } from "pod-money";
 
-const store = new MoneyStore({ podRoot: "https://alice.pod.example/" });
-// (auth is the ambient globalThis.fetch patched by @solid/reactive-authentication)
+// auth is an established @jeswr/pod-auth session; global fetch stays public.
+const store = new MoneyStore({ podRoot: "https://alice.pod.example/", fetch: auth.fetch });
 
 await store.addAccount({ iri: store.ledgerUrl + "#everyday", kind: "Current", label: "Everyday" });
 await store.addTransaction({
@@ -114,10 +114,8 @@ npm run gate         # all of the above in order
 These are deliberately **not** in this run (the data layer is the durable core; the rest is tracked
 work):
 
-- **Next.js UI via `create-solid-app`.** The full app (login via `@solid/reactive-authentication`,
-  account/transaction/budget views, force-static `clientid.jsonld` route) is scaffolded once
-  `create-solid-app` lands in `full-solid-ecosystem`; do **not** hand-roll a throwaway Next.js app
-  before then.
+- The existing [static web host](web/) signs in through `@jeswr/pod-auth` and
+  the shared SignInCard, with bounded fetch passed to discovery and ledger reads.
 - **Cross-server E2E matrix.** Playwright against every well-known Solid server — CSS (WAC + ACP),
   ESS, NSS, and **prod-solid-server with both passkey and username/password login** — exercising
   read / write / list / type-index against a real pod.
