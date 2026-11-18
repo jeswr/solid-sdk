@@ -241,7 +241,7 @@ start to add triples** — seed at creation (the script does) or use a pod templ
 ## Reference skills
 
 If you have access to the Solid agent skills, prefer them over re-deriving APIs:
-`solid-reactive-authentication`, `solid-object`, `solid-fetch-rdf`, `solid-test-infrastructure`.
+`solid-reactive-authentication`, `solid-object`, `fetch-rdf`, `solid-test-infrastructure`.
 They document the *published* APIs and the gotchas above.
 
 <!-- BEGIN:nextjs-agent-rules -->
