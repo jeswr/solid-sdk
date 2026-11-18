@@ -7,6 +7,7 @@
 
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { PodDataError } from "@jeswr/pod-connectors/pod/resource";
+
 export { PodDataError } from "@jeswr/pod-connectors/pod/resource";
 
 /** The WebID profile has no `solid:storage` / `pim:storage` — no pod to browse. */
@@ -106,6 +107,20 @@ export class ItemReadError extends PodDataError {
     super(`Could not open this item (${status}) at ${url}.`, options);
     this.name = "ItemReadError";
     this.url = url;
+    this.status = status;
+  }
+}
+
+/** The recipient profile could not be read or parsed; absence of an inbox is unknown. */
+export class ProfileUnreadableError extends PodDataError {
+  readonly webId: string;
+  readonly status: number | undefined;
+  constructor(webId: string, status?: number) {
+    super(
+      `Could not read the recipient profile${status === undefined ? "" : ` (HTTP ${status})`} at ${webId}.`,
+    );
+    this.name = "ProfileUnreadableError";
+    this.webId = webId;
     this.status = status;
   }
 }

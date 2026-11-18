@@ -105,7 +105,7 @@ beforeEach(() => {
         return [notification(owner)];
       });
     readers.push({ list });
-    return { inbox: async (webId) => webId, list };
+    return { inbox: async (webId) => webId, list, listPage: vi.fn() };
   });
 });
 afterEach(() => {
@@ -315,6 +315,7 @@ it("keeps local notifications available when the pod source fails", async () => 
       throw new Error("Pod offline");
     },
     list: vi.fn(),
+    listPage: vi.fn(),
   });
   render(tree());
   await screen.findByText(local.title);

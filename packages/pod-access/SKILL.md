@@ -134,10 +134,12 @@ not establish safe migration. Run its regression suite when changing the transla
 
 ## Notification delivery and reading
 
-`createNotify({ fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
-`notify(agentWebId, activity)`. Supply the pod-auth fetch and an explicit actor WebID.
+`createNotify({ webId, fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
+`notify(agentWebId, activity)`. Supply the pod-auth fetch and authenticated session `webId`; a different activity actor is refused.
 Builders return templates without actor: `shareNotification`, `assignmentAnnounce`,
-`mentionNotification`, `roomInvitation`. Preserve Tasks §5.7's assignment summary exactly.
+`mentionNotification`, `roomInvitation`, `issueAnnounce(issue, recipient, summary)`. The latter
+preserves Issues' issue-event recipient target and human summary as an Announce draft.
+Preserve Tasks §5.7's assignment summary exactly.
 Delivery failures return structured values and never throw. Do not change permissions here.
 
 Discovery caches exact WebIDs for ten minutes, shared by notifiers/readers with identical
@@ -152,11 +154,56 @@ guard's documented DNS limitation. All parsing goes through fetch-rdf, with remo
 `inbox(webId)` returns the owner's inbox or null, including LWS profiles. `list(inboxUrl,
 { signal? })` returns `InboxNotification[]` newest first, undated last, deterministic URL ties.
 Reuse the shared pure scope/parser/ordering helpers and discovery cache; never import the
-Node transport into the client entry. Fetch at most maxItems children (default 50) with at
+Node transport into the client entry. Fetch at most maxItems children (default 50, maximum 500; sidecars excluded) with at
 most six requests active. Refuse foreign/outside/nested/query/fragment/encoded-slash members.
-Unreadable members are skipped; container 401/403/404 and parse failures return []; other
+Unreadable members are skipped; container 404 and parse failures return []; 401/403 and other
 container failures reject. Aborts reject with AbortError and start no further requests.
-There is no mark-read/delete API. `notificationKind(n)` maps Announce share summaries before
+`listPage(inboxUrl, { signal? })` also returns the complete eligible `members` list and
+`truncated` (whether the child-fetch ceiling was exceeded), retaining limit warnings even
+when fetched notifications are unreadable. Activities can also carry `content`, an optional
+`object`, and the existing Pod Manager `Invite`/`Update` verbs. Legacy `as:name` and valid
+untyped publication dates remain readable. Require an ActivityStreams property (including
+legacy `as:name`) or an `as:`/`ldp:` type; unrelated self-describing RDF is skipped, while
+unknown-type activities with recognizable properties remain readable. `createNotifyFetch(options)` exposes the same
+guarded transport for foreign resources linked by notifications; it rejects a changed final
+response URL if the caller transport ignored manual redirects.
+
+`createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
+discovers the owner's inbox and returns null unless it is inside a trusted active storage
+root (strictly below it) and has no query. Roots come from the authenticated session, never notification RDF.
+The manager exposes `inboxUrl`, `list()`, `markRead(url)` and `dismiss(url)`. Listing adds
+`read` when the listing contains an exactly named `<notification>.read.ttl` sidecar, whatever
+its content; never fetch marker contents. Legacy markers without an actor keep working.
+Read state in an append-only inbox is advisory: a sender can create its own sidecar, even
+claiming the public owner WebID as actor, and make its own notification appear read.
+Read state must never gate security decisions. Hide reserved sidecars while preserving
+ordinary names containing `%`; encoded filename aliases do not match. Direct children only: reject foreign origins, nesting, credentials,
+queries/fragments and encoded slash/backslash before I/O. Mark-read PUT and notification DELETE are unconditional and idempotent; no HEAD or ETag is
+required. Only read-modify-write operations require strong ETag preconditions. Missing
+resources dismiss idempotently and sidecar cleanup is best effort. The manager fetches up to
+`MAX_INBOX_ITEMS` (500), sorts before its display cut and exposes `listPage().truncated`.
+Sidecars never consume the notification fetch budget. Byte-limited listings preserve complete
+statements with `truncated: true`; individual notification bodies retain the hard 256 KiB cap.
+Listing 401/403 errors must propagate to app error states. `includeUnknownActivities: true`
+retains even empty readable RDF as unknown notifications; Issues opts in and exposes no
+invented ActivityStreams type IRI.
+
+Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with the named `<#it>` activity
+subject so receivers can reference it relative to the stored notification URL.
+HTTP 415 retries once with JSON-LD serialized from that same dataset, retaining `@id: "#it"`.
+Read activity subjects as RDF/JS terms, including blank nodes. Issue drafts add PROV-O
+attribution and generation time. Optional non-HTTPS object/target links are omitted.
+Delivery results distinguish invalid targets, unreadable profiles, network failures and real
+HTTP status. All runtime branches refuse dotless hosts, empty labels and trailing dots.
+Public delivery is HTTPS/443; trusted `ownStorageRoots` only relaxes HTTPS ports for scoped
+GET/HEAD; the manager also permits marker PUT and child DELETE strictly within its own inbox.
+Dot-prefixed and `.acl`/`.acr`/`.meta` resources are excluded from mutations and listings;
+LDP containers cannot enter the unknown-activity fallback. Exported `isLoopbackHostname`
+shares the host policy with apps, which must also gate their opt-in on development builds.
+Explicit `devLoopback` admits HTTP(S) on localhost/127.0.0.1/[::1] only, any port.
+Never propagate a development-discovered cache entry into a strict transport policy.
+
+`notificationKind(n)` maps Announce share summaries before
 Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;
 every other shape is other. Keep wrapper and builder round-trip coverage at 100%.
 
