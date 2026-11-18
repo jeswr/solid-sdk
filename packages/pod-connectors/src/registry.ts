@@ -9,6 +9,8 @@
  * - Tier C → **export-file** (no user-grade API; imports the user's official export file)
  *
  * Hosts inject public OAuth configuration through createRegistry().
+ * Optional encrypted refresh persistence is host-owned through ./vault + ./oauth;
+ * it never changes catalog tiers, readiness, or the data written into a pod.
  */
 
 import type { IntegrationAdapter, IntegrationMetadata } from "./core/types.js";

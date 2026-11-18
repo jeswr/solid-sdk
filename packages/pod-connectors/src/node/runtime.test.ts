@@ -12,6 +12,7 @@ import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as importRunner from "../core/import-runner.js";
+import { TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
@@ -26,11 +27,13 @@ import { writeResource } from "../pod/resource.js";
 import { ProfileTypeIndexAnchor, TypeIndexDataset } from "../pod/type-index.js";
 import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
+import { ConnectorTokenVault, importVaultKey } from "../vault.js";
 import { EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
 import * as loopback from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
 import { connectorState, createStateStore } from "./state.js";
+import { FileVaultStore } from "./vault-store.js";
 
 const config: NodeConfig = {
   podRoot: TEST_POD_ROOT,
@@ -56,6 +59,7 @@ const dirs: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -1010,7 +1014,7 @@ describe("CLI import", () => {
   it.each([
     "deadline",
     "host",
-  ])("cancels a pending source exchange on %s and closes the listener", async (kind) => {
+  ])("ends a pending source exchange only at its own timeout after a %s and closes the listener", async (kind) => {
     const { transport } = fixturePod();
     const path = await configPath();
     await writeFile(
@@ -1066,7 +1070,13 @@ describe("CLI import", () => {
       if (!exchangeSignal || !redirect) throw new Error("Source exchange never started");
       expect(exchangeSignal.aborted).toBe(false);
       if (kind === "deadline") await vi.advanceTimersByTimeAsync(120_000);
-      else controller.abort();
+      else {
+        // A host abort never cuts off an exchange already sent; its own timeout ends it.
+        controller.abort();
+        await vi.advanceTimersByTimeAsync(TOKEN_REQUEST_TIMEOUT_MS - 1);
+        expect(exchangeSignal.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+      }
       expect(exchangeSignal.aborted).toBe(true);
       expect(controller.signal.aborted).toBe(kind === "host");
       expect(await result).toBe(kind === "deadline" ? 3 : 130);
@@ -1405,10 +1415,12 @@ describe("CLI import", () => {
           grant_type: "refresh_token",
           refresh_token: "synthetic-source-refresh",
         });
-        expect(init?.signal).toBe(controller.signal);
+        // The refresh runs on its own controller: a host abort cannot cut off its response.
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        expect(init?.signal).not.toBe(controller.signal);
         if (cancelRefresh) {
           controller.abort();
-          init?.signal?.throwIfAborted();
+          expect(init?.signal?.aborted).toBe(false);
         }
         return Response.json({ access_token: "synthetic-source-new", expires_in: 3600 });
       }
@@ -1669,5 +1681,263 @@ describe("CLI cancellation at the Pod write boundary", () => {
     expect(pod.get(stateUrl)).toBe(checkpoint);
     expect(pod.get(`${container}_provenance.ttl`)).toBe(provenance);
     expect(options.stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});
+
+describe("CLI encrypted refresh vault", () => {
+  const encodedKey = Buffer.alloc(32, 23).toString("base64");
+  const account = "synthetic-work";
+  async function vaultFixture() {
+    const path = await configPath();
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...config,
+        connectors: { spotify: { clientId: "source-client", account } },
+      }),
+    );
+    const directory = path + ".vault";
+    const vault = new ConnectorTokenVault(
+      await importVaultKey(encodedKey),
+      new FileVaultStore(directory),
+    );
+    await vault.put(
+      { connectorId: "spotify", account },
+      { refreshToken: "first-refresh", obtainedAt: 1 },
+    );
+    return { path, directory, vault, key: { connectorId: "spotify", account } };
+  }
+  it("reuses and rotates a persisted refresh credential across commands without interactive login", async () => {
+    const { path, directory, vault, key } = await vaultFixture();
+    const { transport } = fixturePod();
+    const interactive = vi.spyOn(loopback, "authorizeLoopback");
+    const api = fixtureFetch("spotify", spotifyAdapter.fixtures());
+    let refreshes = 0;
+    const source: typeof fetch = async (input, init) => {
+      if (String(input) === spotifyAdapter.oauth?.tokenEndpoint) {
+        expect(new URLSearchParams(String(init?.body)).get("refresh_token")).toBe(
+          refreshes++ ? "rotated-refresh" : "first-refresh",
+        );
+        expect(new Headers(init?.headers).has("authorization")).toBe(false);
+        return Response.json({
+          access_token: "synthetic-access",
+          refresh_token: "rotated-refresh",
+          expires_in: 60,
+        });
+      }
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer synthetic-access");
+      return api(input, init);
+    };
+    const error = vi.fn();
+    for (let index = 0; index < 2; index++)
+      expect(
+        await runCli(["import", "spotify", "--vault", directory], {
+          configPath: path,
+          vaultKey: encodedKey,
+          podTransport: transport,
+          sourceTransport: source,
+          stdout: vi.fn(),
+          stderr: error,
+        }),
+      ).toBe(0);
+    expect(refreshes).toBe(2);
+    expect(interactive).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect((await vault.get(key))?.refreshToken).toBe("rotated-refresh");
+  });
+  it("deletes invalid_grant, reports reauthorise with exit 3, and does not open login automatically", async () => {
+    const { path, directory, vault, key } = await vaultFixture();
+    const { transport } = fixturePod();
+    const error = vi.fn();
+    const interactive = vi.spyOn(loopback, "authorizeLoopback");
+    expect(
+      await runCli(["import", "spotify", "--vault", directory], {
+        configPath: path,
+        vaultKey: encodedKey,
+        podTransport: transport,
+        sourceTransport: async () =>
+          Response.json({ error: "invalid_grant", error_description: encodedKey }, { status: 400 }),
+        stdout: vi.fn(),
+        stderr: error,
+      }),
+    ).toBe(3);
+    expect(await vault.get(key)).toBeUndefined();
+    expect(interactive).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("Reconnect this source account.\n");
+  });
+  it.each([
+    true,
+    false,
+  ])("recovers an unreadable record after key rotation only through login (interactive: %s)", async (interactive) => {
+    const { path, directory, vault, key } = await vaultFixture();
+    const rotatedKey = Buffer.alloc(32, 24).toString("base64");
+    const { transport } = fixturePod();
+    const api = fixtureFetch("spotify", spotifyAdapter.fixtures());
+    const grants: (string | null)[] = [];
+    const source: typeof fetch = async (input, init) => {
+      if (String(input) === spotifyAdapter.oauth?.tokenEndpoint) {
+        grants.push(new URLSearchParams(String(init?.body)).get("grant_type"));
+        return Response.json({
+          access_token: "synthetic-access",
+          refresh_token: "fresh-refresh",
+          expires_in: 60,
+        });
+      }
+      return api(input, init);
+    };
+    const opened = vi.fn(async (url: string) => {
+      const auth = new URL(url);
+      const redirect = new URL(auth.searchParams.get("redirect_uri") as string);
+      redirect.searchParams.set("state", auth.searchParams.get("state") as string);
+      redirect.searchParams.set("code", "synthetic-code");
+      await new Promise<void>((resolve, reject) => {
+        get(redirect, (response) => {
+          response.resume();
+          response.on("end", resolve);
+        }).on("error", reject);
+      });
+    });
+    const error = vi.fn();
+    expect(
+      await runCli(["import", "spotify", "--vault", directory], {
+        configPath: path,
+        vaultKey: rotatedKey,
+        podTransport: transport,
+        sourceTransport: source,
+        openAuthorizationUrl: opened,
+        interactiveLogin: interactive,
+        stdout: vi.fn(),
+        stderr: error,
+      }),
+    ).toBe(interactive ? 0 : 3);
+    const rotated = new ConnectorTokenVault(
+      await importVaultKey(rotatedKey),
+      new FileVaultStore(directory),
+    );
+    if (interactive) {
+      // The code exchange replaced the record without decrypting the old ciphertext.
+      expect(grants).toEqual(["authorization_code"]);
+      expect(opened).toHaveBeenCalledTimes(1);
+      expect(error).not.toHaveBeenCalled();
+      expect((await rotated.get(key))?.refreshToken).toBe("fresh-refresh");
+      await expect(vault.get(key)).rejects.toMatchObject({ name: "ConnectorVaultError" });
+    } else {
+      expect(grants).toEqual([]);
+      expect(opened).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith("Reconnect this source account.\n");
+      expect(JSON.stringify(error.mock.calls)).not.toContain(rotatedKey);
+      await expect(rotated.get(key)).rejects.toMatchObject({ name: "ConnectorVaultError" });
+      expect((await vault.get(key))?.refreshToken).toBe("first-refresh");
+    }
+  });
+  it("never starts login for a missing credential when interactive login is disabled", async () => {
+    const path = await configPath();
+    const { transport } = fixturePod();
+    const interactive = vi.spyOn(loopback, "authorizeLoopback");
+    const error = vi.fn();
+    expect(
+      await runCli(["import", "spotify"], {
+        configPath: path,
+        podTransport: transport,
+        sourceTransport: vi.fn(),
+        interactiveLogin: false,
+        stdout: vi.fn(),
+        stderr: error,
+      }),
+    ).toBe(3);
+    expect(interactive).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("Reconnect this source account.\n");
+  });
+  it.each([
+    "directory",
+    "key",
+  ])("requires a key for --vault and warns for a key alone: %s", async (setting) => {
+    const path = await configPath();
+    const { transport } = fixturePod();
+    const interactive = vi.spyOn(loopback, "authorizeLoopback").mockResolvedValue({
+      accessToken: "fixture",
+      tokenType: "Bearer",
+      refreshToken: "must-not-save",
+    });
+    vi.stubEnv("CONNECTOR_VAULT_KEY", "");
+    const stderr = vi.fn();
+    expect(
+      await runCli(
+        ["import", "spotify", ...(setting === "directory" ? ["--vault", path + ".vault"] : [])],
+        {
+          configPath: path,
+          ...(setting === "key" ? { vaultKey: encodedKey } : {}),
+          podTransport: transport,
+          sourceTransport: fixtureFetch("spotify", spotifyAdapter.fixtures()),
+          stdout: vi.fn(),
+          stderr,
+        },
+      ),
+    ).toBe(setting === "directory" ? 2 : 0);
+    expect(interactive).toHaveBeenCalledTimes(setting === "directory" ? 0 : 1);
+    expect(stderr).toHaveBeenCalledWith(
+      setting === "directory"
+        ? "--vault requires CONNECTOR_VAULT_KEY.\n"
+        : "CONNECTOR_VAULT_KEY supplied without --vault; refresh credentials remain in memory.\n",
+    );
+    await expect(fsPromises.stat(path + ".vault")).rejects.toMatchObject({ code: "ENOENT" });
+    vi.unstubAllEnvs();
+  });
+  it("removes CONNECTOR_VAULT_KEY from the process environment right after reading it", async () => {
+    const { path, directory, vault, key } = await vaultFixture();
+    const { transport } = fixturePod();
+    vi.stubEnv("CONNECTOR_VAULT_KEY", encodedKey);
+    let during: string | undefined = "unread";
+    const source: typeof fetch = async (input, init) => {
+      during = process.env.CONNECTOR_VAULT_KEY;
+      if (String(input) === spotifyAdapter.oauth?.tokenEndpoint)
+        return Response.json({ access_token: "synthetic-access", refresh_token: "next" });
+      return fixtureFetch("spotify", spotifyAdapter.fixtures())(input, init);
+    };
+    try {
+      expect(
+        await runCli(["import", "spotify", "--vault", directory], {
+          configPath: path,
+          podTransport: transport,
+          sourceTransport: source,
+          stdout: vi.fn(),
+          stderr: vi.fn(),
+        }),
+      ).toBe(0);
+      expect(during).toBeUndefined();
+      expect("CONNECTOR_VAULT_KEY" in process.env).toBe(false);
+      // The key read from the environment was still used for the vault.
+      expect((await vault.get(key))?.refreshToken).toBe("next");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("rejects an invalid supplied key without exposing it in CLI diagnostics", async () => {
+    const path = await configPath();
+    const { transport } = fixturePod();
+    const error = vi.fn();
+    expect(
+      await runCli(["import", "spotify", "--vault", path + ".vault"], {
+        configPath: path,
+        vaultKey: "sensitive-invalid-key",
+        podTransport: transport,
+        stdout: vi.fn(),
+        stderr: error,
+      }),
+    ).toBe(2);
+    expect(error).toHaveBeenCalledWith("Cannot initialize connector vault.\n");
+  });
+  it("parses --vault once and advertises the environment key in help", async () => {
+    expect(parseImportArgs(["import", "spotify", "--vault", "/tmp/private"])).toEqual({
+      id: "spotify",
+      since: false,
+      file: undefined,
+      vault: "/tmp/private",
+    });
+    for (const flags of [["--vault"], ["--vault", "--since"], ["--vault", "a", "--vault", "b"]])
+      expect(() => parseImportArgs(["import", "spotify", ...flags])).toThrow();
+    const stdout = vi.fn();
+    await runCli(["--help"], { stdout });
+    expect(stdout.mock.calls[0]?.[0]).toContain("CONNECTOR_VAULT_KEY");
   });
 });

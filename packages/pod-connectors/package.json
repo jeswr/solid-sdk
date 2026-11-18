@@ -325,6 +325,10 @@
     "./youtube/*": {
       "types": "./dist/youtube/*.d.ts",
       "default": "./dist/youtube/*.js"
+    },
+    "./vault": {
+      "types": "./dist/vault.d.ts",
+      "default": "./dist/vault.js"
     }
   },
   "files": [
