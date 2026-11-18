@@ -5,10 +5,9 @@
 // an inline parser); writes serialise via n3.Writer (src/serialise.ts) and PUT
 // with If-Match on the ETag captured at read time.
 //
-// Auth is the caller's concern: pass no `fetch` and @solid/reactive-authentication
-// patches globalThis.fetch (the house pattern), or pass an authenticated fetch
-// explicitly. A read is WAC-gated by the server: a 401/403 surfaces as an
-// RdfFetchError with that status — discovery (a type-index hint) is NOT a grant,
+// Auth is the caller's concern: pass the pod-auth session's bounded auth.fetch
+// explicitly. Omitting it uses the unauthenticated global fetch. A read is
+// WAC-gated by the server: a 401/403 surfaces as an RdfFetchError with that status — discovery (a type-index hint) is NOT a grant,
 // so callers must handle the access error rather than assume readability.
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
@@ -21,7 +20,7 @@ export { RdfFetchError };
 
 /** Options for reading a health resource. */
 export interface ReadOptions {
-  /** An authenticated fetch; omit to use the patched `globalThis.fetch`. */
+  /** An authenticated fetch; omit to use the unauthenticated `globalThis.fetch`. */
   fetch?: typeof fetch;
   /** An abort signal for the GET. */
   signal?: AbortSignal;
@@ -66,7 +65,7 @@ export function emptyHealthDocument(): HealthDocument {
 
 /** Options for writing a health document back to a pod. */
 export interface WriteOptions {
-  /** An authenticated fetch; omit to use the patched `globalThis.fetch`. */
+  /** An authenticated fetch; omit to use the unauthenticated `globalThis.fetch`. */
   fetch?: typeof fetch;
   /**
    * The ETag from the read, sent as `If-Match` for an optimistic-concurrency

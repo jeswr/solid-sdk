@@ -1,19 +1,14 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
+// Playwright globalSetup for the shared sign-in e2e. Runs once after the
 // webServers (CSS@3000 + vite@5173) are up. It:
 //   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
 //   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
 //      so without this the app sees no display name / no storage and looks broken);
 //   3. seeds the conventional health RECORD DOCUMENT `health/record.ttl` with one
 //      `health:HealthRecord` + MANY `health:Observation` SIBLING SUBJECTS (the
-//      regression surface): pod-health's <HealthRecords> reads that ONE record
-//      document (useHealthRecords → readHealth → listHealthEntries), and the host App
-//      ALSO reads the WebID profile + (Type-Index discovery via `discoverHealthResource`)
-//      the index documents — several DISTINCT pod documents on load (a discovery CHAIN).
-//      Under the OLD reactive manager each of those documents paid a wasted 401; the
-//      proactive patch keeps the count flat. The observation count is the regression
-//      surface — the 401 count must NOT scale with it.
+//      view reads the single document and renders one row per entry. The sign-in spec
+//      checks that the records require authentication before and after login.
 // It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
 // the real OIDC popup login with this account; the seeded data is its pod contents).
 //
@@ -38,14 +33,12 @@ const PASSWORD = "test-password-123";
 // `discoverHealthResource` uses when no health:HealthRecord Type-Index registration
 // exists — `${podRoot}health/record.ttl`, a single record DOCUMENT, NOT the `health/`
 // container). We seed one health:HealthRecord + N health:Observation SIBLING SUBJECTS
-// INTO that one document; the view renders one row per entry — the observation count is
-// the regression surface (the 401 count must NOT scale with it).
+// INTO that one document; the view renders one row per entry.
 const POD_ROOT = `${BASE}/${POD}/`;
 const RECORD_DOC = `${POD_ROOT}health/record.ttl`;
 // The health-sector ontology namespace pod-health builds against (src/vocab.ts HEALTH).
-// The exact NS value is irrelevant to the budget — what matters is that the seeded
-// subjects use the SAME namespace the data layer reads, so they render as rows.
-const HEALTH = "https://TBD.example/solid/health#";
+// Seed the canonical namespace the data layer reads, so the entries render as rows.
+const HEALTH = "https://jeswr.org/ns/sectors/health#";
 const OBSERVATION_COUNT = 12;
 
 // Where the spec reads the seeded account + container facts.
@@ -156,19 +149,14 @@ export default async function globalSetup() {
     "text/turtle",
   );
 
-  // 4. seed the health RECORD DOCUMENT with one health:HealthRecord + MANY
-  //    health:Observation SIBLING SUBJECTS (the regression surface). They are sibling
-  //    subjects in the ONE record document (pod-health's HealthDocument lists records /
-  //    observations as sibling subjects — see src/model.ts), so the view renders N+1 rows
-  //    from ONE GET. The point of the budget is that the FEW distinct pod documents the
-  //    app reads on load (profile + the Type-Index discovery probe + this record doc) pay a
-  //    FLAT 401 count regardless of how many observations this document holds.
+  // 4. Seed one health:HealthRecord + several health:Observation sibling subjects.
+  // The view renders N+1 rows from the single record document.
   // NOTE: pod-health's Observation.effectiveTime accessor reads via NamedNodeAs.string —
   // it MUST be a NamedNode (an IRI pointing at a time:Instant), NOT an inline literal (a
   // literal throws "Term type must be NamedNode but was Literal" and the whole records load
   // errors with zero rows — the pod-mail blank-node-sender gotcha, this app's variant). We
   // therefore seed each observation WITHOUT effectiveTime (a dateless row renders fine; the
-  // budget needs the rows, not the dates) and only `health:value` (a decimal literal, which
+  // sign-in test needs the rows, not the dates) and only `health:value` (a decimal literal, which
   // the model's LiteralAs.number accessor reads correctly).
   // Create the `health/` CONTAINER before PUTting the record document into it (roborev
   // MEDIUM): CSS auto-creates intermediate containers on a resource PUT (so the e2e passes
@@ -193,7 +181,7 @@ ${observationTriples.join("\n")}
     "text/turtle",
   );
 
-  // 5. hand the spec the seeded facts (login credentials + the regression document).
+  // 5. Hand the spec the seeded facts (login credentials + the private document).
   writeFileSync(
     CREDS_PATH,
     JSON.stringify(
