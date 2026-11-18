@@ -186,8 +186,7 @@ async function createIndexDocument(indexUrl: string, fetchImpl?: typeof fetch): 
  * profile — when neither exists. Idempotent: existing registrations are left
  * untouched.
  *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch runs.
+ * @param fetchImpl - pod-auth's `auth.fetch` for authenticated pod access; defaults to public global fetch.
  */
 export async function ensureTypeRegistrations(opts: {
   webId: string;
