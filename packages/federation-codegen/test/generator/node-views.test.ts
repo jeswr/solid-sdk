@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 //
 // COMPOSITE PER-NODE VIEWS — the derivation (`deriveNodeViews`), the emitted
@@ -11,7 +12,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type ModelManifest, validateManifest } from "@jeswr/model-runtime";
+import { createParseScope, type ModelManifest, validateManifest } from "@jeswr/model-runtime";
 import { DataFactory } from "n3";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -229,6 +230,16 @@ describe("emitted model.js / model.d.ts — the per-node surface", () => {
     expect(dts).toContain("export declare const nodes: Readonly<Record<string, never>>;");
     expect(dts).not.toContain("CompositeNodeHandle");
   });
+
+  it("composite entity declarations accept the runtime's parse scope options", () => {
+    const dts = emitModelDts(manifest, views);
+    expect(dts).toContain(
+      'import type { EntityWrapper, ModelManifest, ParseOptions } from "@jeswr/model-runtime";',
+    );
+    expect(dts).toContain(
+      "parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): TreeData | undefined;",
+    );
+  });
 });
 
 describe("EXECUTION — the emitted per-node handles drive a real composite document", () => {
@@ -243,6 +254,20 @@ describe("EXECUTION — the emitted per-node handles drive a real composite docu
   writeFileSync(modelJsPath, emitModelJs(manifest, views));
 
   const resourceUrl = "https://pod.example/scrobbles/1.ttl";
+
+  it("generated composite parses honor a scope's budget and dataset binding", async () => {
+    const mod = await import(pathToFileURL(modelJsPath).href);
+    const store = mod.entities.Tree.build(resourceUrl, { note: "n", label: "L" });
+    const scope = createParseScope(store, { maxClassReads: 0 });
+    expect(mod.entities.Tree.parse(resourceUrl, store, { scope })).toBeUndefined();
+    expect(scope.exhausted).toBe(true);
+    expect(mod.entities.Tree.parse(resourceUrl, store, { scope: createParseScope(store) })).toEqual(
+      { note: "n", label: "L" },
+    );
+    expect(() =>
+      mod.entities.Tree.parse(resourceUrl, mod.entities.Tree.build(resourceUrl, {}), { scope }),
+    ).toThrow(TypeError);
+  });
 
   it.each([
     "https://ex.test/a|b",

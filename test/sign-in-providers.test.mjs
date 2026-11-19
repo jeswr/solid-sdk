@@ -244,28 +244,26 @@ describe("sign-in protocol checker", () => {
     expect(checkJwks(JSON.stringify({ keys: [ed] })).ok).toBe(true);
   });
 
-  it("rejects the test IdP's login form when it is served from another host", () => {
-    const testIdp = matrix.providers.find((p) => p.id === "test-idp");
+  it("rejects a provider's login page when it is served from another host or path", () => {
+    const { loginPage } = matrix.providers.find((p) => p.id === "solidcommunity");
     const final = {
       status: 200,
       location: null,
       contentType: "text/html",
-      body: '<title>Sign in to solid</title><input type="password">',
-      where: "idp.solid-test.jeswr.org/realms/solid/protocol/openid-connect/auth",
+      body: "<title>Solid</title>",
+      where: "solidcommunity.net/.account/",
     };
     const redirect = "https://app.example/callback";
-    expect(classifyAuthorizeEnd(final, redirect, testIdp.loginPage).ok).toBe(true);
+    expect(classifyAuthorizeEnd(final, redirect, loginPage).ok).toBe(true);
     for (const where of [
-      "evil.example/realms/solid/protocol/openid-connect/auth",
-      "idp.solid-test.jeswr.org.evil.example/realms/solid/protocol/openid-connect/auth",
-      "idp.solid-test.jeswr.org/realms/solid/login-actions/error",
+      "evil.example/.account/",
+      "solidcommunity.net.evil.example/.account/",
+      "solidcommunity.net/.account/error",
     ]) {
-      expect(classifyAuthorizeEnd({ ...final, where }, redirect, testIdp.loginPage).ok, where).toBe(
-        false,
-      );
+      expect(classifyAuthorizeEnd({ ...final, where }, redirect, loginPage).ok, where).toBe(false);
     }
     expect(
-      classifyAuthorizeEnd(final, redirect, { marker: testIdp.loginPage.marker }).ok,
+      classifyAuthorizeEnd(final, redirect, { marker: loginPage.marker }).ok,
       "an expectation without a host is not enough",
     ).toBe(false);
   });

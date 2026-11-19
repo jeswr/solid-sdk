@@ -18,24 +18,11 @@
   ],
   "providers": [
     {
-      "id": "test-idp",
-      "name": "idp.solid-test.jeswr.org",
-      "issuer": "https://idp.solid-test.jeswr.org",
-      "server": "prod-solid-server IdP broker (Keycloak upstream)",
-      "advertisedBy": "Home provider default in the Vite apps, Pod Manager and the App Store",
-      "fullLogin": "Playwright signs up a throwaway account through Drive, then signs in again with it (apps/pod-drive/web/tests/live)",
-      "loginPage": {
-        "at": "^idp\\.solid-test\\.jeswr\\.org/realms/[^/]+/protocol/openid-connect/auth$",
-        "marker": "type=\"password\"",
-        "$comment": "Keycloak's username and password form, reached through the broker"
-      }
-    },
-    {
       "id": "solidcommunity",
       "name": "solidcommunity.net",
       "issuer": "https://solidcommunity.net/",
       "server": "Community Solid Server",
-      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
+      "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS, the suite's default provider list, and the home-provider default in the Vite apps, Pod Manager, the App Store and app-session",
       "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page.",
       "loginPage": {
         "at": "^solidcommunity\\.net/\\.account/$",
@@ -76,6 +63,12 @@
       "server": "Node Solid Server 6",
       "removedOn": "2026-11-11",
       "why": "Its /authorize answers 401 to every Client Identifier Document client_id (checked from GitHub Actions for Drive and the suite), so no suite app can sign in there. Removed from @jeswr/pod-auth KNOWN_PROVIDERS; re-add with a live entry here once it accepts Client ID Documents or pod-auth gains a registration fallback."
+    },
+    {
+      "issuer": "https://idp.solid-test.jeswr.org",
+      "server": "prod-solid-server IdP broker (Keycloak upstream)",
+      "removedOn": "2026-11-19",
+      "why": "The maintainer is retiring the AWS host (solid-test.jeswr.org) to stop AWS costs. Apps now default their home provider to solidcommunity.net; real sign-in is covered by the local Community Solid Server suite (sign-in-local.yml)."
     }
   ]
 }

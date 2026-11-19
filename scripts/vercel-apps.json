@@ -133,5 +133,15 @@
     "originEnv": "APP_ORIGIN",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-migrator",
     "gitDeploymentEnabled": false
+  },
+  {
+    "project": "solid-agent-chat",
+    "rootDirectory": "apps/agent-chat",
+    "package": "@jeswr/app-agent-chat",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-agent-chat",
+    "gitDeploymentEnabled": false,
+    "clientIdDocument": false
   }
 ]

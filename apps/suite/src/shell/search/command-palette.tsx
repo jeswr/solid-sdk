@@ -14,7 +14,9 @@ import {
   DialogDescription,
   DialogTitle,
   Kbd,
+  type NavigationApp,
   suiteApps,
+  visibleNavigationApps,
 } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
 import { type MouseEvent, useRef, useState } from "react";
@@ -46,6 +48,7 @@ export interface CommandPaletteProps {
   onOpenHelp?: (returnTo: HTMLElement | null) => void;
   /** Opens the app launcher (02-suite-shell §3: Cmd/Ctrl+K → "Open app…"). */
   onOpenApps?: () => void;
+  apps?: readonly NavigationApp[];
   showBacklog?: boolean;
 }
 export const appShortcutKeys: Partial<Record<AppSlug, string>> = {
@@ -70,6 +73,7 @@ export function CommandPalette({
   onSearch,
   onOpenHelp,
   onOpenApps,
+  apps = suiteApps,
   showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
 }: CommandPaletteProps) {
   const router = useRouter();
@@ -83,15 +87,13 @@ export function CommandPalette({
     run();
   };
   const navigation = [
-    ...suiteApps
-      .filter((app) => app.status !== "backlog" || showBacklog)
-      .map((app) => ({
-        id: app.slug,
-        label: app.name,
-        href: app.basePath,
-        keys: appShortcutKeys[app.slug],
-        app: app.slug,
-      })),
+    ...visibleNavigationApps(apps, showBacklog).map((app) => ({
+      id: app.slug,
+      label: app.name,
+      href: app.basePath,
+      keys: appShortcutKeys[app.slug],
+      app: app.slug,
+    })),
     { id: "settings", label: "Settings", href: "/settings", keys: "g s", app: undefined },
     {
       id: "notifications",

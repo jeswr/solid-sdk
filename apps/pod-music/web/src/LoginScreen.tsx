@@ -6,7 +6,7 @@
 import { type FormEvent, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 
-const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://idp.solid-test.jeswr.org";
+const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://solidcommunity.net/";
 
 export function LoginScreen() {
   const { login, loggingIn, error, ready } = useSession();
@@ -38,7 +38,7 @@ export function LoginScreen() {
             type="url"
             inputMode="url"
             autoComplete="url"
-            placeholder="https://you.solid-test.jeswr.org/profile/card#me"
+            placeholder="https://you.solidcommunity.net/profile/card#me"
             value={webIdInput}
             onChange={(ev) => setWebIdInput(ev.target.value)}
             disabled={loggingIn}

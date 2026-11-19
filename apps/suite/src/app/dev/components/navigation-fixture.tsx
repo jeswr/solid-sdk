@@ -10,10 +10,11 @@ import {
   type NavigationError,
   type RailPreferences,
   RailPreferencesProvider,
-  suiteApps,
 } from "@jeswr/suite-ui";
 import { Bell, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSuiteEnvironment } from "@/shell/environment";
+import { appRegistry, visibleApps } from "@/shell/registry";
 
 const errors: readonly NavigationError[] = [
   "reauth",
@@ -33,19 +34,32 @@ export function NavigationFixture({
 }: {
   component: "AppRail" | "AppLauncher" | "BottomTabBar";
 }) {
+  const env = useSuiteEnvironment();
   const [state, setState] = useState("ready");
   const [value, setValue] = useState<RailPreferences>({ pinned: defaultRailPins });
   const [message, setMessage] = useState("");
   useEffect(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem("suite-dev-fixture-rail") ?? "null");
-      if (Array.isArray(saved) && saved.every((slug) => suiteApps.some((app) => app.slug === slug)))
+      if (
+        Array.isArray(saved) &&
+        saved.every((slug) => appRegistry.some((app) => app.slug === slug))
+      )
         setValue({ pinned: [...new Set(saved)].slice(0, 6) });
     } catch {
       /* The fixture remains usable when browser storage is unavailable. */
     }
   }, []);
-  const apps: NavigationApp[] = (state === "unavailable" ? [] : suiteApps).map((app) => ({
+  // Keep a future-app scenario for the flag/grouping contract as real apps leave backlog.
+  const candidates =
+    state === "backlog"
+      ? appRegistry.map((app) =>
+          app.slug === "calendar" ? { ...app, status: "backlog" as const } : app,
+        )
+      : appRegistry;
+  const apps: NavigationApp[] = (
+    state === "unavailable" ? [] : visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS, candidates)
+  ).map((app) => ({
     ...app,
     create:
       app.slug === "docs"
@@ -104,7 +118,9 @@ export function NavigationFixture({
       setMessage("App preferences reloaded");
     },
   };
-  const launcher = <AppLauncher currentApp="drive" apps={apps} />;
+  const launcher = (
+    <AppLauncher currentApp="drive" apps={apps} showBacklog={env.NEXT_PUBLIC_SHOW_BACKLOG_APPS} />
+  );
   return (
     <RailPreferencesProvider value={binding}>
       <div
@@ -118,6 +134,7 @@ export function NavigationFixture({
           <AppRail
             currentApp="drive"
             apps={apps}
+            showBacklog={env.NEXT_PUBLIC_SHOW_BACKLOG_APPS}
             notifications={
               <button
                 type="button"
@@ -180,6 +197,7 @@ export function NavigationFixture({
                 "empty",
                 "cached",
                 "unavailable",
+                "backlog",
                 ...errors,
               ].map((option) => (
                 <option key={option} value={option}>
@@ -193,7 +211,13 @@ export function NavigationFixture({
           {component === "AppRail" && (
             <p>The 56px app rail appears from 768px. On small screens, use More below.</p>
           )}
-          {component !== "AppLauncher" && <BottomTabBar currentApp="drive" apps={apps} />}
+          {component !== "AppLauncher" && (
+            <BottomTabBar
+              currentApp="drive"
+              apps={apps}
+              showBacklog={env.NEXT_PUBLIC_SHOW_BACKLOG_APPS}
+            />
+          )}
           {component === "BottomTabBar" && <p>The five-slot app bar appears below 768px.</p>}
           {component === "BottomTabBar" && (
             <div className="fixture-desktop-launcher">{launcher}</div>

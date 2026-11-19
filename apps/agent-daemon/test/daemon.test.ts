@@ -85,6 +85,7 @@ function harness() {
     plan: () => ({ channel: "websocket", reason: "fixture" }),
   };
   const executor = {
+    status: vi.fn(async () => "running" as const),
     runOutboxOnce: vi.fn(async () => ({})),
     onControlOrMandateChange: vi.fn(async () => ({})),
     onApprovalChange: vi.fn(async () => ({})),

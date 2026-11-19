@@ -18,6 +18,14 @@ export interface NavigationApp {
   status: "first-cut" | "parity" | "backlog";
   create?: readonly CreateAction[];
 }
+
+/** Shared admission rule for rails, tabs and launcher groups. */
+export function visibleNavigationApps<T extends NavigationApp>(
+  apps: readonly T[],
+  showBacklog: boolean,
+): T[] {
+  return apps.filter((app) => showBacklog || app.status !== "backlog");
+}
 export const suiteApps: readonly NavigationApp[] = [
   { slug: "home", name: "Home", basePath: "/home", status: "first-cut" },
   { slug: "drive", name: "Drive", basePath: "/drive", status: "first-cut" },
@@ -36,12 +44,14 @@ export const suiteApps: readonly NavigationApp[] = [
       "music",
       "money",
       "health",
+      "agent",
     ] as const
   ).map((slug) => ({
     slug,
     name: slug.charAt(0).toUpperCase() + slug.slice(1),
     basePath: `/${slug}`,
-    status: "backlog" as const,
+    // These apps now have working routes in the suite, including the interim shell.
+    status: "first-cut" as const,
   })),
 ];
 export const defaultRailPins: readonly AppSlug[] = [

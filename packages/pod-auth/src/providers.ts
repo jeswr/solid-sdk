@@ -269,6 +269,7 @@ export function createProviders(
       selected: LoginHint,
     ): Promise<void>;
   },
+  lifetime: AbortSignal,
 ) {
   const transport = nonReactiveFetch();
   const insecure = options.allowInsecureLoopback === true;
@@ -292,7 +293,11 @@ export function createProviders(
     ? new URL("/.well-known/pod-auth/native-bootstrap", options.clientId as string).href
     : redirectUri;
   // The redirect remains a configuration discriminator, never a native resource context.
-  const namespace = JSON.stringify(["pod-auth", options.clientId, redirectUri]);
+  const metadataNamespace = JSON.stringify(["pod-auth", options.clientId, redirectUri]);
+  const namespace =
+    options.sessionScope === undefined
+      ? metadataNamespace
+      : JSON.stringify([metadataNamespace, options.sessionScope]);
   const browser =
     options.storage === undefined && typeof indexedDB !== "undefined"
       ? createBrowserCaches(namespace, { persistSessions: true, wrapFenceStore: protectStore })
@@ -314,7 +319,7 @@ export function createProviders(
     const store =
       options.storage === undefined
         ? fallback
-        : scopedStore<T>(options.storage.caches, namespace + ":" + name);
+        : scopedStore<T>(options.storage.caches, metadataNamespace + ":" + name);
     return store === undefined ? undefined : protectStore(store);
   };
   let hint: LoginHint = {};
@@ -473,6 +478,7 @@ export function createProviders(
     silentAfterRefreshFailure: true,
     silentFirst: false,
     sessionLock: persistence.lock,
+    revocationSignal: lifetime,
   };
   const solidProvider = new DPoPTokenProvider(
     redirectUri,
@@ -662,7 +668,7 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
-    restore: async (account: import("./sessions.js").ActiveAccount) => {
+    restore: async (account: import("./sessions.js").ActiveAccount, signal: AbortSignal) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.
       restoredContext = { selected, context: account.context };
@@ -670,7 +676,9 @@ export function createProviders(
       hint = selected;
       selections.clear();
       const generation = await fence.generation();
-      const request = new Request(account.requestUrl, { signal: fence.signalFor(generation) });
+      const request = new Request(account.requestUrl, {
+        signal: AbortSignal.any([signal, fence.signalFor(generation)]),
+      });
       const claims = await solidProvider.restore(request);
       if (claims === undefined) return undefined;
       if (claims.webId !== account.webId || !sameIssuer(claims.issuer, account.issuer)) {
@@ -682,6 +690,7 @@ export function createProviders(
       return claims;
     },
     logout: async () => {
+      lifetime.throwIfAborted();
       boundary.clear();
       const failures: unknown[] = [];
       // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
@@ -690,6 +699,7 @@ export function createProviders(
       } catch (error) {
         failures.push(error);
       }
+      lifetime.throwIfAborted();
       try {
         await manager.logout();
       } catch (error) {

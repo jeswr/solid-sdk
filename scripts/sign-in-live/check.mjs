@@ -20,7 +20,7 @@
 // table goes to $GITHUB_STEP_SUMMARY when set. Dependency-free: Node 24 built-ins only.
 //
 //   node scripts/sign-in-live/check.mjs                       # every provider, every app
-//   SIGN_IN_PROVIDERS=test-idp,teamid node scripts/sign-in-live/check.mjs
+//   SIGN_IN_PROVIDERS=solidcommunity,teamid node scripts/sign-in-live/check.mjs
 import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

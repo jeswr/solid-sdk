@@ -248,6 +248,12 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
   to the instance are revoked (RFC 7009) when the server supports it, after local cleanup releases the fence
   lock. Each revocation has a five-second deadline and aborts on timeout; failures reject logout after local
   state is cleared. Logout does not end the session at the identity provider.
+  `OidcSessionOptions.revocationSignal` lets an owning instance cancel revocation requests, stalled
+  response bodies and their deadlines on disposal. Aborting it alone does not purge session stores;
+  an explicit logout still performs its local cleanup before revocation.
+- With `preserveRefreshOnFailure`, rotation replaces the durable record in one write under the existing
+  refresh lock and fence commit, before profile revalidation. Readers see the old or replacement record,
+  without a deletion gap. A failed replacement removes the consumed credential and propagates the error.
 - `OidcSession.identity()` returns `undefined` if logout supersedes its session while a cache or durable
   store read is pending. Store failures still reject the lookup; reading identity never starts a login.
 - Namespaces isolate applications, client configurations and accounts; they are a convention, not a security

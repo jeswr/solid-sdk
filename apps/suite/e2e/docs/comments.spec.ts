@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { expect, test } from "@playwright/test";
 import { seedDemoSession } from "../demo-session";
 
 test.beforeEach(async ({ page }) => {
+  // App routes sit behind the shell session guard; start signed in to the demo account.
+  await seedDemoSession(page);
   await page.route("**/__docs-comments-reset", (route) =>
     route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Reset demo</title>" }),
   );
@@ -99,11 +102,11 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await thread.getByRole("button", { name: "Reopen", exact: true }).click();
   await expect(thread.getByText("Resolved", { exact: true })).toHaveCount(0);
   await expect(highlight).toHaveText("word");
-  await expect(page.getByRole("button", { name: "Comments (1 open)", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Comments, 1 open", exact: true })).toBeVisible();
   await page.reload();
   await expect(body).toContainText("A word first. Before word after");
   await expect(highlight).toHaveText("word");
-  await page.getByRole("button", { name: "Comments (1 open)", exact: true }).click();
+  await page.getByRole("button", { name: "Comments, 1 open", exact: true }).click();
   await expect(panel.getByRole("article")).toContainText("Check this word");
   await expect(panel.getByRole("article")).toContainText("Agreed");
   await expect(author).toHaveCount(2);

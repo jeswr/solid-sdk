@@ -127,6 +127,6 @@ NOT re-typechecked here; `src/pod-drive-ui.d.ts` declares the consumed surface),
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod. |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | Sign-in card | `https://idp.solid-test.jeswr.org` | Home provider, shown first. |
+| `VITE_HOME_IDP` | Sign-in card | `https://solidcommunity.net/` | Home provider, shown first. |
 | `VITE_HOME_IDP_NAME` | Sign-in card | Provider host | Home provider display name. |
 | `VITE_KNOWN_PROVIDERS` | Sign-in card | Shared provider directory | Comma-separated HTTPS provider URLs. |

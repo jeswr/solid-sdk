@@ -63,6 +63,12 @@ Tests use fake fetch and portable pods only. Run lint, build, typecheck and test
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.
 
+The HTTP transport exports `TemporarilyUnavailable` from `@jeswr/solid-mcp/http`.
+Throw it from `authenticate` when a required dependency cannot be checked: return 503,
+a fixed JSON-RPC error and `Retry-After: 5`, with no `WWW-Authenticate`, retaining allowed-origin
+CORS. Other authentication throws remain 401 challenges. Never disclose callback diagnostics
+or create a server after either failure.
+
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 Memory tools use `NanopubStore` through the current PodPort and PodOutput. Trusted
 `clientInfo.clientId` is an absolute IRI; tool input must never select deletion
