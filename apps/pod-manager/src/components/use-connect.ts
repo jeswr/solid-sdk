@@ -16,7 +16,8 @@
 import { createFetchPodWriter, createSourceAuth } from "@jeswr/pod-connectors";
 import { useCallback, useRef, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
-import { authorize } from "@/lib/integrations/core/oauth";
+import { authorize, OAUTH_CALLBACK_PATH } from "@/lib/integrations/core/oauth";
+import { BASE_PATH } from "@/lib/base-path";
 import {
   type ImportReport,
   runImport,
@@ -57,7 +58,12 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
       let token = getToken(adapter.metadata.id);
       if (live && !token && adapter.oauth) {
         setState({ phase: "authorizing" });
-        token = await authorize(adapter.metadata.id, adapter.oauth, sourceFetch);
+        token = await authorize(
+          adapter.metadata.id,
+          adapter.oauth,
+          sourceFetch,
+          new URL(`${BASE_PATH}${OAUTH_CALLBACK_PATH}`, location.origin).href,
+        );
         setToken(adapter.metadata.id, token);
       }
 
