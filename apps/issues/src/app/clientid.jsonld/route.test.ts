@@ -7,7 +7,7 @@
 //   - `/`             (the autologin full-page-redirect return target).
 // An OP rejects any redirect_uri not listed here, so a missing app-root entry would
 // break autologin in production. This test pins both (FIX-1).
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORIGIN = "https://issues.solid-test.jeswr.org";
 
@@ -41,5 +41,24 @@ describe("clientid.jsonld route — redirect_uris (FIX-1)", () => {
     // offline_access keeps the autologin redirect path able to mint a refresh token.
     expect(doc.scope).toContain("offline_access");
     expect(doc.grant_types).toContain("refresh_token");
+  });
+});
+
+describe("clientid.jsonld route — under a base path (GitHub Pages)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("prefixes client_id, both redirect_uris and client_uri with the base path", async () => {
+    vi.stubEnv("APP_ORIGIN", "https://jeswr.github.io");
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/solid-sdk/issues");
+    vi.resetModules();
+    const { GET } = await import("./route");
+    const doc = JSON.parse(await GET().text());
+    const base = "https://jeswr.github.io/solid-sdk/issues";
+    expect(doc.client_id).toBe(`${base}/clientid.jsonld`);
+    expect(doc.redirect_uris).toEqual([`${base}/callback.html`, `${base}/`]);
+    expect(doc.client_uri).toBe(`${base}/`);
   });
 });

@@ -10,19 +10,21 @@
  * local dev/e2e (`next dev -p 3200` / the static e2e server on :3200); a
  * production build MUST set it to the deployed origin, e.g.
  *
- *   NEXT_PUBLIC_APP_ORIGIN=https://app.solid-test.jeswr.org npm run build
+ *   NEXT_PUBLIC_APP_ORIGIN=https://jeswr.github.io NEXT_PUBLIC_BASE_PATH=/solid-sdk/pod-manager npm run build
  *
- * (the `build:prod` script does exactly that). The runtime side
- * (session-provider.tsx) derives the client_id it sends from `location.href`,
- * so the two agree iff the site is served at NEXT_PUBLIC_APP_ORIGIN.
+ * (scripts/build-pages.mjs does exactly that). The runtime side (lib/pod-auth.ts)
+ * derives the client_id it sends from `location.origin` plus the base path, so the
+ * two agree iff the site is served at NEXT_PUBLIC_APP_ORIGIN + NEXT_PUBLIC_BASE_PATH.
  */
+import { BASE_PATH } from "@/lib/base-path";
+
 export const dynamic = "force-static";
 
 export function GET(): Response {
-  const origin = (process.env.NEXT_PUBLIC_APP_ORIGIN ?? "http://localhost:3200").replace(
+  const origin = `${(process.env.NEXT_PUBLIC_APP_ORIGIN ?? "http://localhost:3200").replace(
     /\/+$/,
     "",
-  );
+  )}${BASE_PATH}`;
   const clientId = `${origin}/clientid.jsonld`;
   const callback = `${origin}/callback.html`;
 

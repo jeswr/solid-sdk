@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
+import { BASE_PATH } from "./base-path";
 
 export interface MessageEventLike {
   origin: string;
@@ -108,7 +109,7 @@ export class PopupLoginController {
           const callback = new URL(event.data);
           if (
             callback.origin !== this.#options.expectedOrigin ||
-            callback.pathname !== "/callback.html"
+            callback.pathname !== `${BASE_PATH}/callback.html`
           )
             return;
         } catch {

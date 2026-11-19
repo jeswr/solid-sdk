@@ -19,6 +19,7 @@ import { classifyRestoreError, shouldAttemptRestore, shouldClearStoredSession } 
 import { clearAllIssueCaches } from "@/lib/issue-cache";
 import type { RestorableSession, WebIdDPoPTokenProvider } from "@/lib/webid-token-provider";
 import { planAutologin } from "@/lib/autologin-plan";
+import { appPath } from "@/lib/base-path";
 import {
   consumePendingRedirectWebId,
   hasPendingRedirectLogin,
@@ -364,7 +365,7 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       // registration — which works against both local CSS and live servers.
       const host = location.hostname;
       const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
-      const clientId = isLoopback ? undefined : new URL("/clientid.jsonld", location.href).toString();
+      const clientId = isLoopback ? undefined : new URL(appPath("/clientid.jsonld"), location.href).toString();
 
       // Snapshot the PRISTINE fetch — before `manager.registerGlobally()` below
       // patches `globalThis.fetch` — and pin BOTH the WebID-profile read and the
@@ -378,7 +379,7 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
       const pristineFetch = globalThis.fetch.bind(globalThis);
 
       const provider = new WebIdDPoPTokenProvider(
-        new URL("/callback.html", location.href).toString(),
+        new URL(appPath("/callback.html"), location.href).toString(),
         ui.getCode.bind(ui),
         // getWebId — resolves to the WebID the user submitted via login() or the
         // WebID being silently restored.
@@ -566,7 +567,7 @@ export function SolidSessionProvider({ children }: { children: ReactNode }) {
     setError(null);
     setStatus("autologin");
 
-    const redirectReturnUri = new URL("/", location.href).toString();
+    const redirectReturnUri = new URL(appPath("/"), location.href).toString();
     provider
       .beginRedirectLogin(redirectReturnUri)
       .then(({ authorizationUrl }) => {

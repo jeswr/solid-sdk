@@ -158,3 +158,40 @@ describe("gesture-owned popup", () => {
     expect(popup.closed).toBe(true);
   });
 });
+
+describe("served under a base path", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+  it("accepts only the callback page under the base path", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/solid-sdk/pod-manager");
+    vi.resetModules();
+    const { PopupLoginController: Controller } = await import("./popup-login");
+    const listeners = new Set<(event: MessageEventLike) => void>();
+    const popup = { location: { href: "about:blank" }, closed: false, close: vi.fn() };
+    const controller = new Controller({
+      expectedOrigin: ORIGIN,
+      windowRef: {
+        open: vi.fn(() => popup),
+        addEventListener: (_: "message", callback: (event: MessageEventLike) => void) => {
+          listeners.add(callback);
+        },
+        removeEventListener: (_: "message", callback: (event: MessageEventLike) => void) => {
+          listeners.delete(callback);
+        },
+      },
+      pollMs: 20,
+      timeoutMs: 500,
+    });
+    controller.open();
+    const result = controller.getCode(URL_AUTH, new AbortController().signal);
+    const post = (data: string) => {
+      for (const listener of listeners) listener({ origin: ORIGIN, source: popup, data });
+    };
+    post(CALLBACK); // the domain-root callback is not this app's
+    const based = `${ORIGIN}/solid-sdk/pod-manager/callback.html?code=complete&state=check`;
+    post(based);
+    await expect(result).resolves.toBe(based);
+  });
+});

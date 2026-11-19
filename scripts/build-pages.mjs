@@ -26,14 +26,37 @@ function withRouteRestore(html, base) {
   return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${restore}`);
 }
 
+function vercelApps(root) {
+  return JSON.parse(readFileSync(join(root, "scripts/vercel-apps.json"), "utf8"));
+}
+
+const slugOf = (app) => app.project.replace(/^solid-(?:sdk-)?/, "");
+
 export function pagesApps(root) {
-  return JSON.parse(readFileSync(join(root, "scripts/vercel-apps.json"), "utf8"))
+  return vercelApps(root)
     .filter((app) => app.framework === "vite")
-    .map((app) => ({ ...app, slug: app.project.replace(/^solid-(?:sdk-)?/, "") }));
+    .map((app) => ({ ...app, slug: slugOf(app) }));
+}
+
+// Next.js apps with a static export (`out/`), served from real per-route HTML files rather
+// than an SPA fallback. Each reads its base path from NEXT_PUBLIC_BASE_PATH and its origin
+// from the `originEnv` in vercel-apps.json; `env` adds what its static build needs.
+const NEXT_STATIC_APPS = [
+  { project: "solid-pod-manager", env: {} },
+  { project: "solid-sdk-issues", env: { APP_STATIC_EXPORT: "1" } },
+];
+
+export function pagesNextApps(root) {
+  const all = vercelApps(root);
+  return NEXT_STATIC_APPS.map(({ project, env }) => {
+    const app = all.find((candidate) => candidate.project === project);
+    if (app?.framework !== "next") throw new Error(`Unknown Next.js Pages app: ${project}`);
+    return { ...app, slug: slugOf(app), staticEnv: env };
+  });
 }
 
 /** Assemble one Pages artifact, including the site-wide SPA fallback Pages uses. */
-export function assemblePages(root, apps) {
+export function assemblePages(root, apps, nextApps = []) {
   const destination = join(root, ".pages");
   rmSync(destination, { recursive: true, force: true });
   mkdirSync(destination, { recursive: true });
@@ -47,6 +70,10 @@ export function assemblePages(root, apps) {
     writeFileSync(join(output, "index.html"), html);
     writeFileSync(join(output, "404.html"), html);
   }
+  for (const app of nextApps) {
+    cpSync(join(root, app.rootDirectory, "out"), join(destination, app.slug), { recursive: true });
+  }
+  const listed = [...apps, ...nextApps];
   const index = `<!doctype html>
 <!-- AUTHORED-BY Codex GPT-6 -->
 <html lang="en">
@@ -59,7 +86,7 @@ export function assemblePages(root, apps) {
     <main>
       <h1>Solid Suite apps</h1>
       <ul>
-${apps.map((app) => `        <li><a href="${pagesBase}${app.slug}/">${app.slug}</a></li>`).join("\n")}
+${listed.map((app) => `        <li><a href="${pagesBase}${app.slug}/">${app.slug}</a></li>`).join("\n")}
       </ul>
     </main>
   </body>
@@ -91,10 +118,15 @@ function run(root, args, env = process.env) {
 
 export function buildPages(root, slugs = []) {
   const available = pagesApps(root);
+  const availableNext = pagesNextApps(root);
   for (const slug of slugs) {
-    if (!available.some((app) => app.slug === slug)) throw new Error(`Unknown Pages app: ${slug}`);
+    if (![...available, ...availableNext].some((app) => app.slug === slug))
+      throw new Error(`Unknown Pages app: ${slug}`);
   }
   const apps = slugs.length ? available.filter((app) => slugs.includes(app.slug)) : available;
+  const nextApps = slugs.length
+    ? availableNext.filter((app) => slugs.includes(app.slug))
+    : availableNext;
   // Build workspace dependencies first. App builds below bypass Turbo so their
   // explicit --base and CLIENT_BASE_PATH can never reuse a domain-root build.
   run(root, [
@@ -103,7 +135,7 @@ export function buildPages(root, slugs = []) {
     "run",
     "build",
     "--concurrency=4",
-    ...apps.map((app) => `--filter=${app.package}^...`),
+    ...[...apps, ...nextApps].map((app) => `--filter=${app.package}^...`),
   ]);
   for (const app of apps) {
     const base = `${pagesBase}${app.slug}/`;
@@ -114,7 +146,16 @@ export function buildPages(root, slugs = []) {
       CLIENT_BASE_PATH: base,
     });
   }
-  assemblePages(root, apps);
+  for (const app of nextApps) {
+    run(root, ["--dir", app.rootDirectory, "run", "build"], {
+      ...process.env,
+      ...app.staticEnv,
+      // biome-ignore lint/suspicious/noUndeclaredEnvVars: This CLI runs outside Turbo; each app's build reads its own origin variable.
+      [app.originEnv]: process.env.APP_ORIGIN || "https://jeswr.github.io",
+      NEXT_PUBLIC_BASE_PATH: `${pagesBase}${app.slug}`,
+    });
+  }
+  assemblePages(root, apps, nextApps);
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
