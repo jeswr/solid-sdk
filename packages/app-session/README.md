@@ -58,7 +58,7 @@ so pod-auth discards any grant it obtained; before, such a late login could stil
 session. Both cases are pinned in tests.
 
 `LoginScreen` accepts `appName`, `knownProviders` (comma-separated addresses), `homeIdp`,
-`homeIdpName` and `dev`. Its default home is `https://idp.solid-test.jeswr.org`; remaining providers
+`homeIdpName` and `dev`. Its default home is `https://solidcommunity.net/`; remaining providers
 come from pod-auth's directory. The sign-in card stylesheet is imported by the React entry.
 Host applications retain their layout CSS and signed-in views.
 

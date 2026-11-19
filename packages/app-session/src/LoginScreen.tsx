@@ -20,7 +20,7 @@ export interface SignInProviderOptions {
 
 export function signInProviders(options: SignInProviderOptions = {}): SignInProvider[] {
   const providers = providersFromConfig(options.knownProviders, KNOWN_PROVIDERS);
-  const home = options.homeIdp ?? "https://idp.solid-test.jeswr.org";
+  const home = options.homeIdp ?? "https://solidcommunity.net/";
   if (
     classifyLoginInput(home, {
       allowInsecureLoopback: allowInsecureLoopback(options.dev ?? false),

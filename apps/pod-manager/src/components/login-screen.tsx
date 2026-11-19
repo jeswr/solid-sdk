@@ -19,7 +19,7 @@ import { allowInsecureLoopback } from "@/lib/auth-environment";
 
 export function signInProviders(): SignInProvider[] {
   const providers = providersFromConfig(process.env.NEXT_PUBLIC_KNOWN_PROVIDERS, KNOWN_PROVIDERS);
-  const home = process.env.NEXT_PUBLIC_HOME_IDP ?? "https://idp.solid-test.jeswr.org";
+  const home = process.env.NEXT_PUBLIC_HOME_IDP ?? "https://solidcommunity.net/";
   if (classifyLoginInput(home, { allowInsecureLoopback: allowInsecureLoopback() }) === "invalid")
     return providers;
   const issuer = new URL(home.trim()).href;
