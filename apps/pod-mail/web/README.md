@@ -132,4 +132,4 @@ consumed surface), `npm test` (the verbatim auth-seam unit tests), `npm run buil
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod (`https://mail.solid-test.jeswr.org`). |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | `LoginScreen` hint | `https://solidcommunity.net/` | Display only — the auth issuer always comes from the WebID profile. |
