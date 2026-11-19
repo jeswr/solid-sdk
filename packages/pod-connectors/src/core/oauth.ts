@@ -168,14 +168,23 @@ export async function exchangeCodeForToken(
 /**
  * Run the full popup flow in the browser and return the token set.
  * Browser-only (uses `window`); the UI calls this for live-mode connects.
+ *
+ * `callbackPage` is the app's own callback page; it defaults to
+ * {@link OAUTH_CALLBACK_PATH} at the origin root and must be same-origin
+ * (an app served under a base path passes its prefixed callback).
  */
 export async function authorize(
   adapterId: string,
   cfg: OAuthAppConfig,
   sourceFetch: typeof fetch,
+  callbackPage: string = new URL(OAUTH_CALLBACK_PATH, window.location.href).toString(),
 ): Promise<TokenSet> {
   if (!cfg.clientId) throw new IntegrationAuthError(adapterId, "not-configured");
-  const redirectUri = new URL(OAUTH_CALLBACK_PATH, window.location.href).toString();
+  const redirect = new URL(callbackPage, window.location.href);
+  if (redirect.origin !== window.location.origin) {
+    throw new TypeError("The OAuth callback must be on the app's own origin");
+  }
+  const redirectUri = redirect.toString();
   const { verifier, challenge } = await generatePkcePair();
   const state = generateState();
   const authUrl = buildAuthorizationUrl(cfg, { state, challenge, redirectUri });

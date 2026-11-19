@@ -86,8 +86,12 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pod Manager is a static export published on GitHub Pages at
+<https://jeswr.github.io/solid-sdk/pod-manager/> by `scripts/build-pages.mjs` (the `pages`
+workflow), which sets `NEXT_PUBLIC_APP_ORIGIN` and `NEXT_PUBLIC_BASE_PATH`. `npm run build:prod`
+reproduces that build locally. The Dockerfile and `deploy/Caddyfile` are the earlier
+self-hosted setup on solid-test.jeswr.org, which was retired in November 2026 to stop AWS costs.
+The data-integration OAuth apps registered against that host's `/oauth-callback.html` need new
+redirect URIs before those integrations work from Pages.

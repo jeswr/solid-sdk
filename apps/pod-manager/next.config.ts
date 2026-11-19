@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   // trailingSlash stays false: routes export as `<route>.html`, matching the
   // Caddyfile's `try_files {path} {path}.html /index.html`.
   output: "export",
+  // Served from a sub-path on GitHub Pages (jeswr.github.io/solid-sdk/pod-manager/):
+  // scripts/build-pages.mjs sets NEXT_PUBLIC_BASE_PATH. Unset, the app is at the root.
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, "") || undefined,
   webpack(config) {
     // The data layer (`src/lib/`) uses explicit `.js` extensions on relative
     // imports — correct for Node's ESM resolver (and what tsc/vitest expect),

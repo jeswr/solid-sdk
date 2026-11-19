@@ -14,12 +14,13 @@
 // For local dev / a localhost build it defaults to http://localhost:3200. (Next
 // requires `dynamic` to be a static literal, so this is not conditional.)
 import { buildOrigin } from "@/lib/app-origin";
+import { appPath } from "@/lib/base-path";
 
 export const dynamic = "force-static";
 
 export function GET(): Response {
   const origin = buildOrigin();
-  const at = (path: string) => new URL(path, origin).toString();
+  const at = (path: string) => new URL(appPath(path), origin).toString();
   const document = {
     "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
     client_id: at("/clientid.jsonld"), // MUST equal this document's own URL
