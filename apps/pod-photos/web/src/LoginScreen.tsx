@@ -6,7 +6,7 @@
 import { type FormEvent, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 
-const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://idp.solid-test.jeswr.org";
+const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://solidcommunity.net/";
 
 export function LoginScreen() {
   const { login, loggingIn, error, ready } = useSession();
