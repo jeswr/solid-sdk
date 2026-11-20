@@ -62,10 +62,14 @@ export function browserEnv(): PasskeyEnv {
       isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
     };
   };
+  type Policy = {
+    allowsFeature: (feature: string) => boolean;
+    features?: () => readonly string[];
+  };
   const doc = w.document as
     | (Document & {
-        permissionsPolicy?: { allowsFeature: (feature: string) => boolean };
-        featurePolicy?: { allowsFeature: (feature: string) => boolean };
+        permissionsPolicy?: Policy;
+        featurePolicy?: Policy;
       })
     | undefined;
   let storage: Storage | undefined;
@@ -80,10 +84,13 @@ export function browserEnv(): PasskeyEnv {
     platformAvailable: pkc?.isUserVerifyingPlatformAuthenticatorAvailable
       ? () => pkc.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? Promise.resolve(false)
       : undefined,
-    allows: (ceremony) =>
-      (doc?.permissionsPolicy ?? doc?.featurePolicy)?.allowsFeature(
-        `publickey-credentials-${ceremony}`,
-      ) ?? w.self === w.top,
+    allows: (ceremony) => {
+      const policy = doc?.permissionsPolicy ?? doc?.featurePolicy;
+      const feature = `publickey-credentials-${ceremony}`;
+      if (policy?.features?.().includes(feature)) return policy.allowsFeature(feature);
+      // Older browsers can support WebAuthn without exposing its policy directive.
+      return w.self === w.top;
+    },
     rpId: w.location?.hostname ?? "",
     origin: w.location?.origin ?? "",
     storage,

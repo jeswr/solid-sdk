@@ -10,6 +10,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { Engine } from "../src/engine/engine.js";
 import {
+  browserEnv,
   checkResponse,
   forgetPasskey,
   type PasskeyEnv,
@@ -116,6 +117,41 @@ function assertion(
     };
   };
 }
+
+describe("browser WebAuthn policy", () => {
+  it.each([
+    { recognized: false, topLevel: true, allowed: false, expected: true },
+    { recognized: false, topLevel: false, allowed: false, expected: false },
+    { recognized: true, topLevel: true, allowed: false, expected: false },
+    { recognized: true, topLevel: false, allowed: true, expected: true },
+  ])("preflights registration with $recognized recognition, $topLevel top-level, and $allowed permission", async ({
+    recognized,
+    topLevel,
+    allowed,
+    expected,
+  }) => {
+    const self = {};
+    const feature = "publickey-credentials-create";
+    const allowsFeature = vi.fn(() => allowed);
+    vi.stubGlobal("self", self);
+    vi.stubGlobal("top", topLevel ? self : {});
+    vi.stubGlobal("document", {
+      featurePolicy: {
+        features: () => ["publickey-credentials-get", ...(recognized ? [feature] : [])],
+        allowsFeature,
+      },
+    });
+    try {
+      const e = env({ create: registration() }, { allows: browserEnv().allows });
+      const result = await verifyUser(DIGEST, "Sam", e);
+      expect(result.status).toBe(expected ? "verified" : "failed");
+      expect(e.calls).toEqual(expected ? ["create"] : []);
+      expect(allowsFeature.mock.calls).toEqual(recognized ? [[feature]] : []);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe("verifyUser", () => {
   it("registers a platform passkey on first use, requiring user verification", async () => {

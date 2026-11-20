@@ -605,15 +605,19 @@ export class Engine {
     const waiting = this.resolver;
     this.resolver = undefined;
     this.set({ pending: undefined });
-    this.markStub(pending.chatId, requestId, "expired");
+    this.markApprovalExpired(pending.chatId, pending.request);
+    waiting?.resolve(undefined);
+  }
+
+  private markApprovalExpired(chatId: string, request: ApprovalRequest): void {
+    this.markStub(chatId, request.id, "expired");
     this.log({
       outcome: "stop",
       filter: "asked",
-      summary: `Approval expired: ${pending.request.title}`,
-      checks: pending.request.checks,
-      digest: pending.request.digest,
+      summary: `Approval expired: ${request.title}`,
+      checks: request.checks,
+      digest: request.digest,
     });
-    waiting?.resolve(undefined);
   }
 
   private clearApprovalAttempt(): void {
@@ -829,8 +833,12 @@ export class Engine {
       await this.leadIn(chatId, action, gate, run);
       const decision = await this.ask(chatId, request, summary, run);
       this.guard(run);
-      const expired = () => this.now().getTime() >= Date.parse(request.expiresAt);
-      if (!decision || expired()) return { result: "expired", action };
+      const expireIfDue = () => {
+        const expired = this.now().getTime() >= Date.parse(request.expiresAt);
+        if (expired) this.markApprovalExpired(chatId, request);
+        return expired;
+      };
+      if (!decision || expireIfDue()) return { result: "expired", action };
       if (decision.type === "deny") {
         this.markStub(chatId, request.id, "denied");
         if (request.offered.some((o) => o.role === "standing"))
@@ -850,11 +858,11 @@ export class Engine {
         if (this.isRuleRevoked(rule)) return { result: "denied", action };
         const revocation = retirement && (await signRecord(this.key, retirement));
         this.guard(run);
-        if (expired()) return { result: "expired", action };
+        if (expireIfDue()) return { result: "expired", action };
         if (this.isRuleRevoked(rule)) return { result: "denied", action };
         consentJws = await signRecord(this.key, record);
         this.guard(run);
-        if (expired()) return { result: "expired", action };
+        if (expireIfDue()) return { result: "expired", action };
         if (this.isRuleRevoked(rule)) return { result: "denied", action };
         if (revocation) this.ruleRecords.push(revocation);
         this.ruleRecords.push(consentJws);
@@ -885,6 +893,7 @@ export class Engine {
       if (decision.type === "step-up") {
         const attestation = await this.sign(run, "org:idp", decision.payload);
         this.guard(run);
+        if (expireIfDue()) return { result: "expired", action };
         this.attestations.set(digest, attestation);
         this.markStub(chatId, request.id, "approved-once");
         authority = "You completed a face check";
@@ -893,7 +902,7 @@ export class Engine {
       action = decision.action;
       const jws = await signRecord(this.key, decision.record);
       this.guard(run);
-      if (expired()) return { result: "expired", action };
+      if (expireIfDue()) return { result: "expired", action };
       this.approvalRecords.set(decision.record.actionDigest, jws);
       consentJws = jws;
       authority =

@@ -71,6 +71,48 @@ test("mortgage: share only what is needed, face check, signed decision", async (
   await expect(page.getByText("up to $285,000")).toBeVisible({ timeout: 20_000 });
 });
 
+test("editing a disclosure during a keyboard hold requires a fresh hold", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/?demo=1");
+  await page.getByRole("button", { name: "Get a mortgage decision in principle" }).first().click();
+  await page.getByRole("button", { name: "Go with North Bank" }).click();
+  const shareAll = page.getByRole("button", { name: /^Share 3/ });
+  const employer = page.getByRole("switch", { name: "Share Employer" });
+  await expect(shareAll).toBeVisible();
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(new Date(now + 1000));
+  await shareAll.focus();
+  await page.keyboard.down("Space");
+  await expect(shareAll).toHaveText("Keep holding…");
+  await employer.focus();
+  await page.keyboard.press("Enter");
+  await expect(employer).toHaveAttribute("aria-checked", "false");
+  await page.clock.runFor(1200);
+  const verification = page.getByRole("dialog", { name: "Confirm it is you" });
+  await expect(verification).toHaveCount(0);
+  await page.keyboard.up("Space");
+
+  const shareReduced = page.getByRole("button", { name: /^Share 2/ });
+  await shareReduced.focus();
+  await page.keyboard.down("Space");
+  await page.clock.runFor(1200);
+  await expect(verification).toBeVisible();
+  await page.keyboard.up("Space");
+  await page.clock.resume();
+  await confirmDemo(page);
+  await expect(
+    page.getByRole("heading", { name: /Harbour Bank needs a face check/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Not now", exact: true }).click();
+  await expect(
+    page.getByText(/Without the face check Harbour Bank will not release/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Activity", exact: true }).first().click();
+  await expect(
+    page.getByText("Shared income, bank balance with North Bank", { exact: true }),
+  ).toBeVisible();
+});
+
 test("stop cancels a pending approval", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Find me running sneakers under $25" }).first().click();

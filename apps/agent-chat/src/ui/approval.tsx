@@ -14,7 +14,7 @@ import {
   type RuleScope,
   summarizeDraft,
 } from "@jeswr/agent-consent";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Engine } from "../engine/engine.js";
 import type { ProductView } from "../engine/types.js";
 import { AGENT_NAME } from "../engine/world.js";
@@ -37,17 +37,21 @@ export function HoldToConfirm({
   const [holding, setHolding] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const start = () => {
+    if (timer.current !== undefined) return;
     setHolding(true);
     timer.current = setTimeout(() => {
+      timer.current = undefined;
       setHolding(false);
       onConfirm();
     }, 1200);
   };
   const cancel = () => {
-    setHolding(false);
     clearTimeout(timer.current);
+    timer.current = undefined;
+    setHolding(false);
   };
-  useEffect(() => () => clearTimeout(timer.current), []);
+  // A terms change remounts the button. Clear the old timer during that commit.
+  useLayoutEffect(() => () => clearTimeout(timer.current), []);
   return (
     <button
       type="button"
@@ -365,7 +369,11 @@ export function LimitEditor({
       )}
       <div className="actions">
         {valid ? (
-          <HoldToConfirm label="Hold to set limit" onConfirm={() => onConfirm(draft)} />
+          <HoldToConfirm
+            key={JSON.stringify(draft)}
+            label="Hold to set limit"
+            onConfirm={() => onConfirm(draft)}
+          />
         ) : (
           <button type="button" className="btn primary block" disabled>
             Hold to set limit
@@ -478,6 +486,7 @@ export function ApprovalSheet({
   };
 
   const missingRequired = offeredFields.some((f) => f.required && !keep.has(f.id));
+  const shareSelection = JSON.stringify([...keep]);
   const visible = request.offered.filter((o) => o.type !== "share-less");
   const primary = visible.filter((o) => o.role === "primary");
   const standing = visible.filter((o) => o.role === "standing");
@@ -658,7 +667,11 @@ export function ApprovalSheet({
                       {label}
                     </button>
                   ) : (
-                    <HoldToConfirm key={o.id} label={label} onConfirm={() => choose(o)} />
+                    <HoldToConfirm
+                      key={`${o.id}:${shareSelection}`}
+                      label={label}
+                      onConfirm={() => choose(o)}
+                    />
                   );
                 })}
                 {standing.map((o) =>
@@ -674,7 +687,7 @@ export function ApprovalSheet({
                       </button>
                     ) : (
                       <HoldToConfirm
-                        key={o.id}
+                        key={`${o.id}:${shareSelection}`}
                         label={o.label}
                         primary={false}
                         onConfirm={() => choose(o)}
