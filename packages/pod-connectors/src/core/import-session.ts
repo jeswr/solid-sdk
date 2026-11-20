@@ -9,6 +9,7 @@ import { registrationsFor } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
 import type {
   BinaryDoc,
+  ConnectorRunCounts,
   ConnectorState,
   ConnectorStateOptions,
   ImportOutcome,
@@ -61,6 +62,23 @@ export function createImportSession(
   const registrations = new Map<string, TypeRegistrationRequest>();
   // Retain one counter per document, never identifiers for every imported subject.
   const itemCounts = new Map<string, number>();
+  const changes = new Map<string, "created" | "updated" | "unchanged">();
+  const changesCount = { created: 0, updated: 0, unchanged: 0 };
+  const tracking = options.trackChanges === true || options.onRunCounts !== undefined;
+  function counts(skipped = 0): ConnectorRunCounts {
+    return { ...changesCount, skipped };
+  }
+  const contentOnly = (dataset: DatasetCore) => {
+    const result = copyDataset();
+    for (const quad of dataset) {
+      if (
+        quad.predicate.value !== `${PROV}wasGeneratedBy` &&
+        quad.predicate.value !== `${PROV}wasDerivedFrom`
+      )
+        result.add(quad);
+    }
+    return result;
+  };
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
   ): WriteConditions | undefined =>
@@ -130,7 +148,24 @@ export function createImportSession(
       item.generatedBy.add(activityUrl);
       if (used.size < maxRunSources) used.add(origin);
     }
+    const before = tracking && previous ? contentOnly(previous.dataset) : undefined;
+    const after = tracking ? contentOnly(dataset) : undefined;
+    const unchanged =
+      before && after && before.size === after.size && [...after].every((q) => before.has(q));
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
+    if (tracking) {
+      const priorChange = changes.get(url);
+      const change =
+        priorChange === "created" || !previous
+          ? "created"
+          : unchanged && priorChange !== "updated"
+            ? "unchanged"
+            : "updated";
+      if (priorChange) changesCount[priorChange]--;
+      changes.set(url, change);
+      changesCount[change]++;
+      options.onRunCounts?.(counts());
+    }
     let registered = result;
     if (doc.registrationContainer !== undefined) {
       const container = writer.resolve(doc.registrationContainer);
@@ -166,6 +201,10 @@ export function createImportSession(
     reads.delete(url);
     await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
     itemCounts.delete(url);
+    const priorChange = changes.get(url);
+    if (priorChange) changesCount[priorChange]--;
+    changes.delete(url);
+    options.onRunCounts?.(counts());
     const index = written.findIndex((w) => w.url === url);
     if (index !== -1) written.splice(index, 1);
   }
@@ -207,6 +246,7 @@ export function createImportSession(
   function state(outcome?: ImportOutcome): ConnectorState {
     const success = outcome !== undefined;
     return {
+      ...options.state,
       connectedAt: options.state?.connectedAt ?? started.toISOString(),
       lastSync: success ? new Date().toISOString() : options.state?.lastSync,
       cursor: success ? (outcome.cursor ?? options.state?.cursor) : options.state?.cursor,
@@ -226,6 +266,8 @@ export function createImportSession(
     writeBinary,
     remove,
     written,
+    counts,
+    tracking,
     /** Document-level accounting, exposed read-only for diagnostics. */
     itemCounts: itemCounts as ReadonlyMap<string, number>,
     /** Bounded run provenance summary, exposed read-only for diagnostics. */

@@ -279,3 +279,42 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+CON-A2 adds root-exported ConnectorScheduler and owner-only JSON settings/state ports.
+Read the README's Scheduled connectors contract before changing them. Preserve the
+whole-container run claim even for different accounts, the continuous worker pool
+(single-flight, cap, drain on stop), bounded connection/concurrency/JSON/retry limits,
+transport cancellation, allowlisted health codes and legacy checkpoint projection.
+Invalid settings rows are skipped one by one as `invalid-config`; one connection's
+failure never rejects a tick. `health.counts` describe the latest attempt's document
+changes; old `counts` remain the last successful import's document/item counters. Keep
+account cursors separate (legacy cursor only for a sole connection; never rewrite root
+checkpoint fields), merge fresh snapshots after 412, distrust timestamps more than five
+minutes ahead (follow a trusted attempt's back-off; with none, a future-dated stored time
+makes the connection due now; persist no future lastSync/connectedAt) and never roll
+back a newer successful cursor. Reauth (or two consecutive 401s; 403 stays a backed-off
+`forbidden` failure and never invalidates) is latched durably, recording the row's
+`enabledAt` in `latchedEnabledAt`, until that value changes (string compare) or an
+explicit setEnabled, which takes priority over pool claims for its container. The
+latch's settings disable is conditional on the row's enabledAt being unchanged;
+`saveConnection`/`update` resolve `"superseded"` when it was skipped. The in-memory row
+is disabled only while it still carries the run-start enabledAt and the save was not
+superseded; otherwise the current row stays untouched. `TokenSource.invalidate` runs
+only for the grant in use for the rejected run, after an applied (or row-removed) save
+with no superseding enabledAt; vaults discard only a token matching that grant.
+Cancellation starts no further state/config I/O. Before the token fetch a run writes
+an expiring claim (`state.claims[account]`, random holder, `expiresAt` = run limit +
+2 min finish + 5 min skew) conditionally; a 412 or another holder's unexpired claim skips
+quietly (no health), defers the connection until expiry, and only an expired (or
+implausibly distant) claim is taken over; the outcome's persist releases it. Each run
+is bounded by `runTimeoutMs` (default 15 min, 1 s to 2 h): its signal reaches token
+source, Pod writer, runner and transports, waits are cut only at the limit (shutdown
+still drains), and a timeout is a backed-off `timeout` failure; finishing I/O has its
+own 2 min bound. `NoVaultError` skips the run (claim released, no health/latch/settings,
+in-memory back-off). Validate a returned checkpoint before success; an unsavable one
+falls back to a health-only failed attempt so back-off is durable. Ok/partial runs are
+due at min(nextRunAt, lastRunEndedAt + interval). Owner-JSON ACL targets must be resource
+ACLs beside the document, never containers or container `.acl`s. Owner-JSON stores protect their ACL
+once per instance and on create, poll with If-None-Match, and `peek` is read-only.
+The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
+Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.

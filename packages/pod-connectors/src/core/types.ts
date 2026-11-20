@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
@@ -33,6 +34,8 @@ export interface IntegrationMetadata {
   readonly whatYouGet: string;
   /** Honest go-live notes: what the maintainer must register/deploy. */
   readonly requirements: readonly string[];
+  /** Registry scheduling default for API connectors; hosts may override (minimum 15). */
+  readonly defaultIntervalMinutes?: number;
 }
 
 /** OAuth2 endpoints + per-app parameters for the shared PKCE engine. */
@@ -246,12 +249,123 @@ export interface ConnectorState {
   readonly cursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+  /** Latest attempt, separate from the last successful checkpoint above. */
+  readonly health?: ConnectorRunHealth;
+  /** Independent cursors and health, keyed by a host-owned opaque account id. */
+  readonly accounts?: Readonly<Record<string, ConnectorAccountState>>;
+  /**
+   * Root only: expiring cross-host run claims keyed by account id. A scheduler writes its
+   * claim conditionally before fetching a token and removes it when the run ends; other
+   * hosts skip that connection until `expiresAt`.
+   */
+  readonly claims?: Readonly<Record<string, ConnectorRunClaim>>;
+}
+
+export type ConnectorAccountState = Omit<ConnectorState, "accounts" | "claims">;
+
+/** A cross-host run claim: a random per-run holder id and its expiry instant (ISO). */
+export interface ConnectorRunClaim {
+  readonly holder: string;
+  readonly expiresAt: string;
+}
+
+export interface ConnectorRunCounts {
+  readonly created: number;
+  readonly updated: number;
+  readonly unchanged: number;
+  readonly skipped: number;
+}
+
+export type ConnectorErrorClass =
+  | "reauthorise"
+  | "rate-limited"
+  | "unauthorised"
+  | "forbidden"
+  | "conflict"
+  | "source-or-pod"
+  | "unexpected"
+  | "aborted"
+  /** The run exceeded the scheduler's run time limit. */
+  | "timeout";
+
+export interface ConnectorRunHealth {
+  readonly lastRunStartedAt: string;
+  readonly lastRunEndedAt: string;
+  readonly outcome: "ok" | "partial" | "failed" | "needs-reauth";
+  readonly counts: ConnectorRunCounts;
+  readonly errorClass?: ConnectorErrorClass;
+  readonly consecutiveFailures: number;
+  readonly nextRunAt?: string;
+  /**
+   * needs-reauth only: the connection row's `enabledAt` this latch was set against, or ""
+   * when the row had none. The latch clears when the row's value differs (string compare).
+   */
+  readonly latchedEnabledAt?: string;
+  /** The effective interval used for stale classification. */
+  readonly intervalMinutes: number;
+}
+
+/** The vault lane supplies this port. Credentials must never enter persisted state. */
+export interface TokenSource {
+  /**
+   * The run's signal aborts at shutdown or the run time limit; the scheduler stops waiting
+   * then even if the vault ignores it. Throw ReauthoriseError for a missing or revoked
+   * grant and NoVaultError when this host has no vault at all.
+   */
+  accessToken(connectorId: string, account: string, signal?: AbortSignal): Promise<string>;
+  /**
+   * Optional: discard a cached grant confirmed invalid — called only after two
+   * consecutive source 401 (access token rejected) outcomes, never for 403s, rate limits
+   * or other failures. Failures here never fail the run.
+   *
+   * It is called only for the grant that was in use for the rejected run, and never when
+   * an owner re-enable superseded the latch (the row's `enabledAt` changed during the run,
+   * in memory or in the stored settings) or the settings write failed or was cancelled.
+   * The call can still race a reconnection, so implementations should discard only a
+   * token matching that grant (e.g. the one they last returned from `accessToken`),
+   * never a newer grant the owner has just supplied.
+   */
+  invalidate?(connection: {
+    readonly connectorId: string;
+    readonly account: string;
+  }): Promise<void> | void;
+}
+
+/** A missing or revoked vault grant requires explicit owner re-enablement. */
+export class ReauthoriseError extends Error {
+  constructor() {
+    super("Connector authorisation is required.");
+    this.name = "ReauthoriseError";
+  }
+}
+
+/**
+ * This host has no token vault (a capability gap, not a revoked grant). The scheduler
+ * skips the run without recording health, latching needs-reauth or changing settings.
+ */
+export class NoVaultError extends Error {
+  constructor() {
+    super("No token vault on this host.");
+    this.name = "NoVaultError";
+  }
+}
+
+/** The host settings row disappeared while a run was in flight; callers skip quietly. */
+export class ConnectionRemovedError extends Error {
+  constructor() {
+    super("Connector connection was removed.");
+    this.name = "ConnectionRemovedError";
+  }
 }
 
 export interface ConnectorStateOptions {
   readonly state?: ConnectorState;
   /** Called after completion or failure; failures retain the previous checkpoint. */
   readonly onState?: (state: ConnectorState) => void;
+  /** Bounded document accounting, also emitted after partial writes. */
+  readonly onRunCounts?: (counts: ConnectorRunCounts) => void;
+  /** Opt into document change comparisons; a counts listener also enables them. */
+  readonly trackChanges?: boolean;
 }
 
 export interface IntegrationAdapter {

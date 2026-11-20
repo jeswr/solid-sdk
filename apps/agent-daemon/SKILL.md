@@ -91,3 +91,19 @@ The normal daemon derives stable task labels before model invocation from accoun
 import location and raw digest, and stamps TaskContext on successful/failed model
 calls and proposal evidence. Preserve replay identities independently of model output.
 Unassigned legacy counters remain visible separately in JSON and CSV statistics.
+
+CON-A2 adds createConnectorsJob and `awp connectors`. The job is opt-in: composeDaemon
+creates it only for `connectors: { enabled: true }`, which `awp run|once --connectors`
+requests from the lazy composition; embedded hosts inject it explicitly. Keep settings at
+owner-only integrations/connections.json, state at the existing connector state.json, and
+the pendingVaultTokenSource stub throwing NoVaultError (skip: no needs-reauth, no shared
+settings change) until sst-3erb supplies the trusted vault port. Connector failures never
+fault the daemon: once mode runs the pass after ingest and runOutboxOnce, bounded by the
+job's run limit (default 15 min) and wrapped in try/catch; run mode polls with its own 30 s→30 min back-off and fixed log messages.
+Poll settings with conditional GETs over long-lived stores (ACL once per store), keep
+listing read-only, and abort and drain the job before executor drain and lease release on
+both local/launchd and cloud hosts. CLI health lists project opaque ids and
+classifications only (including invalid-config), and logs use fixed messages. Never infer
+transports, OAuth config or credentials from connection JSON. Re-enable is the owner's
+durable `enabledAt`. See the README's scheduler job section and pod-connectors' scheduler
+contract.
