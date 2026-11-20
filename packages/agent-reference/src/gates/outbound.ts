@@ -2500,6 +2500,7 @@ export class OutboundGate {
         { reason: approved ? "minimal-disclosure" : "approval-required" },
       );
       if (!approved) {
+        this.setAction(intent);
         this.decide(
           "ask-principal",
           "Approval of the proposed definition is required before relying on it.",
@@ -3075,6 +3076,7 @@ export class OutboundGate {
           (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.autonomous, request).effect !==
             "prohibited";
         const outcome = canAsk ? "ask-principal" : "stop";
+        if (canAsk) this.setAction(intent);
         this.decide(
           outcome,
           "The task context is not clear for this text, recipient and purpose.",

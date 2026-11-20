@@ -46,7 +46,12 @@ import {
 } from "../mechanisms/forum.js";
 import { JOINT_OPERATIONS, JointParty } from "../mechanisms/joint.js";
 import type { SigningKey } from "../mechanisms/jws.js";
-import { mandateSchema, type OwnerMandate, signMandate } from "../mechanisms/mandate.js";
+import {
+  actionDigest,
+  mandateSchema,
+  type OwnerMandate,
+  signMandate,
+} from "../mechanisms/mandate.js";
 import { MandateStatusLists } from "../mechanisms/mandate-status.js";
 import { LocalDocumentResolver } from "../mechanisms/organizations.js";
 import { LocalResourceHolder, type ResourceReference } from "../mechanisms/references.js";
@@ -121,7 +126,13 @@ import { scenarioRegistry } from "../suites/scenario.js";
 import { PresentedFederationResolver } from "../suites/trust-federation.js";
 import { ReputationResolver } from "../suites/trust-reputation.js";
 import { TraceRecorder } from "../trace/recorder.js";
-import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../trace/types.js";
+import {
+  type OutlineEntry,
+  outlineOf,
+  TRACE_SCHEMA,
+  type TraceEvent,
+  type TraceFile,
+} from "../trace/types.js";
 import { TrustResolver } from "../trust/resolver.js";
 import { AgreementCredentialProtocol } from "../wire/agreement-credential.js";
 import { alterDocumentForTest, changeSelectiveSalt } from "../wire/document-faults.js";
@@ -130,10 +141,13 @@ import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
 import {
+  type ComparisonRun,
+  compareBranch,
+  comparisonOutcome,
   continuedReleaseProblem,
   decisionsOf,
-  firstBranchDivergence,
-  firstCatalogueFailure,
+  describeStep,
+  witnessedDecision,
 } from "./compare.js";
 import { patchDifferences } from "./confinement.js";
 import { identityNameDifferences } from "./confinement-policy.js";
@@ -179,16 +193,28 @@ export interface PathResult {
   readonly blocked?: string;
   readonly actual?: { outcome: string; reason?: string; check?: string };
   readonly expected?: { outcome: string; reason: string };
-  readonly consequences?: readonly {
-    seq: number;
-    agent: string;
-    outcome: string;
-    reason?: string;
-  }[];
+  readonly consequences?: readonly ManifestDecision[];
+  readonly setup?: readonly ManifestDecision[];
   readonly disagrees?: boolean;
   readonly note?: string;
   readonly matches?: boolean;
   readonly difference?: { index: number; expected?: OutlineEntry; actual?: OutlineEntry };
+}
+
+interface ManifestDecision {
+  readonly seq: number;
+  readonly agent: string;
+  readonly outcome: string;
+  readonly reason?: string;
+}
+
+function manifestDecision(event: TraceEvent): ManifestDecision {
+  return {
+    seq: event.seq,
+    agent: event.agent,
+    outcome: required(event.outcome),
+    ...(event.reason ? { reason: event.reason } : {}),
+  };
 }
 
 /** A literal deep patch; arrays replace, objects merge. No code is evaluated. */
@@ -432,6 +458,10 @@ export async function runScenario(
       .map((branch) => ({ ...branch, kind: "branch" as const })),
   ];
   const results: PathResult[] = [];
+  let mainRun: ComparisonRun | undefined;
+  const anyPermissiveBranch = paths.some(
+    (path) => path.kind === "branch" && ["go", "admit"].includes(path.expect?.outcome ?? ""),
+  );
   const exercisedStress = new Set<Scenario["stress"][number]>();
   for (const path of paths) {
     const world = scenarioSchema.parse(patch(configured, path.change));
@@ -507,8 +537,17 @@ export async function runScenario(
         "The engine refuses test-double verifiers outside an explicit in-memory test run; no runs row or trace may be written.",
       );
     for (const check of world.stress) exercisedStress.add(check);
+    const judgedAgentId = "judgedAgent" in path ? path.judgedAgent : undefined;
+    const judgedParty = judgedAgentId
+      ? world.parties.find((party) => party.id === judgedAgentId && party.runs === "agent")
+      : undefined;
+    if (judgedAgentId && !judgedParty)
+      throw new Error(
+        `${scenario.id}/${path.id}: judgedAgent ${judgedAgentId} does not run an agent`,
+      );
+    const judgedAgent = judgedParty?.traceId ?? judgedParty?.id;
     const tracked = registryForRun(verifiers, options.testOnly);
-    const trace = await runPath(
+    const run = await runPath(
       pathProfile,
       world,
       path.id,
@@ -518,32 +557,41 @@ export async function runScenario(
         ...options,
         alternative,
         pathKind: path.kind,
+        judgedAgent,
+        collectEffects:
+          path.kind === "main"
+            ? anyPermissiveBranch || path.expect?.outcome === "go"
+            : ["go", "admit"].includes(path.expect?.outcome ?? ""),
         ...("onlyUnder" in path && path.onlyUnder ? { onlyUnder: path.onlyUnder } : {}),
       },
     );
+    const { trace } = run;
+    if (path.kind === "main") mainRun = run;
     if (tracked.usedTestDouble() && !options.testOnly)
       throw new Error(
         "The engine refuses a test-double verification attempt, including one caught as a verifier failure; no artifact may be written.",
       );
+    const orderedBranch = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
+    const expected =
+      path.catalogueExpected ??
+      (path.kind === "branch" && path.expect
+        ? { outcome: path.expect.outcome, reason: path.expect.reason }
+        : undefined);
+    const comparison =
+      path.kind === "branch"
+        ? compareBranch(mainRun, run, {
+            judgedAgent,
+            witness: path.expect,
+            expectedOutcome: expected?.outcome,
+            ordered: orderedBranch,
+          })
+        : undefined;
     if (path.expect && !world.requiredMethods.length) {
-      const expected = path.expect;
-      const decision = trace.events.find((event, index) => {
-        if (event.kind !== "decision" || event.outcome !== expected.outcome) return false;
-        return trace.events
-          .slice(0, index)
-          .some(
-            (check) =>
-              check.kind === "check" &&
-              check.check === expected.check &&
-              check.reason === expected.reason &&
-              check.agent === event.agent &&
-              check.part === event.part &&
-              check.gateRun === event.gateRun,
-          );
-      });
+      const witness = path.expect;
+      const decision = witnessedDecision(run, witness, judgedAgent);
       if (!decision)
         throw new Error(
-          `${scenario.id}/${path.id}: expected ${expected.check}/${expected.reason} -> ${expected.outcome}`,
+          `${scenario.id}/${path.id}: expected ${witness.check}/${witness.reason} -> ${witness.outcome}`,
         );
       if (
         path.expect.outcome === "stop" &&
@@ -559,10 +607,10 @@ export async function runScenario(
       ) {
         if (
           trace.events
-            .slice(decision?.seq ?? trace.events.length)
+            .slice(decision.seq)
             .some(
               (e) =>
-                e.agent === decision?.agent &&
+                e.agent === decision.agent &&
                 (e.effectRelease ||
                   e.kind === "store" ||
                   (e.kind === "message-out" &&
@@ -582,20 +630,16 @@ export async function runScenario(
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
-    const orderedBranch = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
     const decisions = decisionsOf(trace.events, orderedBranch);
-    const mainTrace = results.find((r) => r.pathKind === "main")?.trace;
-    const divergence =
-      path.kind === "branch" && mainTrace
-        ? (orderedBranch ? firstBranchDivergence : firstCatalogueFailure)(
-            decisionsOf(mainTrace.events, orderedBranch),
-            decisions,
-          )
-        : decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
-    const missingDecision = divergence === "missing-decision";
-    const firstFailure = missingDecision ? undefined : divergence;
-    const noDivergence = path.kind === "branch" && !!mainTrace && !divergence;
-    const judged = missingDecision ? undefined : (firstFailure ?? decisions.at(-1));
+    const firstDifference =
+      path.kind === "main"
+        ? decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""))
+        : comparison?.judged;
+    const missingDecision = comparison?.missingDecision;
+    const noDivergence = !!mainRun && comparison?.diverges === false;
+    const judged = missingDecision
+      ? undefined
+      : (firstDifference ?? decisions.findLast((e) => !judgedAgent || e.agent === judgedAgent));
     const judgedReason =
       judged?.reason ??
       (world.requiredMethods.length && judged
@@ -604,37 +648,30 @@ export async function runScenario(
             .findLast((e) => e.agent === judged.agent && e.kind === "check" && e.reason)?.reason
         : undefined);
     const check =
-      judged &&
-      trace.events
-        .slice(0, judged.seq - 1)
-        .findLast(
-          (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judgedReason,
-        )?.check;
+      orderedBranch || judged?.kind === "check"
+        ? judged?.check
+        : judged &&
+          trace.events
+            .slice(0, judged.seq - 1)
+            .findLast(
+              (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judgedReason,
+            )?.check;
     const actual =
-      !divergence && path.expect && !world.requiredMethods.length
+      !missingDecision && !firstDifference && path.expect && !world.requiredMethods.length
         ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
-        : judged?.outcome && ((orderedBranch && firstFailure) || judgedReason)
+        : judged?.outcome && ((orderedBranch && firstDifference) || judgedReason)
           ? {
               outcome: judged.outcome,
               ...(judgedReason ? { reason: judgedReason } : {}),
               ...(check ? { check } : {}),
             }
           : undefined;
-    const consequences = firstFailure
+    const setup = comparison?.setup.map(manifestDecision);
+    const consequences = firstDifference
       ? decisions
-          .filter((e) => e.seq > firstFailure.seq)
-          .map((e) => ({
-            seq: e.seq,
-            agent: e.agent,
-            outcome: e.outcome as string,
-            ...(e.reason ? { reason: e.reason } : {}),
-          }))
+          .filter((e) => e.seq > firstDifference.seq && (!judgedAgent || e.agent === judgedAgent))
+          .map(manifestDecision)
       : [];
-    const expected =
-      path.catalogueExpected ??
-      (path.kind === "branch" && path.expect
-        ? { outcome: path.expect.outcome, reason: path.expect.reason }
-        : undefined);
     results.push({
       path: path.id,
       pathKind: path.kind,
@@ -645,14 +682,14 @@ export async function runScenario(
       actual,
       expected,
       consequences,
+      ...(judgedAgent ? { setup } : {}),
       ...(missingDecision ? { note: "branch ended before the next main-path decision" } : {}),
       ...(noDivergence ? { note: "branch does not diverge from the main path" } : {}),
       disagrees:
-        missingDecision ||
-        (noDivergence && !("onlyUnder" in path && path.onlyUnder)) ||
+        !!missingDecision ||
+        noDivergence ||
         (!!expected &&
-          ((actual?.outcome === "refuse" ? "stop" : actual?.outcome) !==
-            (expected.outcome === "refuse" ? "stop" : expected.outcome) ||
+          (comparisonOutcome(actual?.outcome) !== comparisonOutcome(expected.outcome) ||
             actual?.reason !== expected.reason)),
       matches: !diff,
       ...(diff ? { difference: diff } : {}),
@@ -680,8 +717,10 @@ async function runPath(
     onlyUnder?: string;
     pathKind: PathResult["pathKind"];
     beforeSolidStep?: (fixture: SolidStepFixture) => void | Promise<void>;
+    judgedAgent?: string;
+    collectEffects?: boolean;
   },
-): Promise<TraceFile> {
+): Promise<ComparisonRun & { trace: TraceFile }> {
   // Brief 32: the faulty-gate stand-in runs only on a branch under accountability-vendor-fault
   // while that configuration is active.
   if (
@@ -2892,7 +2931,13 @@ async function runPath(
   const enqueue = (from: string, result: StepResult) => {
     for (const out of result.outbound) queue.push({ from, out });
   };
+  const steps = new Map<number, ReturnType<typeof describeStep>>();
+  const effectReleases = new Set<number>();
+  const effectSupport = new Map<number, readonly string[]>();
+  const approvedAsks = new Set<number>();
+  const pendingAsks = new Map<string, number>();
   for (const [index, step] of scenario.script.entries()) {
+    const firstEvent = recorder.events().length;
     if (scenario.gateFault?.at === step.id) {
       const fault = scenario.gateFault;
       const faulty = cast.get(fault.agent);
@@ -2968,6 +3013,19 @@ async function runPath(
     } else if (step.segment) recorder.segment("payment");
     const runtime = runtimes.get(step.agent);
     if (!runtime) throw new Error(`step ${step.id}: ${step.agent} does not run an agent`);
+    const traceAgent = parties.get(step.agent)?.traceId ?? step.agent;
+    const trackApprovals = options.judgedAgent && traceAgent !== options.judgedAgent;
+    const previousPending = trackApprovals ? runtime.pendingApprovals() : [];
+    const previouslyCompleted = options.collectEffects
+      ? new Set(
+          runtime
+            .effectStates()
+            .filter((effect) => effect.conclusion === "completed")
+            .map((effect) => effect.key),
+        )
+      : undefined;
+    let approvedDigest: string | undefined;
+    let effectIntent: ActionIntent | undefined;
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
     if (accessPod && options.beforeSolidStep)
       await options.beforeSolidStep({
@@ -3822,6 +3880,7 @@ async function runPath(
       case "approve": {
         const pending = runtime.pendingApprovals()[0];
         if (!pending) throw new Error(`${step.id}: no pending approval`);
+        if (trackApprovals && step.decision === "approve") approvedDigest = pending.actionDigest;
         result = await runtime.submitApproval(
           await cast.approval(
             step.agent,
@@ -3846,6 +3905,7 @@ async function runPath(
         enqueue(step.agent, result as StepResult);
         break;
       case "effect":
+        effectIntent = template<ActionIntent>(step.intent);
         result = await runtime.runTask({
           taskId: step.taskId ?? `urn:scenario:${scenario.id}:${step.id}`,
           kind: "scripted-effect",
@@ -3855,7 +3915,7 @@ async function runPath(
           plan: {
             adapter: step.adapter ?? "urn:scenario:effect",
             key: `urn:scenario:${scenario.id}:${step.id}`,
-            intent: template<ActionIntent>(step.intent),
+            intent: effectIntent,
             params: template<JsonObject>(step.params),
             activityType: step.activityType,
           },
@@ -4248,6 +4308,91 @@ async function runPath(
     if (recordMirror && !(await recordMirror.flush()))
       throw new Error("The principal record mirror is unavailable after a completed step");
     outputs[step.id] = result ?? null;
+    const events = recorder.events().slice(firstEvent);
+    const statementId = (id: string) => String(signed[id]?.statement.id ?? id);
+    const descriptor = describeStep(step, statementId);
+    // A receive step's scripted reply has not run when the inbound gate makes its decision.
+    const inboundDescriptor =
+      step.type === "receive" && step.reply
+        ? describeStep({ ...step, reply: undefined }, statementId)
+        : descriptor;
+    for (const event of events)
+      steps.set(event.seq, event.part === "inbound-gate" ? inboundDescriptor : descriptor);
+    const outboundDecisions = events.filter(
+      (event) =>
+        event.agent === traceAgent && event.part === "outbound-gate" && event.kind === "decision",
+    );
+    if (previouslyCompleted) {
+      const completed = new Set(
+        runtime
+          .effectStates()
+          .filter(
+            (effect) => effect.conclusion === "completed" && !previouslyCompleted.has(effect.key),
+          )
+          .map((effect) => effect.intentDigest),
+      );
+      const support = effectIntent?.parameters.support;
+      for (const event of outboundDecisions) {
+        if (
+          event.outcome !== "go" ||
+          !event.effectRelease ||
+          !event.actionDigest ||
+          !completed.has(event.actionDigest)
+        )
+          continue;
+        effectReleases.add(event.seq);
+        if (
+          effectIntent &&
+          event.actionDigest === actionDigest(effectIntent) &&
+          Array.isArray(support)
+        )
+          effectSupport.set(
+            event.seq,
+            support.filter((item): item is string => typeof item === "string"),
+          );
+      }
+    }
+    if (trackApprovals) {
+      const held = runtime.pendingApprovals();
+      const newPending = held.filter(
+        ({ actionDigest }) => !previousPending.some((p) => p.actionDigest === actionDigest),
+      );
+      const asks = outboundDecisions.filter((event) => event.outcome === "ask-principal");
+      const ask = asks.at(0);
+      const pending = newPending.at(0);
+      if (
+        asks.length === 1 &&
+        newPending.length === 1 &&
+        ask &&
+        pending &&
+        ask.actionDigest === pending.actionDigest
+      )
+        pendingAsks.set(`${traceAgent}|${pending.actionDigest}`, ask.seq);
+
+      // submitApproval signs the exact pending digest and resumes its own continuation.
+      // Require that reply and its first gate decision in this call before excluding the ask.
+      const reply = events.find(
+        (event) =>
+          event.agent === traceAgent &&
+          event.kind === "principal-reply" &&
+          event.approvalDecision === "approve" &&
+          event.actionDigest === approvedDigest,
+      );
+      if (approvedDigest && reply) {
+        const released = outboundDecisions.find((event) => event.seq > reply.seq);
+        const ask = pendingAsks.get(`${traceAgent}|${approvedDigest}`);
+        if (
+          ask !== undefined &&
+          released?.outcome === "go" &&
+          released.actionDigest === approvedDigest
+        )
+          approvedAsks.add(ask);
+      }
+      for (const { actionDigest } of previousPending) {
+        if (!held.some((pending) => pending.actionDigest === actionDigest))
+          pendingAsks.delete(`${traceAgent}|${actionDigest}`);
+      }
+    }
     if (step.segmentEnd) recorder.segmentEnd(step.segmentEnd);
     if (scenario.stopAfter === step.id) {
       recorder.segmentEnd("payment");
@@ -4257,7 +4402,7 @@ async function runPath(
   if (recordMirror && !(await recordMirror.flush()))
     throw new Error("The final principal record could not be mirrored");
   await recorder.complete();
-  return {
+  const trace: TraceFile = {
     schema: TRACE_SCHEMA,
     useCase: scenario.useCase ?? scenario.id,
     path:
@@ -4344,6 +4489,7 @@ async function runPath(
       : {}),
     events: recorder.events(),
   };
+  return { trace, events: trace.events, steps, effectReleases, effectSupport, approvedAsks };
 }
 
 /**

@@ -90,11 +90,14 @@ export class OriginHostedVerifier {
       const node = unsignedOriginRecord(await response.text());
       if (node.string("issuer") !== source || node.string("id") !== id) return undefined;
       this.observed.set(id, node);
+      const pointer = locator.string("pointer");
+      const ignoredPointer = pointer !== address ? pointer : undefined;
       this.sink?.emit({
         part: "transport",
         kind: "record",
+        ...(ignoredPointer ? { fault: "pointer-from-message" } : {}),
         caption:
-          locator.string("pointer") !== address
+          pointer !== address
             ? "The pointer in the message is ignored; the verifier fetched the unsigned product only from the register’s address. It cannot forward this observation as evidence."
             : "The verifier fetched the unsigned product from the register’s address and records only its own observation of origin.",
       });
@@ -102,8 +105,7 @@ export class OriginHostedVerifier {
         type: "origin-fetch",
         source,
         address,
-        ignoredPointer:
-          locator.string("pointer") !== address ? locator.string("pointer") : undefined,
+        ignoredPointer,
         record: id,
         digest: digestOf(node.toObject()),
         transferable: false,

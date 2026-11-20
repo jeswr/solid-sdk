@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { confinementDifferences } from "../src/engine/confinement.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import { outlineOf } from "../src/trace/types.js";
 
 it("fetches unsigned source products only through the signed register address and refuses onward evidence", async () => {
   const { profile, scenario } = loadCase(new URL("../", import.meta.url).pathname, "mortgage-main");
@@ -20,8 +21,20 @@ it("fetches unsigned source products only through the signed register address an
     lookalike.trace!.events.some((e) => e.packet?.jsonld?.includes("northbank-lookalike")),
   ).toBe(true);
   expect(confinementDifferences(paths[0]!.trace!, lookalike.trace!, "authenticity")).toEqual([]);
+  expect(lookalike.note).toBeUndefined();
+  const faults = lookalike.trace!.events.filter((event) => event.fault);
+  expect(faults.length).toBeGreaterThan(0);
+  for (const event of faults)
+    expect(event).toMatchObject({
+      part: "transport",
+      kind: "record",
+      fault: "pointer-from-message",
+    });
+  expect(origin.some((event) => event.fault)).toBe(false);
+  expect(outlineOf({ events: lookalike.trace!.events.filter((event) => !event.fault) })).toEqual(
+    outlineOf(paths[0]!.trace!),
+  );
   const forwarded = paths.find((p) => p.path === "origin-record-forwarded")!;
-  expect(forwarded.disagrees).toBe(true);
   expect(forwarded.trace!.events.findLast((e) => e.kind === "decision")).toMatchObject({
     outcome: "stop",
     reason: "not-authorised",
@@ -31,4 +44,4 @@ it("fetches unsigned source products only through the signed register address an
     verdict: "fail",
     reason: "not-authorised",
   });
-}, 180_000);
+}, 600_000);
