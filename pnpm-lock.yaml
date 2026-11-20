@@ -3585,10 +3585,10 @@ importers:
     dependencies:
       '@jeswr/federation-registry':
         specifier: github:jeswr/federation-registry#main
-        version: git+https://git@github.com:jeswr/federation-registry.git#601e8a4b4981b2876adb760b3d92179e9326de54
+        version: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54
       '@jeswr/solid-vc':
         specifier: github:jeswr/solid-vc#main
-        version: git+https://git@github.com:jeswr/solid-vc.git#bee27d508372e64021e23bdaeb2d79c06e08cf18
+        version: https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -9603,21 +9603,21 @@ packages:
     resolution: {integrity: sha512-+Sg6GCR/wy1oSmQDFq4LQDAhm3ETKnorxN+y5nbLULOR3P0c14f2Wurzj3/xqPXtasLFfHd5iRFQ7AJt4KH2cw==}
     engines: {node: '>=8'}
 
-  '@jeswr/federation-registry@git+https://git@github.com:jeswr/federation-registry.git#601e8a4b4981b2876adb760b3d92179e9326de54':
-    resolution: {commit: 601e8a4b4981b2876adb760b3d92179e9326de54, repo: git@github.com:jeswr/federation-registry.git, type: git}
+  '@jeswr/federation-registry@https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54':
+    resolution: {tarball: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54}
     version: 0.1.0
     engines: {node: '>=24'}
 
-  '@jeswr/guarded-fetch@git+https://git@github.com:jeswr/guarded-fetch.git#81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
-    resolution: {commit: 81926b4481310ff74a5c02c3c4eaa2a51ce2dee6, repo: git@github.com:jeswr/guarded-fetch.git, type: git}
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
+    resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6}
     version: 0.1.0
     engines: {node: '>=22'}
 
   '@jeswr/prefixcc@1.2.1':
     resolution: {integrity: sha512-kBBXbqsaeh3Irp416h/RbelqJgIOp6X/OJJlYmLyr/9qlBYKTKSCuEv5/xjZ0Yf8Yec+QFRYBaOQ2JkMBSH7KA==}
 
-  '@jeswr/rdf-serialize@git+https://git@github.com:jeswr/rdf-serialize.git#9c3a34dd93f318fd00d9e6f22081123e502a0578':
-    resolution: {commit: 9c3a34dd93f318fd00d9e6f22081123e502a0578, repo: git@github.com:jeswr/rdf-serialize.git, type: git}
+  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
+    resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578}
     version: 0.1.0
     engines: {node: '>=24'}
 
@@ -9633,8 +9633,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@jeswr/solid-vc@git+https://git@github.com:jeswr/solid-vc.git#bee27d508372e64021e23bdaeb2d79c06e08cf18':
-    resolution: {commit: bee27d508372e64021e23bdaeb2d79c06e08cf18, repo: git@github.com:jeswr/solid-vc.git, type: git}
+  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
+    resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18}
     version: 0.1.0
     engines: {node: '>=24'}
 
@@ -26045,7 +26045,7 @@ snapshots:
 
   '@istanbuljs/schema@0.1.6': {}
 
-  '@jeswr/federation-registry@git+https://git@github.com:jeswr/federation-registry.git#601e8a4b4981b2876adb760b3d92179e9326de54':
+  '@jeswr/federation-registry@https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54':
     dependencies:
       '@rdfjs/types': 2.0.1
       '@rdfjs/wrapper': 0.34.0
@@ -26053,7 +26053,7 @@ snapshots:
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
 
-  '@jeswr/guarded-fetch@git+https://git@github.com:jeswr/guarded-fetch.git#81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
     dependencies:
       undici: 8.9.0
 
@@ -26065,7 +26065,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@jeswr/rdf-serialize@git+https://git@github.com:jeswr/rdf-serialize.git#9c3a34dd93f318fd00d9e6f22081123e502a0578':
+  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
     dependencies:
       '@rdfjs/types': 2.0.1
       n3: 2.1.1
@@ -26082,10 +26082,10 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@jeswr/solid-vc@git+https://git@github.com:jeswr/solid-vc.git#bee27d508372e64021e23bdaeb2d79c06e08cf18':
+  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
     dependencies:
-      '@jeswr/guarded-fetch': git+https://git@github.com:jeswr/guarded-fetch.git#81926b4481310ff74a5c02c3c4eaa2a51ce2dee6
-      '@jeswr/rdf-serialize': git+https://git@github.com:jeswr/rdf-serialize.git#9c3a34dd93f318fd00d9e6f22081123e502a0578
+      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6
+      '@jeswr/rdf-serialize': https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578
       '@rdfjs/wrapper': 0.34.0
       '@solid/object': 0.6.0
       content-type: 1.0.5
