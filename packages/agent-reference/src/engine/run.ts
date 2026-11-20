@@ -126,7 +126,7 @@ import { PUBLIC_READ } from "../suites/public-read.js";
 import { scenarioRegistry } from "../suites/scenario.js";
 import { PresentedFederationResolver } from "../suites/trust-federation.js";
 import { ReputationResolver } from "../suites/trust-reputation.js";
-import { TraceRecorder } from "../trace/recorder.js";
+import { type TraceObservation, TraceRecorder } from "../trace/recorder.js";
 import {
   type OutlineEntry,
   outlineOf,
@@ -807,10 +807,19 @@ async function runPath(
   const now = () => new Date(clock);
   const ids = idSource(`engine-${scenario.id}-${path}`);
   const standaloneRefusals = new Map<number, RefusedStatement>();
+  const admissions = new Map<number, Extract<TraceObservation, { kind: "admitted-statements" }>>();
   const payloads = new Map<number, unknown>();
+  const releaseSupport = new Map<number, readonly string[]>();
   const recorder = new TraceRecorder((seq, observation) => {
     if (observation.kind === "payload") {
-      if (standaloneRefusals.size) payloads.set(seq, observation.value);
+      if (standaloneRefusals.size) {
+        payloads.set(seq, observation.value);
+        if (observation.support) releaseSupport.set(seq, observation.support);
+      }
+      return;
+    }
+    if (observation.kind === "admitted-statements") {
+      admissions.set(seq, observation);
       return;
     }
     const { evidence } = observation;
@@ -4589,7 +4598,9 @@ async function runPath(
     effectReleases,
     effectSupport,
     standaloneRefusals,
+    admissions,
     payloads,
+    releaseSupport,
     approvedAsks,
   };
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
@@ -9,7 +10,7 @@
  */
 
 import { digestOf } from "../core/canonical.js";
-import type { EvidenceItem } from "../core/types.js";
+import type { EvidenceItem, JsonObject } from "../core/types.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { copyData } from "../model/copy.js";
 import type { LabelIndex } from "../model/labels.js";
@@ -24,8 +25,19 @@ import {
 } from "../wire/payment.js";
 import type { TraceEvent, TraceEventInput } from "./types.js";
 
+export interface VerifiedStatement {
+  readonly statement: JsonObject;
+  readonly claimDigest: string;
+  readonly wireDigest?: string;
+}
+
 export type TraceObservation =
-  | { readonly kind: "payload"; readonly value: unknown }
+  | { readonly kind: "payload"; readonly value: unknown; readonly support?: readonly string[] }
+  | {
+      readonly kind: "admitted-statements";
+      readonly actor: string;
+      readonly statements: readonly VerifiedStatement[];
+    }
   | {
       readonly kind: "refused-statement";
       readonly evidence: EvidenceItem;

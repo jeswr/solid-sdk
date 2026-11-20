@@ -92,7 +92,7 @@ import { identifiersIn } from "../profile/content.js";
 import { dutyRuleSchema } from "../runtime/duties.js";
 import type { OperationHandler } from "../runtime/operations.js";
 import { packetView } from "../trace/packet.js";
-import type { TraceObservation } from "../trace/recorder.js";
+import type { TraceObservation, VerifiedStatement } from "../trace/recorder.js";
 import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import type { Resolution } from "../trust/resolver.js";
 import {
@@ -178,7 +178,18 @@ const OUTCOME_VERDICT: Record<InboundOutcome, Verdict> = {
 
 export class InboundGate {
   private activePaymentDocument: unknown;
+  private readonly verifiedStatements = new WeakMap<Claim, VerifiedStatement>();
   private readonly credentialBytes = new Map<string, string>();
+  private observeVerified(claim: Claim, item: EvidenceItem): void {
+    if (!this.deps.gate.sink?.observePayloads) return;
+    this.verifiedStatements.set(claim, {
+      statement: copyData(claim as JsonObject),
+      claimDigest: digestOf(claim),
+      // A locator can identify a verified fetch, but it does not carry the fetched claim.
+      ...(item.format === "origin-hosted" ? {} : { wireDigest: digestBytes(item.value) }),
+    });
+  }
+
   rememberCredentials(message: AnyMessage): void {
     if (message instanceof MessageNode)
       bindCredentialResolver(message.dataset, (digest) => this.credentialBytes.get(digest));
@@ -1051,6 +1062,7 @@ export class InboundGate {
         outcome = resolution?.outcome ?? this.deps.trust.assessSource(input).outcome;
       const permitted = this.deps.gate.claimSources?.[kind];
       const ok = outcome === "accepted" && (!permitted || permitted.includes(issuer));
+      if (ok) this.observeVerified(claim, item);
       return {
         verdict: ok ? "pass" : outcome === "unresolved" ? "indeterminate" : "fail",
         reason: ok
@@ -1124,6 +1136,7 @@ export class InboundGate {
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
     if (check.signer?.subject !== issuer)
       return { verdict: "fail", reason: "evidence-invalid", claim: s };
+    this.observeVerified(s, item);
     if (this.deps.gate.organizations && check.signer) {
       const current = await this.organizations()?.key(
         issuer,
@@ -1270,7 +1283,7 @@ export class InboundGate {
     reason?: string,
     messageId?: string,
     messageDigest?: string,
-    refused?: Extract<TraceObservation, { kind: "refused-statement" }>,
+    observation?: Exclude<TraceObservation, { kind: "payload" }>,
   ): void {
     this.emit(
       {
@@ -1283,8 +1296,23 @@ export class InboundGate {
         ...(reason ? { reason } : {}),
         caption,
       },
-      outcome === "refuse" ? refused : undefined,
+      observation?.kind === (outcome === "admit" ? "admitted-statements" : "refused-statement") &&
+        (outcome === "admit" || outcome === "refuse")
+        ? observation
+        : undefined,
     );
+  }
+
+  admissionObservation(
+    claims: readonly Claim[],
+  ): Extract<TraceObservation, { kind: "admitted-statements" }> | undefined {
+    const statements = claims.flatMap((claim) => {
+      const verified = this.verifiedStatements.get(claim);
+      // Local interpretations and altered claims have no matching verification.
+      return verified && verified.claimDigest === digestOf(claim) ? [verified] : [];
+    });
+    if (statements.length)
+      return { kind: "admitted-statements", actor: this.deps.identity.actor, statements };
   }
 
   /** Refusals are gate records, never core context or admitted facts. */
@@ -2343,8 +2371,15 @@ export class InboundGate {
         if (reference) return { admitted: 0, refused: 1, reason: reason as ReasonCode };
         continue;
       }
-      this.decisionEvent("admit", `${label} is admitted.`);
       const claim = (cache.get(item.jws)?.claim ?? r.claim) as Claim;
+      this.decisionEvent(
+        "admit",
+        `${label} is admitted.`,
+        undefined,
+        undefined,
+        undefined,
+        this.admissionObservation([claim]),
+      );
       this.storeEvent(claim);
       const fact = this.deps.memory.facts.get(claim.id ?? digestOf(claim));
       if (fact && !opts.policyMetadata) {
@@ -3170,6 +3205,7 @@ export class Admission {
       undefined,
       this.subject,
       digestOf(msg),
+      this.gate.admissionObservation(this.admittedClaims),
     );
     for (const c of this.admittedClaims)
       this.gate.storeEvent(

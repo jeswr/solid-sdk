@@ -213,6 +213,17 @@ export class OutboundGate {
   /** Releases that ended in go, waiting for the message or effect that carries them out. */
   private activeAction: Pick<TraceEventInput, "actionDigest" | "actionScope"> = {};
 
+  private releaseObservation(intent: ActionIntent, value: unknown): TraceObservation {
+    const support = intent.parameters.support;
+    return {
+      kind: "payload",
+      value,
+      ...(Array.isArray(support)
+        ? { support: support.filter((id): id is string => typeof id === "string") }
+        : {}),
+    };
+  }
+
   private setAction(intent: ActionIntent): void {
     const { action, target, operation, conversation, recipient, purpose, parameters } = intent;
     const { evidence, ...otherParameters } = parameters;
@@ -3528,6 +3539,7 @@ export class OutboundGate {
         `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
         undefined,
         { messageId: envelope.id, messageDigest: digestOf(message) },
+        opts.intent && this.releaseObservation(opts.intent, opts.intent.parameters),
       );
       if (opts.intent) recordConsumption?.(opts.intent);
       this.emit(
@@ -3586,7 +3598,7 @@ export class OutboundGate {
       `The action goes: ${this.describeAction(intent)}.`,
       undefined,
       { effectRelease: true },
-      { kind: "payload", value: [intent.parameters, params] },
+      this.releaseObservation(intent, [intent.parameters, params]),
     );
     this.deps.consumeApproval?.(intent);
   }

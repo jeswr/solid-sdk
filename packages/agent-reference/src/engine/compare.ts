@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
+import { CONFLICT_STRATEGIES, LEFT_OPERANDS, ODRL_ACTIONS, OPERATORS } from "@jeswr/solid-odrl";
 import { digestBytes, digestOf } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
+import type { TraceObservation, VerifiedStatement } from "../trace/recorder.js";
 import type { TraceEvent } from "../trace/types.js";
 import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
+import { cachedMessage, isMessagePacket } from "../wire/message-packet.js";
 import type { Scenario } from "./schema.js";
 
 export function decisionsOf(events: readonly TraceEvent[]) {
@@ -150,7 +153,12 @@ export interface ComparisonRun {
   readonly effectSupport?: ReadonlyMap<number, readonly string[]>;
   /** Statement identity and content by the sequence of its standalone inbound refusal. */
   readonly standaloneRefusals?: ReadonlyMap<number, RefusedStatement>;
+  readonly admissions?: ReadonlyMap<
+    number,
+    Extract<TraceObservation, { kind: "admitted-statements" }>
+  >;
   readonly payloads?: ReadonlyMap<number, unknown>;
+  readonly releaseSupport?: ReadonlyMap<number, readonly string[]>;
   readonly approvedAsks?: ReadonlySet<number>;
 }
 
@@ -392,6 +400,43 @@ function claimScalars(value: unknown): string[] {
   return record ? Object.values(record).flatMap(claimScalars) : [];
 }
 
+interface RefusedScan {
+  readonly matchValue?: (key: string) => boolean;
+  readonly checkReferences?: boolean;
+  readonly carried?: ReadonlySet<string>;
+  readonly protocolAction?: boolean;
+  readonly nativeWire?: boolean;
+}
+
+const policyVocabulary = new Map<string, readonly string[]>([
+  ["type", ["set", "offer", "agreement", "permission", "prohibition", "obligation"]],
+  ["action", ODRL_ACTIONS.map((value) => value.toLowerCase())],
+  ["leftOperand", LEFT_OPERANDS.map((value) => value.toLowerCase())],
+  ["operator", OPERATORS.map((value) => value.toLowerCase())],
+  ["conflict", CONFLICT_STRATEGIES],
+]);
+
+function termText(value: unknown, vocabulary: boolean, field = ""): string[] {
+  if (typeof value === "string") {
+    const text = value.toLowerCase();
+    return text && vocabulary === (policyVocabulary.get(field)?.includes(text) === true)
+      ? [text]
+      : [];
+  }
+  if (Array.isArray(value)) return value.flatMap((item) => termText(item, vocabulary, field));
+  const record = object(value);
+  return record
+    ? Object.entries(record).flatMap(([key, child]) => termText(child, vocabulary, key))
+    : [];
+}
+
+function protocolKeyword(field: string | undefined, names: ReadonlySet<string>): boolean {
+  if (field === "action" && names.has("operation") && names.has("parameters")) return true;
+  if (field === "type" || field === "action") return names.has("action") && names.has("type");
+  if (field === "operator" || field === "leftOperand") return names.has("rightoperand");
+  return field === "conflict" && names.has("permissions");
+}
+
 function refusedContent(refused: RefusedStatement) {
   const {
     id: _id,
@@ -403,7 +448,6 @@ function refusedContent(refused: RefusedStatement) {
     issuedAt: _issuedAt,
     validUntil: _validUntil,
     period: _period,
-    terms: _terms,
     derivation: _derivation,
     ...fields
   } = refused.statement;
@@ -411,92 +455,238 @@ function refusedContent(refused: RefusedStatement) {
   // Issuer and subject identifiers can independently appear as protocol participants.
   const participants = new Set(claimText([refused.statement.issuer, refused.statement.subject]));
   const scalars = new Set(claimScalars(fields));
-  const texts = [
-    ...new Set([
-      ...claimText(fields).filter((text) => !participants.has(text)),
-      ...claimText(fields.value),
-      // Short numbers and booleans occur routinely in unrelated prose and identifiers.
-      ...[...scalars].filter((text) => text.replace(/\D/g, "").length >= 3),
-    ]),
-  ];
-  const claimFields = Object.entries(fields);
-  const contains = (value: unknown, field?: string): boolean => {
-    const original = field === undefined ? undefined : fields[field];
-    if (typeof value === "string") {
-      if (references.some((reference) => reference && value.includes(reference))) return true;
-      const plaintext = value.toLowerCase();
-      if (texts.some((text) => plaintext.includes(text))) return true;
-      if (typeof original === "string" && plaintext === original.toLowerCase()) return true;
-      if (
-        (typeof original === "number" || typeof original === "boolean") &&
-        plaintext === String(original)
-      )
-        return true;
-      if (
-        field === "text" &&
-        (plaintext.match(/\b(?:true|false|\d+(?:\.\d+)?)\b/g) ?? []).some((token) =>
-          scalars.has(token),
+  const { terms, ...claimFields } = fields;
+  const claimTexts = new Set([
+    ...[...claimText(claimFields), ...termText(terms, false)].filter(
+      (text) => !participants.has(text),
+    ),
+    ...claimText(fields.value),
+  ]);
+  const vocabulary = new Set(termText(terms, true).filter((text) => !claimTexts.has(text)));
+  const texts = [...claimTexts, ...vocabulary].map((text) => ({
+    text,
+    // Common field names can be part of protocol identifiers such as "text/plain".
+    // Still check for the entire value when it occurs in prose or a parameter.
+    whole: /^[a-z][a-z0-9]*$/.test(text)
+      ? new RegExp(`(?<![\\w./:-])${text}(?![\\w/:-]|\\.\\w)`)
+      : undefined,
+  }));
+  const longScalars = [...scalars].filter((text) => text.replace(/\D/g, "").length >= 3);
+  const claimEntries = Object.entries(claimFields);
+
+  const inspect = (value: unknown, options: RefusedScan = {}): boolean => {
+    const {
+      matchValue = () => true,
+      checkReferences = true,
+      carried,
+      protocolAction,
+      nativeWire,
+    } = options;
+    const scalarMatch = (text: string) => matchValue(`scalar:${text}`);
+    const contains = (
+      value: unknown,
+      field?: string,
+      names: ReadonlySet<string> = new Set(),
+    ): boolean => {
+      const original =
+        field !== undefined && Object.hasOwn(fields, field) ? fields[field] : undefined;
+      if (typeof value === "string") {
+        const plaintext = value.toLowerCase();
+        const textMatch = (text: string) =>
+          !(
+            vocabulary.has(text) &&
+            (nativeWire ||
+              (plaintext === text &&
+                (protocolAction ||
+                  (field !== undefined &&
+                    policyVocabulary.get(field)?.includes(text) &&
+                    protocolKeyword(field, names)))))
+          ) && matchValue(`text:${text}`);
+        if (checkReferences && references.some((reference) => reference && value === reference))
+          return true;
+        if (carried?.has(value)) return false;
+        if (texts.some(({ text }) => plaintext === text && textMatch(text))) return true;
+        if (/^\s*(?:\{|\[)/.test(value)) {
+          let decoded: unknown;
+          try {
+            decoded = decodeAdapterJson(value);
+          } catch {
+            // A text field can start with a brace or bracket.
+          }
+          if (decoded !== undefined) return contains(decoded);
+        }
+        if (
+          checkReferences &&
+          references.some((reference) => reference && value.includes(reference))
         )
+          return true;
+        if (
+          texts.some(
+            ({ text, whole }) =>
+              (whole &&
+              (vocabulary.has(text) ||
+                (text.length <= 8 && (names.has(text) || Object.hasOwn(refused.statement, text))))
+                ? whole.test(plaintext)
+                : plaintext.includes(text)) && textMatch(text),
+          ) ||
+          (typeof original === "string" &&
+            plaintext === original.toLowerCase() &&
+            textMatch(plaintext)) ||
+          ((typeof original === "number" || typeof original === "boolean") &&
+            plaintext === String(original) &&
+            scalarMatch(plaintext)) ||
+          longScalars.some((text) => plaintext.includes(text) && scalarMatch(text)) ||
+          (field === "text" &&
+            (plaintext.match(/\b(?:true|false|\d+(?:\.\d+)?)\b/g) ?? []).some(
+              (token) => scalars.has(token) && scalarMatch(token),
+            ))
+        )
+          return true;
+        // Look ahead so a dotted word preceding a compact JWS cannot swallow the token.
+        for (const [, token] of value.matchAll(/(?<![\w-])(?=([\w-]+\.[\w-]+\.[\w-]+))/g)) {
+          if (!token || carried?.has(token)) continue;
+          if (checkReferences && digestBytes(token) === refused.wireDigest) return true;
+          let decoded: unknown;
+          try {
+            decoded = decodeCompactPayload(token);
+          } catch {
+            continue; // A dotted string can resemble an encoded statement.
+          }
+          if (contains(decoded)) return true;
+        }
+        return false;
+      }
+      const record = object(value);
+      const expected = original ?? (record ? fields.value : undefined);
+      if (
+        expected !== undefined &&
+        expected !== null &&
+        value != null &&
+        typeof expected !== "string" &&
+        digestOf(value) === digestOf(expected) &&
+        (typeof expected === "object"
+          ? matchValue(digestOf(expected))
+          : scalarMatch(String(expected)))
       )
         return true;
-      // Look ahead so a dotted word preceding a compact JWS cannot swallow the token.
-      for (const [, token] of value.matchAll(/(?<![\w-])(?=([\w-]+\.[\w-]+\.[\w-]+))/g)) {
-        if (!token) continue;
-        if (digestBytes(token) === refused.wireDigest) return true;
-        let decoded: unknown;
-        try {
-          decoded = decodeCompactPayload(token);
-        } catch {
-          continue; // A dotted string can resemble an encoded statement.
-        }
-        if (contains(decoded)) return true;
-      }
-      if (/^\s*(?:\{|\[)/.test(value)) {
-        let decoded: unknown;
-        try {
-          decoded = decodeAdapterJson(value);
-        } catch {
-          return false; // A text field can start with a brace or bracket.
-        }
-        return contains(decoded);
-      }
-      return false;
-    }
-    const expected = original ?? (object(value) ? fields.value : undefined);
-    if (
-      expected !== undefined &&
-      expected !== null &&
-      value != null &&
-      typeof expected !== "string" &&
-      digestOf(value) === digestOf(expected)
-    )
-      return true;
-    if (Array.isArray(value)) {
       if (
-        field === "bytes" &&
-        value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+        (typeof value === "number" || typeof value === "boolean") &&
+        !checkReferences &&
+        scalars.has(String(value))
       )
-        return contains(new TextDecoder().decode(Uint8Array.from(value)));
-      return value.some((item) => contains(item, field));
-    }
-    const record = object(value);
-    if (!record) return false;
-    if (
-      record.claimType === refused.statement.claimType &&
-      digestOf(record) === refused.claimDigest
-    )
-      return true;
-    if (
-      claimFields.length &&
-      claimFields.every(
-        ([key, expected]) =>
-          record[key] !== undefined && digestOf(record[key]) === digestOf(expected),
+        return scalarMatch(String(value));
+      if (Array.isArray(value)) {
+        if (
+          field === "bytes" &&
+          value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+        )
+          return contains(new TextDecoder().decode(Uint8Array.from(value)), undefined, names);
+        return value.some((item) => contains(item, field, names));
+      }
+      if (!record) return false;
+      if (
+        checkReferences &&
+        record.claimType === refused.statement.claimType &&
+        digestOf(record) === refused.claimDigest
       )
-    )
-      return true;
-    return Object.entries(record).some(([key, child]) => contains(key) || contains(child, key));
+        return true;
+      if (
+        claimEntries.length &&
+        claimEntries.every(
+          ([key, expected]) =>
+            record[key] !== undefined && digestOf(record[key]) === digestOf(expected),
+        ) &&
+        matchValue(digestOf(claimFields))
+      )
+        return true;
+      const fieldNames = new Set(Object.keys(record).map((key) => key.toLowerCase()));
+      const namedField = nativeWire && record.type === "PropertyValue" && string(record.name);
+      return Object.entries(record).some(
+        ([key, child]) =>
+          !(namedField && (key === "name" || key === "propertyID")) &&
+          contains(child, key === "domainValue" && namedField ? namedField : key, fieldNames),
+      );
+    };
+    return contains(value);
   };
-  return contains;
+
+  return { refused, inspect };
+}
+
+type RefusedContent = ReturnType<typeof refusedContent>;
+
+function explainedValues(content: RefusedContent, statements: readonly VerifiedStatement[]) {
+  const values = new Set<string>();
+  for (const { statement } of statements)
+    content.inspect(statement, {
+      checkReferences: false,
+      matchValue: (key) => {
+        values.add(key);
+        return false;
+      },
+    });
+  return (key: string) => !values.has(key);
+}
+
+function packetCopies(
+  content: RefusedContent,
+  event: TraceEvent,
+  payload: unknown,
+  cited: readonly VerifiedStatement[],
+  admitted: readonly VerifiedStatement[],
+): boolean {
+  const matchValue = explainedValues(content, cited);
+  const observed = object(payload);
+  const wire = observed?.wire;
+  const native = isMessagePacket(wire) ? wire : undefined;
+  const materialized = native && cachedMessage(native);
+  const message = object(materialized ?? observed?.message);
+  if (!message || wire === undefined)
+    return (
+      content.inspect(event.packet, { matchValue }) || content.inspect(payload, { matchValue })
+    );
+
+  const { evidence, ...fields } = message;
+  const carried = new Set<string>();
+  if (Array.isArray(evidence)) {
+    for (const item of evidence) {
+      const entry = object(item);
+      const value = string(entry?.value);
+      const statement =
+        entry?.role === "credential" && value !== undefined
+          ? admitted.find(({ wireDigest }) => wireDigest === digestBytes(value))
+          : undefined;
+      if (statement && entry && value !== undefined) {
+        const { value: _value, ...metadata } = entry;
+        if (
+          content.inspect(metadata, { matchValue }) ||
+          content.inspect(value, { matchValue: () => false }) ||
+          content.inspect(statement.statement, { matchValue: () => false })
+        )
+          return true;
+        carried.add(value);
+      } else if (content.inspect(item)) return true;
+    }
+  } else if (content.inspect(evidence, { matchValue })) return true;
+  if (content.inspect(fields, { matchValue })) return true;
+  if (!native) return content.inspect(wire, { matchValue, carried });
+  // The materialized message includes verified RDF collection attachments. Scan their
+  // values through the model so RDF literals representing field names are not counted.
+  return (
+    content.inspect(native.jsonld, { matchValue, carried, nativeWire: true }) ||
+    native.attachments.some(({ bytes, ...attachment }) => {
+      const graph = attachment.mediaType === "application/n-quads";
+      return (
+        content.inspect(attachment, { matchValue }) ||
+        (!(graph && materialized) &&
+          content.inspect(Buffer.from(bytes, "base64").toString("utf8"), {
+            matchValue,
+            carried,
+            nativeWire: graph,
+          }))
+      );
+    })
+  );
 }
 
 export function stoppedReleaseProblem(
@@ -532,7 +722,49 @@ export function stoppedReleaseProblem(
   }
 
   const withheld = [refusedContent(refused)];
-  const containsRefused = (value: unknown) => withheld.some((contains) => contains(value));
+  const admitted = new Map<string, { statement: VerifiedStatement; decision: TraceEvent }>();
+  const remember = (event: TraceEvent) => {
+    if (
+      event.agent !== stop.agent ||
+      event.kind !== "decision" ||
+      event.part !== "inbound-gate" ||
+      event.outcome !== "admit" ||
+      event.gateRun === undefined
+    )
+      return;
+    const admission = run.admissions?.get(event.seq);
+    if (!admission) return;
+    for (const statement of admission.statements) {
+      const { id, issuer } = statement.statement;
+      if (typeof id !== "string") continue;
+      // A subsequent admission of the same ID must not leave an older citation usable.
+      admitted.delete(id);
+      if (typeof issuer === "string" && issuer !== admission.actor)
+        admitted.set(id, { statement, decision: event });
+    }
+  };
+  for (const event of run.events.slice(0, stop.seq - 1)) remember(event);
+  const eligible = (statement: VerifiedStatement) =>
+    withheld.every(
+      ({ refused }) =>
+        refused.id !== statement.statement.id &&
+        refused.claimDigest !== statement.claimDigest &&
+        refused.wireDigest !== statement.wireDigest,
+    );
+  const citations = (event: TraceEvent) => [
+    ...(event.actionScope?.evidence ?? []),
+    ...(run.effectSupport?.get(event.seq) ?? []),
+    ...(run.releaseSupport?.get(event.seq) ?? []),
+  ];
+  const sources = (content: RefusedContent, ids: readonly string[]) =>
+    ids.flatMap((id) => {
+      const found = admitted.get(id)?.statement;
+      return found &&
+        eligible(found) &&
+        !content.inspect(found.statement, { matchValue: () => false })
+        ? [found]
+        : [];
+    });
   const allowed = new Map<number, TraceEvent>();
   let preceding: TraceEvent | undefined;
   for (const event of later) {
@@ -541,13 +773,22 @@ export function stoppedReleaseProblem(
     if (nextRefusal) withheld.push(refusedContent(nextRefusal));
     if (event.kind === "decision") {
       preceding = event;
+      remember(event);
       if (event.part === "outbound-gate" && event.outcome === "go") {
         const payload = run.payloads?.get(event.seq);
+        const ids = citations(event);
+        const { action, ...scope } = event.actionScope ?? {};
         if (
           (event.effectRelease && payload === undefined) ||
-          containsRefused(event.actionScope) ||
-          containsRefused(run.effectSupport?.get(event.seq)) ||
-          containsRefused(payload)
+          withheld.some((content) => {
+            const matchValue = explainedValues(content, sources(content, ids));
+            return (
+              content.inspect(action, { matchValue, protocolAction: true }) ||
+              content.inspect(scope, { matchValue }) ||
+              content.inspect(ids, { matchValue }) ||
+              content.inspect(payload, { matchValue })
+            );
+          })
         )
           return true;
         if (event.gateRun !== undefined) allowed.set(event.gateRun, event);
@@ -558,11 +799,28 @@ export function stoppedReleaseProblem(
       const payload = run.payloads?.get(event.seq);
       if (
         (!event.fact && payload === undefined) ||
-        containsRefused(event.fact) ||
-        containsRefused(payload) ||
         preceding?.part !== "inbound-gate" ||
         preceding.outcome !== "admit" ||
         !sameScriptStep(run, preceding, event)
+      )
+        return true;
+      const id = string(object(payload)?.id);
+      const found = id === undefined ? undefined : admitted.get(id);
+      const verified =
+        found &&
+        found.decision.seq === preceding.seq &&
+        eligible(found.statement) &&
+        digestOf(payload) === found.statement.claimDigest
+          ? found.statement
+          : undefined;
+      if (
+        withheld.some((content) => {
+          const matchValue = explainedValues(content, verified ? [verified] : []);
+          return (
+            content.inspect(event.fact, { matchValue }) ||
+            content.inspect(payload, { matchValue: verified ? () => false : matchValue })
+          );
+        })
       )
         return true;
     }
@@ -570,9 +828,17 @@ export function stoppedReleaseProblem(
       const release = event.gateRun === undefined ? undefined : allowed.get(event.gateRun);
       if (
         event.messageId === undefined ||
+        !release ||
         !matchesMessageRelease(release, event) ||
-        containsRefused(event.packet) ||
-        containsRefused(run.payloads?.get(event.seq))
+        withheld.some((content) =>
+          packetCopies(
+            content,
+            event,
+            run.payloads?.get(event.seq),
+            sources(content, citations(release)),
+            [...admitted.values()].map(({ statement }) => statement).filter(eligible),
+          ),
+        )
       )
         return true;
     }

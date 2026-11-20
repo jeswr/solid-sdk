@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import { digestBytes, digestOf } from "../src/core/canonical.js";
 import { verifierRegistry } from "../src/derive/verifiers.js";
 import {
+  type ComparisonRun,
   type ComparisonStep,
   compareBranch,
   continuedReleaseProblem,
@@ -132,6 +133,7 @@ const refusedClaim = {
   claimType: "test.claim",
   value: refusedValue,
   account: "urn:account:confidential",
+  terms: { policy: { id: "urn:terms:refused-policy" } },
 };
 const refusedStatement: RefusedStatement = {
   id: refusedId,
@@ -203,12 +205,14 @@ function afterRefusal(
   first = checked(1),
   stop = refusal,
   payloads?: ReadonlyMap<number, unknown>,
+  observations?: Pick<ComparisonRun, "admissions" | "effectSupport">,
 ) {
   return stoppedReleaseProblem(
     {
       events: [first, stop, ...later],
       standaloneRefusals: new Map([[stop.seq, refusedStatement]]),
       payloads,
+      ...observations,
     },
     stop,
     "stop",
@@ -284,15 +288,15 @@ it("rejects even one refused field in a different issuer's separately admitted c
   ).toBe(true);
 });
 
-it("flags the supplier invoice that stores the refused account, even though payment stops", async () => {
+it("allows the supplier's independently admitted invoice and still stops payment at P4", async () => {
   const { profile, scenario } = loadCase(root, "pay-an-invoice");
   const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
   const branch = paths.find((path) => path.path === "branch-1");
   expect(branch).toMatchObject({
-    disagrees: true,
-    note: "an effect followed a stop",
+    disagrees: false,
     actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
   });
+  expect(branch?.note).toBeUndefined();
   const storedInvoice = branch?.trace?.events.find(
     (event) =>
       event.agent === "business-agent" &&
@@ -317,6 +321,15 @@ it("flags the supplier invoice that stores the refused account, even though paym
   expect(branch?.trace?.events).toContainEqual(
     expect.objectContaining({
       agent: "business-agent",
+      part: "outbound-gate",
+      kind: "decision",
+      outcome: "stop",
+      reason: "source-not-authoritative",
+    }),
+  );
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({
+      agent: "business-agent",
       check: "P4",
       verdict: "fail",
       reason: "source-not-authoritative",
@@ -328,6 +341,125 @@ it("flags the supplier invoice that stores the refused account, even though paym
   expect(released?.map((event) => event.packet?.kind)).toEqual(["accept"]);
   expect(JSON.stringify(released)).not.toContain("urn:account:supplier");
 }, 120_000);
+
+it("rejects a refused terms policy ID copied under a different field", () => {
+  const payload = { id: acceptedId, policyHint: refusedClaim.terms.policy.id };
+  expect(
+    afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, payload]])),
+  ).toBe(true);
+});
+
+it("checks JSON-carried values without counting a matching property name", () => {
+  const checkStore = (details: unknown) =>
+    afterRefusal(
+      [laterAdmit, stored],
+      checked(1),
+      refusal,
+      new Map([[stored.seq, { details: JSON.stringify(details) }]]),
+    );
+  expect(checkStore({ [refusedValue]: "independent" })).toBe(false);
+  expect(checkStore({ label: refusedValue })).toBe(true);
+});
+
+const externalClaim = {
+  id: acceptedId,
+  issuer: "urn:issuer:independent",
+  claimType: "test.other-claim",
+  destination: refusedClaim.account,
+};
+
+function admittedClaim(statement = externalClaim, wire = "verified statement bytes") {
+  return new Map([
+    [
+      laterAdmit.seq,
+      {
+        kind: "admitted-statements" as const,
+        actor: "urn:agent",
+        statements: [
+          { statement, claimDigest: digestOf(statement), wireDigest: digestBytes(wire) },
+        ],
+      },
+    ],
+  ]);
+}
+
+it("allows matching values in a verified independent store at the admitted digest", () => {
+  const checkStore = (payload: typeof externalClaim) =>
+    afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, payload]]), {
+      admissions: admittedClaim(),
+    });
+  expect(checkStore(externalClaim)).toBe(false);
+  expect(checkStore({ ...externalClaim, claimType: "test.changed" })).toBe(true);
+});
+
+it("rejects a matching value in a statement the agent issued even after its admit decision", () => {
+  const reading = { ...externalClaim, issuer: "urn:agent", claimType: "test.reading" };
+  expect(
+    afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, reading]]), {
+      admissions: admittedClaim(reading),
+    }),
+  ).toBe(true);
+});
+
+it("requires the packet's own gate to cite an independently admitted source for body values", () => {
+  const payload = { message: { body: { destination: externalClaim.destination } }, wire: {} };
+  const run = (evidence: string[], admit = laterAdmit, message = payload) =>
+    afterRefusal(
+      [admit, { ...gated, actionScope: { ...gated.actionScope, evidence } }, sent],
+      checked(1),
+      refusal,
+      new Map([[sent.seq, message]]),
+      { admissions: admittedClaim() },
+    );
+  expect(run([])).toBe(true);
+  expect(run([acceptedId])).toBe(false);
+  expect(run([acceptedId, refusedId])).toBe(true);
+  expect(run([acceptedId], { ...laterAdmit, agent: "peer" })).toBe(true);
+  expect(run([acceptedId], { ...laterAdmit, outcome: "ask-more" })).toBe(true);
+  expect(
+    run([acceptedId], laterAdmit, {
+      ...payload,
+      message: { body: { destination: `${externalClaim.destination}, ${refusedValue}` } },
+    }),
+  ).toBe(true);
+});
+
+it("allows a carried statement only at the verified wire digest", async () => {
+  const key = await testKey("comparison/independent");
+  const wire = await signClaim(key, externalClaim);
+  const altered = await signClaim(key, { ...externalClaim, extra: "altered" });
+  const checkSend = (value: string) => {
+    const message = { evidence: [{ role: "credential", format: "jws-compact", value }] };
+    return afterRefusal(
+      [laterAdmit, gated, sent],
+      checked(1),
+      refusal,
+      new Map([[sent.seq, { message, wire: { jsonld: JSON.stringify(message) } }]]),
+      { admissions: admittedClaim(externalClaim, wire) },
+    );
+  };
+  expect(checkSend(wire)).toBe(false);
+  expect(checkSend(altered)).toBe(true);
+});
+
+it("requires effect support for its own parameter values", () => {
+  const effect = {
+    ...gated,
+    effectRelease: true,
+    actionScope: { ...gated.actionScope, evidence: [] },
+  };
+  const checkEffect = (support: string[]) =>
+    afterRefusal(
+      [laterAdmit, effect],
+      checked(1),
+      refusal,
+      new Map([[effect.seq, { parameters: { destination: refusedClaim.account } }]]),
+      { admissions: admittedClaim(), effectSupport: new Map([[effect.seq, support]]) },
+    );
+  expect(checkEffect([])).toBe(true);
+  expect(checkEffect([acceptedId])).toBe(false);
+  expect(checkEffect([acceptedId, refusedId])).toBe(true);
+});
 
 it("inspects the original joint packet payload when private fields are redacted from the trace", () => {
   expect(
@@ -390,6 +522,8 @@ it.each([
   [undefined, true],
   [undefined, "exact"],
   [undefined, "re-signed"],
+  [undefined, "parameter-name"],
+  [undefined, "parameter-value"],
   ["sparq-zk-result/5", false],
   ["sparq-zk-result/5", true],
   ["sparq-aggregate/1", false],
@@ -405,10 +539,14 @@ it.each([
     issuer: issuer.id,
     kind: "test.private-reference",
     method: "recorded-by-authority",
-    value: { value: refusedValue },
+    value: {
+      value: content === "parameter-name" || content === "parameter-value" ? "text" : refusedValue,
+    },
   };
   let text = draft.text;
-  if (typeof content === "string") {
+  if (content === "parameter-value") {
+    text = "text";
+  } else if (content === "exact" || content === "re-signed") {
     const exact = content === "exact";
     const token = await signClaim(
       await testKey(exact ? `engine/${draft.agent}/owner` : "comparison/other-issuer"),
@@ -421,7 +559,7 @@ it.each([
       },
     );
     text = exact ? token : `Attached statement: (proof.${token}).`;
-  } else if (content) {
+  } else if (content === true) {
     text = `The reference is ${refusedValue}.`;
   }
   scenario.script = [draft, approve];
@@ -463,8 +601,9 @@ it.each([
     expect.objectContaining({ outcome: "go", effectRelease: true }),
   );
   expect(branch?.trace?.events.some((event) => event.kind === "message-out")).toBe(false);
-  expect(branch?.note).toBe(content ? "an effect followed a stop" : undefined);
-  expect(branch?.disagrees).toBe(Boolean(content));
+  const copied = Boolean(content && content !== "parameter-name");
+  expect(branch?.note).toBe(copied ? "an effect followed a stop" : undefined);
+  expect(branch?.disagrees).toBe(copied);
 });
 
 it("reports a permissive branch only when a missing main bar is followed by a witnessed release", () => {
