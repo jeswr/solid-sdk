@@ -1,30 +1,28 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Real user verification before an approval is signed: a passkey on this device's platform
  * authenticator (Face ID, Touch ID, Windows Hello, the phone's screen lock), asked with
  * userVerification "required". The first approval registers the passkey; later ones assert
- * with it. The assertion's challenge is bound to the action digest, and the result is accepted
- * only when the client data names that challenge, the relying party matches this origin and
- * the authenticator reports that it verified the user (the UV flag).
+ * with it. Each challenge is bound to the approval payload. The response must match the
+ * challenge, origin and relying party, and the authenticator must report user verification.
  *
  * This is a gate in the browser, not a server check: the approval itself is still the record
- * the engine signs with the device key. Where WebAuthn cannot run (an embedding frame without
- * the permission, an older browser, no platform authenticator) the result is "simulated", and
- * the UI must say so plainly. A cancelled or failed check never approves anything.
+ * the engine signs with the device key. A cancelled, unavailable or failed ceremony never
+ * authorizes signing.
  */
 
 export type UserCheck =
   | { status: "verified"; method: "passkey"; registered: boolean }
-  | { status: "simulated"; reason: string }
   | { status: "cancelled" }
   | { status: "failed"; reason: string };
 
 export interface PasskeyEnv {
   credentials?: Pick<CredentialsContainer, "create" | "get">;
   platformAvailable?: () => Promise<boolean>;
-  /** True when this document may use WebAuthn get and create (permissions policy). */
-  allowed: boolean;
+  allows: (ceremony: "get" | "create") => boolean;
   rpId: string;
+  origin: string;
   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   subtle: SubtleCrypto;
   random: (bytes: Uint8Array<ArrayBuffer>) => Uint8Array<ArrayBuffer>;
@@ -64,23 +62,12 @@ export function browserEnv(): PasskeyEnv {
       isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
     };
   };
-  let framed = false;
-  try {
-    framed = w.self !== w.top;
-  } catch {
-    framed = true;
-  }
-  const policy = (
-    globalThis.document as
-      | (Document & { featurePolicy?: { allowsFeature?: (f: string) => boolean } })
-      | undefined
-  )?.featurePolicy;
-  const allowed =
-    !framed ||
-    Boolean(
-      policy?.allowsFeature?.("publickey-credentials-get") &&
-        policy.allowsFeature("publickey-credentials-create"),
-    );
+  const doc = w.document as
+    | (Document & {
+        permissionsPolicy?: { allowsFeature: (feature: string) => boolean };
+        featurePolicy?: { allowsFeature: (feature: string) => boolean };
+      })
+    | undefined;
   let storage: Storage | undefined;
   try {
     storage = w.localStorage;
@@ -93,36 +80,25 @@ export function browserEnv(): PasskeyEnv {
     platformAvailable: pkc?.isUserVerifyingPlatformAuthenticatorAvailable
       ? () => pkc.isUserVerifyingPlatformAuthenticatorAvailable?.() ?? Promise.resolve(false)
       : undefined,
-    allowed,
+    allows: (ceremony) =>
+      (doc?.permissionsPolicy ?? doc?.featurePolicy)?.allowsFeature(
+        `publickey-credentials-${ceremony}`,
+      ) ?? w.self === w.top,
     rpId: w.location?.hostname ?? "",
+    origin: w.location?.origin ?? "",
     storage,
     subtle: w.crypto.subtle,
     random: (b) => w.crypto.getRandomValues(b),
   };
 }
 
-function storedId(env: PasskeyEnv): string | null {
-  try {
-    return env.storage?.getItem(STORE_KEY) ?? null;
-  } catch {
-    return null;
-  }
-}
-function store(env: PasskeyEnv, id: string | null): void {
-  try {
-    if (id) env.storage?.setItem(STORE_KEY, id);
-    else env.storage?.removeItem(STORE_KEY);
-  } catch {
-    /* storage blocked: the passkey is registered again next time */
-  }
-}
-
-/** Forget the registered passkey on this device, so the next approval registers a new one. */
+/** Forget the registered credential ID, surfacing a blocked storage reset to the caller. */
 export function forgetPasskey(env: PasskeyEnv = browserEnv()): void {
-  store(env, null);
+  if (!env.storage) throw new Error("Passkey storage is unavailable.");
+  env.storage.removeItem(STORE_KEY);
 }
 
-/** The challenge: SHA-256 of the action digest, then 16 fresh random bytes. */
+/** The challenge: SHA-256 of the approval digest, then 16 fresh random bytes. */
 async function challengeFor(env: PasskeyEnv, digest: string): Promise<Uint8Array<ArrayBuffer>> {
   const hash = new Uint8Array(
     await env.subtle.digest("SHA-256", new TextEncoder().encode(`errand-approval:${digest}`)),
@@ -133,6 +109,24 @@ async function challengeFor(env: PasskeyEnv, digest: string): Promise<Uint8Array
   return out;
 }
 
+function checkClientData(
+  env: PasskeyEnv,
+  type: "webauthn.get" | "webauthn.create",
+  challenge: Uint8Array,
+  clientDataJSON: ArrayBuffer,
+): string | null {
+  let client: { type?: unknown; challenge?: unknown; origin?: unknown } | null;
+  try {
+    client = JSON.parse(new TextDecoder().decode(bytes(clientDataJSON)));
+  } catch {
+    return "unreadable client data";
+  }
+  if (client?.type !== type) return "wrong ceremony";
+  if (client.challenge !== b64url(challenge)) return "challenge does not match this approval";
+  if (client.origin !== env.origin) return "wrong origin";
+  return null;
+}
+
 /** Check client data and authenticator data from a WebAuthn response. */
 export async function checkResponse(
   env: PasskeyEnv,
@@ -141,14 +135,8 @@ export async function checkResponse(
   clientDataJSON: ArrayBuffer,
   authData: ArrayBuffer | undefined,
 ): Promise<string | null> {
-  let client: { type?: unknown; challenge?: unknown };
-  try {
-    client = JSON.parse(new TextDecoder().decode(bytes(clientDataJSON)));
-  } catch {
-    return "unreadable client data";
-  }
-  if (client.type !== type) return "wrong ceremony";
-  if (client.challenge !== b64url(challenge)) return "challenge does not match this approval";
+  const bad = checkClientData(env, type, challenge, clientDataJSON);
+  if (bad) return bad;
   if (!authData) return "no authenticator data";
   const ad = bytes(authData);
   if (ad.length < 37) return "short authenticator data";
@@ -166,106 +154,141 @@ function errorName(e: unknown): string {
   return e && typeof e === "object" && "name" in e ? String((e as { name: unknown }).name) : "";
 }
 
-/**
- * Ask the device to check it is the principal before an approval of `digest` is signed.
- * `displayName` is the fictional principal's name, shown by the platform when registering.
- */
+const failed = (reason: string): UserCheck => ({ status: "failed", reason });
+
+async function assertPasskey(
+  env: PasskeyEnv,
+  credentials: NonNullable<PasskeyEnv["credentials"]>,
+  id: Uint8Array<ArrayBuffer>,
+  challenge: Uint8Array<ArrayBuffer>,
+  signal?: AbortSignal,
+): Promise<UserCheck> {
+  const cred = (await credentials.get({
+    signal,
+    publicKey: {
+      rpId: env.rpId,
+      challenge,
+      allowCredentials: [{ type: "public-key", id, transports: ["internal"] }],
+      userVerification: "required",
+      timeout: 60_000,
+    },
+  })) as PublicKeyCredential | null;
+  if (!cred) return { status: "cancelled" };
+  if (!equal(bytes(cred.rawId), id)) return failed("an unexpected passkey answered");
+  const res = cred.response as AuthenticatorAssertionResponse;
+  const bad = await checkResponse(
+    env,
+    "webauthn.get",
+    challenge,
+    res.clientDataJSON,
+    res.authenticatorData,
+  );
+  signal?.throwIfAborted();
+  return bad ? failed(bad) : { status: "verified", method: "passkey", registered: false };
+}
+
+/** Verify the principal for the engine's prepared signing payload. */
 export async function verifyUser(
   digest: string,
   displayName: string,
-  env: PasskeyEnv = browserEnv(),
+  getEnv: () => PasskeyEnv = browserEnv,
+  signal?: AbortSignal,
 ): Promise<UserCheck> {
-  if (!env.credentials || !env.allowed || !env.rpId)
-    return {
-      status: "simulated",
-      reason: env.allowed
-        ? "WebAuthn is not supported here"
-        : "this page is embedded without passkey permission",
-    };
-  let available = false;
+  let env: PasskeyEnv;
+  let stored: string | null;
   try {
-    available = env.platformAvailable ? await env.platformAvailable() : false;
+    env = getEnv();
+    if (!env.storage) return { status: "failed", reason: "passkey storage is unavailable" };
+    stored = env.storage.getItem(STORE_KEY);
   } catch {
-    available = false;
+    return { status: "failed", reason: "could not read passkey settings" };
   }
-  if (!available)
-    return { status: "simulated", reason: "this device has no Face ID or screen lock passkey" };
-  const challenge = await challengeFor(env, digest);
-  const id = storedId(env);
   try {
-    if (!id) {
-      const cred = (await env.credentials.create({
-        publicKey: {
-          rp: { id: env.rpId, name: "Errand (demo)" },
-          user: {
-            id: env.random(new Uint8Array(16)),
-            name: `${displayName} (Errand demo)`,
-            displayName,
-          },
-          challenge,
-          pubKeyCredParams: [
-            { type: "public-key", alg: -7 },
-            { type: "public-key", alg: -257 },
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform",
-            userVerification: "required",
-            residentKey: "preferred",
-          },
-          attestation: "none",
-          timeout: 60_000,
-        },
-      })) as PublicKeyCredential | null;
-      if (!cred) return { status: "cancelled" };
-      const res = cred.response as AuthenticatorAttestationResponse;
-      const authData =
-        typeof res.getAuthenticatorData === "function" ? res.getAuthenticatorData() : undefined;
-      store(env, b64url(bytes(cred.rawId)));
-      if (authData) {
-        const bad = await checkResponse(
-          env,
-          "webauthn.create",
-          challenge,
-          res.clientDataJSON,
-          authData,
-        );
-        if (bad) return { status: "failed", reason: bad };
-        return { status: "verified", method: "passkey", registered: true };
+    const permissionFailure = (ceremony: "create" | "get") => {
+      try {
+        return env.allows(ceremony) ? null : "this page is embedded without passkey permission";
+      } catch {
+        return "could not check passkey permission";
       }
-      // Without authenticator data the UV flag cannot be read from registration: assert once.
-      return verifyUser(digest, displayName, env);
+    };
+    const denied = permissionFailure(stored === null ? "create" : "get");
+    if (denied) return failed(denied);
+    const credentials = env.credentials;
+    if (!credentials || !env.rpId || !env.origin) return failed("WebAuthn is not supported here");
+    let available: boolean | undefined;
+    try {
+      available = await env.platformAvailable?.();
+    } catch {
+      return failed("could not check platform passkey availability");
     }
-    const cred = (await env.credentials.get({
+    if (!available) return failed("this device has no Face ID or screen lock passkey");
+    const challenge = await challengeFor(env, digest);
+    signal?.throwIfAborted();
+    if (stored !== null)
+      return await assertPasskey(env, credentials, fromB64url(stored), challenge, signal);
+
+    const cred = (await credentials.create({
+      signal,
       publicKey: {
-        rpId: env.rpId,
+        rp: { id: env.rpId, name: "Errand (demo)" },
+        user: {
+          id: env.random(new Uint8Array(16)),
+          name: `${displayName} (Errand demo)`,
+          displayName,
+        },
         challenge,
-        allowCredentials: [{ type: "public-key", id: fromB64url(id), transports: ["internal"] }],
-        userVerification: "required",
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 },
+          { type: "public-key", alg: -257 },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+          residentKey: "preferred",
+        },
+        attestation: "none",
         timeout: 60_000,
       },
     })) as PublicKeyCredential | null;
     if (!cred) return { status: "cancelled" };
-    if (b64url(bytes(cred.rawId)) !== id)
-      return { status: "failed", reason: "an unexpected passkey answered" };
-    const res = cred.response as AuthenticatorAssertionResponse;
-    const bad = await checkResponse(
-      env,
-      "webauthn.get",
-      challenge,
-      res.clientDataJSON,
-      res.authenticatorData,
-    );
-    if (bad) return { status: "failed", reason: bad };
-    return { status: "verified", method: "passkey", registered: false };
+    const id = new Uint8Array(cred.rawId);
+    if (id.length === 0) return failed("registration returned no credential ID");
+    const res = cred.response as AuthenticatorAttestationResponse;
+    if (typeof res.getAuthenticatorData === "function") {
+      const bad = await checkResponse(
+        env,
+        "webauthn.create",
+        challenge,
+        res.clientDataJSON,
+        res.getAuthenticatorData(),
+      );
+      if (bad) return failed(bad);
+    } else {
+      const bad = checkClientData(env, "webauthn.create", challenge, res.clientDataJSON);
+      if (bad) return failed(bad);
+      // For browsers without registration authenticator data, verify with the new ID once.
+      const denied = permissionFailure("get");
+      if (denied) return failed(denied);
+      const fallbackChallenge = await challengeFor(env, digest);
+      signal?.throwIfAborted();
+      const result = await assertPasskey(env, credentials, id, fallbackChallenge, signal);
+      if (result.status !== "verified") return result;
+    }
+    signal?.throwIfAborted();
+    try {
+      env.storage.setItem(STORE_KEY, b64url(id));
+    } catch {
+      return failed("could not save the new passkey");
+    }
+    return { status: "verified", method: "passkey", registered: true };
   } catch (e) {
     const name = errorName(e);
-    if (name === "NotAllowedError" || name === "AbortError") return { status: "cancelled" };
-    if (name === "SecurityError" || name === "NotSupportedError")
-      return { status: "simulated", reason: "this browser refused passkeys for this page" };
-    if (name === "InvalidStateError") {
-      // A passkey for this site already exists on the device but its id was forgotten.
-      return { status: "failed", reason: "a passkey already exists here; reset it and try again" };
+    if (signal?.aborted || name === "NotAllowedError" || name === "AbortError") {
+      return { status: "cancelled" };
     }
-    return { status: "failed", reason: "the passkey check did not complete" };
+    if (name === "InvalidStateError") {
+      return failed("a passkey already exists here; reset it and try again");
+    }
+    return failed("the passkey check did not complete");
   }
 }

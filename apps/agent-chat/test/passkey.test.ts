@@ -1,14 +1,20 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-// The passkey check that stands before every signed approval: it must verify the user for
-// real where WebAuthn runs, say plainly when it is simulated, and never approve on a cancelled
-// or doubtful answer.
-import { describe, expect, it } from "vitest";
+import {
+  type ApprovalRequest,
+  actionDigest,
+  type DeviceKey,
+  type PrincipalResponse,
+  verifyRecord,
+} from "@jeswr/agent-consent";
+import { describe, expect, it, vi } from "vitest";
+import { Engine } from "../src/engine/engine.js";
 import {
   checkResponse,
   forgetPasskey,
   type PasskeyEnv,
+  verifyUser as runVerification,
   STORE_KEY,
-  verifyUser,
 } from "../src/ui/passkey.js";
 
 const RP = "errand.example";
@@ -27,11 +33,10 @@ async function authData(flags: number, rp = RP): Promise<ArrayBuffer> {
   out[32] = flags;
   return out.buffer;
 }
-function clientData(type: string, challenge: BufferSource): ArrayBuffer {
+function clientData(type: string, challenge: BufferSource, origin = `https://${RP}`): ArrayBuffer {
   const c = new Uint8Array(ArrayBuffer.isView(challenge) ? challenge.buffer : challenge);
-  return new TextEncoder().encode(
-    JSON.stringify({ type, challenge: b64url(c), origin: `https://${RP}` }),
-  ).buffer as ArrayBuffer;
+  return new TextEncoder().encode(JSON.stringify({ type, challenge: b64url(c), origin }))
+    .buffer as ArrayBuffer;
 }
 function memoryStorage(initial: Record<string, string> = {}) {
   const m = new Map(Object.entries(initial));
@@ -63,8 +68,9 @@ function env(fake: Fake, over: Partial<PasskeyEnv> = {}): PasskeyEnv & { calls: 
       },
     },
     platformAvailable: async () => true,
-    allowed: true,
+    allows: () => true,
     rpId: RP,
+    origin: `https://${RP}`,
     storage: memoryStorage(),
     subtle,
     random: (b) => globalThis.crypto.getRandomValues(b),
@@ -73,6 +79,25 @@ function env(fake: Fake, over: Partial<PasskeyEnv> = {}): PasskeyEnv & { calls: 
   };
 }
 const RAW = new Uint8Array([1, 2, 3, 4]);
+
+const verifyUser = (digest: string, displayName: string, environment: PasskeyEnv) =>
+  runVerification(digest, displayName, () => environment);
+
+function registration(options: { flags?: number; tamper?: boolean; legacy?: boolean } = {}) {
+  return async (o: CredentialCreationOptions) => {
+    const challenge = options.tamper
+      ? new Uint8Array(48)
+      : (o.publicKey?.challenge as BufferSource);
+    const ad = await authData(options.flags ?? 0x45);
+    return {
+      rawId: RAW.buffer,
+      response: {
+        clientDataJSON: clientData("webauthn.create", challenge),
+        ...(options.legacy ? {} : { getAuthenticatorData: () => ad }),
+      },
+    };
+  };
+}
 
 function assertion(
   flags = 0x05,
@@ -212,79 +237,98 @@ describe("verifyUser", () => {
     ).toEqual({ status: "cancelled" });
   });
 
-  it("falls back to a labelled simulation only where passkeys cannot run", async () => {
-    expect((await verifyUser(DIGEST, "Sam", env({}, { credentials: undefined }))).status).toBe(
-      "simulated",
-    );
-    expect(await verifyUser(DIGEST, "Sam", env({}, { allowed: false }))).toEqual({
-      status: "simulated",
-      reason: "this page is embedded without passkey permission",
-    });
-    expect(
-      (await verifyUser(DIGEST, "Sam", env({}, { platformAvailable: async () => false }))).status,
-    ).toBe("simulated");
-    const sec = Object.assign(new Error("x"), { name: "SecurityError" });
-    expect(
-      (
-        await verifyUser(
-          DIGEST,
-          "Sam",
-          env({
-            create: async () => {
-              throw sec;
-            },
-          }),
-        )
-      ).status,
-    ).toBe("simulated");
+  it("fails closed on denied permission, missing capabilities, and probe or ceremony errors", async () => {
+    const error = new DOMException("blocked", "SecurityError");
+    const throws = () => {
+      throw error;
+    };
+    for (const overrides of [
+      { credentials: undefined },
+      { allows: () => false },
+      { allows: throws },
+      { platformAvailable: async () => false },
+      { platformAvailable: throws },
+    ]) {
+      const e = env({}, overrides);
+      expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("failed");
+      expect(e.calls).toEqual([]);
+    }
+    const e = env({ create: throws });
+    expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("failed");
+    expect(e.calls).toEqual(["create"]);
   });
 
-  it("asserts after registering when registration gives no authenticator data", async () => {
-    const e = env({
-      create: async () => ({ rawId: RAW.buffer, response: { clientDataJSON: new ArrayBuffer(0) } }),
-      get: assertion(0x05),
-    });
+  it("probes only create for registration and only get for a stored passkey", async () => {
+    const storage = memoryStorage();
+    const allows = vi.fn((ceremony) => ceremony === "create");
+    const e = env({ create: registration(), get: assertion() }, { allows, storage });
     expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("verified");
-    expect(e.calls).toEqual(["create", "get"]);
+    expect(allows.mock.calls).toEqual([["create"]]);
+    allows.mockClear().mockImplementation((ceremony) => ceremony === "get");
+    expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("verified");
+    expect(allows.mock.calls).toEqual([["get"]]);
   });
 
-  it("forgets the passkey on request and survives blocked storage", async () => {
+  it.each([
+    { flags: 0x41 },
+    { tamper: true },
+    { tamper: true, legacy: true },
+  ])("does not persist or assert an invalid registration (%j)", async (options) => {
+    const e = env({ create: registration(options), get: assertion() });
+    expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("failed");
+    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
+    expect(e.calls).toEqual(["create"]);
+  });
+
+  it.each([
+    "verified",
+    "failed",
+    "cancelled",
+  ] as const)("uses the returned ID for one fallback assertion and only saves on success (%s)", async (status) => {
+    const storage = memoryStorage();
+    const allows = vi.fn(() => true);
+    const e = env(
+      {
+        create: registration({ legacy: true }),
+        get: async (options) => {
+          expect(storage.getItem(STORE_KEY)).toBeNull();
+          expect(options.publicKey?.allowCredentials?.[0]?.id).toEqual(RAW);
+          if (status === "cancelled") return null;
+          return assertion(status === "failed" ? 0x01 : 0x05)(options);
+        },
+      },
+      { storage, allows },
+    );
+    expect((await verifyUser(DIGEST, "Sam", e)).status).toBe(status);
+    expect(e.calls).toEqual(["create", "get"]);
+    expect(allows.mock.calls).toEqual([["create"], ["get"]]);
+    expect(storage.getItem(STORE_KEY)).toBe(status === "verified" ? b64url(RAW) : null);
+  });
+
+  it("surfaces storage read, save, and reset failures", async () => {
     const storage = memoryStorage({ [STORE_KEY]: "AQ" });
     forgetPasskey(env({}, { storage }));
     expect(storage.map.has(STORE_KEY)).toBe(false);
-    const blocked = {
-      getItem: () => {
-        throw new Error("blocked");
-      },
-      setItem: () => {
-        throw new Error("blocked");
-      },
-      removeItem: () => {
-        throw new Error("blocked");
-      },
+    const blocked = () => {
+      throw new Error("blocked");
     };
     const e = env(
-      {
-        create: async (o) => {
-          const pk = o.publicKey as PublicKeyCredentialCreationOptions;
-          const ad = await authData(0x05);
-          return {
-            rawId: RAW.buffer,
-            response: {
-              clientDataJSON: clientData("webauthn.create", pk.challenge),
-              getAuthenticatorData: () => ad,
-            },
-          };
-        },
-      },
-      { storage: blocked },
+      { create: registration() },
+      { storage: { ...storage, setItem: blocked, removeItem: blocked } },
     );
-    expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("verified");
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "could not save the new passkey",
+    });
+    expect(() => forgetPasskey(e)).toThrow("blocked");
+    const unreadable = env({}, { storage: { ...storage, getItem: blocked } });
+    expect((await verifyUser(DIGEST, "Sam", unreadable)).status).toBe("failed");
+    expect(unreadable.calls).toEqual([]);
   });
 });
 
 describe("checkResponse", () => {
-  it("rejects unreadable client data and short authenticator data", async () => {
+  it("rejects unreadable client data, the wrong origin, and short authenticator data", async () => {
     const e = env({});
     const ch = new Uint8Array(48);
     expect(
@@ -304,6 +348,15 @@ describe("checkResponse", () => {
         e,
         "webauthn.get",
         ch,
+        clientData("webauthn.get", ch, "https://elsewhere.example"),
+        await authData(0x05),
+      ),
+    ).toBe("wrong origin");
+    expect(
+      await checkResponse(
+        e,
+        "webauthn.get",
+        ch,
         clientData("webauthn.get", ch),
         new ArrayBuffer(10),
       ),
@@ -317,5 +370,241 @@ describe("checkResponse", () => {
         await authData(0x04),
       ),
     ).toBe("no user presence");
+  });
+});
+
+const NOW = new Date("2026-11-13T12:00:00.000Z");
+
+async function pendingRequest(engine: Engine): Promise<ApprovalRequest> {
+  await vi.waitFor(() => expect(engine.getState().pending).toBeDefined());
+  const pending = engine.getState().pending;
+  if (!pending) throw new Error("no pending approval");
+  return pending.request;
+}
+
+function answer(r: ApprovalRequest, type: "approve-once" | "deny") {
+  return {
+    requestId: r.id,
+    digest: r.digest,
+    type,
+    offeredId: r.offered.find((o) => o.type === type)?.id ?? "?",
+  };
+}
+
+function expectUnsigned(engine: Engine) {
+  const state = engine.getState();
+  expect(
+    state.activity.some((a) => a.consentJws || a.filter === "purchases" || a.filter === "shared"),
+  ).toBe(false);
+  expect(state.rules).toHaveLength(0);
+  expect(state.chats.flatMap((c) => c.messages).some((m) => m.type === "receipt")).toBe(false);
+}
+
+describe("approval signing boundary", () => {
+  it.each([
+    ["cancelled", env({ create: async () => null })],
+    ["invalid response", env({ create: registration({ flags: 0x41 }) })],
+    ["denied frame policy", env({ create: registration() }, { allows: () => false })],
+  ] as const)("does not sign or act after %s", async (scenario, passkeyEnv) => {
+    const engine = new Engine({ pace: 0, now: () => NOW, passkeyEnv: () => passkeyEnv });
+    await engine.ready;
+    const purchase = engine.buy(engine.getState().activeChat, "p:socks");
+    const request = await pendingRequest(engine);
+    const response = answer(request, "approve-once");
+    const signer = vi.spyOn(crypto.subtle, "sign");
+    try {
+      expect(await engine.respond(response)).toEqual({
+        ok: false,
+        reason: "verification-required",
+      });
+      expect(await engine.respond(response, { status: "simulated" })).toEqual({
+        ok: false,
+        reason: "verification-required",
+      });
+      const check = await engine.verifyApproval(response);
+      expect(check.status).toBe(scenario === "cancelled" ? "cancelled" : "failed");
+      expect(await engine.respond(response, check)).toEqual({
+        ok: false,
+        reason: "verification-required",
+      });
+      await engine.respond(answer(request, "deny"));
+      expect(await purchase).toBe("denied");
+      expect(signer).not.toHaveBeenCalled();
+      expectUnsigned(engine);
+    } finally {
+      signer.mockRestore();
+    }
+  });
+
+  it("ignores a registration response returned after the user cancels", async () => {
+    const controller = new AbortController();
+    const e = env({
+      create: async (options) => {
+        controller.abort();
+        return registration()(options);
+      },
+    });
+    const engine = new Engine({ pace: 0, now: () => NOW, passkeyEnv: () => e });
+    await engine.ready;
+    const purchase = engine.buy(engine.getState().activeChat, "p:socks");
+    const request = await pendingRequest(engine);
+    const response = answer(request, "approve-once");
+    const check = await engine.verifyApproval(response, controller.signal);
+    expect(check).toEqual({ status: "cancelled" });
+    expect(e.calls).toEqual(["create"]);
+    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
+    expect(await engine.respond(response, check)).toEqual({
+      ok: false,
+      reason: "verification-required",
+    });
+    await engine.respond(answer(request, "deny"));
+    await expect(purchase).resolves.toBe("denied");
+    expectUnsigned(engine);
+  });
+
+  it("rejects a superseded check, a copied result, and a successful check replayed on a later request", async () => {
+    const e = env({ create: registration(), get: assertion() });
+    const engine = new Engine({ pace: 0, now: () => NOW, passkeyEnv: () => e });
+    await engine.ready;
+    const chat = engine.getState().activeChat;
+    const purchase = engine.buy(chat, "p:socks");
+    const first = await pendingRequest(engine);
+    const response = answer(first, "approve-once");
+    const stale = await engine.verifyApproval(response);
+    const current = await engine.verifyApproval(response);
+    expect(stale.status).toBe("verified");
+    expect(current.status).toBe("verified");
+    expect(await engine.respond(response, stale)).toEqual({
+      ok: false,
+      reason: "verification-required",
+    });
+    expect(await engine.respond(response, { ...current })).toEqual({
+      ok: false,
+      reason: "verification-required",
+    });
+    await engine.respond(answer(first, "deny"));
+    await purchase;
+    const next = engine.buy(chat, "p:socks");
+    const second = await pendingRequest(engine);
+    expect(second.id).not.toBe(first.id);
+    expect(second.digest).toBe(first.digest);
+    expect(await engine.respond(answer(second, "approve-once"), current)).toEqual({
+      ok: false,
+      reason: "verification-required",
+    });
+    await engine.respond(answer(second, "deny"));
+    await next;
+    expectUnsigned(engine);
+  });
+
+  it("refuses verification that resolves after expiry", async () => {
+    let now = NOW;
+    const e = env({
+      create: async (o) => {
+        now = new Date(NOW.getTime() + 10 * 60_000);
+        return registration()(o);
+      },
+    });
+    const engine = new Engine({ pace: 0, now: () => now, passkeyEnv: () => e });
+    await engine.ready;
+    const purchase = engine.buy(engine.getState().activeChat, "p:socks");
+    const request = await pendingRequest(engine);
+    const response = answer(request, "approve-once");
+    const result = await engine.verifyApproval(response);
+    expect(result).toEqual({ status: "cancelled" });
+    expect(await engine.respond(response, result)).toEqual({ ok: false, reason: "expired" });
+    await expect(purchase).resolves.toBe("expired");
+    expectUnsigned(engine);
+  });
+
+  it.each([
+    "edited rule",
+    "reduced share",
+  ] as const)("challenges and signs the exact %s, refusing a post-check edit", async (scenario) => {
+    let challenge: Uint8Array | undefined;
+    const e = env({
+      create: async (o) => {
+        challenge = o.publicKey?.challenge as Uint8Array;
+        return registration()(o);
+      },
+      get: async (o) => {
+        challenge = o.publicKey?.challenge as Uint8Array;
+        return assertion()(o);
+      },
+    });
+    const engine = new Engine({ pace: 0, now: () => NOW, passkeyEnv: () => e });
+    await engine.ready;
+    const chat = engine.getState().activeChat;
+    const buying = scenario === "edited rule";
+    const work = buying ? engine.buy(chat, "p:socks") : engine.mortgageApply(chat);
+    const request = await pendingRequest(engine);
+    const fields = request.action.type === "share" ? request.action.fields : [];
+    const keep = fields.filter((f) => f.required && f.state === "offered").map((f) => f.id);
+    const offered = request.offered.find((o) => o.type === "set-limit");
+    const base = { requestId: request.id, digest: request.digest };
+    const response: PrincipalResponse =
+      buying && offered?.draft
+        ? {
+            ...base,
+            type: "set-limit",
+            offeredId: offered.id,
+            draft: {
+              ...offered.draft,
+              limit: { minor: 4300, currency: "USD" },
+            },
+          }
+        : { ...base, type: "share-less", offeredId: "share-less", keep };
+    const altered: PrincipalResponse =
+      response.type === "set-limit"
+        ? { ...response, draft: { ...response.draft, limit: { minor: 4900, currency: "USD" } } }
+        : answer(request, "approve-once");
+    const discarded = await engine.verifyApproval(response);
+    expect(discarded.status).toBe("verified");
+    expect(await engine.respond(altered, discarded)).toEqual({
+      ok: false,
+      reason: "verification-mismatch",
+    });
+    expect(await engine.respond(response, discarded)).toEqual({
+      ok: false,
+      reason: "verification-required",
+    });
+    expectUnsigned(engine);
+
+    const confirmed = await engine.verifyApproval(response);
+    expect(confirmed.status).toBe("verified");
+    expect(await engine.respond(response, confirmed)).toEqual({ ok: true });
+    if (!buying) {
+      const stepUp = await pendingRequest(engine);
+      expect(stepUp.kind).toBe("step-up");
+      await engine.respond(answer(stepUp, "deny"));
+    }
+    await work;
+    const jws = engine.getState().activity.find((a) => a.consentJws)?.consentJws;
+    const key = (engine as unknown as { key: DeviceKey }).key;
+    const record = await verifyRecord(jws ?? "", key.publicJwk);
+    if (buying) {
+      expect(record).toMatchObject({ type: "spending-rule", rule: { limit: { minor: 4300 } } });
+    } else {
+      const expected = actionDigest({
+        ...request.action,
+        fields: fields.map((f) =>
+          f.state === "offered" && !keep.includes(f.id)
+            ? { ...f, state: "withheld-by-gate", withheldReason: "You chose not to share this." }
+            : f,
+        ),
+      });
+      expect(expected).not.toBe(request.digest);
+      expect(record).toMatchObject({ type: "approval", actionDigest: expected });
+      expect(
+        engine
+          .getState()
+          .activity.some((a) => a.summary === "Shared income, bank balance with North Bank"),
+      ).toBe(true);
+    }
+    const digest = actionDigest({ requestId: request.id, payloads: [record] });
+    const expectedChallengePrefix = new Uint8Array(
+      await subtle.digest("SHA-256", new TextEncoder().encode(`errand-approval:${digest}`)),
+    );
+    expect(challenge?.slice(0, 32)).toEqual(expectedChallengePrefix);
   });
 });

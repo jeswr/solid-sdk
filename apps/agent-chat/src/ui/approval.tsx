@@ -14,14 +14,16 @@ import {
   type RuleScope,
   summarizeDraft,
 } from "@jeswr/agent-consent";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { Engine } from "../engine/engine.js";
 import type { ProductView } from "../engine/types.js";
-import { AGENT_NAME, PRINCIPAL } from "../engine/world.js";
+import { AGENT_NAME } from "../engine/world.js";
 import { Icon, ProductArt, Seal } from "./art.js";
 import { CheckList, FactRow, Meter } from "./chat.js";
-import { forgetPasskey, type UserCheck, verifyUser } from "./passkey.js";
+import { forgetPasskey } from "./passkey.js";
 
 const EXPLORER = "https://claude.ai/artifact/CeeevpC9wCwDyzcGDMrpPw";
+const VERIFICATION_CANCELLED = "Face ID passkey verification was cancelled. Nothing was approved.";
 
 export function HoldToConfirm({
   label,
@@ -70,94 +72,37 @@ export function HoldToConfirm({
   );
 }
 
-/**
- * Face ID (or the device's screen lock) through a passkey, before anything is signed. A
- * verified check goes straight on to signing; where passkeys cannot run, a clearly labelled
- * simulated step stands in; a cancelled or failed check returns to the sheet unsigned.
- */
 function VerifyPrompt({
-  digest,
-  onVerified,
+  simulated,
+  onConfirm,
   onCancel,
 }: {
-  digest: string;
-  onVerified: (check: UserCheck) => void;
-  onCancel: (message: string) => void;
+  simulated: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
 }) {
-  const [check, setCheck] = useState<UserCheck>();
-  const started = useRef(false);
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    void verifyUser(digest, PRINCIPAL.name).then((result) => {
-      setCheck(result);
-      if (result.status === "verified") onVerified(result);
-      else if (result.status === "cancelled")
-        onCancel("Face ID did not confirm it is you with your passkey, so nothing was approved.");
-      else if (result.status === "failed")
-        onCancel(`The passkey check failed (${result.reason}), so nothing was approved.`);
-    });
-  }, [digest, onVerified, onCancel]);
-  useEffect(() => {
-    if (check?.status !== "simulated") return;
-    const t = setTimeout(() => onVerified(check), 1400);
-    return () => clearTimeout(t);
-  }, [check, onVerified]);
-  const simulated = check?.status === "simulated";
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancel.current?.focus(), []);
   return (
-    <div className="device" role="dialog" aria-label="Confirm it is you">
+    <div className="device" role="dialog" aria-modal="true" aria-label="Confirm it is you">
       <div className="panel">
         <div className="print signing">
           <Icon name="face" size={40} />
         </div>
-        <strong>{simulated ? "Face ID (simulated)" : "Confirm with Face ID"}</strong>
-        <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
+        <strong>{simulated ? "Demo: Face ID simulated" : "Confirm with Face ID"}</strong>
+        <p className="muted">
           {simulated
-            ? "Simulated: passkeys cannot run here, so no Face ID check was made."
+            ? "This demo signs fictional approvals with a simulated check."
             : "Your device checks it is you with a passkey before this approval is signed."}
-        </div>
+        </p>
         {simulated && (
-          <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-            Why: {check.reason}. Open the app in its own tab to use a real passkey.
-          </div>
+          <button type="button" className="btn primary block" onClick={onConfirm}>
+            Confirm simulated Face ID
+          </button>
         )}
-      </div>
-    </div>
-  );
-}
-
-/** The device confirmation: the engine signs with the non-extractable device key. */
-function DevicePrompt({
-  kid,
-  check,
-  onDone,
-}: {
-  kid?: string;
-  check?: UserCheck;
-  onDone: () => void;
-}) {
-  useEffect(() => {
-    const t = setTimeout(onDone, 900);
-    return () => clearTimeout(t);
-  }, [onDone]);
-  return (
-    <div className="device" role="dialog" aria-label="Confirm on this device">
-      <div className="panel">
-        <div className="print signing">
-          <Icon name="fingerprint" size={40} />
-        </div>
-        <strong>Confirming on this device</strong>
-        <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
-          Signing with this device's key. The key never leaves this device.
-        </div>
-        {check && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-            {check.status === "verified"
-              ? `Face ID confirmed it is you${check.registered ? " and set up a passkey on this device" : ""}.`
-              : "Simulated check: no Face ID was used."}
-          </div>
-        )}
-        {kid && <div className="kid">key {kid.slice(0, 24)}…</div>}
+        <button type="button" className="btn text" ref={cancel} onClick={onCancel}>
+          Cancel verification
+        </button>
       </div>
     </div>
   );
@@ -234,7 +179,7 @@ export function LimitEditor({
     String((start.perPurchaseMax?.minor ?? start.limit.minor / 2) / 100),
   );
   const [until, setUntil] = useState<(typeof UNTIL)[number]["id"]>(start.expiresAt ? "3m" : "off");
-  const now = new Date();
+  const [now] = useState(() => new Date());
   const minor = Math.round(Number(amount) * 100);
   const valid =
     Number.isFinite(minor) && minor > 0 && minor <= 1_000_000 && /^\d+(\.\d{1,2})?$/.test(amount);
@@ -278,7 +223,7 @@ export function LimitEditor({
   const usedBefore = request.meter && offered.type === "raise-limit" ? request.meter.used.minor : 0;
   return (
     <div className="editor">
-      <div className="sheet-seal">
+      <div className="sheet-seal" id="limit-title">
         <Seal /> {offered.type === "raise-limit" ? "Raise your limit" : "Set a spending limit"}
       </div>
       <fieldset className="segment" aria-label="Kind of limit">
@@ -437,97 +382,100 @@ export function LimitEditor({
 type Mode =
   | { type: "sheet" }
   | { type: "editor"; offered: OfferedResponse }
-  | { type: "verify"; response: PrincipalResponse }
-  | { type: "device"; response: PrincipalResponse; check: UserCheck }
   | { type: "face"; offered: OfferedResponse };
 
 export function ApprovalSheet({
   request,
-  kid,
+  engine,
   products,
-  onRespond,
   onClose,
 }: {
   request: ApprovalRequest;
-  kid?: string;
+  engine: Engine;
   products: readonly ProductView[];
-  onRespond: (r: PrincipalResponse) => Promise<{ ok: boolean; reason?: string }>;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<Mode>({ type: "sheet" });
   const [whyOpen, setWhyOpen] = useState(false);
   const [error, setError] = useState<string>();
+  const [verification, setVerification] = useState<{
+    response: PrincipalResponse;
+    phase: "demo" | "checking";
+  }>();
+  const attempt = useRef<AbortController>(null);
   const action = request.action;
   const offeredFields =
     action.type === "share" ? action.fields.filter((f) => f.state === "offered") : [];
   const [keep, setKeep] = useState<Set<string>>(() => new Set(offeredFields.map((f) => f.id)));
   const sheetRef = useRef<HTMLDivElement>(null);
+  const locked = Boolean(verification) || mode.type === "face";
 
   useEffect(() => {
-    sheetRef.current?.focus();
-  }, []);
+    if (!locked) sheetRef.current?.focus();
+  }, [locked]);
 
-  const send = useCallback(
-    async (r: PrincipalResponse) => {
-      const result = await onRespond(r);
-      if (!result.ok) {
-        setError(
-          result.reason === "expired"
-            ? "This request expired. Ask me again."
-            : "That answer was not accepted.",
-        );
-        setMode({ type: "sheet" });
-      }
-    },
-    [onRespond],
-  );
+  useEffect(() => () => attempt.current?.abort(), []);
+
+  const performVerification = async (response: PrincipalResponse) => {
+    if (attempt.current) return;
+    const controller = new AbortController();
+    attempt.current = controller;
+    setVerification({ response, phase: "checking" });
+    const result = await engine.verifyApproval(response, controller.signal);
+    if (controller.signal.aborted) return;
+    if (result.status === "failed") {
+      setError(`The passkey check failed (${result.reason}), so nothing was approved.`);
+    } else if (result.status === "cancelled") {
+      setError(VERIFICATION_CANCELLED);
+    } else {
+      const accepted = await engine.respond(response, result);
+      if (controller.signal.aborted) return;
+      if (!accepted.ok) setError("The verified approval is no longer available.");
+    }
+    attempt.current = null;
+    setVerification(undefined);
+  };
+
+  const beginVerification = (response: PrincipalResponse) => {
+    if (verification || attempt.current) return;
+    setError(undefined);
+    if (engine.demoMode) setVerification((current) => current ?? { response, phase: "demo" });
+    else void performVerification(response);
+  };
 
   const choose = (o: OfferedResponse) => {
+    if (verification || attempt.current) return;
     if (o.type === "deny")
-      return void send({
+      return void engine.respond({
         requestId: request.id,
         digest: request.digest,
         type: "deny",
         offeredId: o.id,
       });
-    if (o.type === "set-limit" || o.type === "raise-limit")
+    if (o.type === "set-limit" || o.type === "raise-limit") {
+      setError(undefined);
       return setMode({ type: "editor", offered: o });
+    }
     if (o.type === "step-up-done") return setMode({ type: "face", offered: o });
     if (o.type === "approve-once" && action.type === "share" && keep.size < offeredFields.length) {
       const less = request.offered.find((x) => x.type === "share-less");
       if (less)
-        return setMode({
-          type: "verify",
-          response: {
-            requestId: request.id,
-            digest: request.digest,
-            type: "share-less",
-            offeredId: less.id,
-            keep: [...keep],
-          },
+        return beginVerification({
+          requestId: request.id,
+          digest: request.digest,
+          type: "share-less",
+          offeredId: less.id,
+          keep: [...keep],
         });
     }
     if (o.type === "approve-once")
-      return setMode({
-        type: "verify",
-        response: {
-          requestId: request.id,
-          digest: request.digest,
-          type: "approve-once",
-          offeredId: o.id,
-        },
+      beginVerification({
+        requestId: request.id,
+        digest: request.digest,
+        type: "approve-once",
+        offeredId: o.id,
       });
   };
-
-  const verified = useCallback(
-    (check: UserCheck) =>
-      setMode((m) => (m.type === "verify" ? { type: "device", response: m.response, check } : m)),
-    [],
-  );
-  const notVerified = useCallback((message: string) => {
-    setError(message);
-    setMode({ type: "sheet" });
-  }, []);
 
   const missingRequired = offeredFields.some((f) => f.required && !keep.has(f.id));
   const visible = request.offered.filter((o) => o.type !== "share-less");
@@ -549,165 +497,190 @@ export function ApprovalSheet({
         className="sheet"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="sheet-title"
+        aria-labelledby={mode.type === "editor" ? "limit-title" : "sheet-title"}
         tabIndex={-1}
         ref={sheetRef}
+        inert={locked}
         onKeyDown={(e) => e.key === "Escape" && deny && mode.type === "sheet" && choose(deny)}
       >
         <div className="handle" />
-        {mode.type === "editor" ? (
-          <LimitEditor
-            offered={mode.offered}
-            request={request}
-            onCancel={() => setMode({ type: "sheet" })}
-            onConfirm={(draft) =>
-              setMode({
-                type: "verify",
-                response: {
+        <fieldset className="sheet-controls" disabled={locked}>
+          {error && (
+            <div className="warn" role="alert">
+              {error}{" "}
+              {error.includes("passkey") && (
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    try {
+                      forgetPasskey();
+                      setError(undefined);
+                    } catch {
+                      setError(
+                        "Could not reset the saved passkey. Check this site's storage settings.",
+                      );
+                    }
+                  }}
+                >
+                  Reset Face ID passkey
+                </button>
+              )}
+            </div>
+          )}
+          {mode.type === "editor" ? (
+            <LimitEditor
+              offered={mode.offered}
+              request={request}
+              onCancel={() => {
+                setError(undefined);
+                setMode({ type: "sheet" });
+              }}
+              onConfirm={(draft) =>
+                beginVerification({
                   requestId: request.id,
                   digest: request.digest,
                   type: mode.offered.type as "set-limit" | "raise-limit",
                   offeredId: mode.offered.id,
                   draft,
-                },
-              })
-            }
-          />
-        ) : (
-          <>
-            <div className="sheet-seal">
-              <Seal /> {AGENT_NAME} needs your OK
-            </div>
-            <h2 id="sheet-title">{request.title}</h2>
-            <p className="reason">{request.plainReason}</p>
-            {request.historyNote && <p className="history">{request.historyNote}</p>}
-            {thumbs.length > 0 && (
-              <div className="thumbs">
-                {thumbs.map((p) => (
-                  <div key={p.id} className="thumb">
-                    <ProductArt art={p.art} color={p.color} />
-                  </div>
-                ))}
+                })
+              }
+            />
+          ) : (
+            <>
+              <div className="sheet-seal">
+                <Seal /> {AGENT_NAME} needs your OK
               </div>
-            )}
-            {request.meter && (
-              <Meter
-                used={request.meter.used}
-                limit={request.meter.limit}
-                after={request.meter.after}
-                resetsAt={request.meter.resetsAt}
-              />
-            )}
-            {action.type === "share" && (
-              <div className="fields">
-                {offeredFields.map((f) => (
-                  <div key={f.id} className="field">
-                    <div className="fl">
-                      <strong>{f.label}</strong>
-                      <span>
-                        {f.preview} · {f.source}
-                      </span>
-                    </div>
-                    {f.required && <span className="req">Needed</span>}
-                    <button
-                      type="button"
-                      className="switch"
-                      role="switch"
-                      aria-label={`Share ${f.label}`}
-                      aria-checked={keep.has(f.id)}
-                      onClick={() => {
-                        const next = new Set(keep);
-                        if (next.has(f.id)) next.delete(f.id);
-                        else next.add(f.id);
-                        setKeep(next);
-                      }}
-                    />
-                  </div>
-                ))}
-                {missingRequired && (
-                  <div className="warn">{action.recipient.name} cannot decide without this.</div>
-                )}
-                {action.fields.some((f) => f.state === "withheld-by-gate") && (
-                  <div className="not-shared">Not shared</div>
-                )}
-                {action.fields
-                  .filter((f) => f.state === "withheld-by-gate")
-                  .map((f) => (
-                    <div key={f.id} className="field withheld-row">
-                      <div className="fl">
-                        <strong>{f.label}</strong>
-                        <span>{f.withheldReason}</span>
-                      </div>
+              <h2 id="sheet-title">{request.title}</h2>
+              <p className="reason">{request.plainReason}</p>
+              {request.historyNote && <p className="history">{request.historyNote}</p>}
+              {thumbs.length > 0 && (
+                <div className="thumbs">
+                  {thumbs.map((p) => (
+                    <div key={p.id} className="thumb">
+                      <ProductArt art={p.art} color={p.color} />
                     </div>
                   ))}
-              </div>
-            )}
-            <dl className="facts">
-              {request.facts.map((f) => (
-                <FactRow
-                  key={`${f.label}:${f.value}`}
-                  label={f.label}
-                  value={f.value}
-                  emphasis={f.emphasis}
+                </div>
+              )}
+              {request.meter && (
+                <Meter
+                  used={request.meter.used}
+                  limit={request.meter.limit}
+                  after={request.meter.after}
+                  resetsAt={request.meter.resetsAt}
                 />
-              ))}
-            </dl>
-            {error && (
-              <div className="warn">
-                {error}{" "}
-                {error.includes("passkey") && (
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => {
-                      forgetPasskey();
-                      setError(undefined);
-                    }}
-                  >
-                    Reset Face ID passkey
-                  </button>
-                )}
-              </div>
-            )}
-            <div className="actions">
-              {primary.map((o) => {
-                const label =
-                  o.type === "approve-once" && action.type === "share"
-                    ? `Share ${keep.size}`
-                    : o.label;
-                const disabled = missingRequired || (action.type === "share" && keep.size === 0);
-                return o.confirm === "tap" ? (
-                  <button
-                    key={o.id}
-                    type="button"
-                    className="btn primary block"
-                    disabled={disabled}
-                    onClick={() => choose(o)}
-                  >
-                    {label}
-                  </button>
-                ) : o.type === "set-limit" ||
-                  o.type === "raise-limit" ||
-                  o.type === "step-up-done" ? (
-                  <button
-                    key={o.id}
-                    type="button"
-                    className="btn primary block"
-                    onClick={() => choose(o)}
-                  >
-                    {label}
-                  </button>
-                ) : disabled ? (
-                  <button key={o.id} type="button" className="btn primary block" disabled>
-                    {label}
-                  </button>
-                ) : (
-                  <HoldToConfirm key={o.id} label={label} onConfirm={() => choose(o)} />
-                );
-              })}
-              {standing.map((o) =>
-                o.type === "approve-once" ? (
-                  o.confirm === "tap" ? (
+              )}
+              {action.type === "share" && (
+                <div className="fields">
+                  {offeredFields.map((f) => (
+                    <div key={f.id} className="field">
+                      <div className="fl">
+                        <strong>{f.label}</strong>
+                        <span>
+                          {f.preview} · {f.source}
+                        </span>
+                      </div>
+                      {f.required && <span className="req">Needed</span>}
+                      <button
+                        type="button"
+                        className="switch"
+                        role="switch"
+                        aria-label={`Share ${f.label}`}
+                        aria-checked={keep.has(f.id)}
+                        onClick={() => {
+                          const next = new Set(keep);
+                          if (next.has(f.id)) next.delete(f.id);
+                          else next.add(f.id);
+                          setKeep(next);
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {missingRequired && (
+                    <div className="warn">{action.recipient.name} cannot decide without this.</div>
+                  )}
+                  {action.fields.some((f) => f.state === "withheld-by-gate") && (
+                    <div className="not-shared">Not shared</div>
+                  )}
+                  {action.fields
+                    .filter((f) => f.state === "withheld-by-gate")
+                    .map((f) => (
+                      <div key={f.id} className="field withheld-row">
+                        <div className="fl">
+                          <strong>{f.label}</strong>
+                          <span>{f.withheldReason}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+              <dl className="facts">
+                {request.facts.map((f) => (
+                  <FactRow
+                    key={`${f.label}:${f.value}`}
+                    label={f.label}
+                    value={f.value}
+                    emphasis={f.emphasis}
+                  />
+                ))}
+              </dl>
+              <div className="actions">
+                {primary.map((o) => {
+                  const label =
+                    o.type === "approve-once" && action.type === "share"
+                      ? `Share ${keep.size}`
+                      : o.label;
+                  const disabled = missingRequired || (action.type === "share" && keep.size === 0);
+                  return o.confirm === "tap" ? (
+                    <button
+                      key={o.id}
+                      type="button"
+                      className="btn primary block"
+                      disabled={disabled}
+                      onClick={() => choose(o)}
+                    >
+                      {label}
+                    </button>
+                  ) : o.type === "set-limit" ||
+                    o.type === "raise-limit" ||
+                    o.type === "step-up-done" ? (
+                    <button
+                      key={o.id}
+                      type="button"
+                      className="btn primary block"
+                      onClick={() => choose(o)}
+                    >
+                      {label}
+                    </button>
+                  ) : disabled ? (
+                    <button key={o.id} type="button" className="btn primary block" disabled>
+                      {label}
+                    </button>
+                  ) : (
+                    <HoldToConfirm key={o.id} label={label} onConfirm={() => choose(o)} />
+                  );
+                })}
+                {standing.map((o) =>
+                  o.type === "approve-once" ? (
+                    o.confirm === "tap" ? (
+                      <button
+                        key={o.id}
+                        type="button"
+                        className="btn block"
+                        onClick={() => choose(o)}
+                      >
+                        {o.label}
+                      </button>
+                    ) : (
+                      <HoldToConfirm
+                        key={o.id}
+                        label={o.label}
+                        primary={false}
+                        onConfirm={() => choose(o)}
+                      />
+                    )
+                  ) : (
                     <button
                       key={o.id}
                       type="button"
@@ -716,79 +689,77 @@ export function ApprovalSheet({
                     >
                       {o.label}
                     </button>
-                  ) : (
-                    <HoldToConfirm
-                      key={o.id}
-                      label={o.label}
-                      primary={false}
-                      onConfirm={() => choose(o)}
-                    />
-                  )
-                ) : (
-                  <button key={o.id} type="button" className="btn block" onClick={() => choose(o)}>
-                    {o.label}
+                  ),
+                )}
+                {deny && (
+                  <button type="button" className="btn text" onClick={() => choose(deny)}>
+                    {deny.label}
                   </button>
-                ),
-              )}
-              {deny && (
-                <button type="button" className="btn text" onClick={() => choose(deny)}>
-                  {deny.label}
-                </button>
-              )}
-            </div>
-            {request.standingWithheldReason && (
-              <div className="withheld">
-                <Icon name="lock" size={14} /> {request.standingWithheldReason}
+                )}
               </div>
-            )}
-            <div className={`why ${whyOpen ? "open" : ""}`}>
-              <button type="button" aria-expanded={whyOpen} onClick={() => setWhyOpen(!whyOpen)}>
-                Why am I being asked? <Icon name="chev" size={16} />
-              </button>
-              {whyOpen && (
-                <>
-                  <CheckList checks={request.checks} />
-                  <div className="why-foot">
-                    <span>
-                      Outcome: ask the principal. This request was written by the gate from the
-                      action itself, not by the AI model.
-                    </span>
-                    <span className="num">Action digest {request.digest.slice(8, 24)}…</span>
-                    <a href={EXPLORER} target="_blank" rel="noreferrer">
-                      Open the trace explorer <Icon name="external" size={12} />
-                    </a>
-                  </div>
-                </>
+              {request.standingWithheldReason && (
+                <div className="withheld">
+                  <Icon name="lock" size={14} /> {request.standingWithheldReason}
+                </div>
               )}
-            </div>
-            <div className="expiry">
-              This request expires in {minutes} minutes. Approvals are single use and bound to this
-              exact action.
-            </div>
-            <button type="button" className="sr-only" onClick={onClose}>
-              Close and decide later
-            </button>
-          </>
-        )}
+              <div className={`why ${whyOpen ? "open" : ""}`}>
+                <button type="button" aria-expanded={whyOpen} onClick={() => setWhyOpen(!whyOpen)}>
+                  Why am I being asked? <Icon name="chev" size={16} />
+                </button>
+                {whyOpen && (
+                  <>
+                    <CheckList checks={request.checks} />
+                    <div className="why-foot">
+                      <span>
+                        Outcome: ask the principal. This request was written by the gate from the
+                        action itself, not by the AI model.
+                      </span>
+                      <span className="num">Action digest {request.digest.slice(8, 24)}…</span>
+                      <a href={EXPLORER} target="_blank" rel="noreferrer">
+                        Open the trace explorer <Icon name="external" size={12} />
+                      </a>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="expiry">
+                This request expires in {minutes} minutes. Approvals are single use and bound to
+                this exact action.
+              </div>
+              <button type="button" className="sr-only" onClick={onClose}>
+                Close and decide later
+              </button>
+            </>
+          )}
+        </fieldset>
       </div>
-      {mode.type === "verify" && (
-        <VerifyPrompt digest={request.digest} onVerified={verified} onCancel={notVerified} />
-      )}
-      {mode.type === "device" && (
-        <DevicePrompt kid={kid} check={mode.check} onDone={() => void send(mode.response)} />
+      {verification && (
+        <VerifyPrompt
+          simulated={engine.demoMode}
+          onConfirm={() => {
+            if (verification.phase === "demo") void performVerification(verification.response);
+          }}
+          onCancel={() => {
+            attempt.current?.abort();
+            attempt.current = null;
+            setVerification(undefined);
+            setError(VERIFICATION_CANCELLED);
+          }}
+        />
       )}
       {mode.type === "face" && action.type === "step-up" && (
         <FaceCheck
           by={action.performedBy}
-          onDone={() =>
-            void send({
+          onDone={() => {
+            setMode({ type: "sheet" });
+            beginVerification({
               requestId: request.id,
               digest: request.digest,
               type: "step-up-done",
               offeredId: mode.offered.id,
               attestation: "face-check",
-            })
-          }
+            });
+          }}
         />
       )}
     </>

@@ -21,14 +21,21 @@ const NOW = new Date("2026-11-13T12:00:00.000Z");
 
 /** Answers each approval with the next scripted answer, recording what was asked. */
 function harness(answers: ((r: ApprovalRequest) => PrincipalResponse)[], now = () => NOW) {
-  const session = new Session({ pace: 0, now });
+  const session = new Session({ pace: 0, now, demoMode: true });
   const asked: ApprovalRequest[] = [];
   session.engine.subscribe((s) => {
     const req = s.pending?.request;
     if (req && !asked.includes(req)) {
       asked.push(req);
       const answer = answers.shift();
-      if (answer) queueMicrotask(() => void session.engine.respond(answer(req)));
+      if (answer) {
+        queueMicrotask(async () => {
+          const response = answer(req);
+          const check =
+            response.type === "deny" ? undefined : await session.engine.verifyApproval(response);
+          await session.engine.respond(response, check);
+        });
+      }
     }
   });
   const messages = (): readonly ChatMessage[] => session.engine.getState().chats[0]?.messages ?? [];
@@ -753,7 +760,11 @@ describe("review security regressions", () => {
     const socks = session.send("buy socks");
     await firstPending.promise;
     const old = once(asked[0] as ApprovalRequest);
-    const answers = await Promise.all([session.engine.respond(old), session.engine.respond(old)]);
+    const check = await session.engine.verifyApproval(old);
+    const answers = await Promise.all([
+      session.engine.respond(old, check),
+      session.engine.respond(old, check),
+    ]);
     expect(answers).toEqual([{ ok: true }, { ok: false, reason: "nothing-pending" }]);
     await socks;
     unsubscribe();

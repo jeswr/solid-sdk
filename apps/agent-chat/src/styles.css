@@ -170,6 +170,10 @@ a {
   /* Above the approval scrim: Stop stays reachable while a sheet is open. */
   z-index: 22;
 }
+.topbar .demo-label {
+  color: var(--text-2);
+  font-size: 12px;
+}
 .topbar .title {
   flex: 1;
   font-weight: 600;
@@ -1051,6 +1055,12 @@ table.compare tr:last-child td {
       transform: translate(-50%, 0);
     }
   }
+}
+.sheet-controls {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
 }
 .handle {
   width: 40px;
