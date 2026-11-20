@@ -10,9 +10,10 @@
  * written by the runtime/enforcement components, not by domain handlers.
  *
  * Bounded retention (file ledger): the current segment rotates after `segmentMaxEntries`
- * entries; at most `maxSegments` archived segments are kept. Before the oldest segment is
- * deleted a `ledger-checkpoint` entry records its last sequence number and hash, so the
- * retained chain still verifies from that point. Deleting evidence is a governance decision:
+ * entries; retention keeps `maxSegments` archived segments after pruning. Before a segment
+ * is deleted a `ledger-checkpoint` entry records its last sequence number and hash, so the
+ * retained chain still verifies from that point. Runtimes with an independent durable head
+ * save that head before deleting any segments. Deleting evidence is a governance decision:
  * a managed deployment must set these bounds from its retention policy (and archive before
  * pruning); the pilot defaults are only a safety bound.
  */
@@ -73,6 +74,9 @@ export interface EvidenceLedger {
   /** The writer's head, maintained independently of entries supplied to a reader. */
   head?(): LedgerHead;
   enableRangeCommitments?(): void;
+  deferPruning?(): void;
+  /** Write retention checkpoints and return the deletion to perform after saving the head. */
+  preparePruning?(at: string): (() => void) | undefined;
   readonly requiresTrustedCheckpoint?: boolean;
   append<T extends LedgerRecord>(record: T, at: string): LedgerEntry;
   entries(): readonly LedgerEntry[];
@@ -156,6 +160,7 @@ export class FileLedger implements EvidenceLedger {
   private last: LedgerEntry | undefined;
   private currentCount = 0;
   private committed = false;
+  private pruningDeferred = false;
   private readonly bounds: LedgerBounds;
 
   constructor(
@@ -171,6 +176,10 @@ export class FileLedger implements EvidenceLedger {
 
   enableRangeCommitments(): void {
     this.committed = true;
+  }
+
+  deferPruning(): void {
+    this.pruningDeferred = true;
   }
 
   head(): LedgerHead {
@@ -227,26 +236,37 @@ export class FileLedger implements EvidenceLedger {
     renameSync(this.path, `${this.path}.seg-${String(next).padStart(6, "0")}`);
     fsyncDir(dirname(this.path));
     this.currentCount = 0;
+    if (!this.pruningDeferred) this.preparePruning(at)?.();
+  }
+
+  preparePruning(at: string): (() => void) | undefined {
     const archived = this.segments();
     const excess = archived.length - this.bounds.maxSegments;
-    if (excess <= 0) return;
+    if (excess <= 0) return undefined;
     const pruned = archived.slice(0, excess);
-    const lastPruned = readSegment(pruned.at(-1) as string).at(-1);
-    // Checkpoint FIRST, then delete: the retained chain stays verifiable from here.
-    this.writeLine(
-      this.sealNext(
-        {
-          type: "ledger-checkpoint",
-          prunedSegments: pruned.map((p) => basename(p)),
-          lastPrunedSeq: lastPruned?.seq ?? 0,
-          lastPrunedHash: lastPruned?.hash ?? GENESIS,
-          note: "older evidence removed under the configured retention bound",
-        },
-        at,
-      ),
-    );
-    for (const p of pruned) rmSync(p, { force: true });
-    fsyncDir(dirname(this.path));
+    // Every possible retained prefix needs a checkpoint if deletion is interrupted.
+    for (const path of pruned) {
+      const lastPruned = readSegment(path).at(-1);
+      if (!lastPruned) throw Error("Cannot checkpoint an empty ledger segment");
+      this.writeLine(
+        this.sealNext(
+          {
+            type: "ledger-checkpoint",
+            prunedSegments: [basename(path)],
+            lastPrunedSeq: lastPruned.seq,
+            lastPrunedHash: lastPruned.hash,
+            note: "older evidence removed under the configured retention bound",
+          },
+          at,
+        ),
+      );
+    }
+    return () => {
+      for (const path of pruned) {
+        rmSync(path, { force: true });
+        fsyncDir(dirname(this.path));
+      }
+    };
   }
 
   /** All retained entries (archived segments + current), oldest first. Bounded by policy. */

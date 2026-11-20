@@ -470,6 +470,19 @@ export async function runScenario(
   const exercisedStress = new Set<Scenario["stress"][number]>();
   for (const path of paths) {
     const world = scenarioSchema.parse(patch(configured, path.change));
+    const guarded = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
+    const mainSteps =
+      guarded && path.change.script !== undefined
+        ? new Map(configured.script.map((step) => [step.id, step]))
+        : undefined;
+    // Compare authored steps before either identity or settlement materialization.
+    const changedSteps = guarded
+      ? new Set(
+          world.script
+            .filter((step) => mainSteps && !isDeepStrictEqual(mainSteps.get(step.id), step))
+            .map((step) => step.id),
+        )
+      : undefined;
     if (configuredProfile.id !== world.profile) throw new Error("branch profile mismatch");
     validateReferences(configuredProfile, world, { pathWorld: true });
     const pathProfile = domainProfileSchema.parse(
@@ -578,18 +591,6 @@ export async function runScenario(
     const proofVariant =
       path.kind === "branch" &&
       world.requiredMethods.some((method) => !configured.requiredMethods.includes(method));
-    const guarded = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
-    const mainSteps =
-      guarded && path.change.script !== undefined
-        ? new Map(configured.script.map((step) => [step.id, step]))
-        : undefined;
-    const changedSteps = guarded
-      ? new Set(
-          world.script
-            .filter((step) => mainSteps && !isDeepStrictEqual(mainSteps.get(step.id), step))
-            .map((step) => step.id),
-        )
-      : undefined;
     const expected =
       path.catalogueExpected ??
       (path.kind === "branch" && path.expect
@@ -606,11 +607,11 @@ export async function runScenario(
         : undefined;
     const witness = path.expect;
     const statement = comparison?.judged?.kind === "check" ? comparison.judged : undefined;
-    // A2 judges an explicit check on withheld evidence inside an admitted gate run.
+    // A2 can witness admission with a withheld statement. A go still needs W's release evidence.
     const witnessed =
       witness &&
-      (statement &&
-      comparisonOutcome(statement.outcome) === comparisonOutcome(witness.outcome) &&
+      (witness.outcome === "admit" &&
+      statement?.outcome === "admit" &&
       statement.check === witness.check &&
       statement.reason === witness.reason
         ? statement

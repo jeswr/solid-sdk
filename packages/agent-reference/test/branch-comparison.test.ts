@@ -446,6 +446,20 @@ it("fails the guard when a main bar disappears before a shared release", () => {
   ).toMatchObject({ judged: stop, failure: go, setup: [] });
 });
 
+it("uses the aligned release to reach a skipped bar after an earlier main release", () => {
+  const step = { id: "shared-release", descriptor: { type: "start", items: [] } };
+  const skipped = decision("approval-required", 2);
+  const stop = { ...decision("not-authorised", 2), outcome: "stop" } as const;
+  const result = compareBranch(
+    { events: [accepted(1), skipped, accepted(3)], steps: new Map([[3, step]]) },
+    { events: [accepted(1), stop], steps: new Map([[1, step]]) },
+    { changedSteps: new Set() },
+  );
+  expect(result.judged).toEqual(stop);
+  expect(result.setup).toEqual([]);
+  expect(result.failure).toBeDefined();
+});
+
 it.each([false, true])("requires the extra go to come from a changed step (%s)", (changed) => {
   const go = accepted(1);
   const extra = accepted(2);
@@ -765,4 +779,141 @@ it("matches an admitted supersession against the catalogue go outcome", async ()
     actual: { outcome: "admit", check: "fitness", reason: "superseded-by-better-source" },
   });
   expect(branch?.note).toBeUndefined();
+}, 180_000);
+
+it("keeps an A2 supersession judgement but requires a release for an explicit go witness", async () => {
+  const { profile, scenario } = loadCase(root, "records-to-new-practice");
+  const branch = scenario.branches[0];
+  if (!branch) throw new Error("Missing supersession branch");
+  branch.expect = { outcome: "go", check: "fitness", reason: "superseded-by-better-source" };
+  const [, result] = await runScenario(profile, scenario, { reportExpectationFailures: true });
+  expect(
+    result?.trace?.events.some((event) => event.kind === "message-out" || event.effectRelease),
+  ).toBe(false);
+  expect(result).toMatchObject({
+    disagrees: true,
+    note: "expected fitness/superseded-by-better-source -> go",
+    actual: { outcome: "admit", check: "fitness", reason: "superseded-by-better-source" },
+  });
+}, 180_000);
+
+it("does not turn a withheld statement's failed check into a go witness", async () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const branch = scenario.branches.find((candidate) => candidate.id === "stranger");
+  if (!branch?.onlyUnder) throw new Error("Missing unknown-source fixture");
+  scenario.branches = [branch];
+  branch.expect = { outcome: "go", check: "source", reason: "source-unknown" };
+  const paths = await runScenario(profile, scenario, {
+    configuration: branch.onlyUnder,
+    reportExpectationFailures: true,
+  });
+  const result = paths.find((candidate) => candidate.path === branch.id);
+  const events = result?.trace?.events ?? [];
+  const check = events.find(
+    (event) =>
+      event.check === "source" && event.verdict === "fail" && event.reason === "source-unknown",
+  );
+  if (!check) throw new Error("Missing the failed inbound source check");
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      agent: check.agent,
+      gateRun: check.gateRun,
+      kind: "decision",
+      outcome: "admit",
+    }),
+  );
+  expect(
+    events.some(
+      (event) =>
+        event.seq > check.seq &&
+        event.agent === check.agent &&
+        (event.kind === "message-out" || event.effectRelease),
+    ),
+  ).toBe(false);
+  expect(result).toMatchObject({
+    disagrees: true,
+    note: "expected source/source-unknown -> go",
+    actual: { outcome: "admit", check: "source", reason: "source-unknown" },
+  });
+}, 180_000);
+
+it("does not let a trailing standalone supersession witness the next admission", async () => {
+  const { profile, scenario } = loadCase(root, "records-to-new-practice");
+  const [, result] = await runScenario(profile, scenario);
+  const events = result?.trace?.events ?? [];
+  const supersession = events.find((event) => event.reason === "superseded-by-better-source");
+  if (!supersession) throw new Error("Missing standalone supersession");
+  const next = events.find(
+    (event) =>
+      event.seq > supersession.seq &&
+      event.kind === "decision" &&
+      event.outcome === "admit" &&
+      event.agent === supersession.agent &&
+      event.gateRun === supersession.gateRun,
+  );
+  expect(next?.step).toBeGreaterThan(supersession.step);
+  expect(
+    witnessedDecision(
+      { events },
+      { outcome: "admit", check: "fitness", reason: "superseded-by-better-source" },
+    ),
+  ).toBeUndefined();
+  expect(result?.consequences).toContainEqual(
+    expect.objectContaining({ seq: next?.seq, outcome: "admit" }),
+  );
+}, 180_000);
+
+it("does not credit a DID-aliased copy of a main step as a replacement release", async () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const configuration = "identity-did";
+  const entry = scenario.configurations.find((candidate) => candidate.id === configuration);
+  const apply = scenario.script.find((step) => step.id === "apply");
+  if (!entry || apply?.type !== "start") throw new Error("Missing DID fixture");
+  scenario.stopAfter = "products-returned";
+  scenario.stress = ["integrity"];
+  entry.world.branches = [
+    {
+      id: "copied-application",
+      what: "Continue with the copied application and refuse its unsupported actor method.",
+      onlyUnder: configuration,
+      change: {
+        script: { [apply.id]: apply },
+        stopAfter: "describe-lender",
+        inject: [
+          {
+            step: "describe-lender",
+            target: "message",
+            path: ["from", "actor"],
+            value: "did:key:z6MkFictionalUnacceptedMethod",
+            resign: true,
+          },
+        ],
+      },
+      expect: { outcome: "refuse", check: "integrity", reason: "unsupported-configuration" },
+      outline: [],
+    },
+  ];
+  const [main, branch] = await runScenario(profile, scenario, { configuration });
+  expect(
+    main?.trace?.events.some(
+      (event) =>
+        event.kind === "message-out" &&
+        event.actionScope?.recipient === "did:web:north.identity.example",
+    ),
+  ).toBe(false);
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({
+      outcome: "go",
+      actionScope: expect.objectContaining({
+        recipient: "did:web:north.identity.example",
+      }),
+    }),
+  );
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({ outcome: "refuse", reason: "unsupported-configuration" }),
+  );
+  expect(branch).toMatchObject({
+    disagrees: true,
+    note: "changed before the judged decision",
+  });
 }, 180_000);

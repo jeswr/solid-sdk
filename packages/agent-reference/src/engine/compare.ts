@@ -21,6 +21,7 @@ export function decisionsOf(events: readonly TraceEvent[]) {
 
 const goes = (outcome: string | undefined) => outcome === "go" || outcome === "admit";
 const passing = ({ outcome }: { outcome?: string }) => goes(outcome) || outcome === "pass";
+const superseded = "superseded-by-better-source";
 
 export function comparisonOutcome(outcome: string | undefined) {
   if (outcome === "refuse") return "stop";
@@ -146,18 +147,34 @@ interface DecisionWitness {
   readonly reason: string;
 }
 
-function witnessCheck(
-  events: readonly TraceEvent[],
-  decision: TraceEvent,
-  witness: DecisionWitness,
-) {
-  return events.some(
+function sameScriptStep(run: ComparisonRun, a: TraceEvent, b: TraceEvent): boolean {
+  if (!run.steps) return a.step === b.step;
+  const step = run.steps.get(a.seq);
+  return step !== undefined && step.id === run.steps.get(b.seq)?.id;
+}
+
+function inMessageRun(run: ComparisonRun, check: TraceEvent): boolean {
+  return run.events.some(
+    (event) =>
+      event.seq < check.seq &&
+      event.kind === "message-in" &&
+      event.agent === check.agent &&
+      event.gateRun === check.gateRun &&
+      sameScriptStep(run, event, check),
+  );
+}
+
+function witnessCheck(run: ComparisonRun, decision: TraceEvent, witness: DecisionWitness) {
+  return run.events.some(
     (check) =>
       check.seq < decision.seq &&
       check.kind === "check" &&
       check.check === witness.check &&
       check.reason === witness.reason &&
       sameGateRun(check, decision) &&
+      // Standalone precedence is emitted after admission and carries the next run number.
+      (check.reason !== superseded ||
+        (sameScriptStep(run, check, decision) && inMessageRun(run, check))) &&
       (!goes(witness.outcome) || check.verdict === "pass"),
   );
 }
@@ -194,7 +211,7 @@ export function witnessedDecision(
       decision.kind === "decision" &&
       (!agent || decision.agent === agent) &&
       comparisonOutcome(decision.outcome) === comparisonOutcome(witness.outcome) &&
-      witnessCheck(run.events, decision, witness) &&
+      witnessCheck(run, decision, witness) &&
       (witness.outcome !== "go" ||
         decision.outcome !== "admit" ||
         (decision.part === "inbound-gate" && laterRelease(run, decision))),
@@ -208,7 +225,7 @@ function boundReleaseDecision(run: ComparisonRun, witness: DecisionWitness, agen
       decision.kind === "decision" &&
       decision.outcome === witness.outcome &&
       (!agent || decision.agent === agent) &&
-      witnessCheck(events, decision, witness),
+      witnessCheck(run, decision, witness),
   );
   if (direct || witness.outcome !== "go") return direct;
 
@@ -245,7 +262,7 @@ function boundReleaseDecision(run: ComparisonRun, witness: DecisionWitness, agen
         admission.gateRun !== undefined &&
         !!step &&
         step.id === run.steps?.get(admission.seq)?.id &&
-        witnessCheck(events, admission, witness)
+        witnessCheck(run, admission, witness)
       );
     });
   });
@@ -285,7 +302,6 @@ function witnessedRelease(
   return released ? decision : undefined;
 }
 
-const superseded = "superseded-by-better-source";
 const withheld = (e: TraceEvent) =>
   e.part === "inbound-gate" &&
   e.kind === "check" &&
@@ -305,18 +321,22 @@ function admittedStatementChecks(run: ComparisonRun, judgedAgent: string | undef
   return run.events.flatMap((check) => {
     const gateRun = check.gateRun;
     if (!withheld(check) || gateRun === undefined) return [];
-    const step = run.steps?.get(check.seq);
     // Standalone admissions record precedence after the last individual admission.
     const admission =
-      check.reason === superseded && step?.descriptor.type === "admit"
+      check.reason === superseded && !inMessageRun(run, check)
         ? admissions.findLast(
             (event) =>
               event.seq < check.seq &&
               event.agent === check.agent &&
               event.gateRun === gateRun - 1 &&
-              run.steps?.get(event.seq)?.id === step.id,
+              sameScriptStep(run, event, check),
           )
-        : admissions.find((event) => event.seq > check.seq && sameGateRun(check, event));
+        : admissions.find(
+            (event) =>
+              event.seq > check.seq &&
+              sameGateRun(check, event) &&
+              (check.reason !== superseded || sameScriptStep(run, event, check)),
+          );
     return admission ? [{ check, admission }] : [];
   });
 }
@@ -587,14 +607,21 @@ function prefixGuard(
     const expected = mainBars[i];
     return !expected || !sameDecision(expected, event);
   });
-  // Inspect only the main prefix reached before judgement. Extra branch releases do not
-  // advance this positional boundary, and a shared step can appear much later on main.
+  // A shared release reaches its actual main position, even when earlier steps were skipped.
   const comparable = prefix.filter((event) => !passing(event) || aligned.has(event.seq));
-  const mainPrefix = boundary
-    ? mainDecisions.filter((event) => event.seq < boundary.seq)
-    : mainDecisions.slice(0, comparable.length);
+  const lastShared = releases.findLast((event) => aligned.has(event.seq));
+  const reached = lastShared && aligned.get(lastShared.seq);
+  const mainPrefix = mainDecisions.filter(
+    (event, index) =>
+      (boundary ? event.seq < boundary.seq : index < comparable.length) ||
+      (reached !== undefined && event.seq <= reached.seq),
+  );
   const missing = mainPrefix.filter((event) => !passing(event))[branchBars.length];
-  const skipped = missing && (comparable[mainPrefix.indexOf(missing)] ?? missing);
+  const skipped =
+    missing &&
+    (comparable[mainPrefix.indexOf(missing)] ??
+      releases.find((event) => (aligned.get(event.seq)?.seq ?? 0) > missing.seq) ??
+      missing);
   const failure = [unexplained, changed, skipped]
     .filter((event) => event !== undefined)
     .sort((a, b) => a.seq - b.seq)[0];

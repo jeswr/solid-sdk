@@ -7,9 +7,9 @@ import { CompactSign } from "jose";
 import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ScriptedMailbox } from "../src/bindings/email.js";
-import { digestOf } from "../src/core/canonical.js";
+import { digestContent, digestOf } from "../src/core/canonical.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
@@ -21,7 +21,7 @@ import { CONFIG_EMAIL } from "../src/profile/configurations.js";
 import { testKey } from "../src/reference/keys.js";
 import { AgentRuntime, type AgentRuntimeOptions } from "../src/runtime/agent.js";
 import { Cast, mandateOf } from "../src/scenarios/common.js";
-import { FileLedger, MemoryLedger } from "../src/store/ledger.js";
+import { FileLedger, type LedgerBounds, MemoryLedger } from "../src/store/ledger.js";
 import { FileStateStore, MemoryStateStore } from "../src/store/state.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
 import { TrustResolver } from "../src/trust/resolver.js";
@@ -37,11 +37,13 @@ async function fixture({
   uncertainDelivery = false,
   stateDir,
   emailApprovalOnly = false,
+  ledgerBounds,
 }: {
   mailTrust?: boolean;
   uncertainDelivery?: boolean;
   stateDir?: string;
   emailApprovalOnly?: boolean;
+  ledgerBounds?: LedgerBounds;
 } = {}) {
   let at = new Date("2026-11-13T09:00:00.000Z");
   const cast = new Cast(() => at);
@@ -85,7 +87,7 @@ async function fixture({
   const memoryStore = new MemoryStateStore();
   const statePath = stateDir && join(stateDir, "state.json");
   const ledgerPath = stateDir && join(stateDir, "record.jsonl");
-  let ledger = ledgerPath ? new FileLedger(ledgerPath) : new MemoryLedger();
+  let ledger = ledgerPath ? new FileLedger(ledgerPath, ledgerBounds) : new MemoryLedger();
   const approvalKey = await testKey("email/old-approval");
   const trust = required(cast.trust.get("a"));
   const oldKey = {
@@ -227,7 +229,7 @@ async function fixture({
     approvalKey,
     reopen: async (includeHistoricalKey = true) => {
       runtime.close();
-      if (ledgerPath) ledger = new FileLedger(ledgerPath);
+      if (ledgerPath) ledger = new FileLedger(ledgerPath, ledgerBounds);
       runtime = await open(includeHistoricalKey);
     },
     recorder,
@@ -467,6 +469,55 @@ it("stops an exactly approved email when the repeated value requires inherited r
   });
   await f.approve();
   expect(f.mailbox.inbox()).toEqual([]);
+  expect(f.recorder.events().findLast(({ kind }) => kind === "decision")).toMatchObject({
+    outcome: "stop",
+    reason: "not-authorised",
+  });
+});
+
+it.each([
+  "text",
+  "UTF-8 bytes",
+] as const)("stops an exactly approved email repeating retained raw content as %s with inherited registration", async (encoding) => {
+  const f = await fixture();
+  const raw = "SYNTHETIC SENSITIVE RÉFÉRENCE";
+  const bytes = encoding === "text" ? raw : [...new TextEncoder().encode(raw)];
+  await f.send("urn:raw-registration-email", `The reference is ${raw}.`);
+  expect(f.runtime.pendingApprovals()).toHaveLength(1);
+  const id = "urn:private:raw";
+  const digest = digestContent(bytes);
+  // biome-ignore lint/complexity/useLiteralKeys: seed the retained content shape written by the inbound runtime
+  f.runtime["gateMemory"].enter("urn:task", {
+    id,
+    digest,
+    kind: "content",
+    accepted: false,
+    label: "Private attachment",
+    claimType: "unstructured-content",
+    source: "urn:source",
+    subject: "urn:owner",
+    terms: {
+      policy: { id: "urn:raw:terms" },
+      inherited: [
+        {
+          target: "urn:private:source",
+          terms: {
+            policy: {
+              id: "urn:source:terms",
+              permissions: [{ type: "permission", action: "distribute" }],
+            },
+            recipientMustBe: { task: "urn:role:registered", label: "a registered recipient" },
+          },
+        },
+      ],
+    },
+    statement: { id, digest, mediaType: "text/plain", bytes },
+  });
+  await f.approve();
+  expect(f.mailbox.inbox()).toEqual([]);
+  expect(f.recorder.events()).toContainEqual(
+    expect.objectContaining({ check: "data-terms", verdict: "fail", reason: "not-authorised" }),
+  );
   expect(f.recorder.events().findLast(({ kind }) => kind === "decision")).toMatchObject({
     outcome: "stop",
     reason: "not-authorised",
@@ -752,6 +803,92 @@ it.each([
     } finally {
       store.close();
     }
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("recovers the saved audit head after interrupted rotation at the retention boundary", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-rotation-audit-"));
+  const f = await fixture({
+    stateDir: dir,
+    ledgerBounds: { segmentMaxEntries: 32, maxSegments: 1 },
+  });
+  try {
+    await f.send();
+    await f.approve();
+    const checkpoint = f.runtime.recordHead();
+    const ledger = f.ledger;
+    if (!(ledger instanceof FileLedger)) throw new Error("Missing file ledger");
+    const before = ledger.entries();
+    const type = "uncheckpointed-observation";
+    // Cross two rotation boundaries without saving runtime state.
+    for (let i = 0; i <= 64; i++)
+      f.runtime.recordObservation({ type, observedBy: "urn:test:observer" });
+    expect(ledger.head().seq).toBeGreaterThan(checkpoint.seq);
+    const save = vi.spyOn(FileStateStore.prototype, "save").mockImplementationOnce(() => {
+      throw new Error("interrupted state save");
+    });
+    try {
+      await expect(f.runtime.auditRecord()).rejects.toThrow("interrupted state save");
+    } finally {
+      save.mockRestore();
+    }
+    const pruningCheckpoint = ledger
+      .entries()
+      .findLast(({ record }) => record.type === "ledger-checkpoint");
+    expect(pruningCheckpoint?.seq).toBeGreaterThan(checkpoint.seq);
+    for (let restart = 0; restart < 2; restart++) {
+      await f.reopen();
+      expect(f.runtime.recordHead()).toEqual(checkpoint);
+      const { jws } = await f.runtime.exportRecord("urn:unrelated");
+      expect(decodeCompactPayload(jws).entries).toEqual(
+        before.map(({ seq, hash }) =>
+          expect.objectContaining({ entry: expect.objectContaining({ seq, hash }) }),
+        ),
+      );
+      const report = await f.runtime.auditRecord();
+      expect(report.released).toContainEqual(expect.objectContaining({ verdict: "inside" }));
+      expect(report.entry).toBeUndefined();
+    }
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("prunes archived segments after saving a verifiable audit head", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-pruned-audit-"));
+  const f = await fixture({
+    stateDir: dir,
+    ledgerBounds: { segmentMaxEntries: 12, maxSegments: 1 },
+  });
+  try {
+    for (let i = 0; i < 48; i++)
+      f.runtime.recordObservation({ type: "observation", observedBy: "urn:test:observer" });
+    const ledger = f.ledger;
+    if (!(ledger instanceof FileLedger)) throw new Error("Missing file ledger");
+    expect(ledger.segments().length).toBeGreaterThan(2);
+    expect((await f.runtime.auditRecord()).ok).toBe(true);
+    expect(ledger.segments()).toHaveLength(1);
+    const checkpoint = f.runtime.recordHead();
+    const first = required(ledger.entries()[0]);
+    expect(first.seq).toBeGreaterThan(1);
+    expect(
+      ledger.entries().filter(({ record }) => record.type === "ledger-checkpoint"),
+    ).toContainEqual(
+      expect.objectContaining({
+        record: expect.objectContaining({
+          lastPrunedSeq: first.seq - 1,
+          lastPrunedHash: first.prev,
+        }),
+      }),
+    );
+    await f.reopen();
+    expect(f.runtime.recordHead().seq).toBeGreaterThanOrEqual(checkpoint.seq);
+    expect(f.ledger.entries()).toContainEqual(expect.objectContaining(checkpoint));
+    expect((await f.runtime.exportRecord("urn:unrelated")).jws).toBeTruthy();
   } finally {
     f.runtime.close();
     rmSync(dir, { recursive: true, force: true });

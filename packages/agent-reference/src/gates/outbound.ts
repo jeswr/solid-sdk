@@ -3350,10 +3350,20 @@ export class OutboundGate {
       const value = item.statement?.value;
       const literal =
         value === undefined ? undefined : typeof value === "string" ? value : canonicalJson(value);
-      const repeatsItem =
-        literal !== undefined &&
-        literal.length >= 4 &&
-        text.toLowerCase().includes(literal.toLowerCase());
+      const bytes = item.kind === "content" ? item.statement?.bytes : undefined;
+      const rawText =
+        typeof bytes === "string"
+          ? bytes
+          : Array.isArray(bytes)
+            ? new TextDecoder().decode(Uint8Array.from(bytes))
+            : undefined;
+      const emailText = text.toLowerCase();
+      const repeatsItem = [literal, rawText].some(
+        (itemText) =>
+          itemText !== undefined &&
+          itemText.length >= 4 &&
+          emailText.includes(itemText.toLowerCase()),
+      );
       const prohibited = approved && repeatsItem && explicitlyProhibits(item.terms, item.id);
       if (repeatsItem && this.missingRecipientRole(item.terms, scope.recipient)) {
         this.verdict(

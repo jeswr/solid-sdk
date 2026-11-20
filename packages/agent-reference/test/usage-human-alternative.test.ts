@@ -61,6 +61,17 @@ it("asks Sam about an undecided use of his own statement, binds the approval to 
     (event) => event.kind === "ask-principal" && event.reason === "approval-required",
   );
   expect(reusedAsks).toHaveLength(2);
+  const secondAsk = reusedAsks[1];
+  if (!secondAsk) throw new Error("Missing the second approval question");
+  expect(secondAsk).toMatchObject({ agent: "sams-agent", kind: "ask-principal" });
+  expect(
+    reused.trace.events.filter(
+      (event) =>
+        event.seq > secondAsk.seq &&
+        event.agent === secondAsk.agent &&
+        (event.kind === "message-out" || event.effectRelease || event.outcome === "go"),
+    ),
+  ).toEqual([]);
 
   // Disclosure stops Harbour's statement before Sam can be asked about it.
   expect(hold).toMatchObject({

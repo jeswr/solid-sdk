@@ -332,12 +332,12 @@ it("runs the transport-specific adversarial branches through separately keyed ag
     ).toBe(true);
   }
   const refusalPath = pathResult("a2a-task-state-lies");
-  expect(refusalPath.note).toBeUndefined();
   expect(refusalPath).toMatchObject({
-    actual: { outcome: "admit", reason: "intact", check: "integrity" },
     expected: { outcome: "admit", reason: "intact" },
-    disagrees: false,
+    disagrees: true,
+    note: "changed before the judged decision",
   });
+  expect(refusalPath.actual).toEqual({ outcome: "admit" });
   const refusal = refusalPath.trace.events;
   const a2aMain = pathResult("main", "transport-a2a").trace;
   const witness = { outcome: "admit", check: "integrity", reason: "intact" };
@@ -351,23 +351,40 @@ it("runs the transport-specific adversarial branches through separately keyed ag
   const inbound = refusal.find(
     (event) => event.kind === "message-in" && event.packet?.kind === "refuse",
   );
-  expect(inbound).toBeDefined();
-  expect(inbound!.seq).toBeGreaterThan(ignored!.seq);
+  if (!ignored || !inbound || inbound.gateRun === undefined)
+    throw new Error("Missing the transport fault or the signed refusal's inbound gate run");
+  expect(inbound.seq).toBeGreaterThan(ignored.seq);
+  const admitted = refusal.find(
+    (event) =>
+      event.seq > inbound.seq && event.kind === "decision" && event.agent === inbound.agent,
+  );
+  if (!admitted) throw new Error("Missing the refusal's inbound decision");
+  expect(admitted).toMatchObject({
+    part: "inbound-gate",
+    outcome: "admit",
+    gateRun: inbound.gateRun,
+  });
   expect(
     refusal.find(
       (event) =>
-        event.seq > inbound!.seq && event.kind === "decision" && event.agent === inbound!.agent,
+        event.seq > inbound.seq &&
+        event.seq < admitted.seq &&
+        event.agent === inbound.agent &&
+        event.gateRun === admitted.gateRun &&
+        event.part === "inbound-gate" &&
+        event.kind === "check" &&
+        event.check === "integrity",
     ),
-  ).toMatchObject({ part: "inbound-gate", outcome: "admit" });
-  const header = inbound?.packet?.layers.header.raw as { conversation?: string } | undefined;
+  ).toMatchObject({ verdict: "pass", reason: "intact" });
+  const header = inbound.packet?.layers.header.raw as { conversation?: string } | undefined;
   const conversation = header?.conversation;
   expect(conversation).toBeTruthy();
   expect(
     refusal.some(
       (event) =>
-        event.seq > inbound!.seq &&
+        event.seq > inbound.seq &&
         event.kind === "message-out" &&
-        event.agent === inbound!.agent &&
+        event.agent === inbound.agent &&
         (event.packet?.layers.header.raw as { conversation?: string })?.conversation ===
           conversation,
     ),

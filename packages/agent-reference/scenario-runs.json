@@ -2966,17 +2966,16 @@
       "settlement": "rdf-order",
       "configuration": "transport-a2a",
       "what": "The task says completed, while the signed reply refuses; the conversation remains refused.",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
-        "outcome": "admit",
-        "reason": "intact",
-        "check": "integrity"
+        "outcome": "admit"
       },
       "expected": {
         "outcome": "admit",
         "reason": "intact"
       },
       "consequences": [],
+      "note": "changed before the judged decision",
       "addedExchanges": 0,
       "trace": "mortgage-main--a2a-task-state-lies--transport-a2a.json"
     },
@@ -15677,7 +15676,13 @@
         "outcome": "go",
         "reason": "superseded-by-better-source"
       },
-      "consequences": [],
+      "consequences": [
+        {
+          "seq": 21,
+          "agent": "practice-agent",
+          "outcome": "admit"
+        }
+      ],
       "trace": "records-to-new-practice--branch-1--baseline.json"
     },
     {

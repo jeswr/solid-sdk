@@ -518,6 +518,7 @@ export class AgentRuntime {
     this.trust = options.trust;
     this.store = options.store;
     this.ledger = options.ledger;
+    this.ledger.deferPruning?.();
     this.clock = options.now ?? (() => new Date());
     const idSource = options.newId ?? newUrn;
     this.newId = () => this.registerIdentifier(idSource());
@@ -9562,9 +9563,13 @@ export class AgentRuntime {
   }
 
   private persist(): void {
-    if (this.ledger.requiresTrustedCheckpoint && this.ledgerAuditTrusted)
+    let prune: (() => void) | undefined;
+    if (this.ledger.requiresTrustedCheckpoint && this.ledgerAuditTrusted) {
+      prune = this.ledger.preparePruning?.(this.now());
       this.state.ledgerAuditHead = this.trustedAuditHead();
+    }
     this.store.save(copyData(this.state));
+    prune?.();
   }
 
   private result(

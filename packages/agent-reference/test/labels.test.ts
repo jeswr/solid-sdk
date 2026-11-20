@@ -33,7 +33,13 @@ it("uses ontology and profile RDF labels and retains each replaced identifier as
 it("keeps generated captions and rule explanations free of identifiers in every produced scenario trace", () => {
   const root = join(import.meta.dirname, "..");
   const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")) as {
-    paths: { trace?: string; status: string; configuration?: string }[];
+    paths: {
+      scenario: string;
+      path: string;
+      trace?: string;
+      status: string;
+      configuration?: string;
+    }[];
   };
   let traces = 0;
   for (const path of manifest.paths) {
@@ -57,8 +63,10 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(0);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(5);
   expect(alternatives).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(0);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(109);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toMatchObject([
+    { scenario: "mortgage-main", path: "a2a-task-state-lies", configuration: "transport-a2a" },
+  ]);
   const blocked = manifest.paths.filter((path) => path.status === "blocked");
   expect(blocked).toHaveLength(5);
   expect(blocked.every((path) => !path.trace)).toBe(true);

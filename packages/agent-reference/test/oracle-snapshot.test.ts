@@ -15,6 +15,8 @@ it("snapshots the canonical decisions without transport rows replacing or extend
   const directory = mkdtempSync(join(tmpdir(), "canonical-oracle-"));
   try {
     mkdirSync(join(directory, "traces"));
+    mkdirSync(join(directory, "scenarios"));
+    writeFileSync(join(directory, "scenarios/case.json"), JSON.stringify({ branches: [] }));
     const canonical = [
       {
         agent: "receiver",
