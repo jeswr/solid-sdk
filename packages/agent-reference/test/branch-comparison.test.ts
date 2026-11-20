@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
-import { firstBranchDivergence } from "../src/engine/compare.js";
+import { continuedReleaseProblem, firstBranchDivergence } from "../src/engine/compare.js";
 import type { TraceEvent } from "../src/trace/types.js";
 
 function decision(reason = "approval-required", seq = 1): TraceEvent {
@@ -31,4 +31,47 @@ it("consumes matches so an additional repetition diverges", () => {
 });
 it("reports no divergence when every non-pass decision matches", () => {
   expect(firstBranchDivergence([decision()], [decision()])).toBeUndefined();
+});
+
+it("detects an earlier successful decision changed before the expected stop", () => {
+  const first = { ...decision("within-mandate"), outcome: "go" as const };
+  const changed = { ...first, agent: "another-agent" };
+  expect(firstBranchDivergence([first, decision()], [changed, decision()])).toEqual(changed);
+});
+
+it("rejects the same stopped proposal even when expect.continues is set", () => {
+  const actionScope = {
+    action: "distribute",
+    operation: "urn:operation",
+    target: "urn:operation",
+    conversation: "urn:conversation",
+    recipient: "urn:recipient",
+    purpose: "urn:purpose",
+    evidence: ["urn:one", "urn:two"],
+  };
+  const stop = {
+    ...decision("prohibited"),
+    outcome: "stop" as const,
+    actionDigest: "stopped",
+    actionScope,
+  };
+  const release = {
+    ...decision("released", 2),
+    outcome: "go" as const,
+    gateRun: 2,
+    actionScope,
+    actionDigest: "stopped",
+  };
+  expect(continuedReleaseProblem(stop, [release])).toBe(true);
+  const store = { ...release, part: "memory" as const, kind: "store" as const };
+  expect(continuedReleaseProblem(stop, [store])).toBe(true);
+  expect(
+    continuedReleaseProblem(stop, [
+      {
+        ...release,
+        actionDigest: "narrower",
+        actionScope: { ...actionScope, evidence: ["urn:one"] },
+      },
+    ]),
+  ).toBe(false);
 });

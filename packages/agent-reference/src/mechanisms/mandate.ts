@@ -285,8 +285,10 @@ export function actionDigest(intent: ActionIntent): string {
   return digestOf(intent);
 }
 
+export const NO_MANDATE_GRANT = "no applicable grant in the mandate (deny by default)";
+
 export interface EvaluateInput {
-  readonly loaded: LoadedMandate | undefined;
+  readonly loaded: (Pick<LoadedMandate, "mandate" | "digest"> & Partial<LoadedMandate>) | undefined;
   readonly loadFailure?: string;
   readonly withdrawn?: boolean;
   readonly intent: ActionIntent;
@@ -417,7 +419,7 @@ export function evaluateIntent(input: EvaluateInput): AuthorisationDecision {
   return {
     ...base,
     outcome: "deny",
-    reason: "no applicable grant in the mandate (deny by default)",
+    reason: NO_MANDATE_GRANT,
   };
 }
 
@@ -519,6 +521,9 @@ export async function verifyApproval(
       reason: "approval is for a different actor",
       verification: check.verification,
     };
+  }
+  if (Date.parse(a.issuedAt) > Date.parse(options.at)) {
+    return { ok: false, reason: "approval not yet issued", verification: check.verification };
   }
   if (Date.parse(a.validUntil) <= Date.parse(options.at)) {
     return { ok: false, reason: "approval expired", verification: check.verification };

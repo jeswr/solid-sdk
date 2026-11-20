@@ -9365,6 +9365,9 @@
               },
               "anchor": {
                 "$ref": "#/$defs/__schema0"
+              },
+              "terminal": {
+                "$ref": "#/$defs/__schema0"
               }
             },
             "required": [
@@ -9412,6 +9415,22 @@
               "witness": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "interval": {
+                "type": "object",
+                "properties": {
+                  "conversation": {
+                    "$ref": "#/$defs/__schema0"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/__schema0"
+                  }
+                },
+                "required": [
+                  "conversation",
+                  "from"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -9480,6 +9499,9 @@
                 "const": "register"
               },
               "agreement": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "answerThrough": {
                 "$ref": "#/$defs/__schema0"
               },
               "persons": {

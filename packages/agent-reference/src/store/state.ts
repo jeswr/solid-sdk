@@ -148,6 +148,7 @@ export interface MandateRevocation {
 }
 
 export interface RuntimeState {
+  ledgerAuditHead?: import("./ledger.js").LedgerHead;
   duties: import("../runtime/duties.js").DutyState;
   recordMessages: Record<
     string,

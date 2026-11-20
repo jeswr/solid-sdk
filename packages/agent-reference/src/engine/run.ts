@@ -114,7 +114,13 @@ import { alterDocumentForTest, changeSelectiveSalt } from "../wire/document-faul
 import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
-import { decisionsOf, firstBranchDivergence } from "./compare.js";
+import {
+  continuedReleaseProblem,
+  decisionsOf,
+  firstBranchDivergence,
+  firstCatalogueFailure,
+} from "./compare.js";
+import { patchDifferences } from "./confinement.js";
 import {
   FAULTY_GATE_CAPTION,
   FAULTY_GATE_STAND_IN,
@@ -126,6 +132,7 @@ import { validateReferences } from "./load.js";
 import {
   advertisedConfigurations,
   matrixConfiguration,
+  matrixExtended,
   matrixPrerequisite,
   matrixProfileChanges,
   matrixSink,
@@ -147,13 +154,14 @@ function required<T>(value: T | undefined): T {
 }
 
 export interface PathResult {
+  readonly pathKind: "main" | "branch";
   readonly usedTestDouble?: boolean;
   readonly path: string;
   readonly configuration?: string;
   readonly what?: string;
   readonly trace?: TraceFile;
   readonly blocked?: string;
-  readonly actual?: { outcome: string; reason: string; check?: string };
+  readonly actual?: { outcome: string; reason?: string; check?: string };
   readonly expected?: { outcome: string; reason: string };
   readonly consequences?: readonly {
     seq: number;
@@ -358,6 +366,17 @@ export async function runScenario(
     ? scenario.configurations.find((c) => c.id === options.configuration)
     : undefined;
   if (options.configuration && !alternative) throw new Error("unknown scenario configuration");
+  if (alternative) {
+    const dependencies = [
+      matrixPrerequisite(scenario, alternative),
+      matrixExtended(scenario, alternative),
+    ];
+    for (const entry of [...dependencies, alternative]) {
+      if (!entry) continue;
+      const differences = patchDifferences(scenario, entry, profile);
+      if (differences.length) throw new Error(`${entry.id}: C3 refused: ${differences.join("; ")}`);
+    }
+  }
   const configured = alternative
     ? scenarioSchema.parse(matrixWorld(scenario, alternative))
     : scenario;
@@ -370,13 +389,16 @@ export async function runScenario(
   const paths = [
     {
       id: "main",
+      kind: "main" as const,
       change: {},
       outline: scenario.expect,
       blocked: undefined as string | undefined,
       expect: scenario.result,
       catalogueExpected: scenario.catalogueExpected,
     },
-    ...configured.branches.filter((b) => !b.onlyUnder || b.onlyUnder === alternative?.id),
+    ...configured.branches
+      .filter((b) => !b.onlyUnder || b.onlyUnder === alternative?.id)
+      .map((branch) => ({ ...branch, kind: "branch" as const })),
   ];
   const results: PathResult[] = [];
   const exercisedStress = new Set<Scenario["stress"][number]>();
@@ -429,6 +451,7 @@ export async function runScenario(
     if (blocker) {
       results.push({
         path: path.id,
+        pathKind: path.kind,
         ...("what" in path ? { what: path.what } : {}),
         ...(alternative ? { configuration: alternative.id } : {}),
         blocked: blocker,
@@ -455,6 +478,7 @@ export async function runScenario(
       {
         ...options,
         alternative,
+        pathKind: path.kind,
         ...("onlyUnder" in path && path.onlyUnder ? { onlyUnder: path.onlyUnder } : {}),
       },
     );
@@ -463,25 +487,33 @@ export async function runScenario(
         "The engine refuses a test-double verification attempt, including one caught as a verifier failure; no artifact may be written.",
       );
     if (path.expect && !world.requiredMethods.length) {
-      const witness = trace.events.findIndex(
-        (e) => e.check === required(path.expect).check && e.reason === required(path.expect).reason,
-      );
-      const checkEvent = trace.events[witness];
-      const decision = trace.events
-        .slice(witness + 1)
-        .find(
-          (e) =>
-            e.kind === "decision" &&
-            e.agent === checkEvent?.agent &&
-            (!["go", "stop"].includes(path.expect?.outcome ?? "") ||
-              e.outcome === path.expect?.outcome),
-        );
-      if (witness < 0 || decision?.outcome !== path.expect.outcome)
+      const expected = path.expect;
+      const decision = trace.events.find((event, index) => {
+        if (event.kind !== "decision" || event.outcome !== expected.outcome) return false;
+        return trace.events
+          .slice(0, index)
+          .some(
+            (check) =>
+              check.kind === "check" &&
+              check.check === expected.check &&
+              check.reason === expected.reason &&
+              check.agent === event.agent &&
+              check.part === event.part &&
+              check.gateRun === event.gateRun,
+          );
+      });
+      if (!decision)
         throw new Error(
-          `${scenario.id}/${path.id}: expected ${path.expect.check}/${path.expect.reason} -> ${path.expect.outcome}`,
+          `${scenario.id}/${path.id}: expected ${expected.check}/${expected.reason} -> ${expected.outcome}`,
         );
-      // A stop scoped to one proposal (`continues`) lets the core go on with a narrower one,
-      // so only then is the guard against a later effect skipped.
+      if (
+        path.expect.outcome === "stop" &&
+        path.expect.continues &&
+        continuedReleaseProblem(decision, trace.events.slice(decision.seq))
+      )
+        throw new Error(
+          `${scenario.id}/${path.id}: a release after the stop lacks a narrower authorised proposal`,
+        );
       if (
         (path.expect.outcome === "stop" && !path.expect.continues) ||
         path.expect.outcome === "refuse"
@@ -492,7 +524,8 @@ export async function runScenario(
             .some(
               (e) =>
                 e.agent === decision?.agent &&
-                (e.kind === "store" ||
+                (e.effectRelease ||
+                  e.kind === "store" ||
                   (e.kind === "message-out" &&
                     !(
                       path.expect?.outcome === "refuse" &&
@@ -510,13 +543,17 @@ export async function runScenario(
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
-    const decisions = decisionsOf(trace.events);
-    const mainTrace = results.find((r) => r.path === "main")?.trace;
+    const orderedBranch = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
+    const decisions = decisionsOf(trace.events, orderedBranch);
+    const mainTrace = results.find((r) => r.pathKind === "main")?.trace;
     const firstFailure =
-      path.id !== "main" && mainTrace
-        ? firstBranchDivergence(decisionsOf(mainTrace.events), decisions)
+      path.kind === "branch" && mainTrace
+        ? (orderedBranch ? firstBranchDivergence : firstCatalogueFailure)(
+            decisionsOf(mainTrace.events, orderedBranch),
+            decisions,
+          )
         : decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
-    const noDivergence = path.id !== "main" && !!mainTrace && !firstFailure;
+    const noDivergence = path.kind === "branch" && !!mainTrace && !firstFailure;
     const judged = firstFailure ?? decisions.at(-1);
     const judgedReason =
       judged?.reason ??
@@ -535,10 +572,10 @@ export async function runScenario(
     const actual =
       !firstFailure && path.expect && !world.requiredMethods.length
         ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
-        : judged?.outcome && judgedReason
+        : judged?.outcome && ((orderedBranch && firstFailure) || judgedReason)
           ? {
               outcome: judged.outcome,
-              reason: judgedReason,
+              ...(judgedReason ? { reason: judgedReason } : {}),
               ...(check ? { check } : {}),
             }
           : undefined;
@@ -554,11 +591,12 @@ export async function runScenario(
       : [];
     const expected =
       path.catalogueExpected ??
-      (path.id !== "main" && path.expect
+      (path.kind === "branch" && path.expect
         ? { outcome: path.expect.outcome, reason: path.expect.reason }
         : undefined);
     results.push({
       path: path.id,
+      pathKind: path.kind,
       ...("what" in path ? { what: path.what } : {}),
       ...(alternative ? { configuration: alternative.id } : {}),
       ...(tracked.usedTestDouble() ? { usedTestDouble: true } : {}),
@@ -597,13 +635,15 @@ async function runPath(
     generateProofs?: boolean;
     alternative?: Scenario["configurations"][number];
     onlyUnder?: string;
+    pathKind: PathResult["pathKind"];
   },
 ): Promise<TraceFile> {
   // Brief 32: the faulty-gate stand-in runs only on a branch under accountability-vendor-fault
   // while that configuration is active.
   if (
     scenario.gateFault &&
-    (options.onlyUnder !== VENDOR_FAULT_CONFIGURATION ||
+    (options.pathKind !== "branch" ||
+      options.onlyUnder !== VENDOR_FAULT_CONFIGURATION ||
       options.alternative?.id !== VENDOR_FAULT_CONFIGURATION)
   )
     throw new Error(
@@ -1219,6 +1259,7 @@ async function runPath(
     ]),
   );
   const emailChallenges = new Map<string, string>();
+  let fixtureEmailNonce: string | undefined;
   const datasets = new Map<string, LocalDatasetHolder>();
   for (const d of scenario.datasets) {
     const identity = required(parties.get(d.holder)).identity;
@@ -2423,6 +2464,8 @@ async function runPath(
               {
                 id: "urn:scenario:forum",
                 releasesRecord: true,
+                recordRecipient: forum.identity,
+                recordRangeOnly: !!options.alternative,
                 execute: async (_key: string, params: JsonObject) => {
                   const result =
                     params.operation === "submit"
@@ -2446,11 +2489,9 @@ async function runPath(
           id: "urn:scenario:host",
           bindsParameters: true,
           purposeScoped: true,
+          publicationRecipient: (params) => parties.get(String(params.host))?.identity,
           execute: async (key: string, params: JsonObject) => {
             const items = Array.isArray(params.items) ? params.items.map(String) : [];
-            const ids = items.map((jws) => (decodeCompactPayload(jws) as { id?: unknown }).id);
-            if (digestOf(ids) !== digestOf(params.evidence))
-              return { conclusion: "not-executed" as const, reason: "items do not match evidence" };
             const shelf = hosted.get(String(params.host)) ?? new Map<string, string[]>();
             shelf.set(key, items);
             hosted.set(String(params.host), shelf);
@@ -2479,6 +2520,7 @@ async function runPath(
       advertisedConfigurations(agent.configurations, configuration),
       {
         gates: gate,
+        emailChallengeNonce: () => required(fixtureEmailNonce),
         settlement,
         ...(settlement.id !== "rdf-order"
           ? {
@@ -2759,14 +2801,15 @@ async function runPath(
               .replace(/^sha-256:/, "")
               .slice(0, 16)
           : undefined;
+        fixtureEmailNonce = nonce;
         if (nonce) emailChallenges.set(step.mailbox, nonce);
         result = await runtime.sendEmail({
           taskId: `urn:scenario:${scenario.id}:${step.id}`,
           adapter: "urn:scenario:email",
           to: required(mailboxes.get(step.mailbox)).address,
-          text: nonce ? `${step.text}\n\nChallenge: ${nonce}` : step.text,
+          text: step.text,
           purpose: step.purpose,
-          ...(nonce ? { challenge: nonce } : {}),
+          challenge: step.challenge,
         });
         break;
       }
@@ -3051,10 +3094,19 @@ async function runPath(
         if (!witness) throw new Error(`step ${step.id}: ${step.witness} does not run an agent`);
         const actor = cast.get(step.agent).identity;
         const head = runtime.recordHead();
+        const from = step.interval && template<{ seq: number; hash: string }>(step.interval.from);
         const receipt = await witness.witnessRecordHead({
           actor: actor.actor,
           party: required(actor.party),
           ...head,
+          ...(step.interval && from
+            ? {
+                interval: {
+                  conversation: template<string>(step.interval.conversation),
+                  from: { seq: from.seq, hash: from.hash },
+                },
+              }
+            : {}),
         });
         result = { ...head, receipt: receipt.jws };
         break;
@@ -3064,6 +3116,9 @@ async function runPath(
           template<string>(step.conversation),
           step.anchor
             ? template<{ seq: number; hash: string; receipt: string }>(step.anchor)
+            : undefined,
+          step.terminal
+            ? template<{ seq: number; hash: string; receipt: string }>(step.terminal)
             : undefined,
         );
         if (step.attack) {
@@ -3121,6 +3176,7 @@ async function runPath(
                 conversation: template<string>(step.conversation),
                 segment: template<string>(step.segment),
                 allegation: step.allegation,
+                ...(step.answerThrough ? { answerThrough: template(step.answerThrough) } : {}),
                 ...(step.observation ? { observation: template<string>(step.observation) } : {}),
                 ...(step.agreement
                   ? { agreement: runtime.agreementProof(template<string>(step.agreement)) }
@@ -3137,14 +3193,14 @@ async function runPath(
                 segment: template<string>(step.segment),
                 at: now().toISOString(),
               };
-        // A range segment discloses only the facts admitted after its anchor.
+        // The runtime derives the range disclosure list from these exact signed bytes.
         const anchored = (
           decodeCompactPayload(template<string>(step.segment)) as { anchor?: { seq?: unknown } }
         ).anchor?.seq;
         const recordFrom = typeof anchored === "number" ? anchored : undefined;
         const params = {
           ...(recordFrom !== undefined ? { recordFrom } : {}),
-          evidence: runtime.recordDisclosures(recordFrom),
+          evidence: recordFrom === undefined ? runtime.recordDisclosures() : [],
           operation: step.type === "forum-claim" ? "submit" : "answer",
           request: await signStatement(
             actor.actorKey,
@@ -3830,7 +3886,7 @@ async function runPath(
     schema: TRACE_SCHEMA,
     useCase: scenario.useCase ?? scenario.id,
     path:
-      path === "main"
+      options.pathKind === "main"
         ? (scenario.cataloguePath ?? "main")
         : {
             index: scenario.branches.findIndex((b) => b.id === path) + 1,
@@ -3838,9 +3894,9 @@ async function runPath(
           },
     parties: scenario.parties.map((p) => ({ id: p.id, name: partyName(p) })),
     scenario: {
-      id: path === "main" ? scenario.id : `${scenario.id}--${path}`,
+      id: options.pathKind === "main" ? scenario.id : `${scenario.id}--${path}`,
       title:
-        path === "main"
+        options.pathKind === "main"
           ? scenario.title
           : `${scenario.title}: ${required(scenario.branches.find((b) => b.id === path)).what}`,
       steps: Object.fromEntries(

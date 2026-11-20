@@ -225,6 +225,7 @@ export class Cast {
       | "bindings"
       | "settlement"
       | "settlementReceiptSource"
+      | "emailChallengeNonce"
     > = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);

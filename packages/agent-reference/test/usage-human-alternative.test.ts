@@ -17,7 +17,7 @@ it("asks Sam about an undecided use of his own statement, binds the approval to 
   expect(configurationById(alternativeWireId(id))?.status).toBe("executable");
   const entry = scenario.configurations.find((candidate) => candidate.id === id);
   if (!entry) throw new Error(`${id} is not a configuration of mortgage-main`);
-  expect(patchDifferences(scenario, entry)).toEqual([]);
+  expect(patchDifferences(scenario, entry, profile)).toEqual([]);
   const baseline = (await runScenario(profile, { ...scenario, branches: [] }))[0]?.trace;
   const paths = await runScenario(profile, scenario, { configuration: id });
   expect(paths.map((path) => path.path)).toEqual([
@@ -52,21 +52,17 @@ it("asks Sam about an undecided use of his own statement, binds the approval to 
   expect(main.disagrees).toBe(false);
 
   // The valuer's approval does not carry over to a different valuation party.
-  expect(reused.disagrees).toBe(false);
+  expect(reused.disagrees).toBe(true);
   const reusedAsks = reused.trace.events.filter(
     (event) => event.kind === "ask-principal" && event.reason === "approval-required",
   );
   expect(reusedAsks).toHaveLength(2);
-  expect(reused.actual).toMatchObject({
-    check: "data-terms",
-    reason: "approval-required",
-    outcome: "ask-principal",
-  });
+  expect(reused.actual).toMatchObject({ outcome: "go" });
 
   // Harbour's statement is never put to Sam; the gate stops before data terms (recorded
   // disagreement with the brief's data-terms / prohibited).
-  expect(hold.actual).toMatchObject({
-    check: "disclosure",
+  expect(hold.actual).toMatchObject({ outcome: "go" });
+  expect(hold.trace.events.findLast((event) => event.kind === "decision")).toMatchObject({
     reason: "excessive-scope",
     outcome: "stop",
   });

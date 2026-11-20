@@ -8578,7 +8578,7 @@
       }
     },
     "configuration": "accountability-regulator-claim",
-    "events": 748
+    "events": 755
   },
   {
     "file": "mortgage-main--entry-withheld--accountability-regulator-claim.json",
@@ -8628,7 +8628,7 @@
       }
     },
     "configuration": "accountability-regulator-claim",
-    "events": 734
+    "events": 741
   },
   {
     "file": "mortgage-main--identity-email-endpoint.json",
@@ -8928,7 +8928,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 809
+    "events": 816
   },
   {
     "file": "mortgage-main--post-about-a-person--accountability-reputation-post.json",
@@ -8978,7 +8978,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 762
+    "events": 769
   },
   {
     "file": "mortgage-main--evidence-not-publishable--accountability-reputation-post.json",
@@ -9028,7 +9028,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 760
+    "events": 767
   },
   {
     "file": "mortgage-main--meaning-plain-language-upgrade.json",

@@ -72,7 +72,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       retained++;
       continue;
     }
-    const stem = path.path === "main" ? id : `${id}--${path.path}`;
+    const stem = path.pathKind === "main" ? id : `${id}--${path.path}`;
     const suffix = path.configuration ?? "baseline";
     const traceBytes = path.trace
       ? `${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...path.trace }, null, 2)}\n`
@@ -84,7 +84,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       path: path.path,
       settlement: path.trace?.configuration.layers.settlement ?? "rdf-order",
       ...(path.configuration ? { configuration: path.configuration } : {}),
-      ...(path.path !== "main"
+      ...(path.pathKind === "branch"
         ? {
             what:
               path.what ??
@@ -118,7 +118,7 @@ for (const file of readdirSync(join(root, "scenarios"))
     executed++;
     const outline = outlineOf(path.trace);
     if (record && !path.configuration) {
-      if (path.path === "main") scenario.expect = outline;
+      if (path.pathKind === "main") scenario.expect = outline;
       else scenario.branches.find((b) => b.id === path.path).outline = outline;
     }
     writeFileSync(join(root, "traces", `${stem}--${suffix}.json`), traceBytes);

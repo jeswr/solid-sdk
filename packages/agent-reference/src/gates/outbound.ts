@@ -35,7 +35,12 @@ import type {
   JsonObject,
 } from "../core/types.js";
 import { ruleInputs } from "../derive/rules.js";
-import { actionDigest, type OwnerMandate } from "../mechanisms/mandate.js";
+import {
+  actionDigest,
+  evaluateIntent,
+  NO_MANDATE_GRANT,
+  type OwnerMandate,
+} from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { configurationById } from "../profile/configurations.js";
@@ -180,6 +185,24 @@ function mandateReason(decision: AuthorisationDecision): string {
 
 export class OutboundGate {
   /** Releases that ended in go, waiting for the message or effect that carries them out. */
+  private activeAction: Pick<TraceEventInput, "actionDigest" | "actionScope"> = {};
+
+  private setAction(intent: ActionIntent): void {
+    const { action, target, operation, conversation, recipient, purpose, parameters } = intent;
+    this.activeAction = {
+      actionDigest: actionDigest(intent),
+      actionScope: {
+        action,
+        target,
+        operation,
+        conversation,
+        recipient,
+        purpose,
+        evidence: Array.isArray(parameters.evidence) ? parameters.evidence.map(String) : [],
+      },
+    };
+  }
+
   private readonly pendingGo = new Set<string>();
   private activePayment: PaymentFacts | undefined;
   private activePaymentDocument: unknown;
@@ -242,6 +265,7 @@ export class OutboundGate {
 
   private emit(event: TraceEventInput): void {
     this.deps.gate.sink?.emit({
+      ...(event.part === "outbound-gate" || event.kind === "message-out" ? this.activeAction : {}),
       ...event,
       ...(this.activePayment
         ? { settlementFacts: this.activePayment }
@@ -282,18 +306,25 @@ export class OutboundGate {
     });
   }
 
-  private decide(outcome: OutboundOutcome, caption: string, reason?: string): void {
+  private decide(
+    outcome: OutboundOutcome,
+    caption: string,
+    reason?: string,
+    release?: Pick<TraceEventInput, "messageId" | "effectRelease">,
+  ): void {
     this.emit({
       part: "outbound-gate",
       kind: "decision",
       verdict: OUTCOME_VERDICT[outcome],
       outcome,
+      ...release,
       ...(reason ? { reason } : {}),
       caption,
     });
   }
 
   rejectEffect(intent: ActionIntent, reason: string): readonly CheckVerdict[] {
+    this.setAction(intent);
     const verdicts: CheckVerdict[] = [];
     this.verdict(
       verdicts,
@@ -685,6 +716,7 @@ export class OutboundGate {
 
   /** Checks 1 to 5 for a proposed action, around the pilot's mandate decision. */
   release(intent: ActionIntent, decision: AuthorisationDecision): Release {
+    this.setAction(intent);
     const selected =
       this.deps.gate.carriage?.() ?? this.deps.gate.configuration?.pilotConfiguration;
     if (selected && !alternativeInstalled(this.deps.gate, selected))
@@ -935,7 +967,9 @@ export class OutboundGate {
       Array.isArray(v) ? v.map(String) : [],
     );
     const requiredClaims =
-      ctx.actionClaims?.filter((r) => r.action === scope.action).flatMap((r) => r.claims) ?? [];
+      ctx.actionClaims
+        ?.filter((rule) => rule.action === scope.action || rule.action === scope.operation)
+        .flatMap((rule) => rule.claims) ?? [];
     const reliance = Object.values(this.deps.memory.relianceHolds).filter(
       (held) =>
         held.task === (ctx.taskId ?? scope.conversation) &&
@@ -1726,32 +1760,40 @@ export class OutboundGate {
         reason: "not-authorised",
         text: `There is no current mandate from ${this.owner} to decide this use.`,
       };
-    const engine = this.deps.policyEngine ?? solidOdrlEngine;
-    const request = {
-      agent: this.deps.identity.actor,
-      action: "distribute",
-      target: scope.target,
-      ...(scope.purpose ? { purpose: scope.purpose } : {}),
-      ...(scope.recipient ? { recipient: scope.recipient } : {}),
-      at: this.deps.now(),
-    };
-    const effects = [
-      engine.evaluate(m.autonomous, request),
-      engine.evaluate(m.withApproval, request),
-    ];
-    if (effects.some((v) => v.effect === "indeterminate"))
+    const results = [...new Set([scope.target, fact.id])].map((target) =>
+      evaluateIntent({
+        loaded: { mandate: m, digest: digestOf(m) },
+        intent: {
+          action: "distribute",
+          target,
+          operation: scope.operation,
+          conversation: scope.conversation,
+          ...(scope.purpose ? { purpose: scope.purpose } : {}),
+          ...(scope.recipient ? { recipient: scope.recipient } : {}),
+          parameters: {},
+        },
+        decider: this.deps.identity.actor,
+        at: this.deps.now(),
+        engine: this.deps.policyEngine,
+      }),
+    );
+    if (results.some((v) => v.outcome === "indeterminate"))
       return {
         verdict: "indeterminate",
         reason: "indeterminate-policy",
         text: `${this.owner}'s mandate cannot be decided for this use.`,
       };
-    if (effects.some((v) => v.effect === "prohibited"))
+    const denied = results.find((v) => v.outcome === "deny" && v.reason !== NO_MANDATE_GRANT);
+    if (denied)
       return {
         verdict: "fail",
-        reason: "prohibited",
+        reason: denied.reason.startsWith("prohibited") ? "prohibited" : "not-authorised",
         text: `${this.owner}'s mandate forbids this use of ${this.owner}'s own statement.`,
       };
-    if (effects[0]?.effect === "permit")
+    if (
+      results.some((v) => v.outcome === "permit") &&
+      !results.some((v) => v.outcome === "approval-required")
+    )
       return {
         verdict: "pass",
         text: `${this.owner}'s mandate allows this use of ${this.owner}'s own statement.`,
@@ -1797,7 +1839,11 @@ export class OutboundGate {
         return checked.reason ?? "unsupported-term";
       }
     }
-    if (scope.action === "distribute" && typeof p.attachedTerms === "string") {
+    if (
+      scope.action === "distribute" &&
+      typeof p.attachedTerms === "string" &&
+      !this.deps.recordRelease?.(intent)
+    ) {
       // An issuer releasing its own statement: the terms it attaches travel with it.
       this.verdict(
         verdicts,
@@ -1968,6 +2014,7 @@ export class OutboundGate {
 
   /** The principal declined a held action: it stops. */
   declined(intent: ActionIntent): void {
+    this.setAction(intent);
     if (intent.action === "pay") {
       this.activePayment = PaymentFacts.fromIntent(
         intent,
@@ -2046,6 +2093,7 @@ export class OutboundGate {
       },
     };
     const verdicts: CheckVerdict[] = [];
+    this.setAction(opts.approved ? intent : (opts.intent ?? intent));
     const finish = (outcome: OutboundOutcome, reason?: string) => ({
       outcome,
       reason,
@@ -2054,6 +2102,7 @@ export class OutboundGate {
     });
     // Brief 31 §2.1: an undecided use of the principal's own statement is held for them.
     const holdForPrincipal = (what: string) => {
+      this.setAction(intent);
       this.decide(
         "ask-principal",
         `No rule decides this use, so the reply is held for ${this.owner}.`,
@@ -2979,7 +3028,6 @@ export class OutboundGate {
     const verdicts: CheckVerdict[] = [];
     if (opts.intent) {
       this.deps.reservePayment?.(opts.intent, envelope.id);
-      this.deps.consumeApproval?.(opts.intent);
       this.pendingGo.delete(actionDigest(opts.intent));
     }
     const signed =
@@ -3008,10 +3056,14 @@ export class OutboundGate {
     this.decide(
       "go",
       `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
+      undefined,
+      { messageId: envelope.id },
     );
+    if (opts.intent) this.deps.consumeApproval?.(opts.intent);
     this.emit({
       part: "transport",
       kind: "message-out",
+      messageId: envelope.id,
       packet: packetView(message, wire, {
         carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
         carriageSummary: "Handed to the carriage.",
@@ -3038,8 +3090,8 @@ export class OutboundGate {
 
   /** Evidence, then go, for an effect (no message): the activity is recorded first. */
   sealEffect(intent: ActionIntent, releaseId: string = actionDigest(intent)): void {
+    this.setAction(intent);
     this.deps.reservePayment?.(intent, releaseId);
-    this.deps.consumeApproval?.(intent);
     this.pendingGo.delete(actionDigest(intent));
     const verdicts: CheckVerdict[] = [];
     this.verdict(
@@ -3055,7 +3107,10 @@ export class OutboundGate {
         },
       },
     );
-    this.decide("go", `The action goes: ${this.describeAction(intent)}.`);
+    this.decide("go", `The action goes: ${this.describeAction(intent)}.`, undefined, {
+      effectRelease: true,
+    });
+    this.deps.consumeApproval?.(intent);
   }
 
   /** The principal starts something in chat. */
@@ -3069,10 +3124,17 @@ export class OutboundGate {
   }
 
   /** The principal's own words, as a chat line. */
-  principal(text: string, caption: string): void {
+  principal(
+    text: string,
+    caption: string,
+    approval?: { actionDigest: string; decision: "approve" | "deny" },
+  ): void {
     this.emit({
       part: "principal",
       kind: "principal-reply",
+      ...(approval
+        ? { actionDigest: approval.actionDigest, approvalDecision: approval.decision }
+        : {}),
       chat: { who: "principal", text },
       caption,
     });

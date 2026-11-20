@@ -32,7 +32,7 @@ describe("accountability-vendor-fault", () => {
 
     // Test 1: main — no stand-in, every audit check passes, no claim is sent.
     const main = paths[0]!.trace!;
-    expect(patchDifferences(scenario, entry)).toEqual([]);
+    expect(patchDifferences(scenario, entry, profile)).toEqual([]);
     expect(confinementDifferences(baseline, main, "accountability")).toEqual([]);
     expect(addedSegmentDifferences(main, entry, scenario.parties)).toEqual([]);
     expect(standIn(main)).toEqual([]);
@@ -83,8 +83,8 @@ describe("accountability-vendor-fault", () => {
     expect(principal.events.some((e) => e.agent === "gate-operator-agent")).toBe(false);
   }, 600_000);
 
-  it("stops a record-backed claim for another digest or to a recipient the component statement does not name", async () => {
-    for (const variant of ["other-digest", "other-operator"] as const) {
+  it("rejects record-backed claims with a wrong digest, fictitious chain points or the wrong operator", async () => {
+    for (const variant of ["other-digest", "other-operator", "fictitious-points"] as const) {
       const { profile, scenario } = loadCase(root, "mortgage-main");
       const entry = scenario.configurations.find((c) => c.id === vendor)!;
       const world = entry.world as {
@@ -92,12 +92,19 @@ describe("accountability-vendor-fault", () => {
         statements: Record<string, { value: { gate: { operatedBy: string } } }>;
       };
       const branch = world.branches.find((b) => b.id === "gate-released-outside-mandate")!;
-      const script = (branch.change as { script: { id: string; value?: { action?: unknown } }[] })
-        .script;
+      const script = (
+        branch.change as { script: { id: string; value?: { action?: unknown; range?: unknown } }[] }
+      ).script;
       if (variant === "other-digest") {
         const claim = script.find((step) => step.id === "fault-claim-statement")!;
         // The first judged release, which the audit found inside the mandate.
         claim.value!.action = JSON.parse('{"$ref":"steps.audit-record.released.0.actionDigest"}');
+      } else if (variant === "fictitious-points") {
+        const claim = script.find((step) => step.id === "fault-claim-statement")!;
+        claim.value!.range = {
+          decision: { seq: 1, hash: "sha-256:invented" },
+          release: { seq: 2, hash: "sha-256:invented" },
+        };
       } else
         world.statements["sam-agent-components"]!.value.gate.operatedBy =
           "urn:fictional:another-gate-operator";

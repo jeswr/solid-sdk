@@ -11,15 +11,22 @@ import {
   type TraceEvent,
   type TraceFile,
 } from "../trace/types.js";
+import { configurationPolicyDifferences, ownedReplacement } from "./confinement-policy.js";
 import {
   addedStepProblem,
   matrixExtended,
   matrixPrerequisite,
+  matrixProfileChanges,
   matrixReferenceWorld,
   matrixWorld,
 } from "./matrix.js";
 import { patch } from "./run.js";
-import { type Scenario, scenarioSchema } from "./schema.js";
+import {
+  type DomainProfile,
+  domainProfileSchema,
+  type Scenario,
+  scenarioSchema,
+} from "./schema.js";
 
 type Entry = Scenario["configurations"][number];
 
@@ -175,7 +182,7 @@ export function addedSegmentDifferences(
     for (const event of events) {
       if (event.part !== "inbound-gate" && event.part !== "outbound-gate") continue;
       if (mechanisms.has(event.agent)) continue;
-      const key = `${event.agent}|${event.part}`;
+      const key = `${event.agent}|${event.part}|${event.gateRun ?? "unbound"}`;
       if (event.kind === "check") pending.set(key, [...(pending.get(key) ?? []), event]);
       if (event.kind === "decision") {
         runs.push({
@@ -210,7 +217,10 @@ export function addedSegmentDifferences(
           (event, i) =>
             i > events.indexOf(run.decision) &&
             event.agent === run.agent &&
-            event.kind === "principal-reply",
+            event.kind === "principal-reply" &&
+            event.approvalDecision === "approve" &&
+            !!run.decision.actionDigest &&
+            event.actionDigest === run.decision.actionDigest,
         );
         const laterRuns = runs
           .slice(at + 1)
@@ -218,6 +228,8 @@ export function addedSegmentDifferences(
             (next) =>
               next.agent === run.agent &&
               next.gate === run.gate &&
+              next.decision.actionDigest === run.decision.actionDigest &&
+              next.decision.outcome === "go" &&
               events.indexOf(next.decision) > replied,
           );
         if (!askedChecks.length)
@@ -257,6 +269,29 @@ export function addedSegmentDifferences(
       if (!["admit", "go"].includes(run.decision.outcome ?? ""))
         differences.push(`${where}: the gate decided ${run.decision.outcome}`);
     });
+    const messageRun = (message: TraceEvent) =>
+      runs.find(({ agent, gate, decision }) => {
+        const incoming = message.kind === "message-in";
+        return (
+          agent === message.agent &&
+          gate === (incoming ? "inbound-gate" : "outbound-gate") &&
+          decision.outcome === (incoming ? "admit" : "go") &&
+          message.messageId &&
+          decision.messageId === message.messageId &&
+          message.gateRun !== undefined &&
+          decision.gateRun === message.gateRun &&
+          (incoming ? decision.seq > message.seq : decision.seq < message.seq)
+        );
+      });
+    for (const message of events)
+      if (
+        (message.kind === "message-in" || message.kind === "message-out") &&
+        !mechanisms.has(message.agent) &&
+        !messageRun(message)
+      )
+        differences.push(
+          `Segment ${name}: ${message.agent} ${message.kind} has no matching gate run`,
+        );
     // C5: the segment's last message is the declared one.
     const messages = events.filter((event) => event.kind === "message-in" && event.packet);
     const last = messages.at(-1);
@@ -272,12 +307,7 @@ export function addedSegmentDifferences(
     const body = last.packet?.layers.content.raw as
       | { outcome?: string; reason?: string }
       | undefined;
-    const admitted = runs.find(
-      (run) =>
-        run.agent === last.agent &&
-        run.gate === "inbound-gate" &&
-        events.indexOf(run.decision) > events.indexOf(last),
-    );
+    const admitted = messageRun(last);
     const actual = {
       agent: last.agent,
       kind: last.packet?.kind,
@@ -344,7 +374,11 @@ function items(world: Scenario): Map<string, unknown> {
  * except the items the configuration lists in `replaces`; no fault or test hook is active.
  * With `requires`, the reference is the prerequisite's world.
  */
-export function patchDifferences(scenario: Scenario, entry: Entry): string[] {
+export function patchDifferences(
+  scenario: Scenario,
+  entry: Entry,
+  profile: DomainProfile,
+): string[] {
   const differences: string[] = [];
   let world: Scenario;
   let reference: Scenario;
@@ -371,8 +405,28 @@ export function patchDifferences(scenario: Scenario, entry: Entry): string[] {
   for (const id of changed)
     if (!replaces.includes(id))
       differences.push(`${id} changes but ${entry.id} does not list it in replaces`);
-  for (const id of replaces)
+  for (const id of replaces) {
     if (!changed.has(id)) differences.push(`${id} is listed in replaces but does not change`);
+    else if (!ownedReplacement(entry, id, before.get(id), after.get(id)))
+      differences.push(`${id} changes fields outside the selected layer`);
+  }
+  const inherited = matrixProfileChanges(scenario, entry).slice(
+    0,
+    entry.profileChange ? -1 : undefined,
+  );
+  try {
+    const baseline = domainProfileSchema.parse(
+      inherited.reduce<unknown>((at, change) => patch(at, change), profile),
+    );
+    const configured = domainProfileSchema.parse(
+      entry.profileChange ? patch(baseline, entry.profileChange) : baseline,
+    );
+    differences.push(
+      ...configurationPolicyDifferences(reference, world, entry, baseline, configured),
+    );
+  } catch (error) {
+    differences.push(`Profile patch refused: ${(error as Error).message}`);
+  }
   // An extending configuration may not replace anything the extended one added.
   const extended = matrixExtended(scenario, entry);
   if (extended) {

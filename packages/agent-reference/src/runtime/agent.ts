@@ -57,10 +57,17 @@ import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/ve
 import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
 import { alternativeInstalled, type GateContext, GateMemory } from "../gates/common.js";
-import { type Admission, InboundGate } from "../gates/inbound.js";
+import { type Admission, claimSchema, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { paymentDigest, periodKey, sameAmount } from "../gates/payment.js";
 import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
+import {
+  anchorReceiptSchema,
+  forumAnswerSchema,
+  forumClaimSchema,
+  RECORD_LIMITS,
+  recordSegmentSchema,
+} from "../mechanisms/forum.js";
 import { jointPayloadSchema } from "../mechanisms/joint.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
@@ -86,7 +93,7 @@ import {
   verifySelectivePresentation,
 } from "../mechanisms/selective.js";
 import { singleUseStatusSchema } from "../mechanisms/single-use.js";
-import { TYP, verifyStatement } from "../mechanisms/statements.js";
+import { representationSchema, TYP, verifyStatement } from "../mechanisms/statements.js";
 import { TrustStore } from "../mechanisms/trust.js";
 import { copyData } from "../model/copy.js";
 import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
@@ -122,8 +129,11 @@ import { readCarried } from "../settlement/carried.js";
 import {
   type EvidenceLedger,
   type LedgerEntry,
+  type LedgerHead,
+  type LedgerRangeEntry,
   type LedgerRecord,
   verifyLedger,
+  verifyLedgerAtHead,
 } from "../store/ledger.js";
 import type {
   EffectState,
@@ -231,6 +241,8 @@ export interface AgentRuntimeOptions {
   readonly ledger: EvidenceLedger;
   readonly now?: () => Date;
   readonly newId?: () => string;
+  /** Deterministic entropy injection for scripted runs. */
+  readonly emailChallengeNonce?: () => string;
   readonly limits?: Partial<PilotLimits>;
   readonly messageLifetimeMs?: number;
   readonly bindings?: readonly { id: string; endpoint?: string }[];
@@ -390,6 +402,7 @@ export class AgentRuntime {
   private readonly store: StateStore;
   private readonly ledger: EvidenceLedger;
   private readonly clock: () => Date;
+  private readonly ledgerAuditTrusted: boolean;
   private readonly newId: () => string;
   private readonly handlers = new Map<string, OperationHandler>();
   private readonly effectAdapters = new Map<string, EffectAdapter>();
@@ -514,10 +527,18 @@ export class AgentRuntime {
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
+    const head = this.ledger.head?.();
+    this.ledgerAuditTrusted =
+      !!head &&
+      (!this.ledger.requiresTrustedCheckpoint ||
+        (head.seq === 0 && !this.state.ledgerAuditHead) ||
+        (head.seq === this.state.ledgerAuditHead?.seq &&
+          head.hash === this.state.ledgerAuditHead.hash));
     this.state.domain.derivedRequests ??= {};
     this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;
     const recordChecks: Record<string, string[]> = {};
+    const gateRuns = { "inbound-gate": 1, "outbound-gate": 1 };
     const auditSink = {
       agent: originalSink?.agent ?? this.identity.actor,
       emit: (event: import("../trace/types.js").TraceEventInput) => {
@@ -549,7 +570,17 @@ export class AgentRuntime {
           });
           recordChecks[event.part] = [];
         }
-        originalSink?.emit(event);
+        const gate =
+          event.kind === "message-in"
+            ? "inbound-gate"
+            : event.kind === "message-out"
+              ? "outbound-gate"
+              : event.part === "inbound-gate" || event.part === "outbound-gate"
+                ? event.part
+                : undefined;
+        const gateRun = gate ? gateRuns[gate] - (event.kind === "message-out" ? 1 : 0) : undefined;
+        if (gate && event.kind === "decision") gateRuns[gate]++;
+        originalSink?.emit(gateRun === undefined ? event : { ...event, gateRun });
       },
     };
     this.options = { ...options, gates: { ...options.gates, sink: auditSink } };
@@ -623,7 +654,13 @@ export class AgentRuntime {
       }
     // Brief 31 §2.2: a register this agent reads from signed answers sees only the entries
     // of answers its own inbound gate admitted (never a local table).
-    gate.resolver?.bindAnswers(() => registerAnswers(memory.facts.values()));
+    gate.resolver?.bindAnswers(() =>
+      registerAnswers(
+        Object.values(memory.contexts)
+          .flat()
+          .filter((item) => item.kind === "statement" && item.accepted === true),
+      ),
+    );
     this.inbound = new InboundGate({
       identity: this.identity,
       trust: this.trust,
@@ -799,7 +836,14 @@ export class AgentRuntime {
         )
           return;
         const approval = this.state.approvals[actionDigest(intent)];
-        if (approval) this.state.usedApprovals[approval.id] = true;
+        if (approval && !this.state.usedApprovals[approval.id]) {
+          this.state.usedApprovals[approval.id] = true;
+          this.record({
+            type: "approval-consumed",
+            id: approval.id,
+            actionDigest: actionDigest(intent),
+          });
+        }
         for (const org of this.state.organisationApprovals[actionDigest(intent)] ?? [])
           this.state.usedApprovals[org.id] = true;
       },
@@ -1633,17 +1677,24 @@ export class AgentRuntime {
     to: string;
     text: string;
     purpose: Iri;
-    challenge?: string;
+    challenge?: boolean;
   }) {
-    // Brief 31 §2.4: a challenge nonce the reply must carry back from this mailbox.
-    if (input.challenge) this.emailChallenges.set(input.challenge, input.to);
+    const nonce = input.challenge
+      ? (this.options.emailChallengeNonce?.() ?? randomBytes(24).toString("hex"))
+      : undefined;
     const params = {
       id: input.taskId,
       from: this.options.gates?.email?.from ?? "",
       to: input.to,
-      text: `${input.text}\n\n${this.emailFooter()}`,
+      text: `${input.text}${nonce ? `\n\nChallenge: ${nonce}` : ""}\n\n${this.emailFooter()}`,
       purpose: input.purpose,
     };
+    if (nonce)
+      this.pendingEmailChallenges.set(digestOf(params), {
+        nonce,
+        to: input.to,
+        purpose: input.purpose,
+      });
     return this.runTask({
       taskId: input.taskId,
       kind: "email",
@@ -1664,19 +1715,32 @@ export class AgentRuntime {
       },
     });
   }
-  /** Nonces this agent sent in challenge emails, by nonce, with the mailbox sent to. */
+  private readonly pendingEmailChallenges = new Map<
+    string,
+    { nonce: string; to: string; purpose: string }
+  >();
   private readonly emailChallenges = new Map<string, string>();
 
-  /**
-   * Brief 31 §2.4: a challenged reply proves control of the mailbox only when it carries a
-   * nonce this agent sent to that mailbox and comes from the address an admitted signed
-   * contact statement names. It proves nothing about the content.
-   */
-  private challengeAnswered(from: string, text: string, nonce: string): boolean {
-    const named = [...this.gateMemory.facts.values()].some(
-      (fact) => fact.claimType === "contact.mailbox" && fact.statement?.mailbox === from,
+  private namedMailbox(from: string, purpose: string): boolean {
+    return [...this.gateMemory.facts.values()].some(
+      (fact) =>
+        fact.claimType === "contact.mailbox" &&
+        fact.statement?.mailbox === from &&
+        (!fact.admittedPurpose || fact.admittedPurpose === purpose),
     );
-    return named && this.emailChallenges.get(nonce) === from && text.includes(nonce);
+  }
+
+  private challengeAnswered(from: string, purpose: string, text: string, nonce?: string): boolean {
+    const scope = canonicalJson([from, purpose]);
+    if (
+      !nonce ||
+      !this.namedMailbox(from, purpose) ||
+      this.emailChallenges.get(scope) !== nonce ||
+      !text.split(/[^A-Za-z0-9-]+/).includes(nonce)
+    )
+      return false;
+    this.emailChallenges.delete(scope);
+    return true;
   }
 
   /**
@@ -1738,7 +1802,10 @@ export class AgentRuntime {
         });
         return { ok: false as const, reason: "unsigned-not-allowed" as ReasonCode };
       }
-      if (input.challenge && !this.challengeAnswered(input.from, input.text, input.challenge)) {
+      if (
+        (input.challenge || this.namedMailbox(input.from, input.purpose)) &&
+        !this.challengeAnswered(input.from, input.purpose, input.text, input.challenge)
+      ) {
         sink?.emit({
           part: "inbound-gate",
           kind: "check",
@@ -2692,17 +2759,10 @@ export class AgentRuntime {
       )
       .map((item) => copyData(item.statement!));
   }
-  /**
-   * The facts a record release discloses: every fact this agent holds, or, for a range
-   * segment (brief 31 item 4), only the facts admitted after its anchor entry.
-   */
-  recordDisclosures(from?: number) {
-    const before = from === undefined ? undefined : this.anchoredFacts.get(from);
-    if (from !== undefined && !before) throw Error(`no record anchor at ${from}`);
-    return [...this.gateMemory.facts.values()].filter((f) => !before?.has(f.id)).map((f) => f.id);
+  /** Legacy whole-record release scope. Ranges are inspected from their signed payload. */
+  recordDisclosures() {
+    return [...this.gateMemory.facts.keys()];
   }
-  /** The fact ids held at each witnessed record head, for range releases. */
-  private readonly anchoredFacts = new Map<number, ReadonlySet<string>>();
 
   /**
    * The agreement this agent formed in one conversation, named by its terms digest, with
@@ -2721,10 +2781,11 @@ export class AgentRuntime {
 
   /** This agent's record head: the sequence and chain hash of its last entry. */
   recordHead(): { seq: number; hash: string } {
-    const last = this.ledger.entries().at(-1);
-    if (!last) throw Error("this agent's record is empty");
-    this.anchoredFacts.set(last.seq, new Set(this.gateMemory.facts.keys()));
-    return { seq: last.seq, hash: last.hash };
+    const head = this.trustedAuditHead();
+    if (!head?.seq || !verifyLedgerAtHead(this.ledger.entries(), head).ok)
+      throw Error("this agent's record head is unavailable");
+    this.ledger.enableRangeCommitments?.();
+    return head;
   }
 
   /**
@@ -2736,6 +2797,7 @@ export class AgentRuntime {
     party: string;
     seq: number;
     hash: string;
+    interval?: { conversation: string; from: LedgerHead };
   }): Promise<{ jws: string }> {
     return this.exclusive(async () => {
       const key = this.keysByAlg.get("EdDSA");
@@ -2750,8 +2812,10 @@ export class AgentRuntime {
         subjectParty: head.party,
         seq: head.seq,
         hash: head.hash,
+        ...(head.interval ? { interval: head.interval } : {}),
         at,
       };
+      this.persist();
       return { jws: await signCompact(key, "awp-record-anchor+jws", receipt) };
     });
   }
@@ -2763,35 +2827,289 @@ export class AgentRuntime {
    */
   exportRecord(
     conversation: string,
-    anchor?: { seq: number; hash: string; receipt: string },
+    anchor?: LedgerHead & { receipt: string },
+    terminal?: LedgerHead & { receipt: string },
   ): Promise<{ jws: string }> {
     return this.exclusive(async () => {
       const key = this.keysByAlg.get("EdDSA");
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
+      if (anchor && !terminal) throw Error("a range needs a witnessed terminal");
+      const all = this.ledger.entries();
+      const bounds = anchor && terminal && { from: anchor.seq, through: terminal.seq };
       const entries = copyData(
-        anchor
-          ? this.ledger.entries().filter((entry) => entry.seq > anchor.seq)
-          : this.ledger.entries(),
+        bounds
+          ? all.filter((entry) => entry.seq > bounds.from && entry.seq <= bounds.through)
+          : all,
       );
+      const messages = [];
+      for (const { direction, digest, jws, conversation: recorded } of Object.values(
+        this.state.recordMessages,
+      )) {
+        if (recorded !== conversation) continue;
+        if (
+          bounds &&
+          (!entries.some(
+            ({ record }) => record.type === `message-${direction}` && record.digest === digest,
+          ) ||
+            !(await this.rangeMessage(jws, conversation, digest)))
+        )
+          continue;
+        messages.push({ direction, digest, jws });
+      }
       const signed = await Promise.all(
-        entries.map(async (entry) => ({
-          entry,
-          proof: await signCompact(key, "awp-record-entry+jws", entry),
-        })),
+        entries.map(async (entry) => {
+          let disclosed: LedgerRangeEntry = entry;
+          if (bounds && !this.rangeMessageRecord(entry.record, conversation)) {
+            if (!entry.recordDigest) throw Error("record has no commitment for redaction");
+            disclosed = { ...entry, record: null, recordDigest: entry.recordDigest };
+          }
+          return {
+            entry: disclosed,
+            proof: await signCompact(key, "awp-record-entry+jws", disclosed),
+          };
+        }),
       );
       const segment = {
         type: "RecordSegment",
         actor: this.identity.actor,
         party: this.identity.party,
         conversation,
-        ...(anchor ? { anchor } : {}),
+        ...(anchor ? { anchor, terminal } : {}),
         entries: signed,
-        messages: Object.values(this.state.recordMessages)
-          .filter((m) => m.conversation === conversation)
-          .map(({ direction, digest, jws }) => ({ direction, digest, jws })),
+        messages,
       };
       return { jws: await signCompact(key, "awp-record-segment+jws", segment) };
     });
+  }
+
+  private rangeMessageRecord(record: LedgerEntry["record"], conversation: string): boolean {
+    const keys =
+      record.type === "message-in"
+        ? [
+            "type",
+            "id",
+            "kind",
+            "conversation",
+            "digest",
+            "from",
+            "onBehalfOfClaim",
+            "binding",
+            "at",
+          ]
+        : ["type", "id", "kind", "conversation", "digest", "at"];
+    return (
+      (record.type === "message-in" || record.type === "message-out") &&
+      record.conversation === conversation &&
+      record.kind === "invoke" &&
+      Object.keys(record).every((key) => keys.includes(key)) &&
+      typeof record.digest === "string" &&
+      /^sha-256:[0-9a-f]{64}$/.test(record.digest) &&
+      (record.binding === undefined ||
+        ["direct", "direct-local/0.1"].includes(String(record.binding)))
+    );
+  }
+
+  /** The range format carries the original structured fee notice and its signed credential. */
+  private async rangeMessage(
+    jws: string,
+    conversation: string,
+    digest: string,
+  ): Promise<string | undefined> {
+    const verified = await verifyRecordedMessage(jws, this.trust, (kid) => {
+      const key = [...this.keysByAlg.values()].find((value) => value.kid === kid);
+      return key && this.identity.party
+        ? {
+            kid,
+            alg: key.alg,
+            publicJwk: key.publicJwk,
+            role: "actor",
+            subject: this.identity.actor,
+            party: this.identity.party,
+          }
+        : undefined;
+    });
+    const message = verified?.message;
+    if (
+      !message ||
+      digestOf(message) !== digest ||
+      message.conversation !== conversation ||
+      message.kind !== "invoke" ||
+      message.body.operation.id !== "urn:op:fee-notice" ||
+      message.body.basis.kind !== "represented" ||
+      message.content?.length ||
+      message.authorship ||
+      Object.keys(message.body.input).length !== 0
+    )
+      return undefined;
+    let item: string | undefined;
+    for (const evidence of message.evidence ?? []) {
+      if (evidence.format !== "jws-compact") return undefined;
+      if (evidence.role === "representation") {
+        const proof = await verifyStatement(evidence.value, {
+          trust: this.trust,
+          typ: TYP.representation,
+          role: "party",
+          schema: representationSchema,
+          limits: this.limits,
+          verifier: this.identity.actor,
+          at: this.now(),
+        });
+        if (
+          !proof.payload ||
+          proof.signer?.subject !== message.from.onBehalfOf ||
+          proof.payload.actor !== message.from.actor ||
+          proof.payload.party !== message.from.onBehalfOf
+        )
+          return undefined;
+        continue;
+      }
+      if (evidence.role !== "credential" || item) return undefined;
+      item = await this.rangeCredential(evidence.value);
+      if (!item) return undefined;
+    }
+    return item;
+  }
+
+  private async rangeCredential(jws: string): Promise<string | undefined> {
+    const verify = (role: "issuer" | "party") =>
+      verifyStatement(jws, {
+        trust: this.trust,
+        typ: TYP.statement,
+        role,
+        schema: claimSchema,
+        limits: this.limits,
+        verifier: this.identity.actor,
+        at: this.now(),
+      });
+    let checked = await verify("issuer");
+    if (checked.verification.outcome === "unknown-key") checked = await verify("party");
+    const claim = checked.payload;
+    if (
+      !claim ||
+      claim.claimType !== "fee.charged" ||
+      checked.signer?.subject !== claim.issuer ||
+      !claim.id ||
+      this.gateMemory.facts.get(claim.id)?.digest !== digestOf(claim)
+    )
+      return undefined;
+    return claim.id;
+  }
+
+  private isRangeRequest(params: JsonObject): boolean {
+    try {
+      const request = decodeCompactPayload(String(params.request)) as { segment: string };
+      return !!(decodeCompactPayload(request.segment) as { anchor?: unknown }).anchor;
+    } catch {
+      return false;
+    }
+  }
+
+  private async readOwnRecordProof(jws: string, typ: string): Promise<unknown> {
+    const checked = await verifyCompact(jws, {
+      typ,
+      limits: RECORD_LIMITS,
+      allowedAlgs: ["EdDSA"],
+      resolve: (kid) => [...this.keysByAlg.values()].find((key) => key.kid === kid),
+    });
+    return checked.outcome === "valid" ? checked.payload : undefined;
+  }
+
+  /** Derive the terms-check input from the actual signed request and nested range. */
+  private async rangeDisclosures(
+    params: JsonObject,
+    intent: ActionIntent,
+  ): Promise<string[] | undefined> {
+    if (
+      typeof params.request !== "string" ||
+      Object.keys(params).some(
+        (key) => !["operation", "recordFrom", "evidence", "request"].includes(key),
+      )
+    )
+      return undefined;
+    try {
+      const submit = params.operation === "submit";
+      const request = (submit ? forumClaimSchema : forumAnswerSchema).parse(
+        await this.readOwnRecordProof(
+          params.request,
+          submit ? "awp-forum-claim+jws" : "awp-forum-answer+jws",
+        ),
+      );
+      const segment = recordSegmentSchema.parse(
+        await this.readOwnRecordProof(request.segment, "awp-record-segment+jws"),
+      );
+      if (
+        !segment.anchor ||
+        !segment.terminal ||
+        segment.anchor.seq !== params.recordFrom ||
+        segment.actor !== this.identity.actor ||
+        segment.party !== this.identity.party ||
+        request.actor !== segment.actor ||
+        request.party !== segment.party
+      )
+        return undefined;
+      for (const point of [
+        segment.anchor,
+        segment.terminal,
+        "answerThrough" in request ? request.answerThrough : undefined,
+      ]) {
+        if (!point) continue;
+        const checked = await verifyStatement(point.receipt, {
+          typ: "awp-record-anchor+jws",
+          trust: this.trust,
+          role: "actor",
+          schema: anchorReceiptSchema,
+          limits: RECORD_LIMITS,
+          verifier: this.identity.actor,
+          at: this.now(),
+        });
+        let receipt = checked.payload;
+        if (!receipt)
+          receipt = anchorReceiptSchema.parse(
+            await this.readOwnRecordProof(point.receipt, "awp-record-anchor+jws"),
+          );
+        if (receipt.seq !== point.seq || receipt.hash !== point.hash) return undefined;
+      }
+      const items = new Set<string>();
+      for (const { entry, proof } of segment.entries) {
+        const payload = await this.readOwnRecordProof(proof, "awp-record-entry+jws");
+        if (
+          !payload ||
+          digestOf(payload) !== digestOf(entry) ||
+          (entry.record && !this.rangeMessageRecord(entry.record, segment.conversation))
+        )
+          return undefined;
+      }
+      for (const message of segment.messages) {
+        const item = await this.rangeMessage(message.jws, segment.conversation, message.digest);
+        if (!item) return undefined;
+        items.add(item);
+      }
+      if ("observation" in request && request.observation) {
+        const item = await this.rangeCredential(request.observation);
+        if (!item) return undefined;
+        items.add(item);
+        if ("agreement" in request && request.agreement) {
+          const fact = this.gateMemory.facts.get(item);
+          const binding = fact?.statement?.agreement as
+            | {
+                conversation?: string;
+                discloseTo?: string;
+                discloseFor?: string;
+              }
+            | undefined;
+          if (
+            !binding?.conversation ||
+            binding.discloseTo !== intent.recipient ||
+            binding.discloseFor !== intent.purpose ||
+            digestOf(request.agreement) !== digestOf(this.agreementProof(binding.conversation))
+          )
+            return undefined;
+        }
+      } else if ("agreement" in request && request.agreement) return undefined;
+      return [...items];
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -2805,17 +3123,41 @@ export class AgentRuntime {
     return this.exclusive(async () => {
       const sink = this.options.gates?.sink;
       const at = this.now();
-      const audit = auditReleases(this.ledger.entries(), (action, when, mandate) => {
-        if (!this.mandate || this.mandate.digest !== mandate.digest) return undefined;
-        this.reauthorising = true;
-        try {
-          return this.mandateDecision(action, when, new Map());
-        } finally {
-          this.reauthorising = false;
-        }
-      });
+      const audit = await auditReleases(
+        this.ledger.entries(),
+        (action, when, mandate) => {
+          if (this.mandate?.digest !== mandate.digest || this.mandate.mandate.id !== mandate.id)
+            return undefined;
+          this.reauthorising = true;
+          try {
+            return this.mandateDecision(action, when, new Map());
+          } finally {
+            this.reauthorising = false;
+          }
+        },
+        {
+          head: this.trustedAuditHead(),
+          verifyApproval: async (entry, release) => {
+            const jws = entry.record.jws;
+            if (typeof jws !== "string") return undefined;
+            const checked = await verifyApproval(jws, {
+              trust: this.trust,
+              actor: this.identity.actor,
+              limits: this.limits,
+              at: release.at,
+            });
+            return (
+              checked.ok &&
+              checked.approval.id === entry.record.id &&
+              checked.approval.decision === "approve" &&
+              checked.approval.actionDigest === release.digest &&
+              checked.approval.conversation === release.action.conversation
+            );
+          },
+        },
+      );
       const component = [...this.gateMemory.facts.values()].find(
-        (fact) => fact.claimType === "agent.components",
+        (fact) => fact.claimType === "agent.components" && fact.subject === this.identity.actor,
       )?.digest;
       if (audit.chain === "broken") {
         sink?.emit({
@@ -2852,7 +3194,7 @@ export class AgentRuntime {
               ? `A ${release.action.action} action released at ${release.at} is within the mandate in force then.`
               : release.verdict === "outside"
                 ? `A ${release.action.action} action released at ${release.at} is outside the mandate in force then: re-evaluated, the mandate does not allow it, although the record says it was permitted.`
-                : `A ${release.action.action} action released at ${release.at} cannot be judged: the mandate it names is not held.`,
+                : `A ${release.action.action} action released at ${release.at} cannot be judged from the retained mandate and approval evidence.`,
         });
       if (audit.unjudged.length)
         sink?.emit({
@@ -2861,14 +3203,21 @@ export class AgentRuntime {
           caption: `${audit.unjudged.length} replies inside agreed exchanges carry no authorisation decision; they are reported, not judged.`,
         });
       const outside = audit.outside.filter((release) => release.verdict === "outside");
+      const indeterminate = audit.outside.length - outside.length + (audit.pruned ? 1 : 0);
       sink?.emit({
         part: "record",
         kind: "decision",
-        outcome: outside.length ? "ask-principal" : "go",
-        ...(outside.length ? { reason: "not-authorised" as const } : {}),
+        outcome: outside.length ? "ask-principal" : indeterminate ? "indeterminate" : "go",
+        ...(outside.length
+          ? { reason: "not-authorised" as const }
+          : indeterminate
+            ? { reason: "record-unavailable" as const }
+            : {}),
         caption: outside.length
           ? "The audit found a release outside the mandate. Sam decides whether to claim."
-          : "Every judged release is within the mandate in force when it was released.",
+          : indeterminate
+            ? "The record is missing evidence needed to judge some releases."
+            : "Every judged release is within the mandate in force when it was released.",
       });
       if (outside.length)
         sink?.emit({
@@ -2890,18 +3239,20 @@ export class AgentRuntime {
       }));
       this.record({
         type: "record-audit",
+        actor: this.identity.actor,
         ...(component ? { statement: component } : {}),
         ...(mandate ? { mandate } : {}),
         judged: audit.judged.length,
         inside: audit.judged.length - audit.outside.length,
         outside: findings,
-        indeterminate: audit.outside.length - outside.length,
+        indeterminate,
         unjudged: audit.unjudged.length,
         at,
       });
       const entry = this.ledger.entries().at(-1);
+      this.persist();
       return {
-        ok: true,
+        ok: indeterminate === 0,
         judged: audit.judged.length,
         inside: audit.judged.length - audit.outside.length,
         unjudged: audit.unjudged.length,
@@ -2923,24 +3274,36 @@ export class AgentRuntime {
    * recipient must be the gate operator an admitted component statement names.
    */
   private recordBacks(claim: Readonly<Record<string, unknown>>, recipient: string): boolean {
-    const action = claim.action;
-    if (typeof action !== "string") return false;
-    const found = this.ledger.entries().some((entry) => {
-      const record = entry.record as Record<string, unknown>;
-      return (
-        record.type === "record-audit" &&
-        Array.isArray(record.outside) &&
-        record.outside.some(
-          (release) => (release as { actionDigest?: unknown }).actionDigest === action,
-        )
-      );
-    });
-    const operator = [...this.gateMemory.facts.values()].some(
+    const entries = this.ledger.entries();
+    if (!verifyLedgerAtHead(entries, this.trustedAuditHead()).ok) return false;
+    const audit = entries.find((entry) => entry.hash === claim.audit)?.record;
+    if (
+      audit?.type !== "record-audit" ||
+      audit.actor !== this.identity.actor ||
+      claim.subject !== recipient ||
+      typeof claim.action !== "string" ||
+      typeof claim.components !== "string" ||
+      audit.statement !== claim.components ||
+      !audit.mandate ||
+      !claim.mandate ||
+      canonicalJson(audit.mandate) !== canonicalJson(claim.mandate) ||
+      !Array.isArray(audit.outside) ||
+      !audit.outside.some(
+        ({ actionDigest, decision, release }) =>
+          actionDigest === claim.action &&
+          claim.range &&
+          canonicalJson(claim.range) === canonicalJson({ decision, release }),
+      )
+    )
+      return false;
+    return [...this.gateMemory.facts.values()].some(
       (fact) =>
         fact.claimType === "agent.components" &&
+        fact.digest === claim.components &&
+        fact.subject === this.identity.actor &&
+        (fact.statement?.agent === undefined || fact.statement.agent === this.identity.actor) &&
         (fact.statement?.gate as { operatedBy?: unknown } | undefined)?.operatedBy === recipient,
     );
-    return found && operator;
   }
 
   /** Check this agent's own record and show it in the trace. */
@@ -5377,14 +5740,72 @@ export class AgentRuntime {
     return true;
   }
 
+  private async publicationMatches(adapter: EffectAdapter, plan: EffectPlan): Promise<boolean> {
+    if (!adapter.publicationRecipient) return true;
+    if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) return false;
+    const recipient = adapter.publicationRecipient(plan.params);
+    const { evidence, items } = plan.params;
+    if (
+      plan.intent.action !== "distribute" ||
+      !recipient ||
+      recipient !== plan.intent.recipient ||
+      Object.keys(plan.params).some((key) => !["host", "evidence", "items"].includes(key)) ||
+      !Array.isArray(items) ||
+      !Array.isArray(evidence) ||
+      !items.length ||
+      items.length !== evidence.length
+    )
+      return false;
+    for (const [index, jws] of items.entries()) {
+      if (typeof jws !== "string" || typeof evidence[index] !== "string") return false;
+      const id = String(evidence[index]);
+      const fact = this.gateMemory.facts.get(id);
+      if (!fact?.digest) return false;
+      const verify = (role: "issuer" | "party") =>
+        verifyStatement(jws, {
+          trust: this.trust,
+          typ: TYP.statement,
+          role,
+          schema: claimSchema,
+          limits: this.limits,
+          verifier: this.identity.actor,
+          at: this.now(),
+        });
+      let checked = await verify("issuer");
+      if (checked.verification.outcome === "unknown-key") checked = await verify("party");
+      const claim = checked.payload;
+      if (
+        !claim ||
+        checked.signer?.subject !== claim.issuer ||
+        claim.id !== id ||
+        digestOf(claim) !== fact.digest
+      )
+        return false;
+    }
+    return true;
+  }
+
+  private recordEvidenceFor(adapter: EffectAdapter, plan: EffectPlan) {
+    return adapter.recordRangeOnly ||
+      this.isRangeRequest(plan.params) ||
+      typeof plan.params.recordFrom === "number"
+      ? this.rangeDisclosures(plan.params, plan.intent)
+      : this.recordDisclosures();
+  }
+
   private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
     const boundary = this.effectAdapters.get(plan.adapter);
-    if (boundary?.bindsParameters || boundary?.plainTextEmail) {
+    if (boundary?.bindsParameters || boundary?.plainTextEmail || boundary?.publicationRecipient) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
         for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
           this.record(verdict);
         return [];
       }
+    }
+    if (boundary && !(await this.publicationMatches(boundary, plan))) {
+      for (const verdict of this.outbound.rejectEffect(plan.intent, "evidence-invalid"))
+        this.record(verdict);
+      return [];
     }
     let emailContext: { text: string; approved: boolean } | undefined;
     if (boundary?.plainTextEmail) {
@@ -5411,7 +5832,11 @@ export class AgentRuntime {
       // Brief 31 §2.4: while a mailbox challenge is active, the context checks run inside
       // the release, in the ordered position of disclosure and data terms. Every other email
       // keeps the baseline order: context checks before the gate decides.
-      if (this.emailChallenges.size > 0) emailContext = { text: email.data.text, approved };
+      if (
+        this.pendingEmailChallenges.has(digestOf(plan.params)) ||
+        this.namedMailbox(email.data.to, email.data.purpose)
+      )
+        emailContext = { text: email.data.text, approved };
       else {
         const contextVerdicts = this.outbound.checkEmailContext(
           plan.intent,
@@ -5422,15 +5847,23 @@ export class AgentRuntime {
         if (contextVerdicts.some((verdict) => verdict.verdict === "fail")) return [];
       }
     }
-    if (this.effectAdapters.get(plan.adapter)?.releasesRecord) {
+    if (boundary?.releasesRecord) {
+      if (boundary.recordRecipient !== plan.intent.recipient) {
+        for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
+          this.record(verdict);
+        return [];
+      }
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
         for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
           this.record(verdict);
         return [];
       }
-      const evidence = this.recordDisclosures(
-        typeof plan.params.recordFrom === "number" ? plan.params.recordFrom : undefined,
-      );
+      const evidence = await this.recordEvidenceFor(boundary, plan);
+      if (!evidence) {
+        for (const verdict of this.outbound.rejectEffect(plan.intent, "evidence-invalid"))
+          this.record(verdict);
+        return [];
+      }
       plan = {
         ...plan,
         params: { ...plan.params, evidence },
@@ -5530,6 +5963,13 @@ export class AgentRuntime {
       method,
       at,
     });
+    const challengeKey = digestOf(effect.params);
+    const challenge = this.pendingEmailChallenges.get(challengeKey);
+    if (challenge && result.conclusion !== "uncertain") {
+      this.pendingEmailChallenges.delete(challengeKey);
+      if (result.conclusion === "completed")
+        this.emailChallenges.set(canonicalJson([challenge.to, challenge.purpose]), challenge.nonce);
+    }
     const status = result.conclusion === "uncertain" ? "attempting" : "concluded";
     let updated: EffectState = {
       ...effect,
@@ -5589,7 +6029,32 @@ export class AgentRuntime {
       // Authoritatively absent: safe to attempt again under the SAME idempotency key,
       // after re-checking authorisation (mutable conditions may have changed).
       const intent = this.findEffectIntent(effect);
-      const decision = intent ? this.authorise(intent, true) : undefined;
+      const plan = intent && {
+        key: effect.key,
+        adapter: effect.adapter,
+        intent,
+        params: effect.params as JsonObject,
+        activityType: effect.activityType ?? "",
+      };
+      let decision: AuthorisationDecision | undefined;
+      if (plan && (await this.publicationMatches(adapter, plan))) {
+        const evidence = adapter.releasesRecord && (await this.recordEvidenceFor(adapter, plan));
+        const recordMatches =
+          !adapter.releasesRecord ||
+          (evidence &&
+            adapter.recordRecipient === intent.recipient &&
+            digestOf(plan.params) === digestOf(intent.parameters) &&
+            digestOf(evidence) === digestOf(plan.params.evidence ?? null));
+        if (recordMatches) {
+          this.recordReleaseDigest =
+            adapter.releasesRecord || adapter.purposeScoped ? actionDigest(intent) : undefined;
+          try {
+            decision = this.authorise(intent, true);
+          } finally {
+            this.recordReleaseDigest = undefined;
+          }
+        }
+      }
       if (decision?.outcome === "permit") {
         const retrying: EffectState = { ...effect, attempts: effect.attempts + 1 };
         this.state.effects[effect.key] = retrying;
@@ -6411,6 +6876,7 @@ export class AgentRuntime {
       actionDigest: a.actionDigest,
       decision: a.decision,
       issuer: a.issuer,
+      jws,
       at: this.now(),
     });
     const pending = this.state.pending[a.actionDigest];
@@ -6423,6 +6889,7 @@ export class AgentRuntime {
           ? "; an attestation of the stronger approval goes with the request"
           : ""
       }.`,
+      { actionDigest: a.actionDigest, decision: a.decision },
     );
     if (pending && extra.evidence && extra.evidence.length > 0) {
       const key = `_start:${pending.conversation}`;
@@ -7817,7 +8284,13 @@ export class AgentRuntime {
     this.ledger.append(jointLogView(record), this.now());
   }
 
+  private trustedAuditHead(): LedgerHead | undefined {
+    return this.ledgerAuditTrusted ? this.ledger.head?.() : undefined;
+  }
+
   private persist(): void {
+    if (this.ledger.requiresTrustedCheckpoint && this.ledgerAuditTrusted)
+      this.state.ledgerAuditHead = this.trustedAuditHead();
     this.store.save(copyData(this.state));
   }
 
@@ -7851,7 +8324,9 @@ function registerAnswers(
     const authorizedFor = strings(s.authorizedFor);
     const claimTypes = s.claimTypes === undefined ? [] : strings(s.claimTypes);
     const status = s.status;
+    const signedAt = typeof s.issuedAt === "string" ? s.issuedAt : fact.asOf;
     if (
+      !signedAt ||
       !authorizedFor ||
       !claimTypes ||
       (status !== "authorized" && status !== "suspended" && status !== "withdrawn")
@@ -7859,6 +8334,8 @@ function registerAnswers(
       continue;
     out.push({
       register: fact.source,
+      signedAt,
+      ...(typeof s.validUntil === "string" ? { validUntil: s.validUntil } : {}),
       entry: {
         party: fact.subject,
         authorizedFor,

@@ -58,7 +58,7 @@ export function matrixPrerequisite(
   if (!entry.requires) return undefined;
   const prerequisite = scenario.configurations.find((c) => c.id === entry.requires);
   if (!prerequisite) throw new Error(`${entry.id}: unknown prerequisite ${entry.requires}`);
-  if (prerequisite.requires || prerequisite.id === entry.id)
+  if (prerequisite.requires || prerequisite.extends || prerequisite.id === entry.id)
     throw new Error(`${entry.id}: only one prerequisite configuration is admitted`);
   if (Object.keys(prerequisite.change)[0] === Object.keys(entry.change)[0])
     throw new Error(`${entry.id}: a prerequisite must change a different layer`);

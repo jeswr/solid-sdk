@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 import { patchDifferences } from "../src/engine/confinement.js";
 import { loadCase } from "../src/engine/load.js";
 import { matrixExtended, matrixPrerequisite, matrixWorld } from "../src/engine/matrix.js";
+import { runScenario } from "../src/engine/run.js";
 import type { Scenario } from "../src/engine/schema.js";
 
 const root = join(import.meta.dirname, "..");
@@ -21,7 +22,7 @@ const withEntry = (scenario: Scenario, id: string, change: Partial<Entry>) => {
 };
 
 it("applies the prerequisite's, the extended configuration's and its own patch, in that order", () => {
-  const loaded = loadCase(root, "mortgage-main").scenario;
+  const { profile, scenario: loaded } = loadCase(root, "mortgage-main");
   const { scenario, entry } = withEntry(loaded, "accountability-reputation-post", {
     extends: "accountability-regulator-claim",
     world: {
@@ -47,9 +48,9 @@ it("applies the prerequisite's, the extended configuration's and its own patch, 
     "Renamed by the extending patch",
   );
   // C3's reference is the extended world: the rename is an edit of what it added.
-  expect(patchDifferences(scenario, entry).join("\n")).toMatch(/party:forum changes/);
+  expect(patchDifferences(scenario, entry, profile).join("\n")).toMatch(/party:forum changes/);
   const replacing = withEntry(scenario, entry.id, { replaces: ["party:forum"] });
-  expect(patchDifferences(replacing.scenario, replacing.entry).join("\n")).toMatch(
+  expect(patchDifferences(replacing.scenario, replacing.entry, profile).join("\n")).toMatch(
     /party:forum was added by accountability-regulator-claim; it may not be replaced/,
   );
 });
@@ -76,4 +77,45 @@ it("refuses extends across layers, and beside requires", () => {
     requires: "identity-anonymous",
   });
   expect(() => matrixWorld(both.scenario, both.entry)).toThrow("the extended one's prerequisite");
+});
+
+it("rejects a requires prerequisite that itself uses extends", () => {
+  const loaded = loadCase(root, "mortgage-main").scenario;
+  const { scenario, entry } = withEntry(loaded, "identity-anonymous", {
+    requires: "accountability-reputation-post",
+  });
+  expect(() => matrixWorld(scenario, entry)).toThrow("only one prerequisite");
+});
+
+it("refuses C3 configurations that rewrite a baseline operation or add a blanket grant", async () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const transport = scenario.configurations.find((entry) => entry.id === "transport-email")!;
+  const operation = profile.operations.find(
+    ({ requiresRepresentation }) => requiresRepresentation,
+  )!;
+  const cases: Partial<Entry>[] = [
+    { profileChange: { operations: { [operation.id]: { requiresRepresentation: false } } } },
+    {
+      world: {
+        ...transport.world,
+        mandates: {
+          "sam-agent": { autonomous: [{ action: "distribute", type: "permission" }] },
+        },
+      },
+    },
+    { world: { ...transport.world, trust: { root: { delegates: [] } } } },
+    {
+      replaces: ["statement:income"],
+      world: {
+        ...transport.world,
+        statements: { income: { subject: "urn:other:subject" } },
+      },
+    },
+  ];
+  for (const change of cases) {
+    const changed = withEntry(scenario, transport.id, change);
+    await expect(
+      runScenario(profile, changed.scenario, { configuration: transport.id }),
+    ).rejects.toThrow("C3 refused");
+  }
 });

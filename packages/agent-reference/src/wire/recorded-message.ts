@@ -5,7 +5,7 @@ import { gunzipSync, gzipSync } from "zlib";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import { validateMessage } from "../core/schema.js";
 import { TYP } from "../mechanisms/statements.js";
-import type { TrustStore } from "../mechanisms/trust.js";
+import type { PinnedKey, TrustStore } from "../mechanisms/trust.js";
 import { MessageNode } from "../model/message-nodes.js";
 import { configurationById } from "../profile/configurations.js";
 import { verifyCompact } from "./jws-compact.js";
@@ -25,7 +25,12 @@ export function encodeMessageProof(packet: MessagePacket): string {
   if (bytes.byteLength > CAP) throw new TypeError("Recorded packet too large");
   return PREFIX + gzipSync(bytes).toString("base64");
 }
-export async function verifyRecordedMessage(proof: string, trust: TrustStore) {
+export async function verifyRecordedMessage(
+  proof: string,
+  trust: TrustStore,
+  ownKey?: (kid: string) => PinnedKey | undefined,
+) {
+  const resolveActor = (kid: string) => trust.resolver("actor")(kid) ?? ownKey?.(kid);
   if (proof.startsWith(PREFIX)) {
     try {
       if (proof.length > CAP) return undefined;
@@ -41,7 +46,7 @@ export async function verifyRecordedMessage(proof: string, trust: TrustStore) {
         cfg?.integrity.status === "selected" && cfg.integrity.mechanism === "data-integrity"
           ? "data-integrity"
           : "jws";
-      const resolve = (id: string) => trust.resolver("actor")(id.replace(/^urn:awp:key:/, ""));
+      const resolve = (id: string) => resolveActor(id.replace(/^urn:awp:key:/, ""));
       const checked = await verifyMessagePacket(packet, { suite, resolve });
       const pinned = checked.ok && checked.kid ? resolve(checked.kid) : undefined;
       return checked.ok && pinned
@@ -52,7 +57,7 @@ export async function verifyRecordedMessage(proof: string, trust: TrustStore) {
     }
   }
   const checked = await verifyCompact(proof, {
-    resolve: trust.resolver("actor"),
+    resolve: resolveActor,
     typ: TYP.message,
     allowedAlgs: ["EdDSA", "ES256"],
     limits: DEFAULT_LIMITS,

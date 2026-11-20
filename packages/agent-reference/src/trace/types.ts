@@ -123,10 +123,24 @@ export interface TraceEvent {
   readonly check?: Check;
   readonly verdict?: Verdict;
   /** On `decision` events: the gate outcome. (Extension; see the package README.) */
-  readonly outcome?: InboundOutcome | OutboundOutcome;
+  readonly outcome?: InboundOutcome | OutboundOutcome | "indeterminate";
   /** A reason code from the pilot model (or a gate code for `not-applicable`). */
   readonly reason?: string;
   readonly rule?: { readonly id: string; readonly text: string };
+  readonly gateRun?: number;
+  readonly messageId?: string;
+  readonly actionDigest?: string;
+  readonly approvalDecision?: "approve" | "deny";
+  readonly actionScope?: {
+    readonly action: string;
+    readonly target: string;
+    readonly operation: string;
+    readonly conversation: string;
+    readonly recipient?: string;
+    readonly purpose?: string;
+    readonly evidence: readonly string[];
+  };
+  readonly effectRelease?: boolean;
   readonly packet?: PacketView;
   readonly settlement?: import("../settlement/types.js").SettlementTrace;
   readonly segment?: "payment" | "added";

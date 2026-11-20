@@ -53,6 +53,7 @@ export interface RegisterEntry {
   readonly claimTypes?: readonly string[];
   readonly status: "authorized" | "suspended" | "withdrawn";
   readonly id: string;
+  readonly expiresAt?: string;
 }
 
 export interface Register {
@@ -90,6 +91,8 @@ export interface TrustResolverOptions {
 export interface AnsweredEntry {
   readonly register: Iri;
   readonly entry: RegisterEntry;
+  readonly signedAt: string;
+  readonly validUntil?: string;
 }
 
 export class TrustResolver {
@@ -107,18 +110,50 @@ export class TrustResolver {
   }
 
   /** The root as this agent sees it: answered registers hold only admitted entries. */
-  private delegates(root: TrustRoot): readonly Register[] {
+  private delegates(root: TrustRoot, at: string): readonly Register[] {
     const answered = this.opts.answeredRegisters ?? [];
     if (!answered.length) return root.delegates;
     const entries = this.answers();
-    return root.delegates.map((register) =>
-      answered.includes(register.id)
-        ? {
-            ...register,
-            entries: entries.filter((a) => a.register === register.id).map((a) => a.entry),
-          }
-        : register,
-    );
+    const now = Date.parse(at);
+    return root.delegates.map((register) => {
+      if (!answered.includes(register.id)) return register;
+      const latest = new Map<string, AnsweredEntry[]>();
+      for (const answer of entries) {
+        const time = Date.parse(answer.signedAt);
+        if (answer.register !== register.id || !Number.isFinite(time) || time > now) continue;
+        const previous = latest.get(answer.entry.party);
+        const previousTime = previous ? Date.parse(previous[0]!.signedAt) : -Infinity;
+        if (time > previousTime) latest.set(answer.entry.party, [answer]);
+        else if (time === previousTime) previous?.push(answer);
+      }
+      return {
+        ...register,
+        entries: [...latest.values()].flatMap((answers) => {
+          const answer = answers[0]!;
+          const expires = Math.min(
+            Date.parse(answer.signedAt) + register.answerTtlMs,
+            ...answers.map(({ validUntil }) =>
+              validUntil === undefined ? Infinity : Date.parse(validUntil),
+            ),
+          );
+          // A superseded answer cannot come back when its replacement expires.
+          if (!Number.isFinite(expires)) return [];
+          const same = answers.every(
+            ({ entry }) =>
+              entry.status === answer.entry.status &&
+              JSON.stringify(entry.authorizedFor) === JSON.stringify(answer.entry.authorizedFor) &&
+              JSON.stringify(entry.claimTypes) === JSON.stringify(answer.entry.claimTypes),
+          );
+          return [
+            {
+              ...answer.entry,
+              status: same && now < expires ? answer.entry.status : "withdrawn",
+              expiresAt: new Date(expires).toISOString(),
+            },
+          ];
+        }),
+      };
+    });
   }
   get pinnedOnly(): boolean {
     return this.opts.ownListOnly === true;
@@ -201,7 +236,7 @@ export class TrustResolver {
       (types ?? []).some((t) =>
         t.endsWith(".*") ? input.claimType.startsWith(t.slice(0, -1)) : t === input.claimType,
       );
-    const register = this.delegates(root).find((r) =>
+    const register = this.delegates(root, input.at).find((r) =>
       r.entries.some((e) => e.party === input.source),
     );
     const entry = register?.entries.find((e) => e.party === input.source);
@@ -240,7 +275,8 @@ export class TrustResolver {
         : `Not accepted for ${input.claimType}.`,
       outcome: ok ? "accepted" : "not-accepted",
       checkedAt: input.at,
-      expires: new Date(Date.parse(input.at) + register.answerTtlMs).toISOString(),
+      expires:
+        entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString(),
       rule: { id: entry.id },
     };
   }
@@ -293,7 +329,7 @@ export class TrustResolver {
         checkedAt: input.at,
       };
     }
-    const register = this.delegates(root).find((r) =>
+    const register = this.delegates(root, input.at).find((r) =>
       r.entries.some((e) => e.party === input.party),
     );
     if (!register) {
@@ -316,7 +352,8 @@ export class TrustResolver {
       says: `${register.answersFor[0]?.toUpperCase()}${register.answersFor.slice(1)} are answered by the ${register.name}.`,
     });
     const entry = register.entries.find((e) => e.party === input.party) as RegisterEntry;
-    const expires = new Date(Date.parse(input.at) + register.answerTtlMs).toISOString();
+    const expires =
+      entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString();
     const ok = entry.status === "authorized" && entry.authorizedFor.includes(input.task);
     path.push({
       at: register.name,

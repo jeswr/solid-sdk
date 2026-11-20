@@ -450,12 +450,14 @@ const step = z.discriminatedUnion("type", [
     attack: z.enum(["gap", "tamper"]).optional(),
     // Brief 31 item 4: export only the entries after a witnessed anchor (a record-anchor step).
     anchor: json.optional(),
+    terminal: json.optional(),
   }),
   z.strictObject({
     ...base,
     type: z.literal("record-anchor"),
     // The peer agent shown this agent's record head; it signs a receipt and records it.
     witness: slug,
+    interval: z.strictObject({ conversation: json, from: json }).optional(),
   }),
   z.strictObject({
     ...base,
@@ -471,6 +473,7 @@ const step = z.discriminatedUnion("type", [
     route: z.literal("register").optional(),
     // The conversation whose recorded agreement the claim names by digest.
     agreement: json.optional(),
+    answerThrough: json.optional(),
     // Brief 31 §2.9: natural persons the claim names besides the claimant.
     persons: z.array(iri).min(1).optional(),
   }),

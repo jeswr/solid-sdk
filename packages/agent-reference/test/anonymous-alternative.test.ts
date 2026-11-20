@@ -21,7 +21,7 @@ it("looks lenders up anonymously in the sector register and reads only the admit
   expect(configurationById(alternativeWireId(id))?.status).toBe("executable");
   const entry = scenario.configurations.find((candidate) => candidate.id === id);
   if (!entry) throw new Error(`${id} is not a configuration of mortgage-main`);
-  expect(patchDifferences(scenario, entry)).toEqual([]);
+  expect(patchDifferences(scenario, entry, profile)).toEqual([]);
   const baseline = (await runScenario(profile, { ...scenario, branches: [] }))[0]?.trace;
   const paths = await runScenario(profile, scenario, { configuration: id });
   expect(paths.map((p) => p.path)).toEqual(["main", "anonymous-asks-for-more"]);
@@ -70,10 +70,19 @@ it("looks lenders up anonymously in the sector register and reads only the admit
   );
 
   // The index refuses an unnamed requester at its authority check.
-  expect(failure.disagrees).toBe(false);
-  expect(failure.actual).toMatchObject({
-    check: "authority",
-    reason: "not-authorised",
-    outcome: "refuse",
-  });
+  expect(failure.disagrees).toBe(true);
+  expect(failure.actual).toMatchObject({ outcome: "go" });
+  expect(failure.trace!.events).toContainEqual(
+    expect.objectContaining({
+      check: "authority",
+      reason: "not-authorised",
+      verdict: "fail",
+    }),
+  );
+  expect(failure.trace!.events).toContainEqual(
+    expect.objectContaining({
+      reason: "not-authorised",
+      outcome: "refuse",
+    }),
+  );
 }, 900_000);

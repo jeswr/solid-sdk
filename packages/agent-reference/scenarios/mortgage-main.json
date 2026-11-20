@@ -13926,7 +13926,9 @@
               "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
               "parameters": {
                 "evidence": [
-                  "urn:fictional:payroll-national-insurance"
+                  "urn:fictional:payroll-national-insurance",
+                  "urn:awp:evidence:harbourbank-deposit-2026-10",
+                  "urn:awp:evidence:paywell-income-2026-10"
                 ]
               },
               "conversation": {
@@ -22260,7 +22262,7 @@
         ],
         "actionClaims": [
           {
-            "action": "read",
+            "action": "urn:op:lender-description",
             "claims": [
               "agent.description"
             ]
@@ -32391,37 +32393,6 @@
           }
         },
         "statements": {
-          "fee-statement": {
-            "id": "fee-statement",
-            "issuer": "north",
-            "subject": "https://sam.example/#me",
-            "kind": "fee.charged",
-            "value": {
-              "fee": 995,
-              "currency": "USD",
-              "service": "Mortgage arrangement fee",
-              "synthetic": true
-            },
-            "method": "recorded-by-authority",
-            "asOf": "2026-11-13T09:00:00.000Z",
-            "terms": {
-              "policy": {
-                "id": "urn:terms:fee-statement",
-                "permissions": [
-                  {
-                    "type": "permission",
-                    "action": "use",
-                    "target": "urn:scenario:mortgage-main:fee-statement"
-                  },
-                  {
-                    "type": "permission",
-                    "action": "distribute",
-                    "target": "urn:scenario:mortgage-main:fee-statement"
-                  }
-                ]
-              }
-            }
-          },
           "north-dispute-route": {
             "id": "north-dispute-route",
             "issuer": "lender-register",
@@ -32548,6 +32519,17 @@
                   "forum.decision"
                 ],
                 "subjects": "any"
+              },
+              "urn:source:north-agent:own-fee-statement": {
+                "id": "urn:source:north-agent:own-fee-statement",
+                "version": "1",
+                "source": "https://northbank.example/#org",
+                "claimTypes": [
+                  "fee.charged"
+                ],
+                "subjects": [
+                  "https://sam.example/#me"
+                ]
               }
             },
             "lender-register-agent": {
@@ -32603,6 +32585,68 @@
             "agent": "north-agent",
             "type": "record-anchor",
             "witness": "sam-agent",
+            "atStep": 40
+          },
+          "fee-statement": {
+            "id": "fee-statement",
+            "agent": "north-agent",
+            "type": "issue",
+            "issuer": "north",
+            "value": {
+              "fee": 995,
+              "currency": "USD",
+              "service": "Mortgage arrangement fee",
+              "synthetic": true,
+              "id": "urn:scenario:mortgage-main:fee-statement",
+              "issuer": "https://northbank.example/#org",
+              "subject": "https://sam.example/#me",
+              "claimType": "fee.charged",
+              "method": "recorded-by-authority",
+              "asOf": "2026-11-13T09:00:00.000Z",
+              "terms": {
+                "policy": {
+                  "id": "urn:terms:fee-statement",
+                  "permissions": [
+                    {
+                      "type": "permission",
+                      "action": "use",
+                      "target": "urn:scenario:mortgage-main:fee-statement"
+                    },
+                    {
+                      "type": "permission",
+                      "action": "distribute",
+                      "target": "urn:scenario:mortgage-main:fee-statement"
+                    }
+                  ]
+                }
+              },
+              "agreement": {
+                "id": {
+                  "$ref": "steps.consent.outbound.0.message.body.agreement"
+                },
+                "offer": {
+                  "$ref": "steps.consent.outbound.0.message.body.proposal"
+                },
+                "conversation": {
+                  "$ref": "steps.apply.conversation"
+                },
+                "termsDigest": {
+                  "$ref": "steps.consent.outbound.0.message.body.termsDigest"
+                },
+                "discloseTo": "urn:fictional:mortgage-ombudsman",
+                "discloseFor": "urn:purpose:redress"
+              }
+            },
+            "atStep": 40
+          },
+          "fee-statement-held": {
+            "id": "fee-statement-held",
+            "agent": "north-agent",
+            "type": "admit",
+            "statements": [
+              "fee-statement"
+            ],
+            "purpose": "urn:purpose:redress",
             "atStep": 40
           },
           "fee-notice": {
@@ -32693,6 +32737,36 @@
             "from": "lender-register-agent",
             "atStep": 41
           },
+          "sam-terminal": {
+            "id": "sam-terminal",
+            "agent": "sam-agent",
+            "type": "record-anchor",
+            "witness": "north-agent",
+            "interval": {
+              "conversation": {
+                "$ref": "steps.fee-notice.conversation"
+              },
+              "from": {
+                "$ref": "steps.sam-anchor"
+              }
+            },
+            "atStep": 42
+          },
+          "north-terminal": {
+            "id": "north-terminal",
+            "agent": "north-agent",
+            "type": "record-anchor",
+            "witness": "sam-agent",
+            "interval": {
+              "conversation": {
+                "$ref": "steps.fee-notice.conversation"
+              },
+              "from": {
+                "$ref": "steps.north-anchor"
+              }
+            },
+            "atStep": 42
+          },
           "claimant-record": {
             "id": "claimant-record",
             "agent": "sam-agent",
@@ -32703,6 +32777,9 @@
             "atStep": 42,
             "anchor": {
               "$ref": "steps.sam-anchor"
+            },
+            "terminal": {
+              "$ref": "steps.sam-terminal"
             }
           },
           "respondent-record": {
@@ -32715,6 +32792,9 @@
             "atStep": 42,
             "anchor": {
               "$ref": "steps.north-anchor"
+            },
+            "terminal": {
+              "$ref": "steps.north-terminal"
             }
           },
           "file-claim": {
@@ -32737,6 +32817,9 @@
             "atStep": 43,
             "agreement": {
               "$ref": "steps.apply.conversation"
+            },
+            "answerThrough": {
+              "$ref": "steps.north-terminal"
             }
           },
           "approve-claim": {

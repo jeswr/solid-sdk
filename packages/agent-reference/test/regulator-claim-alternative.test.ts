@@ -20,7 +20,7 @@ it("files the fee claim with the ombudsman the admitted register answer names an
   const entry = scenario.configurations.find((candidate) => candidate.id === id);
   if (!entry) throw new Error(`${id} is not a configuration of mortgage-main`);
   expect(entry.requires).toBe("identity-anonymous");
-  expect(patchDifferences(scenario, entry)).toEqual([]);
+  expect(patchDifferences(scenario, entry, profile)).toEqual([]);
   const reference = (
     await runScenario(
       profile,

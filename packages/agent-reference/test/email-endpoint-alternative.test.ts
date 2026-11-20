@@ -19,7 +19,7 @@ it("accepts the payroll mailbox reply only as an answered challenge from the add
   expect(configurationById(alternativeWireId(id))?.status).toBe("executable");
   const entry = scenario.configurations.find((candidate) => candidate.id === id);
   if (!entry) throw new Error(`${id} is not a configuration of mortgage-main`);
-  expect(patchDifferences(scenario, entry)).toEqual([]);
+  expect(patchDifferences(scenario, entry, profile)).toEqual([]);
   const baseline = (await runScenario(profile, { ...scenario, branches: [] }))[0]?.trace;
   const paths = await runScenario(profile, scenario, { configuration: id });
   expect(paths.map((p) => p.path)).toEqual(["main", "mailbox-reply-as-evidence"]);

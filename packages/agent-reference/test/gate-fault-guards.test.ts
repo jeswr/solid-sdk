@@ -9,7 +9,7 @@ import { expect, it } from "vitest";
 import { patchDifferences } from "../src/engine/confinement.js";
 import { loadCase, validateReferences } from "../src/engine/load.js";
 import { patch, runScenario } from "../src/engine/run.js";
-import type { Scenario } from "../src/engine/schema.js";
+import { type Scenario, scenarioSchema } from "../src/engine/schema.js";
 
 const root = join(import.meta.dirname, "..");
 const fixture = JSON.parse(
@@ -30,7 +30,7 @@ it("refuses the stand-in in a configuration world, where C3 also reports it", as
   const original = scenario.configurations.find((entry) => entry.id === vendor);
   if (!original) throw new Error("Missing configuration");
   const entry = patch(original, fixture.configuration) as Scenario["configurations"][number];
-  expect(patchDifferences(scenario, entry).join("\n")).toMatch(/gateFault is active/);
+  expect(patchDifferences(scenario, entry, profile).join("\n")).toMatch(/gateFault is active/);
   const changed = {
     ...scenario,
     configurations: scenario.configurations.map((c) => (c.id === vendor ? entry : c)),
@@ -86,4 +86,24 @@ it("keeps the gate and runtime sources free of the stand-in", () => {
   for (const dir of ["src/gates", "src/runtime"])
     for (const file of files(join(root, dir)))
       expect(readFileSync(file, "utf8"), file).not.toMatch(/gateFault|faulty-gate/);
+});
+
+it("rejects a vendor-fault branch that would be published as the main run", () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const changed = {
+    ...scenario,
+    branches: [
+      {
+        id: "main",
+        onlyUnder: vendor,
+        what: "Reserved",
+        change: { gateFault },
+        outline: [],
+        expect: { outcome: "ask-principal", reason: "not-authorised", check: "evidence" },
+      },
+    ],
+  };
+  expect(() => validateReferences(profile, scenarioSchema.parse(changed))).toThrow(
+    "branch id main is reserved",
+  );
 });

@@ -228,6 +228,7 @@ export class InboundGate {
       this.emit({
         part: "transport",
         kind: "message-in",
+        messageId: peek.id,
         packet: packetView(peek, wire as never, {
           carriageSuite: transport,
           carriageSummary: `Arrived over ${binding ?? "an unnamed binding"}.`,
@@ -1185,12 +1186,18 @@ export class InboundGate {
     return checked.reason;
   }
 
-  decisionEvent(outcome: InboundOutcome, caption: string, reason?: string): void {
+  decisionEvent(
+    outcome: InboundOutcome,
+    caption: string,
+    reason?: string,
+    messageId?: string,
+  ): void {
     this.emit({
       part: "inbound-gate",
       kind: "decision",
       verdict: OUTCOME_VERDICT[outcome],
       outcome,
+      ...(messageId ? { messageId } : {}),
       ...(reason ? { reason } : {}),
       caption,
     });
@@ -2815,6 +2822,8 @@ export class Admission {
       this.claimsAdmitted
         ? "The message is admitted and passed to the core, labelled with its sources, terms and quality."
         : "The message is admitted; statements that did not pass are labelled as not admitted.",
+      undefined,
+      this.subject,
     );
     for (const c of this.admittedClaims)
       this.gate.storeEvent(
@@ -2929,6 +2938,7 @@ export class Admission {
       "refuse",
       `The message is refused (${reason}${detail ? `: ${detail}` : ""}); the core never sees it.`,
       reason,
+      this.subject,
     );
   }
 }

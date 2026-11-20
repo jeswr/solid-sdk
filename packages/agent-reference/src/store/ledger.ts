@@ -41,27 +41,79 @@ export interface LedgerEntry {
   readonly prev: string;
   readonly record: { readonly type: string; readonly [key: string]: unknown };
   readonly hash: string;
+  /** Present on entries that support withholding the record while proving the chain. */
+  readonly recordDigest?: string;
 }
+
+export type LedgerRangeEntry =
+  | LedgerEntry
+  | (Omit<LedgerEntry, "record" | "recordDigest"> & {
+      readonly recordDigest: string;
+      readonly record: null;
+    });
 
 const GENESIS = "sha-256:genesis";
 
+export interface LedgerHead {
+  readonly seq: number;
+  readonly hash: string;
+}
+
 export interface EvidenceLedger {
+  /** The writer's head, maintained independently of entries supplied to a reader. */
+  head?(): LedgerHead;
+  enableRangeCommitments?(): void;
+  readonly requiresTrustedCheckpoint?: boolean;
   append<T extends LedgerRecord>(record: T, at: string): LedgerEntry;
   entries(): readonly LedgerEntry[];
 }
 
-function seal(seq: number, at: string, prev: string, record: LedgerEntry["record"]): LedgerEntry {
-  return { seq, at, prev, record, hash: digestOf({ seq, at, prev, record }) };
+function seal(
+  seq: number,
+  at: string,
+  prev: string,
+  record: LedgerEntry["record"],
+  committed = false,
+): LedgerEntry {
+  if (!committed) return { seq, at, prev, record, hash: digestOf({ seq, at, prev, record }) };
+  const recordDigest = digestOf(record);
+  return { seq, at, prev, record, recordDigest, hash: digestOf({ seq, at, prev, recordDigest }) };
+}
+
+function validSeal(entry: LedgerRangeEntry): boolean {
+  const { seq, at, prev, record, recordDigest, hash } = entry;
+  if (recordDigest !== undefined)
+    return (
+      (record === null || digestOf(record) === recordDigest) &&
+      digestOf({ seq, at, prev, recordDigest }) === hash
+    );
+  return record !== null && seal(seq, at, prev, record).hash === hash;
 }
 
 /** In-memory ledger (tests, demo, short-lived scenarios). */
 export class MemoryLedger implements EvidenceLedger {
   protected readonly list: LedgerEntry[] = [];
+  private committed = false;
+  private tip: LedgerHead = { seq: 0, hash: GENESIS };
+
+  enableRangeCommitments(): void {
+    this.committed = true;
+  }
+
+  head(): LedgerHead {
+    return { ...this.tip };
+  }
 
   append<T extends LedgerRecord>(record: T, at: string): LedgerEntry {
-    const prev = this.list.at(-1)?.hash ?? GENESIS;
-    const entry = seal(this.list.length + 1, at, prev, JSON.parse(JSON.stringify(record)));
+    const entry = seal(
+      this.tip.seq + 1,
+      at,
+      this.tip.hash,
+      JSON.parse(JSON.stringify(record)),
+      this.committed,
+    );
     this.list.push(entry);
+    this.tip = { seq: entry.seq, hash: entry.hash };
     return entry;
   }
 
@@ -90,8 +142,10 @@ function readSegment(path: string): LedgerEntry[] {
  * the tail (last entry, current count) is kept in memory.
  */
 export class FileLedger implements EvidenceLedger {
+  readonly requiresTrustedCheckpoint = true;
   private last: LedgerEntry | undefined;
   private currentCount = 0;
+  private committed = false;
   private readonly bounds: LedgerBounds;
 
   constructor(
@@ -102,6 +156,15 @@ export class FileLedger implements EvidenceLedger {
     const current = readSegment(path);
     this.currentCount = current.length;
     this.last = current.at(-1) ?? readSegment(this.segments().at(-1) ?? "").at(-1);
+    this.committed = this.last?.recordDigest !== undefined;
+  }
+
+  enableRangeCommitments(): void {
+    this.committed = true;
+  }
+
+  head(): LedgerHead {
+    return this.last ? { seq: this.last.seq, hash: this.last.hash } : { seq: 0, hash: GENESIS };
   }
 
   /** Archived segment paths, oldest first. */
@@ -133,6 +196,7 @@ export class FileLedger implements EvidenceLedger {
       at,
       this.last?.hash ?? GENESIS,
       JSON.parse(JSON.stringify(record)),
+      this.committed,
     );
   }
 
@@ -220,7 +284,7 @@ export function verifyLedger(entries: readonly LedgerEntry[]): LedgerCheck {
     if (!e) break;
     if (e.seq !== (first?.seq ?? 1) + i) return fail(e, "sequence gap");
     if (e.prev !== prev) return fail(e, "broken link");
-    if (seal(e.seq, e.at, e.prev, e.record).hash !== e.hash) return fail(e, "hash mismatch");
+    if (!validSeal(e)) return fail(e, "hash mismatch");
     prev = e.hash;
   }
   return {
@@ -231,32 +295,51 @@ export function verifyLedger(entries: readonly LedgerEntry[]): LedgerCheck {
   };
 }
 
+/** Verify the retained entries against a head obtained from a trusted writer or witness. */
+export function verifyLedgerAtHead(
+  entries: readonly LedgerEntry[],
+  head: LedgerHead | undefined,
+): LedgerCheck {
+  const check = verifyLedger(entries);
+  if (!check.ok) return check;
+  const tail = entries.at(-1);
+  return head && head.seq === (tail?.seq ?? 0) && head.hash === (tail?.hash ?? GENESIS)
+    ? check
+    : { ...check, ok: false, problem: "record does not match a trusted head" };
+}
+
 /**
  * Brief 31 item 4: recompute a range of the chain that starts after an anchor entry. The
  * first entry must follow the anchor's sequence and link to its hash; the rest must link
  * through. Whether the anchor itself is attested is the caller's check.
  */
 export function verifyLedgerRange(
-  entries: readonly LedgerEntry[],
-  anchor: { readonly seq: number; readonly hash: string },
+  entries: readonly LedgerRangeEntry[],
+  anchor: LedgerHead,
+  terminal?: LedgerHead,
 ): LedgerCheck {
   const scope =
     "chain integrity of the entries after an attested anchor; does not establish entries before the anchor or after the last one";
-  const fail = (e: LedgerEntry, problem: string): LedgerCheck => ({
+  const fail = (e: LedgerRangeEntry, problem: string): LedgerCheck => ({
     ok: false,
     entries: entries.length,
     firstBadSeq: e.seq,
     problem,
     scope,
   });
+  const tail = entries.at(-1);
+  if (!tail || !terminal)
+    return { ok: false, entries: entries.length, problem: "missing range terminal", scope };
   let prev = anchor.hash;
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     if (!e) break;
     if (e.seq !== anchor.seq + 1 + i) return fail(e, "sequence gap");
     if (e.prev !== prev) return fail(e, i === 0 ? "anchor link" : "broken link");
-    if (seal(e.seq, e.at, e.prev, e.record).hash !== e.hash) return fail(e, "hash mismatch");
+    if (!validSeal(e)) return fail(e, "hash mismatch");
     prev = e.hash;
   }
+  if (terminal.seq !== tail.seq || terminal.hash !== tail.hash)
+    return fail(tail, "range does not match its terminal");
   return { ok: true, entries: entries.length, scope };
 }

@@ -66,6 +66,8 @@ export function validateReferences(
     scenario.statements.map((s) => s.id),
     "statement",
   );
+  if (scenario.branches.some((branch) => branch.id === "main"))
+    throw new Error("branch id main is reserved");
   unique(
     scenario.branches.map((b) => b.id),
     "branch",
@@ -138,6 +140,10 @@ export function validateReferences(
     requireParty(b);
   }
   for (const statement of scenario.statements) requireParty(statement.issuer);
+  unique(
+    scenario.mandates.map((mandate) => mandate.agent),
+    "mandate for agent",
+  );
   for (const mandate of scenario.mandates) requireParty(mandate.agent);
   for (const step of scenario.script) {
     requireParty(step.agent);

@@ -12,30 +12,36 @@ import { Cast, mandateOf } from "../src/scenarios/common.js";
 import { MemoryStateStore } from "../src/store/state.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
 import { TrustResolver } from "../src/trust/resolver.js";
+import { decodeCompactPayload } from "../src/wire/inspect.js";
 
 const address = "mailto:shop@fictional.example",
   purpose = "urn:purpose:enquiry",
   op = "urn:op:email";
-async function fixture() {
+const publication = "urn:op:publication";
+const host = "urn:test:host";
+async function fixture({ mailTrust = true } = {}) {
   let at = new Date("2026-11-13T09:00:00.000Z");
   const cast = new Cast(() => at);
   await cast.add(
     { name: "a", actor: "urn:a", party: "urn:owner" },
     mandateOf(
       "mail",
-      [{ type: "permission", action: "distribute", target: op }],
+      [
+        { type: "permission", action: "distribute", target: op },
+        { type: "permission", action: "distribute", target: publication },
+      ],
       [
         { type: "permission", action: "distribute", target: op },
         { type: "permission", action: "transfer", target: "urn:op:email-bind" },
       ],
     ),
-    [op, "urn:op:email-bind"],
+    [op, "urn:op:email-bind", publication],
   );
   cast.rule("a", {
     id: "urn:source:private",
     version: "1",
     source: "urn:owner",
-    claimTypes: ["private.secret"],
+    claimTypes: ["private.secret", "contact.mailbox"],
     subjects: ["urn:owner"],
   });
   const a = cast.get("a"),
@@ -46,6 +52,7 @@ async function fixture() {
       purposes: [purpose],
       validUntil: "2026-12-01T00:00:00.000Z",
     });
+  const published: unknown[] = [];
   const mailbox = new ScriptedMailbox(address, new MemoryStateStore(), []),
     recorder = new TraceRecorder();
   const { runtime, ledger } = await cast.runtime(
@@ -60,6 +67,17 @@ async function fixture() {
           observed: mailbox.deliver(key, params),
         }),
         reconcile: async () => ({ conclusion: "uncertain", reason: "not queried" }),
+      },
+      {
+        id: "urn:publication",
+        bindsParameters: true,
+        purposeScoped: true,
+        publicationRecipient: (params) => String(params.host),
+        execute: async (_key, params) => {
+          published.push(params);
+          return { conclusion: "completed", observed: {} };
+        },
+        reconcile: async () => ({ conclusion: "not-executed", reason: "none" }),
       },
       {
         id: "urn:effect",
@@ -77,6 +95,13 @@ async function fixture() {
           id: "urn:private-reliance",
           rules: [
             {
+              id: "urn:mailbox-quality",
+              claimType: "contact.mailbox",
+              methods: ["recorded-by-authority"],
+              maxAgeDays: 1,
+              text: "Source-signed mailbox.",
+            },
+            {
               id: "urn:private-quality",
               claimType: "private.secret",
               methods: ["recorded-by-authority"],
@@ -85,12 +110,17 @@ async function fixture() {
             },
           ],
         },
-        trust: { levels: ["own-list"], onUnknown: "ask-principal" },
+        ...(mailTrust
+          ? { trust: { levels: ["own-list" as const], onUnknown: "ask-principal" as const } }
+          : {}),
         resolver: new TrustResolver({
           principal: "owner",
           trust: await TrustStore.load(cast.trust.get("a")),
           name: (iri) => iri ?? "unknown",
-          ownList: [{ party: address, tasks: [op, "urn:op:email-bind"] }],
+          ownList: [
+            { party: address, tasks: [op, "urn:op:email-bind"] },
+            { party: host, tasks: [publication] },
+          ],
         }),
         sink: recorder.sink("a"),
         email: {
@@ -98,7 +128,7 @@ async function fixture() {
           from: "mailto:agent@fictional.example",
           structuredReply: "https://fictional.example/form",
         },
-        purposes: { [purpose]: [] },
+        purposes: { [purpose]: ["private.secret"] },
         readings: [
           {
             claimType: "email.reading",
@@ -123,6 +153,7 @@ async function fixture() {
     ledger,
     recorder,
     mailbox,
+    published,
     send,
     approve,
     cast,
@@ -327,4 +358,111 @@ it("retains exact-text review for default terms and the specified four-character
     await f.approve();
     expect(f.mailbox.inbox()).toHaveLength(1);
   }
+});
+
+it("accepts mailbox control only after delivery with a fresh challenge for this mailbox and purpose", async () => {
+  const f = await fixture();
+  const jws = await signStatement(f.cast.get("a").ownerKey, "awp-statement+jws", {
+    id: "urn:contact",
+    issuer: "urn:owner",
+    subject: "urn:owner",
+    claimType: "contact.mailbox",
+    mailbox: address,
+    asOf: "2026-11-13T09:00:00.000Z",
+    method: "recorded-by-authority",
+  });
+  expect(await f.runtime.admitStatements([{ jws }], { task: "urn:task", purpose })).toMatchObject({
+    admitted: 1,
+  });
+  await f.runtime.sendEmail({
+    taskId: "urn:challenge",
+    adapter: "urn:mail",
+    to: address,
+    text: "Please confirm your mailbox.",
+    purpose,
+    challenge: true,
+  });
+  const pending = required(f.runtime.pendingApprovals()[0]);
+  const nonce = required(
+    /Challenge: ([a-z0-9]+)/.exec(String(pending.intent.parameters.text))?.[1],
+  );
+  const reply = { from: address, purpose, text: `I received ${nonce}.` };
+  expect(await f.runtime.receiveEmail({ ...reply, challenge: nonce })).toMatchObject({ ok: false });
+  await f.approve();
+  expect(await f.runtime.receiveEmail(reply)).toMatchObject({ ok: false });
+  expect(await f.runtime.receiveEmail({ ...reply, challenge: nonce })).toMatchObject({ ok: true });
+  expect(await f.runtime.receiveEmail({ ...reply, challenge: nonce })).toMatchObject({ ok: false });
+});
+
+it("redacts private email action parameters from the exact range export bytes", async () => {
+  const f = await fixture();
+  const head = f.runtime.recordHead();
+  const anchor = { ...head, receipt: "witnessed-start" };
+  await f.send("urn:private:message", "PRIVATE-ONLY-IN-EMAIL");
+  await f.approve();
+  const terminal = { ...f.runtime.recordHead(), receipt: "witnessed-end" };
+  const segment = decodeCompactPayload(
+    (await f.runtime.exportRecord("urn:unrelated", anchor, terminal)).jws,
+  );
+  expect(JSON.stringify(segment)).not.toContain("PRIVATE-ONLY-IN-EMAIL");
+  expect(segment.messages).toEqual([]);
+  for (const { entry, proof } of segment.entries as { entry: unknown; proof: string }[]) {
+    expect(entry).toMatchObject({ record: null, recordDigest: expect.any(String) });
+    expect(decodeCompactPayload(proof)).toEqual(entry);
+  }
+});
+
+it("binds publication to the admitted fact digest and the host's resolved identity", async () => {
+  const f = await fixture({ mailTrust: false });
+  const original = {
+    id: "urn:private:item",
+    issuer: "urn:owner",
+    subject: "urn:owner",
+    claimType: "private.secret",
+    asOf: "2026-11-13T09:00:00.000Z",
+    method: "recorded-by-authority",
+    value: "admitted",
+    terms: {
+      policy: {
+        id: "urn:terms",
+        permissions: [
+          { type: "permission", action: "use" },
+          { type: "permission", action: "distribute" },
+        ],
+      },
+    },
+  };
+  const sign = (value: string) =>
+    signStatement(f.cast.get("a").ownerKey, "awp-statement+jws", { ...original, value });
+  const held = await sign("admitted");
+  expect(
+    await f.runtime.admitStatements([{ jws: held }], { task: "urn:task", purpose }),
+  ).toMatchObject({ admitted: 1 });
+  const publish = (key: string, destination: string, item: string) => {
+    const params = { host: destination, items: [item], evidence: [original.id] };
+    return f.runtime.runTask({
+      taskId: key,
+      kind: "publication",
+      plan: {
+        adapter: "urn:publication",
+        key,
+        params,
+        activityType: "urn:activity:publish",
+        intent: {
+          action: "distribute",
+          target: publication,
+          operation: publication,
+          recipient: host,
+          purpose,
+          conversation: key,
+          parameters: params,
+        },
+      },
+    });
+  };
+  await publish("urn:publish:replacement", host, await sign("unchecked"));
+  await publish("urn:publish:redirect", "urn:other:host", held);
+  expect(f.published).toEqual([]);
+  await publish("urn:publish:exact", host, held);
+  expect(f.published).toHaveLength(1);
 });

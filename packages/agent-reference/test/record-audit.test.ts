@@ -49,49 +49,52 @@ const evaluate: ReleaseEvaluator = (action, _at, named) =>
               : "deny",
       } as AuthorisationDecision);
 
+const audit = (entries: readonly LedgerEntry[], evaluate: ReleaseEvaluator) =>
+  auditReleases(entries, evaluate, { head: entries.at(-1) });
+
 describe("record audit", () => {
-  it("judges an autonomous release inside the mandate", () => {
-    const audit = auditReleases(ledger(decision("use"), check, go), evaluate);
-    expect(audit.chain).toBe("intact");
-    expect(audit.judged.map((r) => [r.verdict, r.reason])).toEqual([["inside", "within-mandate"]]);
-    expect(audit.outside).toEqual([]);
+  it("judges an autonomous release inside the mandate", async () => {
+    const report = await audit(ledger(decision("use"), check, go), evaluate);
+    expect(report.chain).toBe("intact");
+    expect(report.judged.map((r) => [r.verdict, r.reason])).toEqual([["inside", "within-mandate"]]);
+    expect(report.outside).toEqual([]);
   });
 
-  it("judges an approved release inside only with a recorded approval for that digest", () => {
+  it("does not clear a release from an unverified approval row or reuse an approval", async () => {
     const approval = {
       type: "approval",
       id: "urn:test:approval",
       actionDigest: actionDigest(intent("pay")),
       decision: "approve",
     };
-    const approved = auditReleases(
-      ledger(
-        approval,
-        decision("pay", { basis: "owner-approval", approval: approval.id }),
-        check,
-        go,
-      ),
-      evaluate,
-    );
-    expect(approved.judged[0]?.verdict).toBe("inside");
-    const elsewhere = auditReleases(
-      ledger(
-        { ...approval, actionDigest: actionDigest(intent("use")) },
-        decision("pay", { basis: "owner-approval", approval: approval.id }),
-        check,
-        go,
-      ),
-      evaluate,
-    );
-    expect(elsewhere.judged[0]).toMatchObject({ verdict: "outside", reason: "not-authorised" });
+    const approved = decision("pay", { basis: "owner-approval", approval: approval.id });
+    const entries = ledger(approval, approved, check, go, approved, check, go);
+    expect((await audit(entries, evaluate)).judged[0]?.verdict).toBe("indeterminate");
+    const verified = await auditReleases(entries, evaluate, {
+      head: entries.at(-1),
+      verifyApproval: async () => true,
+    });
+    expect(verified.judged.map(({ verdict }) => verdict)).toEqual(["inside", "outside"]);
+    const invalid = await auditReleases(entries, evaluate, {
+      head: entries.at(-1),
+      verifyApproval: async () => false,
+    });
+    expect(invalid.judged[0]?.verdict).toBe("outside");
+    expect(
+      (
+        await auditReleases(entries.slice(0, -1), evaluate, {
+          head: entries.at(-1),
+        })
+      ).chain,
+    ).toBe("broken");
   });
 
-  it("finds a release outside the mandate from the record alone, recorded as permit, without any marker", () => {
+  it("finds a release outside the mandate from the record alone, recorded as permit, without any marker", async () => {
     const entries = ledger(decision("use"), check, go, decision("transfer"), check, go);
     expect(entries.some((e) => "standIn" in e.record)).toBe(false);
-    const audit = auditReleases(entries, evaluate);
-    expect(audit.outside).toHaveLength(1);
-    expect(audit.outside[0]).toMatchObject({
+    const report = await audit(entries, evaluate);
+    expect(report.outside).toHaveLength(1);
+    expect(report.outside[0]).toMatchObject({
       verdict: "outside",
       recorded: "permit",
       recomputed: "deny",
@@ -99,36 +102,36 @@ describe("record audit", () => {
       decision: { seq: 4 },
       release: { seq: 6 },
     });
-    expect(audit.outside[0]?.release.hash).toBe((entries[5] as LedgerEntry).hash);
+    expect(report.outside[0]?.release.hash).toBe((entries[5] as LedgerEntry).hash);
   });
 
-  it("reports a release whose named mandate is not held as indeterminate", () => {
-    const audit = auditReleases(
+  it("reports a release whose named mandate is not held as indeterminate", async () => {
+    const report = await audit(
       ledger(decision("use", { policy: { ...mandate, digest: "sha-256:other" } }), check, go),
       evaluate,
     );
-    expect(audit.judged[0]).toMatchObject({
+    expect(report.judged[0]).toMatchObject({
       verdict: "indeterminate",
       reason: "record-unavailable",
     });
-    expect(audit.outside).toHaveLength(1);
+    expect(report.outside).toHaveLength(1);
   });
 
-  it("counts a release with no authorisation decision as unjudged", () => {
-    const audit = auditReleases(
+  it("counts a release with no authorisation decision as unjudged", async () => {
+    const report = await audit(
       ledger({ ...check, verdict: "not-applicable" }, go, decision("use"), check, go),
       evaluate,
     );
-    expect(audit.unjudged).toHaveLength(1);
-    expect(audit.unjudged[0]?.checks).toEqual(["mandate:not-applicable"]);
-    expect(audit.judged).toHaveLength(1);
+    expect(report.unjudged).toHaveLength(1);
+    expect(report.unjudged[0]?.checks).toEqual(["mandate:not-applicable"]);
+    expect(report.judged).toHaveLength(1);
   });
 
-  it("refuses to judge a broken chain", () => {
+  it("refuses to judge a broken chain", async () => {
     const entries = ledger(decision("transfer"), check, go).map((e) => ({ ...e }));
     entries[1] = { ...(entries[1] as LedgerEntry), record: { ...check, verdict: "fail" } };
-    const audit = auditReleases(entries, evaluate);
-    expect(audit.chain).toBe("broken");
-    expect(audit.judged).toEqual([]);
+    const report = await audit(entries, evaluate);
+    expect(report.chain).toBe("broken");
+    expect(report.judged).toEqual([]);
   });
 });

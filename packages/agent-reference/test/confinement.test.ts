@@ -16,7 +16,7 @@ import { patch, runScenario } from "../src/engine/run.js";
 import type { Scenario } from "../src/engine/schema.js";
 import { alternativeWireId, configurationById } from "../src/profile/configurations.js";
 import type { LayerId } from "../src/suites/registry.js";
-import type { TraceFile } from "../src/trace/types.js";
+import { OUTBOUND_CHECKS, type TraceEvent, type TraceFile } from "../src/trace/types.js";
 
 const root = join(import.meta.dirname, "..");
 type Entry = Scenario["configurations"][number];
@@ -60,7 +60,7 @@ it("confines every scenario configuration (brief 31 C1 to C5) and preserves the 
         );
         continue;
       }
-      const patched = patchDifferences(scenario, entry);
+      const patched = patchDifferences(scenario, entry, profile);
       expect(patched, `${scenario.title}, ${entry.id} (C3):\n${patched.join("\n")}`).toEqual([]);
       const trace = await main(entry);
       if (!baseline || !trace) throw new Error(`${entry.id}: missing real configuration trace`);
@@ -86,13 +86,13 @@ it("refuses a transport configuration that adds a step, inside an added segment 
   const original = scenario.configurations.find((entry) => entry.id === "transport-email");
   if (!original) throw new Error("Missing email configuration");
   const outside = patch(original, wrong.configuration) as Entry;
-  expect(patchDifferences(scenario, outside).join("\n")).toMatch(
+  expect(patchDifferences(scenario, outside, profile).join("\n")).toMatch(
     /confinement-fault is added outside an added segment/,
   );
   const marked = patch(outside, {
     world: { script: { "confinement-fault": { segment: "added", segmentEnd: "added" } } },
   }) as Entry;
-  expect(patchDifferences(scenario, marked).join("\n")).toMatch(
+  expect(patchDifferences(scenario, marked, profile).join("\n")).toMatch(
     /transport configurations may not add exchanges/,
   );
   scenario.configurations = scenario.configurations.map((entry) =>
@@ -153,6 +153,10 @@ async function runFixture(name: string, sameStop = false) {
     candidate.id === entry.id ? entry : candidate,
   );
   const stop = sameStop ? (entry.world.stopAfter as string | undefined) : undefined;
+  if (stop) {
+    scenario.stopAfter = stop;
+    delete entry.world.stopAfter;
+  }
   const baseline = (
     await runScenario(
       profile,
@@ -168,6 +172,7 @@ async function runFixture(name: string, sameStop = false) {
   if (!baseline || !changed) throw new Error("The fixture must exercise real gates");
   return {
     scenario,
+    profile,
     entry,
     baseline,
     changed,
@@ -177,11 +182,11 @@ async function runFixture(name: string, sameStop = false) {
 }
 
 it("detects an added exchange with a check missing, and passes it whole", async () => {
-  const { scenario, entry, baseline, changed, loaded, layer } = await runFixture(
+  const { scenario, profile, entry, baseline, changed, loaded, layer } = await runFixture(
     "added-exchange-check-missing.json",
   );
   // Control: the untouched added register lookup satisfies every part of the rule.
-  expect(patchDifferences(scenario, entry)).toEqual([]);
+  expect(patchDifferences(scenario, entry, profile)).toEqual([]);
   expect(confinementDifferences(baseline, changed, layer)).toEqual([]);
   expect(addedSegmentDifferences(changed, entry, scenario.parties)).toEqual([]);
   expect(changed.events.filter((event) => event.addedBy).length).toBeGreaterThan(0);
@@ -205,12 +210,12 @@ it("detects an added exchange with a failing check", async () => {
 }, 300_000);
 
 it("detects a patch that edits a baseline mandate rule", () => {
-  const { scenario } = loadCase(root, "mortgage-main");
+  const { profile, scenario } = loadCase(root, "mortgage-main");
   const loaded = fixture("patch-edits-mandate-rule.json");
   const original = scenario.configurations.find((entry) => entry.id === loaded.configuration.id);
   if (!original) throw new Error("Missing configuration");
   const entry = patch(original, loaded.configuration) as Entry;
-  expect(patchDifferences(scenario, entry).join("\n")).toMatch(
+  expect(patchDifferences(scenario, entry, profile).join("\n")).toMatch(
     /mandate:sam-agent#autonomous\/urn:rule:use:payment-request changes/,
   );
 });
@@ -261,4 +266,90 @@ it("judges agent gate runs only: a mechanism's events are skipped, an agent's mi
     { id: "forum", runs: "agent" as const },
   ]).join("\n");
   expect(asAgent).toMatch(/forum\|outbound-gate records checks without a decision/);
+});
+
+it("rejects an approval for a different digest and a message with no gate run", () => {
+  const id = "usage-control-human-approval";
+  const entry: Pick<Entry, "id" | "added"> = { id, added: [{ segment: "added-exchange" }] };
+  const shared = { step: 1, agent: "agent", caption: "Gate evidence", addedBy: id };
+  const digest = "sha-256:action";
+  const complete: TraceEvent[] = [
+    ...OUTBOUND_CHECKS.slice(0, OUTBOUND_CHECKS.indexOf("P1")).map((check, index) => ({
+      ...shared,
+      seq: index + 11,
+      part: "outbound-gate" as const,
+      kind: "check" as const,
+      verdict: "pass" as const,
+      check,
+      gateRun: 2,
+    })),
+    {
+      ...shared,
+      seq: 21,
+      part: "outbound-gate",
+      kind: "decision",
+      outcome: "go",
+      messageId: "urn:message",
+      actionDigest: digest,
+      gateRun: 2,
+    },
+    {
+      ...shared,
+      seq: 22,
+      part: "transport",
+      kind: "message-out",
+      messageId: "urn:message",
+      gateRun: 2,
+    },
+  ];
+  expect(
+    addedSegmentDifferences(
+      {
+        events: [{ ...complete[complete.length - 1]!, segment: "added", segmentEnd: "added" }],
+      },
+      entry,
+    ),
+  ).toContainEqual(expect.stringContaining("message-out has no matching gate run"));
+
+  const prefix: TraceEvent[] = [
+    {
+      ...shared,
+      seq: 1,
+      part: "outbound-gate",
+      kind: "check",
+      check: "limits-approval",
+      verdict: "ask-principal",
+      gateRun: 1,
+      segment: "added",
+      actionDigest: digest,
+    },
+    {
+      ...shared,
+      seq: 2,
+      part: "outbound-gate",
+      kind: "decision",
+      outcome: "ask-principal",
+      gateRun: 1,
+      actionDigest: digest,
+    },
+  ];
+  const approval: TraceEvent = {
+    ...shared,
+    seq: 3,
+    part: "principal",
+    kind: "principal-reply",
+    approvalDecision: "approve",
+    actionDigest: digest,
+  };
+  expect(addedSegmentDifferences({ events: [...prefix, approval, ...complete] }, entry)).toEqual(
+    [],
+  );
+  expect(
+    addedSegmentDifferences(
+      {
+        events: [...prefix, { ...approval, actionDigest: "sha-256:unrelated" }, ...complete],
+      },
+      entry,
+    ),
+  ).toContainEqual(expect.stringContaining("without a later approved pass"));
 });
