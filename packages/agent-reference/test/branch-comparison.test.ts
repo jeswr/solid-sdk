@@ -15,9 +15,13 @@ import {
 } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import { MessageNode } from "../src/model/message-nodes.js";
+import { CONFIG_PUBLIC } from "../src/profile/configurations.js";
+import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
 import { signClaim } from "../src/scenarios/common.js";
 import type { PacketView, TraceEvent } from "../src/trace/types.js";
+import { inspectMessagePacket, writeMessagePacket } from "../src/wire/message-packet.js";
 import { ToyJointProtocol } from "./doubles/joint.js";
 import { ToyProofSystem } from "./doubles/proof.js";
 
@@ -206,11 +210,12 @@ function afterRefusal(
   stop = refusal,
   payloads?: ReadonlyMap<number, unknown>,
   observations?: Pick<ComparisonRun, "admissions" | "effectSupport">,
+  statement = refusedStatement,
 ) {
   return stoppedReleaseProblem(
     {
       events: [first, stop, ...later],
-      standaloneRefusals: new Map([[stop.seq, refusedStatement]]),
+      standaloneRefusals: new Map([[stop.seq, statement]]),
       payloads,
       ...observations,
     },
@@ -288,15 +293,15 @@ it("rejects even one refused field in a different issuer's separately admitted c
   ).toBe(true);
 });
 
-it("allows the supplier's independently admitted invoice and still stops payment at P4", async () => {
+it("flags uncited values in the fee acceptance while payment still stops at P4", async () => {
   const { profile, scenario } = loadCase(root, "pay-an-invoice");
   const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
   const branch = paths.find((path) => path.path === "branch-1");
   expect(branch).toMatchObject({
-    disagrees: false,
+    disagrees: true,
     actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
+    note: "an effect followed a stop",
   });
-  expect(branch?.note).toBeUndefined();
   const storedInvoice = branch?.trace?.events.find(
     (event) =>
       event.agent === "business-agent" &&
@@ -339,6 +344,12 @@ it("allows the supplier's independently admitted invoice and still stops payment
     (event) => event.agent === "business-agent" && event.kind === "message-out",
   );
   expect(released?.map((event) => event.packet?.kind)).toEqual(["accept"]);
+  expect(released?.[0]?.actionScope).toMatchObject({
+    action: "use",
+    recipient: "urn:fictional:supplier",
+    evidence: [],
+  });
+  expect(released?.[0]?.seq).toBeLessThan(storedInvoice?.seq ?? -1);
   expect(JSON.stringify(released)).not.toContain("urn:account:supplier");
 }, 120_000);
 
@@ -347,6 +358,52 @@ it("rejects a refused terms policy ID copied under a different field", () => {
   expect(
     afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, payload]])),
   ).toBe(true);
+});
+
+it.each([
+  "issuer",
+  "subject",
+] as const)("rejects a renamed terms value equal to the refused claim's %s", (field) => {
+  const id = refusedClaim.terms.policy.id;
+  const statement = { ...refusedClaim, [field]: id };
+  expect(
+    afterRefusal(
+      [laterAdmit, stored],
+      checked(1),
+      refusal,
+      new Map([[stored.seq, { id: acceptedId, policyHint: id }]]),
+      undefined,
+      { ...refusedStatement, claimDigest: digestOf(statement), statement },
+    ),
+  ).toBe(true);
+});
+
+it("checks parameter values even when sibling fields resemble a policy rule", () => {
+  const statement = { ...refusedClaim, terms: { action: "anonymize" } };
+  expect(
+    afterRefusal(
+      [gated, sent],
+      checked(1),
+      refusal,
+      new Map([[sent.seq, { message: { body: { type: "memo", action: "anonymize" } }, wire: {} }]]),
+      undefined,
+      { ...refusedStatement, claimDigest: digestOf(statement), statement },
+    ),
+  ).toBe(true);
+});
+
+it.each([
+  refusedId,
+  refusedValue,
+  refusedValue.replace("Private", "\\u0050rivate"),
+])("checks an overwritten JSON value (%s) in both plain and compact bytes", (hidden) => {
+  const json = `{"memo":"${hidden}","memo":"ordinary"}`;
+  // The compact payload's duplicate member must also be inspected before decoding JSON.
+  const compact = `eyJhbGciOiJFZERTQSJ9.${Buffer.from(json).toString("base64url")}.signature`;
+  for (const details of [json, compact, { bytes: [...Buffer.from(json)] }])
+    expect(
+      afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, { details }]])),
+    ).toBe(true);
 });
 
 it("checks JSON-carried values without counting a matching property name", () => {
@@ -374,7 +431,7 @@ function admittedClaim(statement = externalClaim, wire = "verified statement byt
       laterAdmit.seq,
       {
         kind: "admitted-statements" as const,
-        actor: "urn:agent",
+        party: "urn:agent",
         statements: [
           { statement, claimDigest: digestOf(statement), wireDigest: digestBytes(wire) },
         ],
@@ -399,6 +456,41 @@ it("rejects a matching value in a statement the agent issued even after its admi
       admissions: admittedClaim(reading),
     }),
   ).toBe(true);
+  expect(
+    afterRefusal(
+      [laterAdmit, gated, sent],
+      checked(1),
+      refusal,
+      new Map([[sent.seq, { message: { body: { destination: reading.destination } }, wire: {} }]]),
+      { admissions: admittedClaim(reading) },
+    ),
+  ).toBe(true);
+});
+
+it.each([
+  ["urn:account:123", "urn:account:1234"],
+  ["urn:account:1234", "urn:account:123"],
+])("matches whole values in releases and citations (%s, %s)", (refusedAccount, otherAccount) => {
+  const statement = { ...refusedClaim, account: refusedAccount };
+  const refused = { ...refusedStatement, claimDigest: digestOf(statement), statement };
+  const check = (destination: string, cited?: string) =>
+    afterRefusal(
+      [
+        laterAdmit,
+        { ...gated, actionScope: { ...gated.actionScope, evidence: cited ? [acceptedId] : [] } },
+        sent,
+      ],
+      checked(1),
+      refusal,
+      new Map([
+        [sent.seq, { message: { body: { destination: `Account: ${destination}.` } }, wire: {} }],
+      ]),
+      { admissions: admittedClaim({ ...externalClaim, destination: `Account: ${cited}.` }) },
+      refused,
+    );
+  expect(check(otherAccount)).toBe(false);
+  expect(check(refusedAccount, otherAccount)).toBe(true);
+  expect(check(refusedAccount, refusedAccount)).toBe(false);
 });
 
 it("requires the packet's own gate to cite an independently admitted source for body values", () => {
@@ -424,6 +516,22 @@ it("requires the packet's own gate to cite an independently admitted source for 
   ).toBe(true);
 });
 
+it("invalidates a citation when the stored bytes for its statement ID change", () => {
+  const check = (record: typeof externalClaim) =>
+    afterRefusal(
+      [laterAdmit, stored, gated, sent],
+      checked(1),
+      refusal,
+      new Map<number, unknown>([
+        [stored.seq, record],
+        [sent.seq, { message: { body: { destination: refusedClaim.account } }, wire: {} }],
+      ]),
+      { admissions: admittedClaim() },
+    );
+  expect(check(externalClaim)).toBe(false);
+  expect(check({ ...externalClaim, destination: "urn:account:different" })).toBe(true);
+});
+
 it("allows a carried statement only at the verified wire digest", async () => {
   const key = await testKey("comparison/independent");
   const wire = await signClaim(key, externalClaim);
@@ -440,6 +548,53 @@ it("allows a carried statement only at the verified wire digest", async () => {
   };
   expect(checkSend(wire)).toBe(false);
   expect(checkSend(altered)).toBe(true);
+});
+
+it("allows the unchanged credential's native projection alongside independently scanned packet data", async () => {
+  const key = await testKey("comparison/native-carried");
+  // The issuer IRI is projected into the JSON-LD document even when the payload is attached.
+  const claim = { ...externalClaim, issuer: externalClaim.destination };
+  const credential = await signClaim(key, claim);
+  const release = { ...gated, actionScope: { ...gated.actionScope, evidence: [] } };
+  const check = async (text: string, value = credential) => {
+    const message = {
+      profile: PILOT_PROFILE,
+      configuration: CONFIG_PUBLIC,
+      id: gated.messageId,
+      conversation: "urn:test:comparison",
+      kind: "invoke",
+      from: {},
+      createdAt: "2026-11-13T09:00:00Z",
+      expiresAt: "2026-11-13T10:00:00Z",
+      body: {
+        operation: { id: "urn:test:operation", version: "1" },
+        input: { text },
+        basis: { kind: "public" },
+      },
+      evidence: [{ role: "credential", format: "jws-compact", value }],
+    } as const;
+    const wire = await writeMessagePacket(
+      MessageNode.toNode({ ...message, evidence: [...message.evidence] }),
+      {
+        suite: "jws",
+        key,
+        verificationMethod: `urn:awp:key:${key.kid}`,
+        created: message.createdAt,
+      },
+    );
+    expect(wire.jsonld).toContain(`"issuer":"${claim.issuer}"`);
+    expect(await inspectMessagePacket(wire)).toMatchObject({ body: { input: { text } } });
+    return afterRefusal(
+      [laterAdmit, release, sent],
+      checked(1),
+      refusal,
+      new Map([[sent.seq, { message, wire }]]),
+      { admissions: admittedClaim(claim, credential) },
+    );
+  };
+  expect(await check("ordinary")).toBe(false);
+  expect(await check(`Copy: ${externalClaim.destination}`)).toBe(true);
+  expect(await check("ordinary", await signClaim(key, { ...claim, extra: "changed" }))).toBe(true);
 });
 
 it("requires effect support for its own parameter values", () => {
@@ -524,6 +679,7 @@ it.each([
   [undefined, "re-signed"],
   [undefined, "parameter-name"],
   [undefined, "parameter-value"],
+  [undefined, "parameter-value-before-colon"],
   ["sparq-zk-result/5", false],
   ["sparq-zk-result/5", true],
   ["sparq-aggregate/1", false],
@@ -540,12 +696,15 @@ it.each([
     kind: "test.private-reference",
     method: "recorded-by-authority",
     value: {
-      value: content === "parameter-name" || content === "parameter-value" ? "text" : refusedValue,
+      value:
+        typeof content === "string" && content.startsWith("parameter-") ? "text" : refusedValue,
     },
   };
   let text = draft.text;
   if (content === "parameter-value") {
     text = "text";
+  } else if (content === "parameter-value-before-colon") {
+    text = "text: confidential";
   } else if (content === "exact" || content === "re-signed") {
     const exact = content === "exact";
     const token = await signClaim(

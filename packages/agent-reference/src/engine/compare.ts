@@ -1,12 +1,18 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-import { CONFLICT_STRATEGIES, LEFT_OPERANDS, ODRL_ACTIONS, OPERATORS } from "@jeswr/solid-odrl";
+import { DataFactory } from "n3";
 import { digestBytes, digestOf } from "../core/canonical.js";
-import type { JsonObject } from "../core/types.js";
+import { attachmentGraphs } from "../model/attachments.js";
+import { SCHEMA } from "../model/named-values.js";
 import type { TraceObservation, VerifiedStatement } from "../trace/recorder.js";
 import type { TraceEvent } from "../trace/types.js";
-import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
-import { cachedMessage, isMessagePacket } from "../wire/message-packet.js";
+import { cachedMessageProjection, isMessagePacket } from "../wire/message-packet.js";
+import {
+  explainedValues,
+  type RefusedContent,
+  type RefusedStatement,
+  refusedContent,
+} from "./refused-values.js";
 import type { Scenario } from "./schema.js";
 
 export function decisionsOf(events: readonly TraceEvent[]) {
@@ -136,13 +142,7 @@ export interface ComparisonStep {
   readonly descriptor: StepDescriptor;
 }
 
-export interface RefusedStatement {
-  readonly id: string;
-  readonly claimDigest: string;
-  readonly wireDigest: string;
-  readonly wire?: string;
-  readonly statement: JsonObject;
-}
+export type { RefusedStatement } from "./refused-values.js";
 
 export interface ComparisonRun {
   readonly events: readonly TraceEvent[];
@@ -386,248 +386,6 @@ function matchesMessageRelease(release: TraceEvent | undefined, send: TraceEvent
   );
 }
 
-function claimText(value: unknown): string[] {
-  if (typeof value === "string") return value ? [value.toLowerCase()] : [];
-  if (Array.isArray(value)) return value.flatMap(claimText);
-  const record = object(value);
-  return record ? Object.values(record).flatMap(claimText) : [];
-}
-
-function claimScalars(value: unknown): string[] {
-  if (typeof value === "number" || typeof value === "boolean") return [String(value)];
-  if (Array.isArray(value)) return value.flatMap(claimScalars);
-  const record = object(value);
-  return record ? Object.values(record).flatMap(claimScalars) : [];
-}
-
-interface RefusedScan {
-  readonly matchValue?: (key: string) => boolean;
-  readonly checkReferences?: boolean;
-  readonly carried?: ReadonlySet<string>;
-  readonly protocolAction?: boolean;
-  readonly nativeWire?: boolean;
-}
-
-const policyVocabulary = new Map<string, readonly string[]>([
-  ["type", ["set", "offer", "agreement", "permission", "prohibition", "obligation"]],
-  ["action", ODRL_ACTIONS.map((value) => value.toLowerCase())],
-  ["leftOperand", LEFT_OPERANDS.map((value) => value.toLowerCase())],
-  ["operator", OPERATORS.map((value) => value.toLowerCase())],
-  ["conflict", CONFLICT_STRATEGIES],
-]);
-
-function termText(value: unknown, vocabulary: boolean, field = ""): string[] {
-  if (typeof value === "string") {
-    const text = value.toLowerCase();
-    return text && vocabulary === (policyVocabulary.get(field)?.includes(text) === true)
-      ? [text]
-      : [];
-  }
-  if (Array.isArray(value)) return value.flatMap((item) => termText(item, vocabulary, field));
-  const record = object(value);
-  return record
-    ? Object.entries(record).flatMap(([key, child]) => termText(child, vocabulary, key))
-    : [];
-}
-
-function protocolKeyword(field: string | undefined, names: ReadonlySet<string>): boolean {
-  if (field === "action" && names.has("operation") && names.has("parameters")) return true;
-  if (field === "type" || field === "action") return names.has("action") && names.has("type");
-  if (field === "operator" || field === "leftOperand") return names.has("rightoperand");
-  return field === "conflict" && names.has("permissions");
-}
-
-function refusedContent(refused: RefusedStatement) {
-  const {
-    id: _id,
-    issuer: _issuer,
-    subject: _subject,
-    claimType: _claimType,
-    method: _method,
-    asOf: _asOf,
-    issuedAt: _issuedAt,
-    validUntil: _validUntil,
-    period: _period,
-    derivation: _derivation,
-    ...fields
-  } = refused.statement;
-  const references = [refused.id, refused.claimDigest, refused.wireDigest, refused.wire];
-  // Issuer and subject identifiers can independently appear as protocol participants.
-  const participants = new Set(claimText([refused.statement.issuer, refused.statement.subject]));
-  const scalars = new Set(claimScalars(fields));
-  const { terms, ...claimFields } = fields;
-  const claimTexts = new Set([
-    ...[...claimText(claimFields), ...termText(terms, false)].filter(
-      (text) => !participants.has(text),
-    ),
-    ...claimText(fields.value),
-  ]);
-  const vocabulary = new Set(termText(terms, true).filter((text) => !claimTexts.has(text)));
-  const texts = [...claimTexts, ...vocabulary].map((text) => ({
-    text,
-    // Common field names can be part of protocol identifiers such as "text/plain".
-    // Still check for the entire value when it occurs in prose or a parameter.
-    whole: /^[a-z][a-z0-9]*$/.test(text)
-      ? new RegExp(`(?<![\\w./:-])${text}(?![\\w/:-]|\\.\\w)`)
-      : undefined,
-  }));
-  const longScalars = [...scalars].filter((text) => text.replace(/\D/g, "").length >= 3);
-  const claimEntries = Object.entries(claimFields);
-
-  const inspect = (value: unknown, options: RefusedScan = {}): boolean => {
-    const {
-      matchValue = () => true,
-      checkReferences = true,
-      carried,
-      protocolAction,
-      nativeWire,
-    } = options;
-    const scalarMatch = (text: string) => matchValue(`scalar:${text}`);
-    const contains = (
-      value: unknown,
-      field?: string,
-      names: ReadonlySet<string> = new Set(),
-    ): boolean => {
-      const original =
-        field !== undefined && Object.hasOwn(fields, field) ? fields[field] : undefined;
-      if (typeof value === "string") {
-        const plaintext = value.toLowerCase();
-        const textMatch = (text: string) =>
-          !(
-            vocabulary.has(text) &&
-            (nativeWire ||
-              (plaintext === text &&
-                (protocolAction ||
-                  (field !== undefined &&
-                    policyVocabulary.get(field)?.includes(text) &&
-                    protocolKeyword(field, names)))))
-          ) && matchValue(`text:${text}`);
-        if (checkReferences && references.some((reference) => reference && value === reference))
-          return true;
-        if (carried?.has(value)) return false;
-        if (texts.some(({ text }) => plaintext === text && textMatch(text))) return true;
-        if (/^\s*(?:\{|\[)/.test(value)) {
-          let decoded: unknown;
-          try {
-            decoded = decodeAdapterJson(value);
-          } catch {
-            // A text field can start with a brace or bracket.
-          }
-          if (decoded !== undefined) return contains(decoded);
-        }
-        if (
-          checkReferences &&
-          references.some((reference) => reference && value.includes(reference))
-        )
-          return true;
-        if (
-          texts.some(
-            ({ text, whole }) =>
-              (whole &&
-              (vocabulary.has(text) ||
-                (text.length <= 8 && (names.has(text) || Object.hasOwn(refused.statement, text))))
-                ? whole.test(plaintext)
-                : plaintext.includes(text)) && textMatch(text),
-          ) ||
-          (typeof original === "string" &&
-            plaintext === original.toLowerCase() &&
-            textMatch(plaintext)) ||
-          ((typeof original === "number" || typeof original === "boolean") &&
-            plaintext === String(original) &&
-            scalarMatch(plaintext)) ||
-          longScalars.some((text) => plaintext.includes(text) && scalarMatch(text)) ||
-          (field === "text" &&
-            (plaintext.match(/\b(?:true|false|\d+(?:\.\d+)?)\b/g) ?? []).some(
-              (token) => scalars.has(token) && scalarMatch(token),
-            ))
-        )
-          return true;
-        // Look ahead so a dotted word preceding a compact JWS cannot swallow the token.
-        for (const [, token] of value.matchAll(/(?<![\w-])(?=([\w-]+\.[\w-]+\.[\w-]+))/g)) {
-          if (!token || carried?.has(token)) continue;
-          if (checkReferences && digestBytes(token) === refused.wireDigest) return true;
-          let decoded: unknown;
-          try {
-            decoded = decodeCompactPayload(token);
-          } catch {
-            continue; // A dotted string can resemble an encoded statement.
-          }
-          if (contains(decoded)) return true;
-        }
-        return false;
-      }
-      const record = object(value);
-      const expected = original ?? (record ? fields.value : undefined);
-      if (
-        expected !== undefined &&
-        expected !== null &&
-        value != null &&
-        typeof expected !== "string" &&
-        digestOf(value) === digestOf(expected) &&
-        (typeof expected === "object"
-          ? matchValue(digestOf(expected))
-          : scalarMatch(String(expected)))
-      )
-        return true;
-      if (
-        (typeof value === "number" || typeof value === "boolean") &&
-        !checkReferences &&
-        scalars.has(String(value))
-      )
-        return scalarMatch(String(value));
-      if (Array.isArray(value)) {
-        if (
-          field === "bytes" &&
-          value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
-        )
-          return contains(new TextDecoder().decode(Uint8Array.from(value)), undefined, names);
-        return value.some((item) => contains(item, field, names));
-      }
-      if (!record) return false;
-      if (
-        checkReferences &&
-        record.claimType === refused.statement.claimType &&
-        digestOf(record) === refused.claimDigest
-      )
-        return true;
-      if (
-        claimEntries.length &&
-        claimEntries.every(
-          ([key, expected]) =>
-            record[key] !== undefined && digestOf(record[key]) === digestOf(expected),
-        ) &&
-        matchValue(digestOf(claimFields))
-      )
-        return true;
-      const fieldNames = new Set(Object.keys(record).map((key) => key.toLowerCase()));
-      const namedField = nativeWire && record.type === "PropertyValue" && string(record.name);
-      return Object.entries(record).some(
-        ([key, child]) =>
-          !(namedField && (key === "name" || key === "propertyID")) &&
-          contains(child, key === "domainValue" && namedField ? namedField : key, fieldNames),
-      );
-    };
-    return contains(value);
-  };
-
-  return { refused, inspect };
-}
-
-type RefusedContent = ReturnType<typeof refusedContent>;
-
-function explainedValues(content: RefusedContent, statements: readonly VerifiedStatement[]) {
-  const values = new Set<string>();
-  for (const { statement } of statements)
-    content.inspect(statement, {
-      checkReferences: false,
-      matchValue: (key) => {
-        values.add(key);
-        return false;
-      },
-    });
-  return (key: string) => !values.has(key);
-}
-
 function packetCopies(
   content: RefusedContent,
   event: TraceEvent,
@@ -639,8 +397,8 @@ function packetCopies(
   const observed = object(payload);
   const wire = observed?.wire;
   const native = isMessagePacket(wire) ? wire : undefined;
-  const materialized = native && cachedMessage(native);
-  const message = object(materialized ?? observed?.message);
+  const materialized = native && cachedMessageProjection(native);
+  const message = object(materialized?.node.live ?? observed?.message);
   if (!message || wire === undefined)
     return (
       content.inspect(event.packet, { matchValue }) || content.inspect(payload, { matchValue })
@@ -648,8 +406,9 @@ function packetCopies(
 
   const { evidence, ...fields } = message;
   const carried = new Set<string>();
+  const subjects = new Set<string>();
   if (Array.isArray(evidence)) {
-    for (const item of evidence) {
+    for (const [index, item] of evidence.entries()) {
       const entry = object(item);
       const value = string(entry?.value);
       const statement =
@@ -660,20 +419,46 @@ function packetCopies(
         const { value: _value, ...metadata } = entry;
         if (
           content.inspect(metadata, { matchValue }) ||
-          content.inspect(value, { matchValue: () => false }) ||
-          content.inspect(statement.statement, { matchValue: () => false })
+          content.inspect(value, { referencesOnly: true }) ||
+          content.inspect(statement.statement, { referencesOnly: true })
         )
           return true;
         carried.add(value);
+        const node = materialized?.node.evidence?.[index];
+        if (node?.statement === value)
+          for (const subject of node.credential?.projectionSubjects(node.format) ?? [])
+            subjects.add(subject);
       } else if (content.inspect(item)) return true;
     }
   } else if (content.inspect(evidence, { matchValue })) return true;
   if (content.inspect(fields, { matchValue })) return true;
   if (!native) return content.inspect(wire, { matchValue, carried });
-  // The materialized message includes verified RDF collection attachments. Scan their
-  // values through the model so RDF literals representing field names are not counted.
+  if (materialized) {
+    // Scan attachment terms in their own graph scope, including nodes outside the model view.
+    const type = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+    const property = DataFactory.namedNode(SCHEMA + "PropertyValue");
+    for (const graph of attachmentGraphs(materialized.node.dataset)) {
+      for (const quad of graph) {
+        const referencesOnly = subjects.has(quad.subject.value);
+        const structuralKey =
+          [SCHEMA + "name", SCHEMA + "propertyID"].includes(quad.predicate.value) &&
+          graph.countQuads(quad.subject, type, property, null) > 0;
+        if (
+          content.inspect(quad.subject.value, { matchValue, referencesOnly }) ||
+          content.inspect(quad.graph.value, { matchValue, referencesOnly }) ||
+          (!structuralKey && content.inspect(quad.object.value, { matchValue, referencesOnly }))
+        )
+          return true;
+      }
+    }
+  }
   return (
-    content.inspect(native.jsonld, { matchValue, carried, nativeWire: true }) ||
+    content.inspect(native.jsonld, {
+      matchValue,
+      projection: materialized
+        ? { subjects, repeatedProof: materialized.repeatedProof }
+        : undefined,
+    }) ||
     native.attachments.some(({ bytes, ...attachment }) => {
       const graph = attachment.mediaType === "application/n-quads";
       return (
@@ -682,7 +467,6 @@ function packetCopies(
           content.inspect(Buffer.from(bytes, "base64").toString("utf8"), {
             matchValue,
             carried,
-            nativeWire: graph,
           }))
       );
     })
@@ -739,12 +523,13 @@ export function stoppedReleaseProblem(
       if (typeof id !== "string") continue;
       // A subsequent admission of the same ID must not leave an older citation usable.
       admitted.delete(id);
-      if (typeof issuer === "string" && issuer !== admission.actor)
+      if (typeof issuer === "string" && admission.party !== undefined && issuer !== admission.party)
         admitted.set(id, { statement, decision: event });
     }
   };
   for (const event of run.events.slice(0, stop.seq - 1)) remember(event);
   const eligible = (statement: VerifiedStatement) =>
+    digestOf(statement.statement) === statement.claimDigest &&
     withheld.every(
       ({ refused }) =>
         refused.id !== statement.statement.id &&
@@ -759,9 +544,7 @@ export function stoppedReleaseProblem(
   const sources = (content: RefusedContent, ids: readonly string[]) =>
     ids.flatMap((id) => {
       const found = admitted.get(id)?.statement;
-      return found &&
-        eligible(found) &&
-        !content.inspect(found.statement, { matchValue: () => false })
+      return found && eligible(found) && !content.inspect(found.statement, { referencesOnly: true })
         ? [found]
         : [];
     });
@@ -777,14 +560,12 @@ export function stoppedReleaseProblem(
       if (event.part === "outbound-gate" && event.outcome === "go") {
         const payload = run.payloads?.get(event.seq);
         const ids = citations(event);
-        const { action, ...scope } = event.actionScope ?? {};
         if (
           (event.effectRelease && payload === undefined) ||
           withheld.some((content) => {
             const matchValue = explainedValues(content, sources(content, ids));
             return (
-              content.inspect(action, { matchValue, protocolAction: true }) ||
-              content.inspect(scope, { matchValue }) ||
+              content.inspect(event.actionScope, { matchValue }) ||
               content.inspect(ids, { matchValue }) ||
               content.inspect(payload, { matchValue })
             );
@@ -804,13 +585,16 @@ export function stoppedReleaseProblem(
         !sameScriptStep(run, preceding, event)
       )
         return true;
-      const id = string(object(payload)?.id);
+      const id = string(object(payload)?.id) ?? event.fact?.id;
       const found = id === undefined ? undefined : admitted.get(id);
+      const digestMatches =
+        found !== undefined &&
+        payload !== undefined &&
+        digestOf(payload) === found.statement.claimDigest;
+      // A later citation resolves to the current statement at this ID.
+      if (id !== undefined && !digestMatches) admitted.delete(id);
       const verified =
-        found &&
-        found.decision.seq === preceding.seq &&
-        eligible(found.statement) &&
-        digestOf(payload) === found.statement.claimDigest
+        found && digestMatches && found.decision.seq === preceding.seq && eligible(found.statement)
           ? found.statement
           : undefined;
       if (
@@ -818,7 +602,7 @@ export function stoppedReleaseProblem(
           const matchValue = explainedValues(content, verified ? [verified] : []);
           return (
             content.inspect(event.fact, { matchValue }) ||
-            content.inspect(payload, { matchValue: verified ? () => false : matchValue })
+            content.inspect(payload, { matchValue, referencesOnly: verified !== undefined })
           );
         })
       )

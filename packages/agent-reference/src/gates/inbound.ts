@@ -1312,7 +1312,7 @@ export class InboundGate {
       return verified && verified.claimDigest === digestOf(claim) ? [verified] : [];
     });
     if (statements.length)
-      return { kind: "admitted-statements", actor: this.deps.identity.actor, statements };
+      return { kind: "admitted-statements", party: this.deps.identity.party, statements };
   }
 
   /** Refusals are gate records, never core context or admitted facts. */

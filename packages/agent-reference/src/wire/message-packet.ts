@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 /** Complete document carriage. No compatibility envelope is emitted here. */
 
+import { canonicalJson } from "../core/canonical.js";
 import { DEFAULT_LIMITS, type PilotLimits } from "../core/limits.js";
 import type { AnyMessage } from "../core/types.js";
 import { materializeAttachments } from "../model/attachments.js";
@@ -69,7 +71,15 @@ export interface PacketDocumentView {
     readonly byteLength: number;
   }[];
 }
-const cache = new WeakMap<object, { node: MessageNode; view: PacketDocumentView }>();
+const cache = new WeakMap<
+  object,
+  {
+    node: MessageNode;
+    view: PacketDocumentView;
+    attachments: readonly DocumentAttachment[];
+    repeatedProof?: string;
+  }
+>();
 export function isMessagePacket(value: unknown): value is MessagePacket {
   return (
     !!value &&
@@ -86,8 +96,17 @@ export async function rememberMessagePacket(
 ): Promise<void> {
   const document = readJson(packet.jsonld);
   const named = node.dataset.getGraphs(null, null, null).some((g) => g.termType !== "DefaultGraph");
+  const { proof, ...unsigned } = document;
+  const jws = proof && typeof proof === "object" && "jws" in proof ? proof.jws : undefined;
+  const repeatedProof =
+    typeof jws === "string" &&
+    jws.split(".")[1] === Buffer.from(canonicalJson(unsigned)).toString("base64url")
+      ? jws
+      : undefined;
   cache.set(packet, {
     node,
+    attachments: packet.attachments.map((attachment) => ({ ...attachment })),
+    repeatedProof,
     view: {
       jsonld: packet.jsonld,
       context: document["@context"] as string | string[],
@@ -105,6 +124,24 @@ export function packetDocumentView(wire: unknown): PacketDocumentView | undefine
 }
 export function cachedMessage(wire: unknown): AnyMessage | undefined {
   return wire && typeof wire === "object" ? cache.get(wire)?.node.live : undefined;
+}
+/** The parsed projection belongs only to the exact document and attachments read. */
+export function cachedMessageProjection(wire: MessagePacket) {
+  const entry = cache.get(wire);
+  if (
+    entry?.view.jsonld === wire.jsonld &&
+    entry.attachments.length === wire.attachments.length &&
+    entry.attachments.every((saved, index) => {
+      const current = wire.attachments[index];
+      return (
+        current?.bytes === saved.bytes &&
+        current.digest === saved.digest &&
+        current.mediaType === saved.mediaType &&
+        current.byteLength === saved.byteLength
+      );
+    })
+  )
+    return { node: entry.node, repeatedProof: entry.repeatedProof };
 }
 /** Display only. The actual integrity boundary always verifies again with pinned material. */
 export async function inspectMessagePacket(wire: unknown): Promise<AnyMessage | undefined> {

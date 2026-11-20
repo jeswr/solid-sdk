@@ -35,7 +35,7 @@ export type TraceObservation =
   | { readonly kind: "payload"; readonly value: unknown; readonly support?: readonly string[] }
   | {
       readonly kind: "admitted-statements";
-      readonly actor: string;
+      readonly party: string | undefined;
       readonly statements: readonly VerifiedStatement[];
     }
   | {

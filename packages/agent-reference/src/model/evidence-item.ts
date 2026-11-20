@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 import type { Term } from "@jeswr/fetch-rdf";
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { objectTerms } from "@jeswr/rdf-serialize/wrapper";
@@ -200,6 +201,41 @@ export class EmbeddedCredentialNode extends RdfNode {
   get payload(): JsonObject {
     return this.subjectPayload.live as JsonObject;
   }
+  /** The materialized subjects belonging to the exact projection of the original bytes. */
+  projectionSubjects(format: string): ReadonlySet<string> {
+    try {
+      const bytes = this.originalJws;
+      const externalLinks =
+        this.types.has(VC + "VerifiablePresentation") &&
+        (format === "awp-action-intent/0.1" ||
+          inspectEvidenceEnvelope(bytes, format, { allowEmpty: true }).credentials.length === 0);
+      const projection = new Store();
+      // Seed external links for the renderer without attributing their graphs to these bytes.
+      if (externalLinks)
+        for (const credential of this.credentials)
+          projection.addQuads(
+            this.dataset.getQuads(
+              TermAs.term(credential) as never,
+              DataFactory.namedNode(RDF_TYPE),
+              DataFactory.namedNode(VC + "VerifiableCredential"),
+              DataFactory.defaultGraph(),
+            ),
+          );
+      const rendered = EmbeddedCredentialNode.fromEvidence(bytes, format, this.id, projection);
+      const expected = externalLinks ? credentialClosure(rendered, false) : projection;
+      const actual = credentialClosure(this, !externalLinks);
+      if (actual.size === expected.size && [...expected].every((quad) => actual.has(quad))) {
+        const subjects = new Set([...actual].map((quad) => quad.subject.value));
+        // A proof subject can also occur elsewhere in the packet, outside its proof graph.
+        for (const quad of materializeAttachments(this.dataset))
+          if (subjects.has(quad.subject.value) && !actual.has(quad)) return new Set();
+        return subjects;
+      }
+    } catch {
+      // An unreadable or altered projection is scanned as ordinary packet data.
+    }
+    return new Set();
+  }
   /** Projection alone grants no source standing; original role/typ verification is separate. */
   projectionMatches(format?: string): boolean {
     try {
@@ -289,7 +325,7 @@ class EmbeddedSubjectNode extends RdfNode {
     this.setNode(AWP + "statementPayload", value);
   }
 }
-function credentialClosure(node: EmbeddedCredentialNode): Store {
+function credentialClosure(node: EmbeddedCredentialNode, followCredentials = true): Store {
   node = new EmbeddedCredentialNode(node.id, materializeAttachments(node.dataset));
   const output = new Store();
   const pending: Term[] = [TermAs.term(node)];
@@ -308,7 +344,6 @@ function credentialClosure(node: EmbeddedCredentialNode): Store {
           VC + "credentialSubject",
           VC + "credentialStatus",
           AWP + "mandateCredential",
-          VC + "verifiableCredential",
           AWP + "statementPayload",
           "https://schema.org/itemListElement",
         ].includes(quad.predicate.value);
@@ -323,7 +358,12 @@ function credentialClosure(node: EmbeddedCredentialNode): Store {
                 null,
               ),
           );
-        if (structural || nestedValue) pending.push(quad.object);
+        if (
+          structural ||
+          nestedValue ||
+          (followCredentials && quad.predicate.value === VC + "verifiableCredential")
+        )
+          pending.push(quad.object);
       }
     }
   }

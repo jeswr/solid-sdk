@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 /** Verified carriage content. Only the wire reader installs these graph associations. */
 import type { Term } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
@@ -17,6 +18,9 @@ export function bindAttachments(
 }
 export function attachmentGraph(dataset: Store, id: string): Store | undefined {
   return admitted.get(dataset)?.get(id)?.graph;
+}
+export function* attachmentGraphs(dataset: Store): Iterable<Store> {
+  for (const { graph } of admitted.get(dataset)?.values() ?? []) if (graph) yield graph;
 }
 export function attachmentTerm(dataset: Store, term: Term): Term {
   return admitted.get(dataset)?.get(term.value)?.term ?? term;
