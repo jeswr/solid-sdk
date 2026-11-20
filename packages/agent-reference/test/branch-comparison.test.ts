@@ -214,6 +214,33 @@ const sent: TraceEvent = {
   packet: packetWithStatement(acceptedId),
 };
 
+const ownActor = "urn:actor:agent";
+const refusalPrincipal = {
+  id: "owner",
+  name: "Owner",
+  role: "principal",
+  identity: "urn:agent",
+  runs: "issuer-only",
+  handlers: [],
+  configurations: [],
+} satisfies Scenario["parties"][number];
+const refusalAgent = {
+  id: "agent-party",
+  traceId: "agent",
+  name: "Agent",
+  role: "agent",
+  identity: "urn:another-identity",
+  actor: ownActor,
+  actsFor: refusalPrincipal.id,
+  runs: "agent",
+  handlers: [],
+  configurations: [],
+} satisfies Scenario["parties"][number];
+const refusalScenario = {
+  ...loadCase(root, "pay-an-invoice").scenario,
+  parties: [refusalAgent, refusalPrincipal],
+} satisfies Scenario;
+
 function afterRefusal(
   later: TraceEvent[],
   first = checked(1),
@@ -221,7 +248,7 @@ function afterRefusal(
   payloads?: ReadonlyMap<number, unknown>,
   observations?: Pick<ComparisonRun, "admissions" | "effectSupport">,
   statement = refusedStatement,
-  scenario?: Scenario,
+  scenario: Scenario = refusalScenario,
 ) {
   return stoppedReleaseProblem(
     {
@@ -435,6 +462,7 @@ it("requires an explicit scenario to excuse a recorded invoice acceptance", asyn
     );
     if (!call) throw new Error("Missing invoice comparison");
     const [run, stop, outcome] = call;
+    // @ts-expect-error Exercise a JavaScript caller omitting the required scenario.
     expect(stoppedReleaseProblem(run, stop, outcome)).toBe(true);
   } finally {
     spy.mockRestore();
@@ -573,7 +601,6 @@ function admittedClaim(
 
 const useRule = { id: "urn:rule:paid-service", action: "use", target: "urn:op:service" };
 const ownParty = "urn:party:agent";
-const ownActor = "urn:actor:agent";
 const peerParty = "urn:party:peer";
 const proposalId = "urn:message:proposal";
 const termsDigest = digestOf({ fee: 1 });
@@ -1132,43 +1159,11 @@ it.each([
   [ownActor, true],
   [externalClaim.issuer, false],
 ])("checks whether issuer %s can explain a store or citation", (issuer, problem) => {
-  const { scenario } = loadCase(root, "pay-an-invoice");
-  const world = {
-    ...scenario,
-    parties: [
-      {
-        id: "agent",
-        name: "Agent",
-        role: "agent",
-        identity: "urn:another-identity",
-        actor: ownActor,
-        actsFor: "owner",
-        runs: "agent",
-        handlers: [],
-        configurations: [],
-      },
-      {
-        id: "owner",
-        name: "Owner",
-        role: "principal",
-        identity: "urn:agent",
-        runs: "issuer-only",
-        handlers: [],
-        configurations: [],
-      },
-    ],
-  } satisfies Scenario;
   const reading = { ...externalClaim, issuer, claimType: "test.reading" };
   expect(
-    afterRefusal(
-      [laterAdmit, stored],
-      checked(1),
-      refusal,
-      new Map([[stored.seq, reading]]),
-      { admissions: admittedClaim(reading) },
-      refusedStatement,
-      world,
-    ),
+    afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, reading]]), {
+      admissions: admittedClaim(reading),
+    }),
   ).toBe(problem);
   expect(
     afterRefusal(
@@ -1177,10 +1172,53 @@ it.each([
       refusal,
       new Map([[sent.seq, { message: { body: { destination: reading.destination } }, wire: {} }]]),
       { admissions: admittedClaim(reading) },
-      refusedStatement,
-      world,
     ),
   ).toBe(problem);
+});
+
+it.each([
+  { label: "no scenario", scenario: undefined, issuer: ownActor },
+  {
+    label: "no matching trace agent",
+    scenario: {
+      ...refusalScenario,
+      parties: [{ ...refusalAgent, traceId: "peer" }, refusalPrincipal],
+    },
+    issuer: ownActor,
+  },
+  {
+    label: "no actor identity",
+    scenario: {
+      ...refusalScenario,
+      parties: [{ ...refusalAgent, actor: undefined }, refusalPrincipal],
+    },
+    issuer: ownActor,
+  },
+  {
+    label: "no represented party",
+    scenario: { ...refusalScenario, parties: [refusalAgent] },
+    issuer: externalClaim.issuer,
+  },
+] satisfies {
+  label: string;
+  scenario: Scenario | undefined;
+  issuer: string;
+}[])("flags a store and a cited send when there is $label", ({ scenario, issuer }) => {
+  const reading = { ...externalClaim, issuer };
+  const check = (events: TraceEvent[], payloads: ReadonlyMap<number, unknown>) => {
+    const run = {
+      events: [checked(1), refusal, laterAdmit, ...events],
+      standaloneRefusals: new Map([[refusal.seq, refusedStatement]]),
+      admissions: admittedClaim(reading),
+      payloads,
+    } satisfies ComparisonRun;
+    if (scenario) return stoppedReleaseProblem(run, refusal, "refuse", scenario);
+    // @ts-expect-error Exercise a JavaScript caller omitting the required scenario.
+    return stoppedReleaseProblem(run, refusal, "refuse");
+  };
+  expect.soft(check([stored], new Map([[stored.seq, reading]]))).toBe(true);
+  const packet = { message: { body: { destination: reading.destination } }, wire: {} };
+  expect.soft(check([gated, sent], new Map([[sent.seq, packet]]))).toBe(true);
 });
 
 it.each([
@@ -1381,6 +1419,7 @@ it("rejects citations in outbound go scope and in completed effect support", () 
       },
       refusal,
       "stop",
+      refusalScenario,
     ),
   ).toBe(true);
 });

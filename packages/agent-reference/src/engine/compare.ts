@@ -1110,7 +1110,7 @@ export function stoppedReleaseProblem(
   run: ComparisonRun,
   stop: TraceEvent,
   expectedOutcome: string,
-  scenario?: Scenario,
+  scenario: Scenario,
 ): boolean {
   const later = run.events.slice(stop.seq);
   const refused = run.standaloneRefusals?.get(stop.seq);
@@ -1139,11 +1139,21 @@ export function stoppedReleaseProblem(
     );
   }
 
-  const ownActors = new Set(signingAgents(scenario, stop.agent).map(({ actor }) => actor));
+  const ownSigners = new Set<string>();
+  for (const { actor, actsFor } of signingAgents(scenario, stop.agent)) {
+    const party = scenario.parties.find(({ id }) => id === actsFor)?.identity;
+    if (!actor || !party) {
+      ownSigners.clear();
+      break;
+    }
+    ownSigners.add(actor);
+    ownSigners.add(party);
+  }
   const withheld = [refusedContent(refused)];
   const admitted = new Map<string, { statement: VerifiedStatement; decision: TraceEvent }>();
   const remember = (event: TraceEvent) => {
     if (
+      ownSigners.size === 0 ||
       event.agent !== stop.agent ||
       event.kind !== "decision" ||
       event.part !== "inbound-gate" ||
@@ -1162,7 +1172,7 @@ export function stoppedReleaseProblem(
         typeof issuer === "string" &&
         admission.party !== undefined &&
         issuer !== admission.party &&
-        !ownActors.has(issuer)
+        !ownSigners.has(issuer)
       )
         admitted.set(id, { statement, decision: event });
     }
