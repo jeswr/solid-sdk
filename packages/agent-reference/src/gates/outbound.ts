@@ -122,6 +122,7 @@ export interface OutboundDeps {
   readonly referencePeer?: (conversation: string) => { actor: string; party: string } | undefined;
   readonly referenceAgreementId?: (intent: ActionIntent) => string | undefined;
   readonly recordRelease?: (intent: ActionIntent) => boolean;
+  readonly recordReleaseItem?: (intent: ActionIntent, id: string) => AdmittedFact | undefined;
   readonly authoredProofSupports?: (
     intent: ActionIntent,
     item: EvidenceItem,
@@ -611,10 +612,14 @@ export class OutboundGate {
     return ask ? { rule: ask, withApproval: true } : undefined;
   }
 
+  private disclosedFact(intent: ActionIntent, id: string): AdmittedFact | undefined {
+    return this.deps.recordReleaseItem?.(intent, id) ?? this.deps.memory.facts.get(id);
+  }
+
   private labels(intent: ActionIntent): string[] {
     const ids = intent.parameters.evidence;
     return Array.isArray(ids)
-      ? ids.map((id) => this.deps.memory.facts.get(String(id))?.label ?? "a statement")
+      ? ids.map((id) => this.disclosedFact(intent, String(id))?.label ?? "a statement")
       : [];
   }
 
@@ -685,7 +690,7 @@ export class OutboundGate {
       if (Array.isArray(p.evidence))
         for (const id of p.evidence.map(String)) if (!items.has(id)) items.set(id, undefined);
       const labels = [...items].map(([id, kind]) => {
-        const fact = this.deps.memory.facts.get(id);
+        const fact = this.disclosedFact(intent, id);
         const label = fact?.label ?? idWords(id, this.name);
         const claimType = fact?.claimType ?? kind;
         return claimType ? `${label} (${claimType})` : label;
@@ -1398,7 +1403,7 @@ export class OutboundGate {
       Array.isArray(v) ? v : [],
     );
     if (
-      support.some((id) => !this.deps.memory.facts.has(String(id)) && !relianceIds.has(String(id)))
+      support.some((id) => !this.disclosedFact(intent, String(id)) && !relianceIds.has(String(id)))
     ) {
       const unacceptedReading = taskItems.find(
         (i) => i.kind === "reading" && support.includes(i.id),
@@ -1942,7 +1947,7 @@ export class OutboundGate {
         : Array.isArray(offer?.evidenceRequest)
           ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
           : undefined;
-      const items = p.evidence.map((id) => this.deps.memory.facts.get(String(id)));
+      const items = p.evidence.map((id) => this.disclosedFact(intent, String(id)));
       if (
         this.deps.gate.selectiveAnnual &&
         items.some(
@@ -2191,7 +2196,7 @@ export class OutboundGate {
     const p = intent.parameters;
     // Issuer-authored text cannot hide unsupported machine terms on the actual items.
     for (const id of scope.action === "distribute" && Array.isArray(p.evidence) ? p.evidence : []) {
-      const fact = this.deps.memory.facts.get(String(id));
+      const fact = this.disclosedFact(intent, String(id));
       if (!fact?.terms) continue;
       const checked = evaluateItemTerms(fact.terms, {
         name: this.deps.gate.name,
@@ -2252,7 +2257,7 @@ export class OutboundGate {
     const access = this.deps.gate.accessPod && p.access !== undefined;
     const requests = access ? accessRequests.safeParse(p.access).data : undefined;
     const ruledItems = p.evidence.map((id) => {
-      const fact = this.deps.memory.facts.get(String(id));
+      const fact = this.disclosedFact(intent, String(id));
       const terms: ItemTerms | undefined = fact?.terms;
       const t = evaluateItemTerms(terms, {
         name: this.deps.gate.name,
@@ -3349,11 +3354,8 @@ export class OutboundGate {
         literal !== undefined &&
         literal.length >= 4 &&
         text.toLowerCase().includes(literal.toLowerCase());
-      const missingRole =
-        !!item.terms?.recipientMustBe &&
-        !this.recipientAllows(scope.recipient, item.terms.recipientMustBe.task);
       const prohibited = approved && repeatsItem && explicitlyProhibits(item.terms, item.id);
-      if (repeatsItem && missingRole) {
+      if (repeatsItem && this.missingRecipientRole(item.terms, scope.recipient)) {
         this.verdict(
           verdicts,
           subject,

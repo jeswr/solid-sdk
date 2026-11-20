@@ -3,10 +3,40 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
+import { applyIdentityNames } from "../src/engine/identity-names.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 
 const root = join(import.meta.dirname, "..");
+it("uses the aliased represented entity in the signed organization mandate", async () => {
+  const { profile, scenario } = loadCase(root, "supplier-onboarding");
+  scenario.branches = [];
+  scenario.script = scenario.script.slice(0, 3);
+  scenario.stress = ["integrity"];
+  const supplier = "urn:fictional:supplier";
+  const alias = "did:web:supplier.example";
+  scenario.identityNames = { [supplier]: alias };
+  applyIdentityNames(profile, scenario);
+  expect(scenario.organizationCredentials[0]?.entity).toBe(alias);
+  // These synthetic documents are external to the typed scenario identity rewrite.
+  const document = scenario.documents.find(({ id }) => id === supplier);
+  if (!document) throw Error("missing organization document");
+  document.id = alias;
+  document.value.subject = alias;
+  for (const key of document.value.keys as { subject: string }[])
+    if (key.subject === supplier) key.subject = alias;
+  const status = scenario.documents.find(({ id }) => id === "urn:status:supplier");
+  if (!status) throw Error("missing organization status list");
+  status.value.issuer = alias;
+  const request = scenario.script.find((step) => step.type === "start");
+  if (request?.type !== "start") throw Error("missing onboarding request");
+  request.contents.entity = alias;
+  const [path] = await runScenario(profile, scenario, { compare: false });
+  expect(path?.trace?.events.filter(({ check }) => check === "authority")).toContainEqual(
+    expect.objectContaining({ agent: "buyer-agent", check: "authority", verdict: "pass" }),
+  );
+});
+
 it("runs supplier onboarding and both catalogue refusals through current documents, credential status and source gates", async () => {
   const { profile, scenario } = loadCase(root, "supplier-onboarding");
   const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });

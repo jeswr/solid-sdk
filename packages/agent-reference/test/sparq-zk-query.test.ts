@@ -44,13 +44,15 @@ it("checks absence against the complete pinned dataset without requiring a medic
   const subject = "urn:trial:subject";
   const purpose = "urn:purpose:trial-eligibility";
   const issuer = "urn:trial:issuer";
-  rule.inputsFrom = [issuer];
+  const medicationIssuer = "urn:trial:medication-issuer";
+  const medicationKind = "trial.medications";
+  rule.inputsFrom = [issuer, medicationIssuer];
   const key = { publicKey: "00".repeat(32) };
   const inputs = ["trial.age", "trial.diagnosis", "trial.medication-complete"];
   const ruleDigest = digestOf(rule);
   const nonce = "trial-absence";
   const policy = { inputCommitment: "00".repeat(32) };
-  const checked = async (complete: boolean, coverageKinds: string[]) => {
+  const checked = async (complete: boolean, coverageKinds: string[], positiveSupplier = false) => {
     const binds: ProofBinds[] = ["rule", "issuers", "fresh"];
     if (complete) binds.push("complete");
     const verify: ProofSystem["verify"] = async (input) => {
@@ -118,7 +120,10 @@ it("checks absence against the complete pinned dataset without requiring a medic
         ],
       },
       purpose,
-      acceptsSource: (source, kind) => source === issuer && inputs.includes(kind),
+      acceptsSource: (source, kind) =>
+        (source === issuer && inputs.includes(kind)) ||
+        (source === medicationIssuer &&
+          (kind === medicationKind || (positiveSupplier && kind === inputs[0]))),
       event: () => {},
     });
   };
@@ -128,6 +133,10 @@ it("checks absence against the complete pinned dataset without requiring a medic
     reason: "derivation-not-verified",
   });
   expect(await checked(true, inputs.slice(0, -1))).toMatchObject({
+    ok: false,
+    reason: "source-not-authoritative",
+  });
+  expect(await checked(true, inputs, true)).toMatchObject({
     ok: false,
     reason: "source-not-authoritative",
   });

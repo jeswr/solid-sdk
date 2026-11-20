@@ -444,8 +444,17 @@ export async function verifyOpaqueDerivation(input: {
         !conditions?.some((c) => c.input === kind && c.operator === "not-in") ||
         conditions.some((c) => c.input === kind && c.operator !== "not-in"),
     );
+    const negativeOnlyKinds = kinds.filter((kind) => !positiveKinds.includes(kind));
+    // Completeness can establish absence without a row from an issuer whose authority is
+    // limited to a negative-only input. Keep the coverage requirement for positive suppliers.
     const sourcesOk = dataset
-      ? sources.every((issuer) => dataset.coverage.some((source) => source.issuer === issuer)) &&
+      ? sources.every(
+          (issuer) =>
+            dataset.coverage.some((source) => source.issuer === issuer) ||
+            (checked.binds.includes("complete") &&
+              negativeOnlyKinds.some((kind) => input.acceptsSource(issuer, kind)) &&
+              !positiveKinds.some((kind) => input.acceptsSource(issuer, kind))),
+        ) &&
         positiveKinds.every((kind) =>
           dataset.coverage.some((source) => source.claimTypes.includes(kind)),
         ) &&

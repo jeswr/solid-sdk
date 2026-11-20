@@ -359,7 +359,7 @@ function required<T>(value: T | undefined | null): T {
 async function privateContext(
   f: Awaited<ReturnType<typeof fixture>>,
   value: import("../src/core/types.js").Json = "SECRET-1234",
-  explicit = true,
+  explicit: boolean | import("../src/gates/common.js").ItemTerms = true,
 ) {
   const statement = {
     id: "urn:private:item",
@@ -369,26 +369,28 @@ async function privateContext(
     method: "recorded-by-authority",
     asOf: "2026-11-13T09:00:00.000Z",
     value,
-    ...(explicit
-      ? {
-          terms: {
-            policy: {
-              id: "urn:private:terms",
-              permissions: [{ type: "permission", action: "use" }],
-              prohibitions: [
-                {
-                  type: "prohibition",
-                  action: "distribute",
-                  constraints: [
-                    { leftOperand: "recipient", operator: "eq", rightOperand: address },
-                    { leftOperand: "purpose", operator: "eq", rightOperand: purpose },
-                  ],
-                },
-              ],
+    ...(typeof explicit === "object"
+      ? { terms: explicit }
+      : explicit
+        ? {
+            terms: {
+              policy: {
+                id: "urn:private:terms",
+                permissions: [{ type: "permission", action: "use" }],
+                prohibitions: [
+                  {
+                    type: "prohibition",
+                    action: "distribute",
+                    constraints: [
+                      { leftOperand: "recipient", operator: "eq", rightOperand: address },
+                      { leftOperand: "purpose", operator: "eq", rightOperand: purpose },
+                    ],
+                  },
+                ],
+              },
             },
-          },
-        }
-      : {}),
+          }
+        : {}),
   };
   const jws = await signStatement(f.cast.get("a").ownerKey, "awp-statement+jws", statement);
   expect(await f.runtime.admitStatements([{ jws }], { task: "urn:task", purpose })).toEqual({
@@ -439,6 +441,36 @@ it("retains exact-text review for default terms and the specified four-character
     await f.approve();
     expect(f.mailbox.inbox()).toHaveLength(1);
   }
+});
+
+it("stops an exactly approved email when the repeated value requires inherited registration", async () => {
+  const f = await fixture();
+  await f.send("urn:registration-email", "The reference is SECRET-1234.");
+  expect(f.runtime.pendingApprovals()).toHaveLength(1);
+  await privateContext(f, "SECRET-1234", {
+    policy: { id: "urn:terms:inherited" },
+    inherited: [
+      {
+        target: "urn:private:source",
+        terms: {
+          policy: {
+            id: "urn:terms:source",
+            permissions: [
+              { type: "permission", action: "use" },
+              { type: "permission", action: "distribute" },
+            ],
+          },
+          recipientMustBe: { task: "urn:role:registered", label: "a registered recipient" },
+        },
+      },
+    ],
+  });
+  await f.approve();
+  expect(f.mailbox.inbox()).toEqual([]);
+  expect(f.recorder.events().findLast(({ kind }) => kind === "decision")).toMatchObject({
+    outcome: "stop",
+    reason: "not-authorised",
+  });
 });
 
 it("accepts mailbox control only after delivery with a fresh challenge for this mailbox and purpose", async () => {
@@ -684,24 +716,34 @@ it("uses the durable file checkpoint and treats a missing historical approval ke
   }
 });
 
-it("keeps a self-consistent file suffix outside the durable audit head across retries", async () => {
+it.each([
+  "appended observation",
+  "reconstructed suffix",
+] as const)("audits and exports only the durable file prefix with an uncheckpointed %s", async (suffixKind) => {
   const dir = mkdtempSync(join(tmpdir(), "agent-unwitnessed-audit-"));
   const f = await fixture({ stateDir: dir });
   try {
     await f.send();
+    await f.approve();
     const checkpoint = f.runtime.recordHead();
-    const rogue = new FileLedger(join(dir, "record.jsonl")).append(
-      { type: "gate-decision", gate: "outbound-gate", outcome: "go" },
-      "2026-11-13T09:00:00.000Z",
-    );
-    expect(rogue.prev).toBe(checkpoint.hash);
+    const type = "uncheckpointed-observation";
+    if (suffixKind === "appended observation")
+      f.runtime.recordObservation({ type, observedBy: "urn:test:observer" });
+    else
+      new FileLedger(join(dir, "record.jsonl")).append(
+        { type, gate: "outbound-gate", outcome: "go" },
+        "2026-11-13T09:00:00.000Z",
+      );
     for (let restart = 0; restart < 2; restart++) {
       await f.reopen();
-      expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
-      await expect(f.runtime.exportRecord("urn:unrelated")).rejects.toThrow(
-        "record head is unavailable",
-      );
-      expect(await f.runtime.auditRecord()).toMatchObject({ ok: false, released: [] });
+      expect(f.runtime.recordHead()).toEqual(checkpoint);
+      const { jws } = await f.runtime.exportRecord("urn:unrelated");
+      const { entries } = decodeCompactPayload(jws);
+      expect(entries).toHaveLength(checkpoint.seq);
+      expect(JSON.stringify(entries)).not.toContain(type);
+      const report = await f.runtime.auditRecord();
+      expect(report.released).toContainEqual(expect.objectContaining({ verdict: "inside" }));
+      expect(report.entry).toBeUndefined();
     }
     f.runtime.close();
     const store = new FileStateStore(join(dir, "state.json"));
@@ -862,25 +904,24 @@ it("requires gate-authored audit evidence and real points in the trusted ledger"
   );
 });
 
-it("fails closed when a file ledger suffix does not verify against the durable checkpoint", async () => {
+it("fails closed when an authenticated file ledger entry has changed", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-corrupt-audit-"));
   const f = await fixture({ stateDir: dir });
   try {
     const path = join(dir, "record.jsonl");
-    const ledger = new FileLedger(path);
-    const suffix = ledger.append(
-      { type: "crash-before-state-checkpoint", value: "original" },
-      "2026-11-13T09:00:00.000Z",
-    );
+    await f.send();
+    await f.approve();
+    const entry = required(f.ledger.entries().at(-1));
     writeFileSync(
       path,
       readFileSync(path, "utf8").replace(
-        JSON.stringify(suffix),
-        JSON.stringify({ ...suffix, record: { ...suffix.record, value: "changed" } }),
+        JSON.stringify(entry),
+        JSON.stringify({ ...entry, record: { ...entry.record, value: "changed" } }),
       ),
     );
     await f.reopen();
     expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
+    expect(await f.runtime.auditRecord()).toMatchObject({ ok: false, released: [] });
   } finally {
     f.runtime.close();
     rmSync(dir, { recursive: true, force: true });

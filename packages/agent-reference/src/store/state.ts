@@ -156,6 +156,10 @@ export interface MandateRevocation {
 
 export interface RuntimeState {
   ledgerAuditHead?: import("./ledger.js").LedgerHead;
+  authoredProofs: Record<
+    string,
+    import("./ledger.js").LedgerHead & { task: Iri; requestDigest: string }
+  >;
   auditApprovalProofs: Record<Iri, string>;
   emailChallenges: Record<string, string>;
   duties: import("../runtime/duties.js").DutyState;
@@ -260,6 +264,7 @@ export function emptyState(): RuntimeState {
     pendingPodGrants: {},
     precedenceHolds: {},
     recordMessages: {},
+    authoredProofs: {},
     auditApprovalProofs: {},
     emailChallenges: {},
     conversations: {},

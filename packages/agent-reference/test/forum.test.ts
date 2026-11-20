@@ -2,15 +2,16 @@
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { z } from "zod";
-import { digestOf } from "../src/core/canonical.js";
+import { digestContent, digestOf } from "../src/core/canonical.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import { LocalForum, RECORD_LIMITS } from "../src/mechanisms/forum.js";
 import { signStatement, TYP, verifyStatement } from "../src/mechanisms/statements.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
+import { AgentRuntime } from "../src/runtime/agent.js";
 import { LEDGER_GENESIS, legacyApprovalRedaction, MemoryLedger } from "../src/store/ledger.js";
 import { MemoryStateStore } from "../src/store/state.js";
 import { decodeCompactPayload } from "../src/wire/inspect.js";
@@ -277,6 +278,121 @@ it("withholds a whole record when the exact signed payload has no grant", async 
     reason: "evidence-invalid",
   });
   expect(path?.trace?.events.some(({ agent }) => agent === "forum")).toBe(false);
+});
+
+function beforeClaimantRecord(addRow: (runtime: AgentRuntime) => void) {
+  const head = AgentRuntime.prototype.recordHead;
+  let added = false;
+  return vi.spyOn(AgentRuntime.prototype, "recordHead").mockImplementation(function (
+    this: AgentRuntime,
+  ) {
+    if (!added && this.identity.party === "urn:fictional:fee-dispute:owner") {
+      added = true;
+      addRow(this);
+    }
+    return head.call(this);
+  });
+}
+
+it("exports a legacy approval through the scenario witness without releasing its original bytes", async () => {
+  const { profile, scenario } = loadCase(join(import.meta.dirname, ".."), "fee-dispute");
+  scenario.branches = [];
+  scenario.stopAfter = "claimant-record";
+  scenario.stress = [];
+  const raw = "PRIVATE SYNTHETIC LEGACY APPROVAL";
+  let approvalSeq: number | undefined;
+  const head = beforeClaimantRecord((runtime) => {
+    // biome-ignore lint/complexity/useLiteralKeys: seed a pre-commitment row in the runtime's ledger
+    const entry = runtime["ledger"].append({ type: "approval", jws: raw }, AT);
+    expect(entry.recordDigest).toBeUndefined();
+    approvalSeq = entry.seq;
+  });
+  const exportRecord = vi.spyOn(AgentRuntime.prototype, "exportRecord");
+  try {
+    const [path] = await runScenario(profile, scenario, { compare: false });
+    expect(path?.trace).toBeDefined();
+    expect(exportRecord).toHaveBeenCalledOnce();
+    const exported = await required(exportRecord.mock.results[0]).value;
+    const segment = decodeCompactPayload(exported.jws);
+    expect(approvalSeq).toBeDefined();
+    expect(segment.entries).toContainEqual(
+      expect.objectContaining({
+        entry: expect.objectContaining({ seq: approvalSeq, record: null }),
+      }),
+    );
+    expect(JSON.stringify(segment)).not.toContain(raw);
+  } finally {
+    exportRecord.mockRestore();
+    head.mockRestore();
+  }
+});
+
+it.each([
+  false,
+  true,
+])("applies the retained raw content's inherited terms to a granted whole record (allowed=%s)", async (allowed) => {
+  const { profile, scenario } = loadCase(join(import.meta.dirname, ".."), "fee-dispute");
+  scenario.branches = [];
+  scenario.stopAfter = "file-claim";
+  required(profile.purposes.find(({ id }) => id === "urn:purpose:redress")).claims.push(
+    "unstructured-content",
+  );
+  const bytes = "SYNTHETIC PRIVATE RECORD CONTENT";
+  const digest = digestContent(bytes);
+  const id = "urn:test:raw-content";
+  const item = {
+    id,
+    digest,
+    kind: "content" as const,
+    accepted: false,
+    label: "Unstructured test attachment",
+    claimType: "unstructured-content",
+    source: "urn:test:source",
+    subject: "urn:fictional:fee-dispute:owner",
+    terms: {
+      policy: { id: "urn:test:attachment-terms" },
+      inherited: [
+        {
+          target: "urn:test:source-statement",
+          terms: {
+            policy: {
+              id: "urn:test:source-terms",
+              ...(allowed
+                ? { permissions: [{ type: "permission", action: "distribute" } as const] }
+                : { prohibitions: [{ type: "prohibition", action: "distribute" } as const] }),
+            },
+          },
+        },
+      ],
+    },
+    statement: { id, digest, bytes, mediaType: "text/plain" },
+  };
+  const head = beforeClaimantRecord((runtime) => {
+    // biome-ignore lint/complexity/useLiteralKeys: arrange a retained content row after admission
+    runtime["gateMemory"].enter("urn:test:task", item);
+    // biome-ignore lint/complexity/useLiteralKeys: seed the same raw bytes in the signed record
+    runtime["ledger"].append({ type: "unstructured-content", ...item, at: AT }, AT);
+  });
+  try {
+    const [path] = await runScenario(profile, scenario, { compare: false });
+    const rawCheck = required(path?.trace).events.find(
+      ({ part, agent, check, caption }) =>
+        part === "outbound-gate" &&
+        agent === "owner-agent" &&
+        check === "data-terms" &&
+        caption.includes(item.label),
+    );
+    expect(rawCheck).toMatchObject({
+      verdict: allowed ? "pass" : "fail",
+      ...(allowed ? {} : { reason: "prohibited" }),
+    });
+    expect(path?.trace?.events.findLast(({ kind }) => kind === "decision")).toMatchObject({
+      outcome: allowed ? "ask-principal" : "stop",
+      reason: allowed ? "approval-required" : "prohibited",
+    });
+  } finally {
+    head.mockRestore();
+  }
 });
 it("verifies each segment independently and identifies tampering, sequence gaps, missing messages and check citations", async () => {
   for (const attack of [

@@ -80,6 +80,7 @@ export function applyIdentityNames(profile: DomainProfile, world: Scenario): voi
   }
   for (const { accounts } of world.paymentProviders)
     for (const account of accounts) fields(account, "party");
+  for (const credential of world.organizationCredentials) fields(credential, "entity");
   for (const store of world.stores) {
     fields(store, "organization");
     for (const role of store.roles) fields(role, "agent");

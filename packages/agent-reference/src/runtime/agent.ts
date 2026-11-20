@@ -60,7 +60,12 @@ import { contributorUpperBound, proofPolicy } from "../derive/verification.js";
 import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
 import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
-import { alternativeInstalled, type GateContext, GateMemory } from "../gates/common.js";
+import {
+  alternativeInstalled,
+  type ContextItem,
+  type GateContext,
+  GateMemory,
+} from "../gates/common.js";
 import { type Admission, claimSchema, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { paymentDigest, periodKey, sameAmount } from "../gates/payment.js";
@@ -417,6 +422,7 @@ export class AgentRuntime {
   private readonly store: StateStore;
   private readonly ledger: EvidenceLedger;
   private readonly clock: () => Date;
+  /** The writer may advance the checkpoint only when it opened at the saved head. */
   private readonly ledgerAuditTrusted: boolean;
   private readonly newId: () => string;
   private readonly handlers = new Map<string, OperationHandler>();
@@ -437,6 +443,7 @@ export class AgentRuntime {
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
   private recordReleaseDigest?: string;
+  private recordReleaseContent?: ReadonlyMap<string, ContextItem>;
   private readonly retainedMessageViews = new Map<string, AnyMessage>();
   private readonly paymentOffers = new Map<string, PaymentOfferNode>();
   /** The admission of the inbound message being processed now (serial executor). */
@@ -757,6 +764,10 @@ export class AgentRuntime {
         return undefined;
       },
       recordRelease: (intent) => this.recordReleaseDigest === actionDigest(intent),
+      recordReleaseItem: (intent, id) => {
+        const item = this.recordReleaseContent?.get(id);
+        return item && this.recordReleaseDigest === actionDigest(intent) ? item : undefined;
+      },
       authoredProofSupports: (intent, item, claimType) =>
         this.authoredProofSupports(intent, item, claimType),
       recordBacks: (claim, recipient) => this.recordBacks(claim, recipient),
@@ -2457,11 +2468,13 @@ export class AgentRuntime {
     method: string;
     request: DerivedRequest;
     recipient: string;
+    task?: string;
     assurance: "attested" | "proved";
     proofBinds: readonly ProofBinds[];
     inputs: readonly string[];
     presentationSaltHex?: string;
   }) {
+    input = copyData(input);
     return this.exclusive(async () => {
       const system = this.options.gates?.proofSystems?.get(input.method),
         gate = this.options.gates;
@@ -2475,13 +2488,18 @@ export class AgentRuntime {
         !input.request.assurances.includes(input.assurance)
       )
         return { ok: false as const, reason: "assurance-insufficient" };
-      const receivedRequest = [...this.gateMemory.facts.values()].some(
-        (f) =>
-          f.claimType === "derivation.request" &&
-          f.source === input.recipient &&
-          digestOf(f.statement?.value) === digestOf(input.request),
-      );
-      if (!receivedRequest) return { ok: false as const, reason: "missing-context" };
+      const requestDigest = digestOf(input.request);
+      const requestMatches = (task: string) =>
+        this.currentProofRequest(task, input.recipient, input.request.purpose, rule.id) ===
+        requestDigest;
+      const scopedTask = this.options.gates?.taskId ?? input.task;
+      const tasks = scopedTask
+        ? [scopedTask].filter(requestMatches)
+        : Object.keys(this.gateMemory.contexts).filter(
+            (task) => task !== "*" && requestMatches(task),
+          );
+      const task = tasks.length === 1 ? tasks[0] : undefined;
+      if (!task) return { ok: false as const, reason: "missing-context" };
       const facts = input.inputs.map((id) => this.gateMemory.facts.get(id));
       const credentials = input.inputs.map(
         (id) =>
@@ -2590,18 +2608,40 @@ export class AgentRuntime {
       const key = this.options.sourceKey;
       if (!key) return { ok: false as const, reason: "unknown-key" };
       const jws = await signCompact(key, TYP.statement, statement);
-      this.record({
+      const proofDigest = digestOf(jws);
+      const { seq, hash } = this.record({
         type: "proof-derivation",
         statement,
         requestDigest: digestOf(args),
-        proofDigest: digestOf(jws),
+        proofDigest,
         recipient: input.recipient,
         purpose: input.request.purpose,
         cached,
       });
+      this.state.authoredProofs[proofDigest] = { seq, hash, task, requestDigest };
       this.persist();
       return { ok: true as const, statement, jws };
     });
+  }
+
+  private currentProofRequest(
+    task: string,
+    recipient: string,
+    purpose: string,
+    rule: string,
+  ): string | undefined {
+    const request = this.gateMemory.contexts[task]?.findLast(
+      (item) =>
+        item.accepted === true &&
+        item.kind === "statement" &&
+        item.claimType === "derivation.request" &&
+        item.source === recipient &&
+        item.admittedPurpose === purpose &&
+        (item.statement?.value as JsonObject | undefined)?.rule === rule,
+    );
+    return request && this.gateMemory.facts.get(request.id)?.digest === request.digest
+      ? digestOf(request.statement?.value)
+      : undefined;
   }
 
   /** A sender may present its own gate-produced answer in the exact request's scope. */
@@ -2613,29 +2653,42 @@ export class AgentRuntime {
     if (
       intent.action !== "distribute" ||
       item.role !== "credential" ||
-      item.format !== "derivation+jws"
+      item.format !== "derivation+jws" ||
+      !intent.purpose ||
+      !intent.recipient
     )
       return false;
-    const entries = this.ledger.entries();
+    const proofDigest = digestOf(item.value);
+    const authored = this.state.authoredProofs[proofDigest];
+    const task = this.options.gates?.taskId ?? intent.conversation;
+    if (!authored || authored.task !== task) return false;
+    const entries = this.auditEntries();
     if (
       this.ledger.requiresTrustedCheckpoint &&
       !verifyLedgerAtHead(entries, this.trustedAuditHead()).ok
     )
       return false;
-    const proofDigest = digestOf(item.value);
-    const record = entries.findLast(
-      ({ record }) =>
+    const entry = entries.find(
+      ({ seq, hash, record }) =>
+        seq === authored.seq &&
+        hash === authored.hash &&
         record.type === "proof-derivation" &&
-        record.producer !== "core" &&
         record.proofDigest === proofDigest &&
         record.recipient === intent.recipient &&
         record.purpose === intent.purpose,
-    )?.record;
-    const statement = record?.statement as JsonObject | undefined;
-    if (!statement || statement.claimType !== claimType || !intent.purpose || !intent.recipient)
+    );
+    if (!entry || !verifyLedgerRange([entry], { seq: entry.seq - 1, hash: entry.prev }, entry).ok)
       return false;
+    const statement = entry.record.statement as JsonObject | undefined;
+    if (!statement || statement.claimType !== claimType) return false;
     const at = this.now();
     const derivation = statement.derivation as JsonObject;
+    if (
+      typeof derivation.rule !== "string" ||
+      this.currentProofRequest(task, intent.recipient, intent.purpose, derivation.rule) !==
+        authored.requestDigest
+    )
+      return false;
     const inputs = derivation.inputs as { id: string; digest: string }[];
     return (
       fitnessOf(
@@ -3144,10 +3197,22 @@ export class AgentRuntime {
   /** This agent's record head: the sequence and chain hash of its last entry. */
   recordHead(): { seq: number; hash: string } {
     const head = this.trustedAuditHead();
-    if (!head?.seq || !verifyLedgerAtHead(this.ledger.entries(), head).ok)
+    if (!head?.seq || !verifyLedgerAtHead(this.auditEntries(), head).ok)
       throw Error("this agent's record head is unavailable");
     this.ledger.enableRangeCommitments?.();
     return head;
+  }
+
+  /** Original approval rows a peer needs to attest legacy redactions for this interval. */
+  legacyApprovalsForRecord(from: LedgerHead, through: LedgerHead): readonly LedgerEntry[] {
+    const all = this.auditEntries();
+    if (!verifyLedgerAtHead(all, this.trustedAuditHead()).ok)
+      throw Error("this agent's record head is unavailable");
+    if (from.seq === through.seq && from.hash === through.hash) return [];
+    const rows = all.filter(({ seq }) => seq > from.seq && seq <= through.seq);
+    if (!verifyLedgerRange(rows, from, through).ok)
+      throw Error("the retained record does not match the witnessed interval");
+    return copyData(rows.filter((entry) => !entry.recordDigest && legacyApprovalRedaction(entry)));
   }
 
   /**
@@ -3213,7 +3278,7 @@ export class AgentRuntime {
       const key = this.keysByAlg.get("EdDSA");
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
       if (anchor && !terminal) throw Error("a range needs a witnessed terminal");
-      const all = this.ledger.entries();
+      const all = this.auditEntries();
       if (
         this.ledger.requiresTrustedCheckpoint &&
         !verifyLedgerAtHead(all, this.trustedAuditHead()).ok
@@ -3440,13 +3505,36 @@ export class AgentRuntime {
   }
 
   /** Whole-record rows may repeat original statements. Inspect both the row and its proof. */
-  private wholeRecordItems(value: unknown, items: Set<string>): boolean {
+  private wholeRecordItems(
+    value: unknown,
+    items: Set<string>,
+    content: Map<string, ContextItem>,
+  ): boolean {
     if (typeof value === "string")
       return !value.startsWith("awp-jsonld-gzip:") && !/^eyJ[\w-]*\.[\w-]+\.[\w-]+$/.test(value);
     if (!value || typeof value !== "object") return true;
-    if (Array.isArray(value)) return value.every((item) => this.wholeRecordItems(item, items));
+    if (Array.isArray(value))
+      return value.every((item) => this.wholeRecordItems(item, items, content));
     const record = value as Record<string, unknown>;
     if (record.type === "approval" && "jws" in record) return false;
+    if (record.type === "unstructured-content") {
+      const { type: _type, at: _at, ...stored } = record;
+      const digest = digestOf(stored);
+      const retained = Object.values(this.gateMemory.contexts)
+        .flat()
+        .find(
+          (item) =>
+            item.kind === "content" &&
+            item.id === stored.id &&
+            item.claimType === "unstructured-content" &&
+            digestOf(item) === digest,
+        );
+      if (!retained || this.gateMemory.facts.has(retained.id)) return false;
+      const previous = content.get(retained.id);
+      if (previous && digestOf(previous) !== digest) return false;
+      content.set(retained.id, retained);
+      items.add(retained.id);
+    }
     if (typeof record.claimType === "string" && typeof record.issuer === "string") {
       if (
         typeof record.id !== "string" ||
@@ -3455,17 +3543,18 @@ export class AgentRuntime {
         return false;
       items.add(record.id);
     }
-    return Object.values(record).every((item) => this.wholeRecordItems(item, items));
+    return Object.values(record).every((item) => this.wholeRecordItems(item, items, content));
   }
 
   /** Inventory signed companion payloads by their exact proof bytes and authenticated owner. */
   async recordReleaseProofs(
     segment: import("zod").infer<typeof recordSegmentSchema>,
     agreement?: { offer: string; acceptance: string },
-    whole?: { segment: string; observation?: string },
+    whole?: { segment: string; observation?: string; content?: ReadonlySet<string> },
   ) {
     const proofs = new Map<string, { digest: string; issuer: string; label: string }>();
     const credentials = new Set<string>();
+    const retainedContent = whole?.content;
     const add = (proof: string, issuer: string, label: string) => {
       const digest = digestOf(proof);
       proofs.set(digest, { digest, issuer, label });
@@ -3492,7 +3581,8 @@ export class AgentRuntime {
             digestOf(message) !== archived.digest)) ||
         message.from.actor !== verified.pinned.subject ||
         !message.from.onBehalfOf ||
-        message.from.onBehalfOf !== verified.pinned.party
+        message.from.onBehalfOf !== verified.pinned.party ||
+        (retainedContent && message.content?.some((part) => !retainedContent.has(digestOf(part))))
       )
         return undefined;
       add(
@@ -3634,7 +3724,13 @@ export class AgentRuntime {
     parameters: NamedValuesNode,
     intent: ActionIntent,
     rangeOnly: boolean,
-  ): Promise<string[] | undefined> {
+  ): Promise<
+    | {
+        evidence: string[];
+        content?: ReadonlyMap<string, ContextItem>;
+      }
+    | undefined
+  > {
     const params = parameters.live;
     if (
       Array.isArray(params) ||
@@ -3716,13 +3812,14 @@ export class AgentRuntime {
       }
       if (!segment.anchor) {
         const items = new Set<string>();
+        const content = new Map<string, ContextItem>();
         for (const { entry, proof } of segment.entries) {
           const signed = rangeEntrySchema.parse(
             await this.readOwnRecordProof(proof, "awp-record-entry+jws"),
           );
           if (
-            !this.wholeRecordItems(entry.record, items) ||
-            !this.wholeRecordItems(signed.record, items)
+            digestOf(signed) !== digestOf(entry) ||
+            !this.wholeRecordItems(entry.record, items, content)
           )
             return undefined;
         }
@@ -3732,11 +3829,12 @@ export class AgentRuntime {
           {
             segment: request.segment,
             observation: "observation" in request ? request.observation : undefined,
+            content: new Set([...content.values()].map((item) => digestOf(item.statement))),
           },
         );
         if (!inventory) return undefined;
         const allowed = await this.recordProofItems(inventory, grants, intent, true);
-        return allowed && [...new Set([...allowed, ...items])];
+        return allowed && { evidence: [...new Set([...allowed, ...items])], content };
       }
       const entries = segment.entries.map(({ entry }) => entry) as LedgerRangeEntry[];
       const hasMessage = (entry: LedgerRangeEntry, digest: string, direction: string) =>
@@ -3791,7 +3889,7 @@ export class AgentRuntime {
       if (!inventory) return undefined;
       const proofs = await this.recordProofItems(inventory, grants, intent, false);
       if (!proofs) return undefined;
-      return [...new Set([...items, ...proofs])];
+      return { evidence: [...new Set([...items, ...proofs])] };
     } catch {
       return undefined;
     }
@@ -3809,7 +3907,7 @@ export class AgentRuntime {
       const sink = this.options.gates?.sink;
       const at = this.now();
       const audit = await auditReleases(
-        this.ledger.entries(),
+        this.auditEntries(),
         (action, when, mandate) => {
           if (this.mandate?.digest !== mandate.digest || this.mandate.mandate.id !== mandate.id)
             return undefined;
@@ -3939,20 +4037,22 @@ export class AgentRuntime {
         decision: release.decision,
         release: release.release,
       }));
-      this.record({
-        type: "record-audit",
-        actor: this.identity.actor,
-        ...(component ? { statement: component } : {}),
-        ...(mandate ? { mandate } : {}),
-        judged: audit.judged.length,
-        inside: audit.judged.length - audit.outside.length,
-        outside: findings,
-        indeterminate,
-        unjudged: audit.unjudged.length,
-        at,
-      });
-      const entry = this.ledger.entries().at(-1);
-      this.persist();
+      // A prefix-only audit cannot create new authenticated findings.
+      const entry = this.ledgerAuditTrusted
+        ? this.record({
+            type: "record-audit",
+            actor: this.identity.actor,
+            ...(component ? { statement: component } : {}),
+            ...(mandate ? { mandate } : {}),
+            judged: audit.judged.length,
+            inside: audit.judged.length - audit.outside.length,
+            outside: findings,
+            indeterminate,
+            unjudged: audit.unjudged.length,
+            at,
+          })
+        : undefined;
+      if (entry) this.persist();
       return {
         ok: indeterminate === 0,
         judged: audit.judged.length,
@@ -3976,7 +4076,7 @@ export class AgentRuntime {
    * recipient must be the gate operator an admitted component statement names.
    */
   private recordBacks(claim: Readonly<Record<string, unknown>>, recipient: string): boolean {
-    const entries = this.ledger.entries();
+    const entries = this.auditEntries();
     if (!verifyLedgerAtHead(entries, this.trustedAuditHead()).ok) return false;
     const auditEntry = entries.find((entry) => entry.hash === claim.audit);
     const audit = auditEntry?.record;
@@ -6747,6 +6847,7 @@ export class AgentRuntime {
         if (contextVerdicts.some((verdict) => verdict.verdict === "fail")) return [];
       }
     }
+    let recordContent: ReadonlyMap<string, ContextItem> | undefined;
     if (boundary?.releasesRecord) {
       if (boundary.recordRecipient !== plan.intent.recipient) {
         for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
@@ -6758,12 +6859,14 @@ export class AgentRuntime {
           this.record(verdict);
         return [];
       }
-      const evidence = await this.recordEvidenceFor(boundary, plan);
-      if (!evidence) {
+      const record = await this.recordEvidenceFor(boundary, plan);
+      if (!record) {
         for (const verdict of this.outbound.rejectEffect(plan.intent, "evidence-invalid"))
           this.record(verdict);
         return [];
       }
+      const { evidence, content } = record;
+      recordContent = content;
       plan = {
         ...plan,
         params: { ...plan.params, evidence },
@@ -6783,17 +6886,23 @@ export class AgentRuntime {
     const scoped = this.effectAdapters.get(plan.adapter);
     this.recordReleaseDigest =
       scoped?.releasesRecord || scoped?.purposeScoped ? actionDigest(plan.intent) : undefined;
+    this.recordReleaseContent = recordContent;
     this.outbound.holdEmailContext(emailContext);
     const expiry = plan.params.reason === "expiry";
-    const decision = this.authorise(
-      plan.intent,
-      false,
-      [],
-      withdrawal?.grant && { grant: withdrawal.grant, reason: expiry ? "expiry" : "principal" },
-    );
-    this.outbound.holdEmailContext(undefined);
+    let decision: AuthorisationDecision;
+    try {
+      decision = this.authorise(
+        plan.intent,
+        false,
+        [],
+        withdrawal?.grant && { grant: withdrawal.grant, reason: expiry ? "expiry" : "principal" },
+      );
+    } finally {
+      this.outbound.holdEmailContext(undefined);
+      this.recordReleaseDigest = undefined;
+      this.recordReleaseContent = undefined;
+    }
     for (const verdict of this.outbound.takeEmailContextVerdicts()) this.record(verdict);
-    this.recordReleaseDigest = undefined;
     const adapter = this.effectAdapters.get(plan.adapter);
     const expiryGrant = expiry && withdrawal?.grant;
     // A due withdrawal still owes cleanup when the gate cannot authorize an attempt now.
@@ -6955,18 +7064,21 @@ export class AgentRuntime {
       };
       let decision: AuthorisationDecision | undefined;
       if (plan && (await this.publicationMatches(adapter, plan))) {
-        const evidence = adapter.releasesRecord && (await this.recordEvidenceFor(adapter, plan));
+        const record = adapter.releasesRecord
+          ? await this.recordEvidenceFor(adapter, plan)
+          : undefined;
         const recordMatches =
           !adapter.releasesRecord ||
-          (evidence &&
+          (record &&
             adapter.recordRecipient === intent.recipient &&
             digestOf(plan.params) === digestOf(intent.parameters) &&
-            digestOf(evidence) === digestOf(plan.params.evidence ?? null));
+            digestOf(record.evidence) === digestOf(plan.params.evidence ?? null));
         const withdrawal =
           plan.adapter === POD_ACCESS_ADAPTER ? this.withdrawalEffectDuty(plan) : undefined;
         if (recordMatches && (plan.adapter !== POD_ACCESS_ADAPTER || withdrawal)) {
           this.recordReleaseDigest =
             adapter.releasesRecord || adapter.purposeScoped ? actionDigest(intent) : undefined;
+          this.recordReleaseContent = record?.content;
           try {
             decision = this.authorise(
               intent,
@@ -6979,6 +7091,7 @@ export class AgentRuntime {
             );
           } finally {
             this.recordReleaseDigest = undefined;
+            this.recordReleaseContent = undefined;
           }
         }
       }
@@ -9429,12 +9542,23 @@ export class AgentRuntime {
     this.state.domain[key] = owner === undefined ? value : { owner, value };
   }
 
-  private record<T extends LedgerRecord>(record: T): void {
-    this.ledger.append(jointLogView(record), this.now());
+  private record<T extends LedgerRecord>(record: T): LedgerEntry {
+    return this.ledger.append(jointLogView(record), this.now());
   }
 
   private trustedAuditHead(): LedgerHead | undefined {
-    return this.ledgerAuditTrusted ? this.ledger.head?.() : undefined;
+    return this.ledgerAuditTrusted ? this.ledger.head?.() : this.state.ledgerAuditHead;
+  }
+
+  private auditEntries(): readonly LedgerEntry[] {
+    const entries = this.ledger.entries();
+    const checkpoint = this.state.ledgerAuditHead;
+    if (this.ledgerAuditTrusted || !checkpoint) return entries;
+    if (checkpoint.seq === LEDGER_GENESIS.seq) return [];
+    const end = entries.findIndex(
+      ({ seq, hash }) => seq === checkpoint.seq && hash === checkpoint.hash,
+    );
+    return end < 0 ? entries : entries.slice(0, end + 1);
   }
 
   private persist(): void {

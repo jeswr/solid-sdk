@@ -3509,19 +3509,22 @@ async function runPath(
         const actor = cast.get(step.agent).identity;
         const head = runtime.recordHead();
         const from = step.interval && template<{ seq: number; hash: string }>(step.interval.from);
-        const receipt = await witness.witnessRecordHead({
-          actor: actor.actor,
-          party: required(actor.party),
-          ...head,
-          ...(step.interval && from
-            ? {
-                interval: {
-                  conversation: template<string>(step.interval.conversation),
-                  from: { seq: from.seq, hash: from.hash },
-                },
-              }
-            : {}),
-        });
+        const receipt = await witness.witnessRecordHead(
+          {
+            actor: actor.actor,
+            party: required(actor.party),
+            ...head,
+            ...(step.interval && from
+              ? {
+                  interval: {
+                    conversation: template<string>(step.interval.conversation),
+                    from: { seq: from.seq, hash: from.hash },
+                  },
+                }
+              : {}),
+          },
+          from ? runtime.legacyApprovalsForRecord(from, head) : [],
+        );
         result = { ...head, receipt: receipt.jws };
         break;
       }
@@ -3535,12 +3538,15 @@ async function runPath(
             throw Error(`step ${step.id}: expected a whole record witness`);
           const head = runtime.recordHead();
           const actor = cast.get(step.agent).identity;
-          const receipt = await required(runtimes.get(step.witness)).witnessRecordHead({
-            ...head,
-            actor: actor.actor,
-            party: required(actor.party),
-            interval: { conversation, from: LEDGER_GENESIS },
-          });
+          const receipt = await required(runtimes.get(step.witness)).witnessRecordHead(
+            {
+              ...head,
+              actor: actor.actor,
+              party: required(actor.party),
+              interval: { conversation, from: LEDGER_GENESIS },
+            },
+            runtime.legacyApprovalsForRecord(LEDGER_GENESIS, head),
+          );
           terminal = { ...head, receipt: receipt.jws };
         }
         const segment = await runtime.exportRecord(

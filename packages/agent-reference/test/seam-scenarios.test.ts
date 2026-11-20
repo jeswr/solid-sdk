@@ -3,9 +3,14 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
-import { verifierRegistry } from "../src/derive/verifiers.js";
+import { digestOf } from "../src/core/canonical.js";
+import type { ActionIntent, JsonObject } from "../src/core/types.js";
+import { queryFor } from "../src/derive/rules.js";
+import { type DerivedRequest, verifierRegistry } from "../src/derive/verifiers.js";
 import { loadCase as loadActualCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import { signStatement, TYP } from "../src/mechanisms/statements.js";
+import { Cast, mandateOf, permit } from "../src/scenarios/common.js";
 import { outlineOf, type TraceEvent } from "../src/trace/types.js";
 import { ToyJointProtocol } from "./doubles/joint.js";
 import { ToyProofSystem } from "./doubles/proof.js";
@@ -140,6 +145,21 @@ it.each([
     testOnly: true,
     compare: false,
   });
+  if (id === "salary-benchmark") {
+    const branch = required(paths.find((path) => path.path === "branch-1"));
+    expect(branch.blocked).toBeUndefined();
+    expect(branch.trace?.events).toContainEqual(
+      expect.objectContaining({
+        part: "outbound-gate",
+        check: "data-terms",
+        verdict: "fail",
+        reason: "prohibited",
+      }),
+    );
+    expect(branch.actual).toMatchObject({ outcome: "stop", reason: "prohibited" });
+    expect(branch.disagrees).toBe(false);
+    expect(branch.expected).toMatchObject({ outcome: "stop", reason: "prohibited" });
+  }
   for (const path of paths.filter((p) => p.usedTestDouble)) {
     expect(path.blocked).toBeUndefined();
     expect(path.trace).toBeDefined();
@@ -147,11 +167,7 @@ it.each([
       expect(path.trace?.events.some((e) => e.rule?.id === "DER-14" && e.verdict === "pass")).toBe(
         true,
       );
-    else if (id === "salary-benchmark") {
-      expect(path.actual).toMatchObject({ outcome: "stop", reason: "prohibited" });
-      expect(path.disagrees).toBe(false);
-      expect(path.expected).toMatchObject({ outcome: "stop", reason: "prohibited" });
-    } else
+    else if (id !== "salary-benchmark")
       expect(path.actual).toMatchObject({
         outcome: "stop",
         reason:
@@ -193,6 +209,161 @@ function required<T>(value: T | undefined | null): T {
   if (value === undefined || value === null) throw new Error("Required test fixture is missing");
   return value;
 }
+
+it("requires runtime-authored proof bytes for the current task and admitted request", async () => {
+  const { profile } = loadCase(root, "age-check");
+  const rule = required(profile.rules.find((rule) => "template" in rule));
+  const operation = "urn:op:age-check:proof-answer";
+  const purpose = "urn:purpose:age-check";
+  const task = "urn:test:proof-task";
+  const now = () => new Date("2026-11-13T09:00:00.000Z");
+  const cast = new Cast(now);
+  const holder = await cast.add(
+    { name: "holder", actor: "urn:test:holder-agent", party: "urn:test:holder" },
+    mandateOf("holder", [permit("distribute", operation, [purpose])]),
+    [operation],
+  );
+  const receiver = await cast.add(
+    { name: "receiver", actor: "urn:test:receiver-agent", party: "urn:test:receiver" },
+    mandateOf("receiver", []),
+    [],
+  );
+  cast.introduce("holder", "receiver");
+  for (const [party, claimType] of [
+    [holder.identity.party, "identity.birth-date"],
+    [receiver.identity.party, "derivation.request"],
+  ] as const)
+    cast.rule("holder", {
+      id: `urn:test:authority:${claimType}`,
+      version: "1",
+      source: party,
+      subjects: [party],
+      claimTypes: [claimType],
+    });
+  const system = new ToyProofSystem();
+  const keys = await system.issuerKeygen(new Uint8Array([1]));
+  const birth = {
+    id: "urn:test:birth",
+    claimType: "identity.birth-date",
+    issuer: holder.identity.party,
+    subject: holder.identity.party,
+    method: "recorded-by-authority",
+    value: "1990-01-01",
+    asOf: now().toISOString(),
+    terms: {
+      policy: {
+        id: "urn:test:birth-terms",
+        permissions: [
+          { type: "permission", action: "use", target: "urn:test:birth" },
+          { type: "permission", action: "distribute", target: "urn:test:birth" },
+        ],
+      },
+    },
+  };
+  const credential = await system.issue({
+    issuerKey: keys.secretKey,
+    subject: birth.subject,
+    claims: { statements: [birth] },
+  });
+  const { runtime } = await cast.runtime("holder", [], [], undefined, {
+    sourceKey: holder.ownerKey,
+    gates: {
+      ...verifierRegistry([system]),
+      rules: [rule],
+      proofCredentials: [{ statement: birth.id, digest: digestOf(birth), credential }],
+      actionClaims: [{ action: operation, claims: [rule.output] }],
+      reliance: {
+        id: "urn:test:reliance",
+        rules: profile.claims.map(({ kind, methods, maxAgeDays }) => ({
+          id: `urn:test:reliance:${kind}`,
+          claimType: kind,
+          methods,
+          maxAgeDays,
+          text: kind,
+        })),
+      },
+    },
+  });
+  const request: DerivedRequest = {
+    nonce: "urn:test:proof-request:1",
+    rule: rule.id,
+    ruleDigest: digestOf(rule),
+    subject: birth.subject,
+    purpose,
+    assurances: ["attested"],
+    query: queryFor(rule),
+    policy: {},
+    consumed: false,
+  };
+  const admitRequest = async (value: DerivedRequest, scope: string) => {
+    const jws = await signStatement(receiver.ownerKey, TYP.statement, {
+      ...birth,
+      id: value.nonce,
+      claimType: "derivation.request",
+      issuer: receiver.identity.party,
+      subject: receiver.identity.party,
+      value,
+      terms: undefined,
+    });
+    expect(
+      await runtime.admitStatements([{ jws }], { task: scope, taskId: scope, purpose }),
+    ).toEqual({
+      admitted: 1,
+      refused: 0,
+    });
+  };
+  const birthJws = await signStatement(holder.ownerKey, TYP.statement, birth);
+  expect(
+    await runtime.admitStatements([{ jws: birthJws }], { task, taskId: task, purpose }),
+  ).toEqual({
+    admitted: 1,
+    refused: 0,
+  });
+  await admitRequest(request, task);
+  const result = await runtime.proveDerived({
+    request,
+    recipient: receiver.identity.party,
+    method: system.method,
+    assurance: "attested",
+    proofBinds: system.binds,
+    inputs: [birth.id],
+  });
+  if (!result.ok) throw Error(result.reason);
+  const intent: ActionIntent = {
+    action: "distribute",
+    operation,
+    target: operation,
+    purpose,
+    recipient: receiver.identity.party,
+    conversation: task,
+    parameters: {},
+  };
+  const authorise = (value: string, conversation = task) =>
+    // biome-ignore lint/complexity/useLiteralKeys: run the actual early outbound evidence check
+    runtime["authorise"]({ ...intent, conversation }, false, [
+      { value, role: "credential", format: "derivation+jws" },
+    ]);
+  expect(authorise(result.jws).outcome).toBe("permit");
+  expect.soft(authorise(result.jws, "urn:test:other-task")).toMatchObject({
+    outcome: "deny",
+    reason: "evidence-missing",
+  });
+
+  const statement: JsonObject = { ...result.statement, id: "urn:test:unverified-proof" };
+  const jws = await signStatement(holder.ownerKey, TYP.statement, statement);
+  runtime.recordObservation({
+    type: "proof-derivation",
+    observedBy: "urn:test:observer",
+    producer: "outbound-gate",
+    statement,
+    proofDigest: digestOf(jws),
+    recipient: receiver.identity.party,
+    purpose,
+  });
+  expect.soft(authorise(jws)).toMatchObject({ outcome: "deny", reason: "evidence-missing" });
+  await admitRequest({ ...request, nonce: "urn:test:proof-request:2" }, task);
+  expect(authorise(result.jws)).toMatchObject({ outcome: "deny", reason: "evidence-missing" });
+});
 it("holds raw inputs when the actual received request and installed profile allow a narrower proof", async () => {
   const { profile, scenario } = loadCase(root, "visa-application");
   scenario.branches = [];
