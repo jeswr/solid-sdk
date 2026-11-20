@@ -415,7 +415,17 @@
             }
           },
           {
-            "id": "human-decision",
+            "id": "score-reference",
+            "agent": "receiver-agent",
+            "type": "read-content",
+            "part": "urn:content:employment-reference:original",
+            "subject": "urn:fictional:employment-reference:subject",
+            "output": {
+              "reference.score": 0.2
+            }
+          },
+          {
+            "id": "reject-candidate",
             "agent": "receiver-agent",
             "type": "effect",
             "intent": {
@@ -426,20 +436,18 @@
               "purpose": "urn:purpose:employment-reference",
               "conversation": "urn:scenario:employment-reference:task",
               "parameters": {
-                "decision": "reject",
+                "decision": "reject-candidate",
                 "originalDigest": "sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84",
                 "support": [
-                  "urn:scenario:employment-reference:original"
-                ],
-                "modelScore": 0.2,
-                "reading": {
-                  "$ref": "steps.read-original.readings.0.statement.id"
-                }
+                  "urn:scenario:employment-reference:original",
+                  {
+                    "$ref": "steps.score-reference.readings.0.statement.id"
+                  }
+                ]
               }
             },
             "params": {
-              "decision": "reject",
-              "modelScore": 0.2
+              "decision": "reject-candidate"
             },
             "activityType": "urn:activity:human-decision"
           }
@@ -452,13 +460,18 @@
           "5": "The former employer’s agent completes the approve step.",
           "6": "The new employer’s agent checks the message and prepares a response.",
           "7": "The new employer’s agent completes the read content step.",
-          "8": "The new employer’s agent proposes the local action."
+          "8": "The new employer’s agent records a model-output score of the original reference.",
+          "9": "The new employer’s agent proposes rejecting the candidate using the reference and its score."
         }
       },
       "expect": {
+        "outcome": "stop",
+        "check": "fitness",
+        "reason": "method-not-accepted"
+      },
+      "catalogueExpected": {
         "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
+        "reason": "approval-required"
       },
       "outline": [
         {

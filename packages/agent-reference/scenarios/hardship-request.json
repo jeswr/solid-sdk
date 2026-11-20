@@ -447,13 +447,22 @@
               "diagnosis"
             ],
             "purpose": "urn:purpose:hardship-request"
+          },
+          {
+            "id": "deny-diagnosis",
+            "agent": "owner-agent",
+            "type": "approve",
+            "decision": "deny",
+            "note": "Do not send my diagnosis.",
+            "evidence": []
           }
         ],
         "traceSteps": {
           "1": "The borrower’s agent checks the signed statements.",
           "2": "The lender’s agent sends the signed request.",
           "3": "The borrower’s agent checks the message and prepares a response.",
-          "4": "The borrower’s agent sends the signed request."
+          "4": "The borrower’s agent sends the signed request.",
+          "5": "The borrower declines to send the diagnosis."
         }
       },
       "expect": {

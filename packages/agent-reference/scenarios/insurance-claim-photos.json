@@ -538,7 +538,8 @@
             "type": "admit",
             "statements": [
               "original",
-              "photo"
+              "photo",
+              "garage-letter"
             ],
             "purpose": "urn:purpose:insurance-claim-photos",
             "operation": "urn:op:insurance-claim-photos"
@@ -597,7 +598,8 @@
             },
             "evidence": [
               "original",
-              "photo"
+              "photo",
+              "garage-letter"
             ],
             "purpose": "urn:purpose:insurance-claim-photos",
             "content": [
@@ -679,6 +681,11 @@
                   96,
                   130
                 ]
+              },
+              {
+                "id": "urn:content:insurance-claim-photos:garage-letter",
+                "mediaType": "text/plain",
+                "bytes": "We inspected the vehicle and found serious damage."
               }
             ]
           },
@@ -687,7 +694,7 @@
             "agent": "owner-agent",
             "type": "approve",
             "decision": "approve",
-            "note": "Send this exact claim account and original image with the garage estimate.",
+            "note": "Send this exact claim account and original image with the garage’s letter.",
             "evidence": []
           },
           {
@@ -703,7 +710,7 @@
           "3": "The policyholder’s agent checks the message and prepares a response.",
           "4": "The policyholder’s agent sends the signed request.",
           "5": "The policyholder’s agent completes the approve step.",
-          "6": "The receiver requests the required garage estimate before content reading."
+          "6": "The insurer asks the garage for an estimate in structured form."
         },
         "statements": [
           {
@@ -789,13 +796,75 @@
                 ]
               }
             }
+          },
+          {
+            "id": "garage-letter",
+            "issuer": "garage",
+            "subject": "urn:fictional:insurance-claim-photos:owner",
+            "kind": "unstructured-content",
+            "value": {
+              "contentDigest": "sha-256:122632ea908bf4095803e0a915bc5e0b156b1c50b725b5c7552b78153f220c4f"
+            },
+            "method": "recorded-by-authority",
+            "asOf": "2026-11-13T09:00:00.000Z",
+            "terms": {
+              "policy": {
+                "id": "urn:terms:insurance-claim-photos:garage-letter",
+                "permissions": [
+                  {
+                    "type": "permission",
+                    "action": "use",
+                    "target": "urn:scenario:insurance-claim-photos:garage-letter",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:insurance-claim-photos"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:scenario:insurance-claim-photos:garage-letter",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "eq",
+                        "rightOperand": "urn:purpose:insurance-claim-photos"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
           }
-        ]
+        ],
+        "trust": {
+          "sources": {
+            "owner-agent": {
+              "urn:source:estimate:garage": {
+                "claimTypes": [
+                  "repair.estimate",
+                  "unstructured-content"
+                ]
+              }
+            },
+            "receiver-agent": {
+              "urn:source:estimate:garage": {
+                "claimTypes": [
+                  "repair.estimate",
+                  "unstructured-content"
+                ]
+              }
+            }
+          }
+        }
       },
       "expect": {
         "outcome": "ask-more",
         "check": "fitness",
-        "reason": "evidence-missing"
+        "reason": "structured-form-required"
       },
       "outline": [
         {

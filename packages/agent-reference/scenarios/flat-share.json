@@ -179,7 +179,7 @@
   "branches": [
     {
       "id": "branch-1",
-      "what": "One side's identity cannot be tied to any source the other accepts",
+      "what": "The person declines to trust the stranger",
       "change": {
         "script": [
           {
@@ -208,15 +208,22 @@
             "agent": "blair-agent",
             "type": "receive",
             "from": "alex-agent"
+          },
+          {
+            "id": "trust-no",
+            "agent": "blair-agent",
+            "type": "trust-decision",
+            "decision": "deny"
           }
         ],
         "traceSteps": {
           "1": "Alex’s agent sends a signed request.",
-          "2": "Blair’s agent checks the incoming message and prepares a response."
+          "2": "Blair’s agent checks the incoming message and prepares a response.",
+          "3": "Blair declines to trust Alex’s agent."
         }
       },
       "expect": {
-        "outcome": "ask-principal",
+        "outcome": "refuse",
         "check": "source",
         "reason": "source-unknown"
       },

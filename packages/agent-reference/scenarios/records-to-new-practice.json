@@ -321,7 +321,7 @@
         "reason": "superseded-by-better-source"
       },
       "catalogueExpected": {
-        "outcome": "ask-more",
+        "outcome": "go",
         "reason": "superseded-by-better-source"
       },
       "outline": [

@@ -1199,7 +1199,8 @@
           "verdict": "fail",
           "reason": "not-authorised"
         }
-      ]
+      ],
+      "judgedAgent": "receiver-agent"
     },
     {
       "id": "branch-2",

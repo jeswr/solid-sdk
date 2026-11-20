@@ -20,8 +20,13 @@ it("keeps each original issuer's signature and standing behind the holder envelo
         (e) => e.check === "source" && e.caption.startsWith(source) && e.verdict === "pass",
       ),
     ).toBe(true);
-  expect(paths[1]?.disagrees).toBe(true);
-  expect(paths[1]?.note).toBe("branch does not diverge from the main path");
+  expect(paths[1]?.disagrees).toBe(false);
+  expect(paths[1]?.note).toBeUndefined();
+  expect(paths[1]?.actual).toEqual({
+    outcome: "admit",
+    check: "fitness",
+    reason: "superseded-by-better-source",
+  });
   expect(
     paths[1]?.trace?.events.some(
       (e) => e.reason === "superseded-by-better-source" && e.verdict === "pass",

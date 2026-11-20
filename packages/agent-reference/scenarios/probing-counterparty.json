@@ -406,39 +406,16 @@
           {
             "id": "probe-1",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 1
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 1
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -470,39 +447,16 @@
           {
             "id": "probe-2",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 2
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 2
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -534,39 +488,16 @@
           {
             "id": "probe-3",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 3
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 3
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -598,39 +529,16 @@
           {
             "id": "probe-4",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 4
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 4
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -662,39 +570,16 @@
           {
             "id": "probe-5",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 5
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 5
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -726,39 +611,16 @@
           {
             "id": "probe-6",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 6
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 6
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -790,39 +652,16 @@
           {
             "id": "probe-7",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 7
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 7
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -854,39 +693,16 @@
           {
             "id": "probe-8",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 8
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 8
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -918,39 +734,16 @@
           {
             "id": "probe-9",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 9
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 9
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -982,39 +775,16 @@
           {
             "id": "probe-10",
             "agent": "service-agent",
-            "type": "message",
+            "type": "invoke-agreement",
             "conversation": {
               "$ref": "steps.request.conversation"
             },
-            "kind": "invoke",
-            "body": {
-              "operation": {
-                "id": "urn:operation:service-query",
-                "version": "0.1"
-              },
-              "basis": {
-                "kind": "agreement",
-                "agreement": {
-                  "$ref": "steps.open-channel.outbound.0.message.body.agreement"
-                }
-              },
-              "purpose": "urn:purpose:service-query",
-              "input": {
-                "request": "private-history",
-                "sequence": 10
-              }
+            "operation": "urn:operation:service-query",
+            "input": {
+              "request": "private-history",
+              "sequence": 10
             },
-            "intent": {
-              "operation": "urn:operation:service-query",
-              "action": "use",
-              "target": "urn:operation:service-query",
-              "purpose": "urn:purpose:service-query",
-              "recipient": "urn:fictional:rowan",
-              "conversation": {
-                "$ref": "steps.request.conversation"
-              },
-              "parameters": {}
-            },
+            "purpose": "urn:purpose:service-query",
             "evidence": []
           },
           {
@@ -1048,34 +818,34 @@
           "1": "The service’s agent sends a signed request.",
           "2": "Rowan’s agent checks the incoming message and prepares a response.",
           "3": "The service’s agent checks the incoming message and prepares a response.",
-          "4": "The service’s agent completes the message step.",
+          "4": "The service’s agent sends a represented request under the agreement.",
           "5": "Rowan’s agent checks the incoming message and prepares a response.",
           "6": "Rowan’s agent proposes the local action.",
-          "7": "The service’s agent completes the message step.",
+          "7": "The service’s agent sends a represented request under the agreement.",
           "8": "Rowan’s agent checks the incoming message and prepares a response.",
           "9": "Rowan’s agent proposes the local action.",
-          "10": "The service’s agent completes the message step.",
+          "10": "The service’s agent sends a represented request under the agreement.",
           "11": "Rowan’s agent checks the incoming message and prepares a response.",
           "12": "Rowan’s agent proposes the local action.",
-          "13": "The service’s agent completes the message step.",
+          "13": "The service’s agent sends a represented request under the agreement.",
           "14": "Rowan’s agent checks the incoming message and prepares a response.",
           "15": "Rowan’s agent proposes the local action.",
-          "16": "The service’s agent completes the message step.",
+          "16": "The service’s agent sends a represented request under the agreement.",
           "17": "Rowan’s agent checks the incoming message and prepares a response.",
           "18": "Rowan’s agent proposes the local action.",
-          "19": "The service’s agent completes the message step.",
+          "19": "The service’s agent sends a represented request under the agreement.",
           "20": "Rowan’s agent checks the incoming message and prepares a response.",
           "21": "Rowan’s agent proposes the local action.",
-          "22": "The service’s agent completes the message step.",
+          "22": "The service’s agent sends a represented request under the agreement.",
           "23": "Rowan’s agent checks the incoming message and prepares a response.",
           "24": "Rowan’s agent proposes the local action.",
-          "25": "The service’s agent completes the message step.",
+          "25": "The service’s agent sends a represented request under the agreement.",
           "26": "Rowan’s agent checks the incoming message and prepares a response.",
           "27": "Rowan’s agent proposes the local action.",
-          "28": "The service’s agent completes the message step.",
+          "28": "The service’s agent sends a represented request under the agreement.",
           "29": "Rowan’s agent checks the incoming message and prepares a response.",
           "30": "Rowan’s agent proposes the local action.",
-          "31": "The service’s agent completes the message step.",
+          "31": "The service’s agent sends a represented request under the agreement.",
           "32": "Rowan’s agent checks the incoming message and prepares a response.",
           "33": "Rowan’s agent proposes the local action."
         }

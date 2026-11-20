@@ -1013,29 +1013,6 @@
     "events": 113
   },
   {
-    "file": "emergency-access--branch-1--baseline.json",
-    "scenario": {
-      "id": "emergency-access--branch-1",
-      "title": "Access to allergies in an emergency: The request comes from a registered clinician with an emergency flag",
-      "steps": {
-        "1": "The clinician’s agent checks and admits the signed statements.",
-        "2": "The patient’s record agent checks and admits the signed statements.",
-        "3": "The clinician’s agent sends a signed request.",
-        "4": "The patient’s record agent checks the incoming message and prepares a response.",
-        "5": "The patient’s record agent completes the message step.",
-        "6": "The clinician’s agent checks the incoming message and prepares a response.",
-        "7": "The patient’s record agent completes the notifications step.",
-        "8": "The patient’s agent checks the incoming message and prepares a response.",
-        "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
-        "10": "The patient’s record agent completes the duties step.",
-        "11": "The patient’s record agent checks the observed result.",
-        "12": "The patient’s record agent checks the observed result."
-      }
-    },
-    "configuration": "baseline",
-    "events": 113
-  },
-  {
     "file": "emergency-access--branch-2--baseline.json",
     "scenario": {
       "id": "emergency-access--branch-2",

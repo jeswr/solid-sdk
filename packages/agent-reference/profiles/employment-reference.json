@@ -102,6 +102,10 @@
       "values": [
         "requires-review"
       ]
+    },
+    {
+      "claimType": "reference.score",
+      "type": "number"
     }
   ],
   "labels": {
