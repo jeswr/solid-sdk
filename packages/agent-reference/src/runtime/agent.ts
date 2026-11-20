@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 /**
  * The pilot agent runtime: one deterministic engine shared by every scenario.
  *
@@ -52,7 +53,7 @@ import type {
   RepresentationAssessment,
 } from "../core/types.js";
 import { evaluateRule, queryFor } from "../derive/rules.js";
-import { proofPolicy } from "../derive/verification.js";
+import { contributorUpperBound, proofPolicy } from "../derive/verification.js";
 import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
 import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
@@ -2166,9 +2167,10 @@ export class AgentRuntime {
     return { ok: true as const, statement, jws };
   }
   derivationRelease(
-    input: Parameters<import("../gates/outbound.js").OutboundGate["checkDerivationRelease"]>[0],
+    input: Parameters<OutboundGate["checkDerivationRelease"]>[0],
+    contributionSession?: FixedJointSession,
   ): boolean {
-    const ok = this.outbound.checkDerivationRelease(input);
+    const ok = this.outbound.checkDerivationRelease(input, contributionSession);
     this.record({ type: "derivation-evidence", ...input, at: this.now() });
     this.persist();
     return ok;
@@ -3520,7 +3522,7 @@ export class AgentRuntime {
         throw new MessageReleaseError(
           this.result("rejected", { reason: "approval-mismatch", outbound: [] }),
         );
-      const decision = this.authorise(intent);
+      const decision = this.authorise(intent, false, plan.evidence);
       if (decision.outcome === "approval-required") {
         return {
           messages: [],
@@ -3568,7 +3570,7 @@ export class AgentRuntime {
         throw new MessageReleaseError(
           this.result("rejected", { reason: "approval-mismatch", outbound: [] }),
         );
-      const decision = this.authorise(intent);
+      const decision = this.authorise(intent, false, plan.evidence);
       if (decision.outcome === "approval-required") {
         return {
           messages: [],
@@ -4732,7 +4734,11 @@ export class AgentRuntime {
       answeringOperation ?? (msg.kind === "invoke" ? msg.body.operation : undefined);
     const intent = "intent" in reply ? reply.intent : undefined;
     if (intent) {
-      const decision = this.authorise(intent);
+      const decision = this.authorise(
+        intent,
+        false,
+        "evidence" in reply ? reply.evidence : undefined,
+      );
       if (decision.outcome === "approval-required") {
         const pending = this.park(
           conv.id,
@@ -4988,7 +4994,7 @@ export class AgentRuntime {
     m: OutboundPlan,
   ): Promise<OutboundMessage[]> {
     if (m.intent) {
-      const decision = this.authorise(m.intent);
+      const decision = this.authorise(m.intent, false, m.evidence);
       if (decision.outcome === "approval-required") {
         this.park(conversationId, m.intent, { type: "message", plan: m });
         return [];
@@ -5018,7 +5024,11 @@ export class AgentRuntime {
    * The outbound gate's release around the pilot's mandate decision. `quiet` re-authorises
    * at transmission or reconciliation without showing a new release.
    */
-  private authorise(intent: ActionIntent, quiet = false): AuthorisationDecision {
+  private authorise(
+    intent: ActionIntent,
+    quiet = false,
+    evidence: readonly EvidenceItem[] = [],
+  ): AuthorisationDecision {
     // Invalid core proposals retain the existing fail-closed scope checks.
     if (intent.target && intent.conversation) intent = ActionIntentNode.toNode(intent).live;
     const at = this.now();
@@ -5032,7 +5042,10 @@ export class AgentRuntime {
     if (!quiet && !this.resuming) this.outbound.propose(intent, this.proposalOrigin);
     this.reauthorising = quiet;
     try {
-      effective = this.outbound.release(intent, decision).decision;
+      effective = this.outbound.release(intent, decision, [
+        ...evidence,
+        ...(this.options.gates?.supplementaryEvidence ?? []),
+      ]).decision;
     } finally {
       this.reauthorising = false;
     }
@@ -7511,7 +7524,8 @@ export class AgentRuntime {
             );
             ok =
               checked.ok &&
-              (suppressed || new Set(checked.contributors).size >= entry.minimumContributors);
+              (suppressed ||
+                contributorUpperBound(fixed, checked.contributors) >= entry.minimumContributors);
             if (!checked.ok) {
               partyAtFault = checked.partyAtFault;
               backendFailure = {
@@ -7555,8 +7569,9 @@ export class AgentRuntime {
       const binding = [...this.gateMemory.facts.values()].find(
         (f) => f.statement?.contentDigest === part.digest,
       );
+      const intact = digestContent(part.bytes) === part.digest;
       if (
-        digestContent(part.bytes) !== part.digest ||
+        !intact ||
         !binding ||
         !(message.evidence ?? []).some((e) => {
           try {
@@ -7566,10 +7581,15 @@ export class AgentRuntime {
           }
         })
       ) {
-        this.outbound.stopEvidence(message.id);
-        throw new MessageReleaseError(
-          this.result("rejected", { reason: "evidence-invalid", outbound: [] }),
-        );
+        const reason =
+          intact &&
+          !binding &&
+          opts.intent &&
+          this.outbound.needsStructuredClaim(opts.intent, content)
+            ? "structured-form-required"
+            : "evidence-invalid";
+        this.outbound.stopEvidence(message.id, reason);
+        throw new MessageReleaseError(this.result("rejected", { reason, outbound: [] }));
       }
     }
     let credentialMessage: MessageNode | undefined;

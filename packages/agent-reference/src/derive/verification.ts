@@ -1,13 +1,30 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 /** Source-phase checks for opaque proofs and joint evidence. No prover-supplied policy. */
 import { digestOf } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
 import type { GateContext } from "../gates/common.js";
 import { type DerivationRule, queryFor, ruleInputs } from "./rules.js";
-import type { JointOutcome, ProofBinds } from "./verifiers.js";
+import type { FixedJointSession, JointOutcome, ProofBinds } from "./verifiers.js";
 
 // Claims are held across every asynchronous verifier and source check.
 const inFlight = new WeakSet<object>();
+
+/** A non-compute-only slot may also commit zero. This count is an upper bound. */
+export function contributorUpperBound(
+  fixed: FixedJointSession,
+  verified?: readonly string[],
+): number {
+  const parties = verified && new Set(verified);
+  const roster = (fixed.session.roster ?? []) as JsonObject[];
+  return new Set(
+    roster.flatMap(({ party, computeOnly }) =>
+      typeof party === "string" && computeOnly !== true && (!parties || parties.has(party))
+        ? [party]
+        : [],
+    ),
+  ).size;
+}
 
 /** Bare outcome messages (including refusals) also verify before handler/core admission. */
 export async function verifyJointMessageOutcome(
@@ -43,12 +60,12 @@ export async function verifyJointMessageOutcome(
     const outcome = value.outcome as JsonObject;
     if (
       !["below-minimum-group", "too-few-contributors"].includes(String(outcome.type)) &&
-      new Set(checked.contributors).size < accepted.minimumContributors
+      contributorUpperBound(fixed, checked.contributors) < accepted.minimumContributors
     )
       return {
         ok: false,
         reason: "derivation-not-verified",
-        detail: "The verified contributor set is below the receiver's minimum.",
+        detail: "The upper bound on contributors with inputs is below the receiver's minimum.",
       };
     fixed.outcomeConsumed = true;
     gate.saveDerivationState?.();
@@ -218,19 +235,20 @@ export async function verifyOpaqueDerivation(input: {
                 ? outcome.sum
                 : { count: outcome.count, sum: outcome.sum }
             : undefined;
-      const ok =
-        same &&
+      const enough =
         checked.ok &&
-        new Set(checked.contributors).size >= jointEntry.minimumContributors &&
-        released !== undefined &&
-        digestOf(released) === digestOf(s.value);
+        contributorUpperBound(fixed, checked.contributors) >= jointEntry.minimumContributors;
+      const ok =
+        same && enough && released !== undefined && digestOf(released) === digestOf(s.value);
       if (
         !step(
           "DER-14",
           ok,
           "derivation-not-verified",
           checked.ok
-            ? `Every roster contribution verifies; assumption: ${protocol.assumption}`
+            ? !enough
+              ? "The upper bound on contributors with inputs is below the receiver's minimum."
+              : `Every roster contribution verifies; assumption: ${protocol.assumption}`
             : `Joint evidence failed: ${checked.reason}; check: ${checked.check ?? "unknown"}; roster index: ${checked.index ?? "unknown"}; party at fault: ${checked.partyAtFault ?? "unknown"}.`,
         )
       )

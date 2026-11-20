@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Claude Opus 5.5
 // Brief 32 tests 1, 2 and 6: the vendor-fault suite's three paths.
 import { describe, expect, it } from "vitest";
@@ -22,6 +23,10 @@ describe("accountability-vendor-fault", () => {
     const { profile, scenario } = loadCase(root, "mortgage-main");
     const baseline = (await runScenario(profile, { ...scenario, branches: [] }))[0]!.trace!;
     const entry = scenario.configurations.find((c) => c.id === vendor)!;
+    const world = entry.world as { branches: Scenario["branches"] };
+    const principalBranch = world.branches.find((b) => b.id === "fault-was-the-principals")!;
+    // The scripted approval cannot run after the gate has already stopped the claim.
+    principalBranch.change = { ...principalBranch.change, stopAfter: "fault-claim-send" };
     const paths = await runScenario(profile, scenario, { configuration: vendor });
     expect(paths.map((path) => path.path)).toEqual([
       "main",
@@ -46,7 +51,15 @@ describe("accountability-vendor-fault", () => {
     expect(main.events.some((e) => e.agent === "gate-operator-agent")).toBe(false);
 
     // Test 2: the fault branch.
+    expect(paths[1]).toMatchObject({
+      disagrees: false,
+      actual: { outcome: "ask-principal", check: "evidence", reason: "not-authorised" },
+    });
     const fault = paths[1]!.trace!;
+    expect(fault.events.some((e) => e.kind === "ask-principal" && e.addedBy === vendor)).toBe(true);
+    expect(fault.events.some((e) => e.kind === "principal-reply" && e.addedBy === vendor)).toBe(
+      true,
+    );
     const marks = standIn(fault);
     expect(marks).toHaveLength(1);
     expect(marks[0]).toMatchObject({ part: "outbound-gate", kind: "record" });
@@ -76,6 +89,15 @@ describe("accountability-vendor-fault", () => {
     // Test 6 (no finding): the principal's own claim stops at evidence.
     const principal = paths[2]!.trace!;
     expect(standIn(principal)).toEqual([]);
+    const added = principal.events.filter((e) => e.addedBy === vendor);
+    expect(
+      added.find(
+        (e) => e.kind === "decision" && !["go", "pass", "admit"].includes(e.outcome ?? ""),
+      ),
+    ).toMatchObject({ outcome: "stop", reason: "evidence-invalid" });
+    expect(
+      added.some((e) => ["ask-principal", "principal-reply", "message-out"].includes(e.kind)),
+    ).toBe(false);
     expect(principal.events.findLast((e) => e.kind === "decision")).toMatchObject({
       part: "outbound-gate",
       reason: "evidence-invalid",
@@ -111,7 +133,7 @@ describe("accountability-vendor-fault", () => {
       world.branches = [
         {
           ...branch,
-          change: { ...branch.change, stopAfter: "fault-claim-approved" },
+          change: { ...branch.change, stopAfter: "fault-claim-send" },
           expect: { outcome: "stop", check: "evidence", reason: "evidence-invalid" },
         },
       ] as Scenario["branches"];

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 import { readCarried } from "../settlement/carried.js";
 // AUTHORED-BY Codex GPT-6
 
@@ -2690,9 +2691,29 @@ export class Admission {
     );
     if (required.length > 0) {
       const missing = this.missingClaims(required, task, subject, need.purpose);
+      const sources = this.deps.gate.claimSources;
+      const content = new Map(
+        missing.flatMap((kind) => {
+          const letter = this.admittedClaims.find(
+            (claim) =>
+              claim.claimType === "unstructured-content" && sources?.[kind]?.includes(claim.issuer),
+          );
+          return letter ? [[kind, letter] as const] : [];
+        }),
+      );
+      const reason = content.size ? "structured-form-required" : "evidence-missing";
       const detail = missing
-        .map((kind) => claimRequest(this.deps.gate, kind, undefined, "label"))
+        .map((kind) => {
+          const letter = content.get(kind);
+          return letter
+            ? `Ask ${letter.issuer} for structured evidence. ${claimRequest(this.deps.gate, kind, [letter.issuer])}`
+            : claimRequest(this.deps.gate, kind, undefined, "label");
+        })
         .join(" ");
+      const refs = this.coverageRefs([
+        ...missing,
+        ...new Set([...content.values()].map((claim) => claim.id ?? digestOf(claim))),
+      ]);
       this.gate.verdictEvent(
         "fitness",
         missing.length ? "ask-more" : "pass",
@@ -2700,19 +2721,19 @@ export class Admission {
           ? detail
           : "Every kind of claim required by this operation is covered by admitted, fit evidence.",
         {
-          reason: missing.length ? "evidence-missing" : "fit-for-use",
+          reason: missing.length ? reason : "fit-for-use",
           rule: {
             id: "CORE-IN-21",
             text: "Each required claim kind must be covered for the same task and subject.",
           },
-          refs: this.coverageRefs(missing),
+          refs,
         },
       );
       if (missing.length) {
         this.outcome = "ask-more";
         for (const c of this.admittedClaims) this.gate.storeEvent(c);
-        this.gate.decisionEvent("ask-more", detail, "evidence-missing");
-        return { ok: false, reason: "evidence-missing", detail, askMore: true };
+        this.gate.decisionEvent("ask-more", detail, reason);
+        return { ok: false, reason, detail, askMore: true };
       }
     }
     for (const item of this.claims(msg)) {

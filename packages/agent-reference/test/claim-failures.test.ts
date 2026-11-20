@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 import { expect, it } from "vitest";
-import { digestOf } from "../src/core/canonical.js";
+import { digestContent, digestOf } from "../src/core/canonical.js";
 import { openConversation } from "../src/core/conversation.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import type { JsonObject } from "../src/core/types.js";
+import { loadCase } from "../src/engine/load.js";
+import { runScenario } from "../src/engine/run.js";
+import type { Scenario } from "../src/engine/schema.js";
 import { type GateContext, GateMemory } from "../src/gates/common.js";
 import { InboundGate } from "../src/gates/inbound.js";
 import { OutboundGate } from "../src/gates/outbound.js";
@@ -33,7 +37,7 @@ async function fixture(claims = ["assessment"]) {
     id: "urn:test:source-rule",
     version: "1",
     source: ISSUER,
-    claimTypes: ["assessment"],
+    claimTypes: ["assessment", "unstructured-content"],
     subjects: "any",
   });
   const trust = await TrustStore.load(cast.trust.get("receiver"));
@@ -54,6 +58,13 @@ async function fixture(claims = ["assessment"]) {
           methods: ["recorded-by-authority"],
           maxAgeDays: 30,
           text: "Require the accepted assessor's recent record.",
+        },
+        {
+          id: "urn:test:letter-fitness",
+          claimType: "unstructured-content",
+          methods: ["recorded-by-authority"],
+          maxAgeDays: 30,
+          text: "Admit the assessor's letter as content.",
         },
       ],
     },
@@ -415,3 +426,122 @@ it("keeps unrelated claims and integrity failures on their existing refusal path
   expect(f.recorder.events().at(-1)?.outcome).toBe("refuse");
   expect(f.memory.facts.size).toBe(0);
 });
+
+it.each([
+  "accepted",
+  "other",
+  "structured",
+] as const)("uses the issuer of admitted prose to request structured evidence (%s)", async (variant) => {
+  const f = await fixture();
+  if (variant === "other") f.sources.assessment = ["urn:test:another-assessor"];
+  const content = {
+    ...f.claim,
+    id: "urn:test:assessor-letter",
+    claimType: "unstructured-content",
+    value: { contentDigest: digestOf("The damage is serious.") },
+  };
+  const evidence = [await signClaim(f.key, content)];
+  if (variant === "structured") evidence.push(await signClaim(f.key, f.claim));
+  const result = await messageAdmission(f, evidence);
+  expect(f.memory.facts.has(content.id)).toBe(true);
+  if (variant === "structured") {
+    expect(result).toMatchObject({ ok: true });
+    return;
+  }
+  const reason = variant === "accepted" ? "structured-form-required" : "evidence-missing";
+  expect(result).toMatchObject({ ok: false, askMore: true, reason });
+  const coverage = f.recorder.events().findLast((event) => event.rule?.id === "CORE-IN-21");
+  expect(coverage).toMatchObject({ verdict: "ask-more", reason });
+  if (variant === "accepted") {
+    expect(coverage?.refs?.map((ref) => ref.id)).toEqual(["assessment", content.id]);
+    expect(coverage?.caption).toContain(`Ask ${ISSUER}`);
+    expect(coverage?.caption).toContain("recorded-by-authority");
+    expect(coverage?.caption).not.toContain("urn:test:subject");
+    const held = f.recorder.events().findLast((e) => e.kind === "decision")!;
+    expect(await messageAdmission(f, [await signClaim(f.key, f.claim)])).toMatchObject({
+      ok: true,
+    });
+    const between = f.recorder.events().slice(held.seq);
+    expect(between.some((e) => e.part === "core")).toBe(false);
+  }
+});
+
+it("holds the insurer's core at the coverage check until a structured estimate arrives", async () => {
+  const { profile, scenario } = loadCase(
+    new URL("..", import.meta.url).pathname,
+    "insurance-claim-photos",
+  );
+  const branch = scenario.branches.find((b) => b.id === "needed-claim-left-out")!;
+  const change = branch.change as Pick<Scenario, "script" | "statements">;
+  const original = scenario.statements.find((claim) => claim.id === "estimate")!;
+  const garage = scenario.parties.find((party) => party.id === "garage")!;
+  const letterId = "garage-letter";
+  const subject = original.subject;
+  const bytes = "The damage is serious.";
+  const purpose = "urn:purpose:insurance-claim-photos";
+  const claimId = "urn:scenario:insurance-claim-photos:garage-letter";
+  profile.claims
+    .find((claim) => claim.kind === "unstructured-content")!
+    .sources.push(garage.identity);
+  for (const agent of ["owner-agent", "receiver-agent"]) {
+    scenario.trust.sources[agent]!.push({
+      id: `urn:test:garage-letter:${agent}`,
+      version: "1",
+      source: garage.identity,
+      claimTypes: ["unstructured-content"],
+      subjects: [subject!],
+    });
+  }
+  change.statements ??= scenario.statements;
+  change.statements.push({
+    ...original,
+    id: letterId,
+    kind: "unstructured-content",
+    value: {
+      contentDigest: digestContent(bytes),
+    },
+    terms: {
+      policy: {
+        id: "urn:terms:test:garage-letter",
+        permissions: ["use", "distribute"].map((action) => ({
+          type: "permission",
+          action,
+          target: claimId,
+          constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: purpose }],
+        })),
+      },
+    },
+  });
+  const admit = change.script.find((step) => step.type === "admit")!;
+  if (admit.type !== "admit") throw new Error("Expected local statement admission");
+  admit.statements.push(letterId);
+  const share = change.script.find((step) => step.id === "share")!;
+  if (share.type !== "start") throw new Error("Expected a claim submission");
+  share.evidence.push(letterId);
+  share.content.push({ id: "urn:content:garage-letter", mediaType: "text/plain", bytes });
+  branch.expect = { outcome: "ask-more", check: "fitness", reason: "structured-form-required" };
+  scenario.branches = [branch];
+  const [, path] = await runScenario(profile, scenario, { compare: false });
+  const events = path!.trace!.events;
+  const challenge = events.find(
+    (e) =>
+      e.agent === "receiver-agent" &&
+      e.kind === "decision" &&
+      e.reason === "structured-form-required",
+  )!;
+  expect(challenge).toMatchObject({ outcome: "ask-more" });
+  expect(challenge.caption).toContain(`Ask ${garage.name}`);
+  const retry = events.find(
+    (e) =>
+      e.agent === "receiver-agent" &&
+      e.kind === "decision" &&
+      e.outcome === "admit" &&
+      e.seq > challenge.seq,
+  )!;
+  expect(retry).toBeDefined();
+  expect(
+    events
+      .slice(challenge.seq, retry.seq - 1)
+      .some((e) => e.agent === "receiver-agent" && e.part === "core"),
+  ).toBe(false);
+}, 120_000);

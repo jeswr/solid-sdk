@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import { tightenUsage } from "../mechanisms/usage-model.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
@@ -31,10 +32,13 @@ import type {
   ActionIntent,
   AnyMessage,
   AuthorisationDecision,
+  EvidenceItem,
   Iri,
   JsonObject,
 } from "../core/types.js";
 import { ruleInputs } from "../derive/rules.js";
+import { contributorUpperBound } from "../derive/verification.js";
+import type { FixedJointSession } from "../derive/verifiers.js";
 import {
   actionDigest,
   evaluateIntent,
@@ -439,18 +443,21 @@ export class OutboundGate {
   }
 
   /** DER-21/22/23 before an opaque proof, contribution, partial or numeric release. */
-  checkDerivationRelease(input: {
-    subject: string;
-    purpose: string;
-    recipient: string;
-    inputs: readonly string[];
-    way: "proof" | "joint contribution" | "joint partial" | "joint outcome";
-    minimumGroup?: number;
-    evidenceOk?: boolean;
-    partyAtFault?: string;
-    suppressed?: boolean;
-    record?: JsonObject;
-  }): boolean {
+  checkDerivationRelease(
+    input: {
+      subject: string;
+      purpose: string;
+      recipient: string;
+      inputs: readonly string[];
+      way: "proof" | "joint contribution" | "joint partial" | "joint outcome";
+      minimumGroup?: number;
+      evidenceOk?: boolean;
+      partyAtFault?: string;
+      suppressed?: boolean;
+      record?: JsonObject;
+    },
+    contributionSession?: FixedJointSession,
+  ): boolean {
     const verdicts: CheckVerdict[] = [];
     this.verdict(
       verdicts,
@@ -466,6 +473,38 @@ export class OutboundGate {
         },
       },
     );
+    if (input.way === "joint contribution" && contributionSession) {
+      const { session, rule, method } = contributionSession;
+      const roster = session.roster as JsonObject[];
+      const slot = roster.find(({ party }) => party === this.deps.identity.party);
+      const minimum = this.deps.gate.acceptedJoint?.find(
+        (entry) =>
+          entry.rule === rule && entry.method === method && entry.purposes.includes(input.purpose),
+      )?.minimumContributors;
+      const belowMinimum =
+        minimum === undefined
+          ? !!session.wire // The native protocol requires a local profile entry.
+          : Number(session.minimumContributors) < minimum ||
+            contributorUpperBound(contributionSession) < minimum;
+      if (slot?.computeOnly !== true && belowMinimum) {
+        this.verdict(
+          verdicts,
+          input.subject,
+          "data-terms",
+          "fail",
+          "The session's stated minimum or upper bound on contributors with inputs is below this contributor's required minimum.",
+          {
+            reason: "prohibited",
+            rule: {
+              id: "DER-14b",
+              text: "Compute-only slots are excluded from the contributor minimum.",
+            },
+          },
+        );
+        this.decide("stop", "The contribution stays with its holder.", "prohibited");
+        return false;
+      }
+    }
     for (const id of input.inputs) {
       const item = this.deps.memory.facts.get(id);
       for (const action of ["use", "distribute"] as const) {
@@ -587,7 +626,11 @@ export class OutboundGate {
   }
 
   /** The request the principal sees, built from the rule and the facts of the action. */
-  approvalRequest(intent: ActionIntent, limitText: string | undefined): string {
+  approvalRequest(
+    intent: ActionIntent,
+    limitText: string | undefined,
+    evidence: readonly EvidenceItem[] = [],
+  ): string {
     const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
     const who = this.name(scope.recipient);
@@ -604,7 +647,25 @@ export class OutboundGate {
       }
     }
     if (scope.action === "distribute") {
-      const labels = this.labels(intent);
+      const items = new Map<string, string | undefined>();
+      for (const item of evidence) {
+        if (!isClaimEvidence(item)) continue;
+        try {
+          const claim = unverifiedEvidenceClaim(item);
+          if (typeof claim.id === "string" && typeof claim.claimType === "string")
+            items.set(claim.id, claim.claimType);
+        } catch {
+          // Unreadable credentials are handled by the evidence check.
+        }
+      }
+      if (Array.isArray(p.evidence))
+        for (const id of p.evidence.map(String)) if (!items.has(id)) items.set(id, undefined);
+      const labels = [...items].map(([id, kind]) => {
+        const fact = this.deps.memory.facts.get(id);
+        const label = fact?.label ?? idWords(id, this.name);
+        const claimType = fact?.claimType ?? kind;
+        return claimType ? `${label} (${claimType})` : label;
+      });
       const uses = [
         scope.purpose ? `use them for ${idWords(scope.purpose, this.name)}` : "",
         typeof p.retentionDays === "number" ? `keep them for ${p.retentionDays} days` : "",
@@ -715,7 +776,11 @@ export class OutboundGate {
   }
 
   /** Checks 1 to 5 for a proposed action, around the pilot's mandate decision. */
-  release(intent: ActionIntent, decision: AuthorisationDecision): Release {
+  release(
+    intent: ActionIntent,
+    decision: AuthorisationDecision,
+    evidence: readonly EvidenceItem[] = [],
+  ): Release {
     this.setAction(intent);
     const selected =
       this.deps.gate.carriage?.() ?? this.deps.gate.configuration?.pilotConfiguration;
@@ -1178,6 +1243,28 @@ export class OutboundGate {
       };
     }
 
+    if (
+      ctx.recordBackedClaims?.length &&
+      evidence.some((item) => {
+        if (!isClaimEvidence(item)) return false;
+        let claim: JsonObject;
+        try {
+          claim = unverifiedEvidenceClaim(item);
+        } catch {
+          // Verification of malformed credentials still happens at release.
+          return false;
+        }
+        return this.missingRecordSupport(claim, scope.recipient);
+      })
+    ) {
+      this.stopEvidence(subject, "evidence-invalid", verdicts);
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "evidence-invalid" },
+      };
+    }
+
     if (reliance.length) {
       const unsafe =
         scope.action === "pay" ||
@@ -1329,7 +1416,7 @@ export class OutboundGate {
         reason: "approval-required",
         chat: {
           who: "agent",
-          text: `${roles.length ? `To ${roles.join(", ")}: ` : ""}${this.approvalRequest(intent, undefined)} Action digest: ${subject}. Parameters: ${JSON.stringify(intent.parameters)}`,
+          text: `${roles.length ? `To ${roles.join(", ")}: ` : ""}${this.approvalRequest(intent, undefined, evidence)} Action digest: ${subject}. Parameters: ${JSON.stringify(intent.parameters)}`,
         },
         caption: "The gate built this request from the action and the approval rule.",
       });
@@ -1422,7 +1509,7 @@ export class OutboundGate {
       const request =
         demandText && demanded
           ? this.strongerApprovalRequest(intent, demanded.label)
-          : this.approvalRequest(intent, limitText);
+          : this.approvalRequest(intent, limitText, evidence);
       this.verdict(
         verdicts,
         subject,
@@ -1951,11 +2038,50 @@ export class OutboundGate {
     return blocked;
   }
 
-  stopEvidence(subject: string): void {
-    this.verdict([], subject, "evidence", "fail", "The outgoing credential was not verified.", {
-      reason: "evidence-invalid",
-    });
-    this.decide("stop", "Unverified evidence cannot leave.", "evidence-invalid");
+  private missingRecordSupport(
+    claim: Readonly<Record<string, unknown>>,
+    recipient?: string,
+  ): boolean {
+    return (
+      this.deps.gate.recordBackedClaims?.includes(String(claim.claimType)) === true &&
+      !this.deps.recordBacks?.(claim, recipient ?? "")
+    );
+  }
+
+  needsStructuredClaim(intent: ActionIntent, content?: ContentProfile): boolean {
+    const kind = intent.parameters.claimType;
+    if (typeof kind === "string") return kind !== "unstructured-content";
+    const required = this.deps.gate.actionClaims
+      ?.filter((rule) => rule.action === intent.action || rule.action === intent.operation)
+      .flatMap((rule) => rule.claims);
+    if (required?.length) return required.some((claim) => claim !== "unstructured-content");
+    const claims =
+      intent.purpose &&
+      (this.deps.gate.purposes?.[intent.purpose] ?? content?.purposes?.[intent.purpose]);
+    return !!claims?.length && !claims.includes("unstructured-content");
+  }
+
+  stopEvidence(
+    subject: string,
+    reason: "evidence-invalid" | "structured-form-required" = "evidence-invalid",
+    verdicts: CheckVerdict[] = [],
+  ): void {
+    const structured = reason === "structured-form-required";
+    this.verdict(
+      verdicts,
+      subject,
+      "evidence",
+      "fail",
+      structured
+        ? "The action needs a structured claim; prose or a reading cannot supply it."
+        : "The outgoing credential was not verified.",
+      { reason },
+    );
+    this.decide(
+      "stop",
+      structured ? "Ask the source for the structured claim." : "Unverified evidence cannot leave.",
+      reason,
+    );
   }
   stopAgreementCredential(subject: string, reason: string): void {
     this.verdict(
@@ -2461,15 +2587,22 @@ export class OutboundGate {
           }
         }
         if (!fact && claim.issuer !== this.deps.identity.party) {
-          this.stopEvidence(digest);
-          return finish("stop", "evidence-invalid");
+          const reading =
+            typeof claim.originalDigest === "string" &&
+            typeof claim.implementation === "string" &&
+            ["model-output", "self-reported"].includes(String(claim.method));
+          const reason =
+            opts.intent &&
+            this.needsStructuredClaim(opts.intent, opts.content) &&
+            (claim.claimType === "unstructured-content" || reading)
+              ? "structured-form-required"
+              : "evidence-invalid";
+          this.stopEvidence(digest, reason);
+          return finish("stop", reason);
         }
         // Brief 32: a record-backed claim leaves only with the record's support and only to
         // the gate operator the admitted component statement names; this only tightens.
-        if (
-          this.deps.gate.recordBackedClaims?.includes(String(claim.claimType)) &&
-          !this.deps.recordBacks?.(claim, intent.recipient ?? "")
-        ) {
+        if (this.missingRecordSupport(claim, intent.recipient)) {
           this.stopEvidence(digest);
           return finish("stop", "evidence-invalid");
         }

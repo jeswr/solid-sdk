@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 /** One party's durable state machine. Network scheduling belongs to the binding.
  * No method runs another party's protocol function. All receive calls must follow
  * that party's ordinary inbound gate (the operation handler supplies its peer).
@@ -195,16 +196,20 @@ export class JointParty {
       suppressed?: boolean;
       record?: JsonObject;
     } = {},
+    contributionSession?: FixedJointSession,
   ) {
-    return this.options.runtime().derivationRelease({
-      subject: String(this.options.fixed.session.sessionId),
-      purpose: this.options.purpose,
-      recipient: this.options.recipient,
-      minimumGroup: Number(this.options.fixed.session.minimumGroup),
-      inputs: this.options.inputs,
-      way,
-      ...extra,
-    });
+    return this.options.runtime().derivationRelease(
+      {
+        subject: String(this.options.fixed.session.sessionId),
+        purpose: this.options.purpose,
+        recipient: this.options.recipient,
+        minimumGroup: Number(this.options.fixed.session.minimumGroup),
+        inputs: this.options.inputs,
+        way,
+        ...extra,
+      },
+      contributionSession,
+    );
   }
   async contribute() {
     const release = this.claim("own-contribution");
@@ -218,7 +223,7 @@ export class JointParty {
         .admittedStatements()
         .filter((s) => this.options.inputs.includes(String(s.id)));
       const computeOnly = (this.options.fixed.session.roster as JsonObject[]).some(
-        (p) => p.party === this.options.party && p.computeOnly,
+        (p) => p.party === this.options.party && p.computeOnly === true,
       );
       const count = computeOnly ? 0 : facts.find((f) => f.claimType === "joint.count")?.value;
       const sum = computeOnly ? 0 : facts.find((f) => f.claimType === "joint.sum")?.value;
@@ -231,7 +236,8 @@ export class JointParty {
         sum < 0
       )
         throw new Error("joint inputs are unavailable or invalid");
-      if (!this.release("joint contribution")) return { ok: false as const, reason: "prohibited" };
+      if (!this.release("joint contribution", {}, this.options.fixed))
+        return { ok: false as const, reason: "prohibited" };
       const result = await this.options.protocol.contribute({
         session: this.options.fixed.session,
         party: this.options.party,
