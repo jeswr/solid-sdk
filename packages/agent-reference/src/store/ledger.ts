@@ -32,7 +32,7 @@ import {
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join } from "path";
 import { digestOf } from "../core/canonical.js";
-import { fsyncDir } from "./state.js";
+import { fsyncDir, writeFileDurable } from "./state.js";
 
 /** Any record with a `type`; stored as its JSON form. */
 export type LedgerRecord = { readonly type: string };
@@ -75,6 +75,8 @@ export interface EvidenceLedger {
   head?(): LedgerHead;
   enableRangeCommitments?(): void;
   deferPruning?(): void;
+  /** Resume writes at a verified state-store head, excluding any uncommitted tail. */
+  recoverUncommittedSuffix?(head: LedgerHead): void;
   /** Write retention checkpoints and return the deletion to perform after saving the head. */
   preparePruning?(at: string): (() => void) | undefined;
   readonly requiresTrustedCheckpoint?: boolean;
@@ -184,6 +186,36 @@ export class FileLedger implements EvidenceLedger {
 
   head(): LedgerHead {
     return this.last ? { seq: this.last.seq, hash: this.last.hash } : { seq: 0, hash: GENESIS };
+  }
+
+  recoverUncommittedSuffix(head: LedgerHead): void {
+    const paths = [...this.segments(), this.path];
+    const segments = paths.map((path) => ({
+      path,
+      entries: readSegment(path).filter((entry) => entry.seq <= head.seq),
+    }));
+    const prefix = segments.flatMap(({ entries }) => entries);
+    if (!verifyLedgerAtHead(prefix, head).ok)
+      throw new Error("Cannot resume the evidence ledger at an invalid saved head");
+    // Drop the newest segments first. Every intermediate state retains the saved head.
+    this.currentCount = 0;
+    for (const segment of segments.reverse()) {
+      const { path, entries } = segment;
+      if (entries.length === 0) {
+        rmSync(path, { force: true });
+        fsyncDir(dirname(this.path));
+        continue;
+      }
+      const tmp = `${this.path}.recovery-tmp`;
+      rmSync(tmp, { force: true });
+      writeFileDurable(tmp, entries.map((entry) => `${JSON.stringify(entry)}\n`).join(""), "wx");
+      renameSync(tmp, path);
+      fsyncDir(dirname(this.path));
+      this.currentCount = path === this.path ? entries.length : 0;
+      break;
+    }
+    this.last = prefix.at(-1);
+    this.committed ||= this.last?.recordDigest !== undefined;
   }
 
   /** Archived segment paths, oldest first. */

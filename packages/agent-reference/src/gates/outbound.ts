@@ -74,6 +74,7 @@ import {
 } from "../profile/content.js";
 import type { WireMessage } from "../store/state.js";
 import { packetView } from "../trace/packet.js";
+import type { TraceObservation } from "../trace/recorder.js";
 import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import {
   type AdmittedFact,
@@ -292,16 +293,21 @@ export class OutboundGate {
     return this.name(this.deps.identity.party);
   }
 
-  private emit(event: TraceEventInput): void {
-    this.deps.gate.sink?.emit({
-      ...(event.part === "outbound-gate" || event.kind === "message-out" ? this.activeAction : {}),
-      ...event,
-      ...(this.activePayment
-        ? { settlementFacts: this.activePayment }
-        : this.activePaymentDocument
-          ? { settlementDocument: this.activePaymentDocument }
+  private emit(event: TraceEventInput, observation?: TraceObservation): void {
+    this.deps.gate.sink?.emit(
+      {
+        ...(event.part === "outbound-gate" || event.kind === "message-out"
+          ? this.activeAction
           : {}),
-    });
+        ...event,
+        ...(this.activePayment
+          ? { settlementFacts: this.activePayment }
+          : this.activePaymentDocument
+            ? { settlementDocument: this.activePaymentDocument }
+            : {}),
+      },
+      observation,
+    );
   }
 
   private verdict(
@@ -340,16 +346,20 @@ export class OutboundGate {
     caption: string,
     reason?: string,
     release?: Pick<TraceEventInput, "messageId" | "messageDigest" | "effectRelease">,
+    observation?: TraceObservation,
   ): void {
-    this.emit({
-      part: "outbound-gate",
-      kind: "decision",
-      verdict: OUTCOME_VERDICT[outcome],
-      outcome,
-      ...release,
-      ...(reason ? { reason } : {}),
-      caption,
-    });
+    this.emit(
+      {
+        part: "outbound-gate",
+        kind: "decision",
+        verdict: OUTCOME_VERDICT[outcome],
+        outcome,
+        ...release,
+        ...(reason ? { reason } : {}),
+        caption,
+      },
+      observation,
+    );
   }
 
   rejectEffect(intent: ActionIntent, reason: string): readonly CheckVerdict[] {
@@ -3358,14 +3368,14 @@ export class OutboundGate {
             ? new TextDecoder().decode(Uint8Array.from(bytes))
             : undefined;
       const emailText = text.toLowerCase();
-      const repeatsItem = [literal, rawText].some(
-        (itemText) =>
-          itemText !== undefined &&
-          itemText.length >= 4 &&
-          emailText.includes(itemText.toLowerCase()),
+      const repetitions = [literal, rawText].filter(
+        (itemText): itemText is string => !!itemText && emailText.includes(itemText.toLowerCase()),
       );
-      const prohibited = approved && repeatsItem && explicitlyProhibits(item.terms, item.id);
-      if (repeatsItem && this.missingRecipientRole(item.terms, scope.recipient)) {
+      const prohibited =
+        approved &&
+        repetitions.some((itemText) => itemText.length >= 4) &&
+        explicitlyProhibits(item.terms, item.id);
+      if (repetitions.length && this.missingRecipientRole(item.terms, scope.recipient)) {
         this.verdict(
           verdicts,
           subject,
@@ -3520,20 +3530,23 @@ export class OutboundGate {
         { messageId: envelope.id, messageDigest: digestOf(message) },
       );
       if (opts.intent) recordConsumption?.(opts.intent);
-      this.emit({
-        part: "transport",
-        kind: "message-out",
-        messageId: envelope.id,
-        packet: packetView(message, wire, {
-          carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
-          carriageSummary: "Handed to the carriage.",
-          name: this.name,
-          vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
-          known: opts.known,
-        }),
-        ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
-        caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
-      });
+      this.emit(
+        {
+          part: "transport",
+          kind: "message-out",
+          messageId: envelope.id,
+          packet: packetView(message, wire, {
+            carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
+            carriageSummary: "Handed to the carriage.",
+            name: this.name,
+            vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
+            known: opts.known,
+          }),
+          ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
+          caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
+        },
+        { kind: "payload", value: { message, wire } },
+      );
     };
   }
 
@@ -3550,7 +3563,7 @@ export class OutboundGate {
   }
 
   /** Evidence, then go, for an effect (no message): the activity is recorded first. */
-  sealEffect(intent: ActionIntent, releaseId: string = actionDigest(intent)): void {
+  sealEffect(intent: ActionIntent, releaseId: string, params: unknown): void {
     this.setAction(intent);
     this.deps.reservePayment?.(intent, releaseId);
     this.pendingGo.delete(actionDigest(intent));
@@ -3568,9 +3581,13 @@ export class OutboundGate {
         },
       },
     );
-    this.decide("go", `The action goes: ${this.describeAction(intent)}.`, undefined, {
-      effectRelease: true,
-    });
+    this.decide(
+      "go",
+      `The action goes: ${this.describeAction(intent)}.`,
+      undefined,
+      { effectRelease: true },
+      { kind: "payload", value: [intent.parameters, params] },
+    );
     this.deps.consumeApproval?.(intent);
   }
 

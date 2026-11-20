@@ -70,8 +70,12 @@ it("looks lenders up anonymously in the sector register and reads only the admit
   );
 
   // The index refuses an unnamed requester at its authority check.
-  expect(failure.disagrees).toBe(true);
-  expect(failure.actual).toMatchObject({ outcome: "go" });
+  expect(failure.disagrees).toBe(false);
+  expect(failure.actual).toEqual({
+    outcome: "refuse",
+    check: "authority",
+    reason: "not-authorised",
+  });
   expect(failure.trace!.events).toContainEqual(
     expect.objectContaining({
       check: "authority",

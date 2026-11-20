@@ -159,6 +159,13 @@ it.each([
     expect(branch.actual).toMatchObject({ outcome: "stop", reason: "prohibited" });
     expect(branch.disagrees).toBe(false);
     expect(branch.expected).toMatchObject({ outcome: "stop", reason: "prohibited" });
+    expect(
+      branch.trace?.events.some(
+        (event) =>
+          event.kind === "message-out" &&
+          event.messageId === "urn:awp:engine-salary-benchmark-branch-1:computer-agent:0013",
+      ),
+    ).toBe(false);
   }
   for (const path of paths.filter((p) => p.usedTestDouble)) {
     expect(path.blocked).toBeUndefined();

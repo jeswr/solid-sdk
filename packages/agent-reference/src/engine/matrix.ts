@@ -177,7 +177,8 @@ export function matrixSink(
   if (configuration.id === "baseline") return sink;
   return {
     agent: sink.agent,
-    emit(input) {
+    observePayloads: sink.observePayloads,
+    emit(input, payload) {
       // This generated step-up question contains an operation name, never exact proposed text.
       const event = input.chat?.text.startsWith("Before ")
         ? {
@@ -190,26 +191,29 @@ export function matrixSink(
             },
           }
         : input;
-      if (!configuration.id.startsWith("transport-")) return sink.emit(event);
+      if (!configuration.id.startsWith("transport-")) return sink.emit(event, payload);
       const raw = event.packet?.layers.header.raw as { configuration?: string } | undefined;
-      if (!event.packet || !raw?.configuration) return sink.emit(event);
+      if (!event.packet || !raw?.configuration) return sink.emit(event, payload);
       const suite =
         raw.configuration === configuration.pilotConfiguration
           ? configuration.layers.transport
           : "direct-http";
-      sink.emit({
-        ...event,
-        packet: {
-          ...event.packet,
-          carriage: {
-            suite,
-            summary:
-              suite === "direct-http"
-                ? "Signed bytes passed directly in process."
-                : `${suite === "email" ? "Email" : suite.toUpperCase()} carries the signed bytes in process.`,
+      sink.emit(
+        {
+          ...event,
+          packet: {
+            ...event.packet,
+            carriage: {
+              suite,
+              summary:
+                suite === "direct-http"
+                  ? "Signed bytes passed directly in process."
+                  : `${suite === "email" ? "Email" : suite.toUpperCase()} carries the signed bytes in process.`,
+            },
           },
         },
-      });
+        payload,
+      );
     },
   };
 }

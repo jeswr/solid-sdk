@@ -115,6 +115,7 @@ for (const file of readdirSync(join(root, "scenarios"))
             actual: path.actual,
             expected: path.expected,
             consequences: path.consequences,
+            ...(path.notReached?.length ? { notReached: path.notReached } : {}),
             ...(path.setup ? { setup: path.setup } : {}),
             ...(path.note ? { note: path.note } : {}),
             // Brief 31 §1: messages sent inside the configuration's own added segments.

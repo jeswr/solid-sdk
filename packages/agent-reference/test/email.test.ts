@@ -476,11 +476,14 @@ it("stops an exactly approved email when the repeated value requires inherited r
 });
 
 it.each([
-  "text",
-  "UTF-8 bytes",
-] as const)("stops an exactly approved email repeating retained raw content as %s with inherited registration", async (encoding) => {
+  ["text", "SYNTHETIC SENSITIVE RÉFÉRENCE"],
+  ["UTF-8 bytes", "SYNTHETIC SENSITIVE RÉFÉRENCE"],
+  ["text", "X"],
+  ["text", "QZ"],
+  ["UTF-8 bytes", "QZX"],
+  ["UTF-8 bytes", "é"],
+] as const)("stops an exactly approved email repeating retained raw content as %s (%s) with inherited registration", async (encoding, raw) => {
   const f = await fixture();
-  const raw = "SYNTHETIC SENSITIVE RÉFÉRENCE";
   const bytes = encoding === "text" ? raw : [...new TextEncoder().encode(raw)];
   await f.send("urn:raw-registration-email", `The reference is ${raw}.`);
   expect(f.runtime.pendingApprovals()).toHaveLength(1);
@@ -889,6 +892,79 @@ it("prunes archived segments after saving a verifiable audit head", async () => 
     expect(f.runtime.recordHead().seq).toBeGreaterThanOrEqual(checkpoint.seq);
     expect(f.ledger.entries()).toContainEqual(expect.objectContaining(checkpoint));
     expect((await f.runtime.exportRecord("urn:unrelated")).jws).toBeTruthy();
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("resumes bounded retention on new writes after recovering the saved audit prefix", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-resumed-audit-"));
+  const f = await fixture({
+    stateDir: dir,
+    ledgerBounds: { segmentMaxEntries: 12, maxSegments: 1 },
+  });
+  try {
+    await f.send();
+    await f.approve();
+    const saved = f.runtime.recordHead();
+    const durablePrefix = f.ledger.entries();
+    for (let i = 0; i < 48; i++)
+      f.runtime.recordObservation({ type: "uncommitted-suffix", observedBy: "urn:test" });
+    await f.reopen();
+    expect(f.runtime.recordHead()).toEqual(saved);
+    expect((await f.runtime.auditRecord()).entry).toBeUndefined();
+
+    f.runtime.recordObservation({ type: "after-recovery", observedBy: "urn:test" });
+    expect(f.ledger.entries().slice(0, durablePrefix.length)).toEqual(durablePrefix);
+    expect(f.ledger.entries()[durablePrefix.length]).toMatchObject({
+      seq: saved.seq + 1,
+      prev: saved.hash,
+    });
+    expect(f.ledger.entries().at(-1)?.record.type).toBe("after-recovery");
+    expect(f.ledger.entries().some(({ record }) => record.type === "uncommitted-suffix")).toBe(
+      false,
+    );
+    for (let i = 0; i < 48; i++)
+      f.runtime.recordObservation({ type: "after-recovery", observedBy: "urn:test" });
+    expect((await f.runtime.auditRecord()).entry).toBeDefined();
+    const ledger = f.ledger;
+    if (!(ledger instanceof FileLedger)) throw new Error("Missing file ledger");
+    expect(ledger.segments()).toHaveLength(1);
+    const resumed = f.runtime.recordHead();
+    await f.reopen();
+    expect(f.runtime.recordHead().seq).toBeGreaterThanOrEqual(resumed.seq);
+    expect(f.ledger.entries()).toContainEqual(expect.objectContaining(resumed));
+    expect((await f.runtime.exportRecord("urn:unrelated")).jws).toBeTruthy();
+    expect(f.ledger.entries().some(({ record }) => record.type === "uncommitted-suffix")).toBe(
+      false,
+    );
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("refuses to resume writes when the saved ledger prefix fails verification", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-broken-prefix-"));
+  const path = join(dir, "record.jsonl");
+  const f = await fixture({ stateDir: dir });
+  try {
+    await f.send();
+    f.runtime.recordObservation({ type: "orphaned-suffix", observedBy: "urn:test" });
+    const entries = f.ledger.entries();
+    const [first, ...rest] = entries;
+    if (!first) throw new Error("Missing saved ledger prefix");
+    const corrupted =
+      [{ ...first, record: { type: "altered" } }, ...rest]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n") + "\n";
+    writeFileSync(path, corrupted);
+    await f.reopen();
+    expect(() =>
+      f.runtime.recordObservation({ type: "after-recovery", observedBy: "urn:test" }),
+    ).toThrow("Cannot resume the evidence ledger at an invalid saved head");
+    expect(readFileSync(path, "utf8")).toBe(corrupted);
   } finally {
     f.runtime.close();
     rmSync(dir, { recursive: true, force: true });

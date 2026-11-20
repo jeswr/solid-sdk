@@ -71,7 +71,8 @@ it("stops an authentic carrier with unapproved private credential fields before 
   const entry = scenario.configurations.find(
     (entry) => entry.id === "commitments-agreement-credential",
   )!;
-  entry.world = { ...entry.world, branches: [], stopAfter: "fee-offer" };
+  scenario.stopAfter = "fee-offer";
+  entry.world = { ...entry.world, branches: [] };
   const original = AgreementCredentialProtocol.prototype.offer;
   const producer = vi
     .spyOn(AgreementCredentialProtocol.prototype, "offer")
@@ -114,7 +115,8 @@ it("the payment provider independently rechecks the native credential before a l
   const entry = scenario.configurations.find(
     (entry) => entry.id === "commitments-agreement-credential",
   )!;
-  entry.world = { ...entry.world, branches: [], stopAfter: "provider-settles" };
+  scenario.stopAfter = "provider-settles";
+  entry.world = { ...entry.world, branches: [] };
   const original = AgreementCredentialProtocol.prototype.check;
   let acceptances = 0;
   const check = vi

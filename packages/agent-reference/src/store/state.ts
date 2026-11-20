@@ -389,7 +389,7 @@ export function fsyncDir(dir: string): void {
   }
 }
 
-function writeFileDurable(path: string, content: string, flags: string): void {
+export function writeFileDurable(path: string, content: string, flags: string): void {
   const fd = openSync(path, flags, 0o600);
   try {
     writeSync(fd, content);

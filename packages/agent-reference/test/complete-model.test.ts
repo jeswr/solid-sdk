@@ -78,7 +78,7 @@ async function roundTripCorpus(): Promise<void> {
         carriageChecked = true;
         carriageCounts.set(key, (carriageCounts.get(key) ?? 0) + 1);
       };
-      // Pin all 26 original capacity occurrences, even if a later compact proof fits inline.
+      // Pin all 26 live capacity occurrences, even if a later compact proof fits inline.
       if (requiredCounts.has(key)) await checkCarriage();
       let limits: import("../src/core/limits.js").PilotLimits | undefined;
       let doc: import("../src/wire/document.js").JsonLdDocument;

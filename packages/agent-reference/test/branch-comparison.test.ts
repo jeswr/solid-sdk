@@ -1,16 +1,22 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
+import { digestBytes, digestOf } from "../src/core/canonical.js";
+import { verifierRegistry } from "../src/derive/verifiers.js";
 import {
+  type ComparisonStep,
   compareBranch,
   continuedReleaseProblem,
   describeStep,
+  type RefusedStatement,
   stoppedReleaseProblem,
   witnessedDecision,
 } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import type { PacketView, TraceEvent } from "../src/trace/types.js";
+import { ToyJointProtocol } from "./doubles/joint.js";
+import { ToyProofSystem } from "./doubles/proof.js";
 
 const root = new URL("../", import.meta.url).pathname;
 
@@ -117,6 +123,14 @@ const checked = (seq: number, extra: Partial<TraceEvent> = {}): TraceEvent => ({
 });
 
 const refusedId = "urn:statement:refused";
+const refusedValue = "Private synthetic reference CODE-941";
+const refusedClaim = { id: refusedId, claimType: "test.claim", value: refusedValue };
+const refusedStatement: RefusedStatement = {
+  id: refusedId,
+  claimDigest: digestOf(refusedClaim),
+  wireDigest: digestBytes("protected statement bytes"),
+  statement: refusedClaim,
+};
 const acceptedId = "urn:statement:accepted";
 const refusal: TraceEvent = { ...accepted(2, "admit"), outcome: "refuse" };
 const laterAdmit: TraceEvent = { ...accepted(3, "admit"), gateRun: 2 };
@@ -175,11 +189,17 @@ const sent: TraceEvent = {
   packet: packetWithStatement(acceptedId),
 };
 
-function afterRefusal(later: TraceEvent[], first = checked(1), stop = refusal) {
+function afterRefusal(
+  later: TraceEvent[],
+  first = checked(1),
+  stop = refusal,
+  payloads?: ReadonlyMap<number, unknown>,
+) {
   return stoppedReleaseProblem(
     {
       events: [first, stop, ...later],
-      standaloneRefusals: new Map([[stop.seq, refusedId]]),
+      standaloneRefusals: new Map([[stop.seq, refusedStatement]]),
+      payloads,
     },
     stop,
     "stop",
@@ -211,6 +231,78 @@ it("rejects a store or send carrying the refused statement despite its own gate 
   expect(afterRefusal([gated, { ...sent, packet: packetWithStatement(refusedId) }])).toBe(true);
 });
 
+it.each([
+  ["ID citation", { derivedFrom: [refusedId] }],
+  ["claim digest", { source: refusedStatement.claimDigest }],
+  ["wire digest", { source: refusedStatement.wireDigest }],
+  ["copy under a new ID", { ...refusedClaim, id: acceptedId }],
+] as const)("rejects a gated packet carrying a refused statement's %s", (_name, raw) => {
+  const packet = packetWithStatement(acceptedId);
+  expect(
+    afterRefusal([
+      gated,
+      {
+        ...sent,
+        packet: {
+          ...packet,
+          layers: { ...packet.layers, provenance: { present: true, summary: "", raw } },
+        },
+      },
+    ]),
+  ).toBe(true);
+});
+
+it("rejects a renamed store even when the published fact view omits the value", () => {
+  expect(
+    afterRefusal(
+      [laterAdmit, stored],
+      checked(1),
+      refusal,
+      new Map([[stored.seq, { ...refusedClaim, id: acceptedId }]]),
+    ),
+  ).toBe(true);
+});
+
+it("allows an independently sourced invoice after refusing the supplier account statement", async () => {
+  const { profile, scenario } = loadCase(root, "pay-an-invoice");
+  const branch = (await runScenario(profile, scenario)).find((path) => path.path === "branch-1");
+  expect(branch).toMatchObject({
+    disagrees: false,
+    actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
+  });
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({
+      agent: "business-agent",
+      kind: "store",
+      fact: expect.objectContaining({ claimType: "invoice", source: "urn:fictional:supplier" }),
+    }),
+  );
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({
+      agent: "business-agent",
+      check: "P4",
+      verdict: "fail",
+      reason: "source-not-authoritative",
+    }),
+  );
+  const released = branch?.trace?.events.filter(
+    (event) => event.agent === "business-agent" && event.kind === "message-out",
+  );
+  expect(released?.map((event) => event.packet?.kind)).toEqual(["accept"]);
+  expect(JSON.stringify(released)).not.toContain("urn:account:supplier");
+}, 120_000);
+
+it("inspects the original joint packet payload when private fields are redacted from the trace", () => {
+  expect(
+    afterRefusal(
+      [gated, sent],
+      checked(1),
+      refusal,
+      new Map([[sent.seq, { partial: { derivedFrom: refusedId } }]]),
+    ),
+  ).toBe(true);
+});
+
 it("requires a preceding go for the send's gate run, message ID and digest", () => {
   expect(afterRefusal([sent])).toBe(true);
   expect(afterRefusal([{ ...gated, gateRun: 2 }, sent])).toBe(true);
@@ -224,13 +316,16 @@ it("rejects citations in outbound go scope and in completed effect support", () 
     afterRefusal([{ ...gated, actionScope: { ...gated.actionScope, evidence: [refusedId] } }]),
   ).toBe(true);
   const effect = { ...gated, effectRelease: true, messageId: undefined, messageDigest: undefined };
-  expect(afterRefusal([effect])).toBe(false);
+  const payloads = new Map([[effect.seq, { service: "urn:independent:operation" }]]);
+  expect(afterRefusal([effect], checked(1), refusal, payloads)).toBe(false);
+  expect(afterRefusal([effect])).toBe(true);
   expect(
     stoppedReleaseProblem(
       {
         events: [checked(1), refusal, effect],
-        standaloneRefusals: new Map([[refusal.seq, refusedId]]),
+        standaloneRefusals: new Map([[refusal.seq, refusedStatement]]),
         effectSupport: new Map([[effect.seq, [refusedId]]]),
+        payloads,
       },
       refusal,
       "stop",
@@ -251,6 +346,68 @@ it("keeps the blanket check for a refused message and an outbound stop", () => {
   expect(afterRefusal([laterAdmit, stored, gated, sent], { ...received, agent: "peer" })).toBe(
     false,
   );
+});
+
+it.each([
+  [undefined, false],
+  [undefined, true],
+  ["sparq-zk-result/5", false],
+  ["sparq-zk-result/5", true],
+  ["sparq-aggregate/1", false],
+  ["sparq-aggregate/1", true],
+] as const)("checks an approved email after a refused statement (method %s, repeats value %s)", async (method, repeats) => {
+  const { profile, scenario } = loadCase(root, "no-agent-on-the-other-side");
+  const draft = scenario.script[0];
+  const approve = scenario.script[1];
+  if (draft?.type !== "email-send" || approve?.type !== "approve")
+    throw new Error("Missing email fixture");
+  scenario.script = [draft, approve];
+  scenario.stress = [];
+  scenario.statements.push({
+    id: "private-reference",
+    issuer: "party-1",
+    kind: "test.private-reference",
+    method: "recorded-by-authority",
+    value: { value: refusedValue },
+  });
+  scenario.branches = [
+    {
+      id: "standalone-refusal",
+      what: "The reader refuses a statement and independently gates the email.",
+      expect: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
+      outline: [],
+      change: {
+        requiredMethods: method ? [method] : [],
+        script: [
+          {
+            id: "refuse-reference",
+            type: "admit",
+            agent: draft.agent,
+            purpose: draft.purpose,
+            statements: ["private-reference"],
+          },
+          { ...draft, text: repeats ? `The reference is ${refusedValue}.` : draft.text },
+          approve,
+        ],
+      },
+    },
+  ];
+  const paths = await runScenario(profile, scenario, {
+    registry: verifierRegistry([new ToyProofSystem(), new ToyJointProtocol()]),
+    testOnly: true,
+    compare: false,
+    reportExpectationFailures: true,
+  });
+  const branch = paths.find((path) => path.path === "standalone-refusal");
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({ outcome: "refuse", reason: "source-not-authoritative" }),
+  );
+  expect(branch?.trace?.events).toContainEqual(
+    expect.objectContaining({ outcome: "go", effectRelease: true }),
+  );
+  expect(branch?.trace?.events.some((event) => event.kind === "message-out")).toBe(false);
+  expect(branch?.note).toBe(repeats ? "an effect followed a stop" : undefined);
+  expect(branch?.disagrees).toBe(repeats);
 });
 
 it("reports a permissive branch only when a missing main bar is followed by a witnessed release", () => {
@@ -458,6 +615,72 @@ it("uses the aligned release to reach a skipped bar after an earlier main releas
   expect(result.judged).toEqual(stop);
   expect(result.setup).toEqual([]);
   expect(result.failure).toBeDefined();
+});
+
+it.each([
+  "removed",
+  "script",
+  "trace",
+  "unchanged release",
+] as const)("uses the effective script and trace to identify the skipped G1 bar (%s)", (presence) => {
+  const bar = decision("approval-required", 2);
+  const stop = { ...decision("not-authorised", 4), outcome: "stop" } as const;
+  const descriptor = { type: "start", items: [] };
+  const main = {
+    events: [accepted(1), bar, accepted(3)],
+    steps: new Map([
+      [1, { id: "initial", descriptor }],
+      [2, { id: "bank", descriptor }],
+      [3, { id: "shared", descriptor }],
+    ]),
+  };
+  const extra = accepted(2, "admit");
+  const rejected = presence === "unchanged release" ? extra : undefined;
+  const branch = {
+    events: [checked(1), ...(rejected ? [rejected] : []), accepted(3), stop],
+    steps: new Map<number, ComparisonStep>(
+      [
+        ...(presence === "trace" ? [[1, { id: "bank", descriptor }] as const] : []),
+        [2, { id: "initial", descriptor }] as const,
+        [3, { id: "shared", descriptor }] as const,
+        [4, { id: "new-stop", descriptor }] as const,
+      ].filter(([seq]) => seq !== 2 || rejected !== undefined),
+    ),
+    scriptIds: new Set([
+      "shared",
+      "new-stop",
+      ...(presence === "script" ? ["bank"] : []),
+      ...(rejected ? ["initial"] : []),
+    ]),
+  };
+  const result = compareBranch(main, branch, { changedSteps: new Set(["new-stop"]) });
+  expect(result.judged).toEqual(stop);
+  expect(result.notReached).toEqual(presence === "script" || presence === "trace" ? [] : [bar]);
+  expect(result.failure).toEqual(presence === "removed" ? undefined : (rejected ?? accepted(3)));
+});
+
+it("does not use an identical later bar to cover a skipped bar before a shared release", () => {
+  const descriptor = { type: "start", items: [] };
+  const bar = decision("approval-required", 2);
+  const shared = accepted(3);
+  const late = { ...bar, seq: 4 };
+  const stop = { ...decision("not-authorised", 5), outcome: "stop" } as const;
+  const steps = new Map([
+    [2, { id: "early-bar", descriptor }],
+    [3, { id: "shared", descriptor }],
+    [4, { id: "late-bar", descriptor }],
+  ]);
+  const result = compareBranch(
+    { events: [accepted(1), bar, shared, late], steps },
+    {
+      events: [shared, late, stop],
+      steps: new Map([...steps].slice(1)),
+      scriptIds: new Set(["early-bar", "shared", "late-bar", "stop"]),
+    },
+    { changedSteps: new Set(["stop"]) },
+  );
+  expect(result.judged).toEqual(stop);
+  expect(result.failure).toEqual(shared);
 });
 
 it.each([false, true])("requires the extra go to come from a changed step (%s)", (changed) => {

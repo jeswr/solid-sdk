@@ -9,6 +9,7 @@
  */
 
 import { digestOf } from "../core/canonical.js";
+import type { EvidenceItem } from "../core/types.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { copyData } from "../model/copy.js";
 import type { LabelIndex } from "../model/labels.js";
@@ -23,14 +24,26 @@ import {
 } from "../wire/payment.js";
 import type { TraceEvent, TraceEventInput } from "./types.js";
 
+export type TraceObservation =
+  | { readonly kind: "payload"; readonly value: unknown }
+  | {
+      readonly kind: "refused-statement";
+      readonly evidence: EvidenceItem;
+      readonly claim?: unknown;
+    };
+
 /** What the runtime and gates write to. */
 export interface TraceSink {
   /** The party id whose diagram lights up. */
   readonly agent: string;
-  emit(event: TraceEventInput): void;
+  /** Opt in to comparisons using the original data before the trace projection. */
+  readonly observePayloads?: boolean;
+  emit(event: TraceEventInput, observation?: TraceObservation): void;
 }
 
 export class TraceRecorder {
+  constructor(private readonly observe?: (seq: number, observation: TraceObservation) => void) {}
+
   private selected?: SettlementSuite;
   settlement(suite: SettlementSuite): void {
     this.selected = suite;
@@ -99,7 +112,9 @@ export class TraceRecorder {
   sink(agent: string): TraceSink {
     return {
       agent,
-      emit: (event) => {
+      observePayloads: !!this.observe,
+      emit: (event, observation) => {
+        if (observation) this.observe?.(this.list.length + 1, observation);
         if (this.rule) this.current = this.rule(agent, event, this.current);
         const { settlementFacts, settlementDocument, ...plain } = event;
         const view = jointLogView(plain);

@@ -92,6 +92,7 @@ import { identifiersIn } from "../profile/content.js";
 import { dutyRuleSchema } from "../runtime/duties.js";
 import type { OperationHandler } from "../runtime/operations.js";
 import { packetView } from "../trace/packet.js";
+import type { TraceObservation } from "../trace/recorder.js";
 import type { InboundCheck, InboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
 import type { Resolution } from "../trust/resolver.js";
 import {
@@ -226,11 +227,14 @@ export class InboundGate {
   }
 
   /** Emit to the trace sink, if any. */
-  emit(event: TraceEventInput): void {
-    this.deps.gate.sink?.emit({
-      ...event,
-      ...(this.activePaymentDocument ? { settlementDocument: this.activePaymentDocument } : {}),
-    });
+  emit(event: TraceEventInput, observation?: TraceObservation): void {
+    this.deps.gate.sink?.emit(
+      {
+        ...event,
+        ...(this.activePaymentDocument ? { settlementDocument: this.activePaymentDocument } : {}),
+      },
+      observation,
+    );
   }
 
   /** A wire unit arrived over the carriage. Opens its admission. */
@@ -1266,17 +1270,21 @@ export class InboundGate {
     reason?: string,
     messageId?: string,
     messageDigest?: string,
+    refused?: Extract<TraceObservation, { kind: "refused-statement" }>,
   ): void {
-    this.emit({
-      part: "inbound-gate",
-      kind: "decision",
-      verdict: OUTCOME_VERDICT[outcome],
-      outcome,
-      ...(messageId ? { messageId } : {}),
-      ...(messageDigest ? { messageDigest } : {}),
-      ...(reason ? { reason } : {}),
-      caption,
-    });
+    this.emit(
+      {
+        part: "inbound-gate",
+        kind: "decision",
+        verdict: OUTCOME_VERDICT[outcome],
+        outcome,
+        ...(messageId ? { messageId } : {}),
+        ...(messageDigest ? { messageDigest } : {}),
+        ...(reason ? { reason } : {}),
+        caption,
+      },
+      outcome === "refuse" ? refused : undefined,
+    );
   }
 
   /** Refusals are gate records, never core context or admitted facts. */
@@ -2037,45 +2045,48 @@ export class InboundGate {
   storeEvent(c: Claim, chat?: string): void {
     const terms = c.terms as ItemTerms | undefined;
     const method = this.deps.memory.facts.get(c.id ?? digestOf(c))?.method ?? c.method;
-    this.emit({
-      part: "memory",
-      kind: "store",
-      fact: {
-        id: c.id ?? digestOf(c),
-        label: this.labelOf(c),
-        claimType: c.claimType,
-        subject: c.subject ?? "unknown",
-        value:
-          ((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping"
-            ? { codeList: c.codeList, code: c.code, derivation: c.derivation }
-            : ((c as JsonObject).balance ??
-              (c as JsonObject).monthly ??
-              (c as JsonObject).decision ??
-              (c as JsonObject).product ??
-              (c as JsonObject).level ??
-              null),
-        source: c.issuer,
-        ...(method ? { method } : {}),
-        ...(c.asOf ? { asOf: c.asOf } : {}),
-        ...(c.period ? { period: c.period } : {}),
-        ...(terms
-          ? { terms: { id: terms.policy.id, summary: termsSummary(terms, this.name) } }
+    this.emit(
+      {
+        part: "memory",
+        kind: "store",
+        fact: {
+          id: c.id ?? digestOf(c),
+          label: this.labelOf(c),
+          claimType: c.claimType,
+          subject: c.subject ?? "unknown",
+          value:
+            ((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping"
+              ? { codeList: c.codeList, code: c.code, derivation: c.derivation }
+              : ((c as JsonObject).balance ??
+                (c as JsonObject).monthly ??
+                (c as JsonObject).decision ??
+                (c as JsonObject).product ??
+                (c as JsonObject).level ??
+                null),
+          source: c.issuer,
+          ...(method ? { method } : {}),
+          ...(c.asOf ? { asOf: c.asOf } : {}),
+          ...(c.period ? { period: c.period } : {}),
+          ...(terms
+            ? { terms: { id: terms.policy.id, summary: termsSummary(terms, this.name) } }
+            : {}),
+          provenance: `${((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping" ? "Locally mapped; original signed by" : "signed by"} ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
+        },
+        ...(chat
+          ? {
+              chat: {
+                who: "agent" as const,
+                text:
+                  c.method === "model-output"
+                    ? `[model-output; reading of ${String(c.originalDigest)}] ${chat}`
+                    : chat,
+              },
+            }
           : {}),
-        provenance: `${((c as JsonObject).derivation as JsonObject | undefined)?.type === "code-mapping" ? "Locally mapped; original signed by" : "signed by"} ${this.name(c.issuer)}${c.issuedAt ? `, issued ${c.issuedAt}` : ""}`,
+        caption: `${this.labelOf(c)} is stored with its source, how it was produced, its date and its terms.`,
       },
-      ...(chat
-        ? {
-            chat: {
-              who: "agent" as const,
-              text:
-                c.method === "model-output"
-                  ? `[model-output; reading of ${String(c.originalDigest)}] ${chat}`
-                  : chat,
-            },
-          }
-        : {}),
-      caption: `${this.labelOf(c)} is stored with its source, how it was produced, its date and its terms.`,
-    });
+      { kind: "payload", value: c },
+    );
   }
 
   /**
@@ -2178,6 +2189,7 @@ export class InboundGate {
       };
       const cache = new Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>();
       const r = await this.assessClaim(ev, opts.subject);
+      const refusedStatement = { kind: "refused-statement" as const, evidence: ev, claim: r.claim };
       cache.set(item.jws, r);
       const label = r.claim ? this.labelOf(r.claim) : "A statement";
       if (reference && (r.reason === "evidence-invalid" || r.reason === "unknown-key" || !r.claim))
@@ -2190,7 +2202,14 @@ export class InboundGate {
         this.verdictEvent("integrity", "fail", `${label} does not verify against a pinned key.`, {
           reason: r.reason,
         });
-        this.decisionEvent("refuse", `${label} is refused and kept out of memory.`, r.reason);
+        this.decisionEvent(
+          "refuse",
+          `${label} is refused and kept out of memory.`,
+          r.reason,
+          undefined,
+          undefined,
+          refusedStatement,
+        );
         refused++;
         continue;
       }
@@ -2317,6 +2336,9 @@ export class InboundGate {
               : (this.getClaimFailure()?.outcome ?? "refuse"),
           request ?? `${label} is refused and kept out of memory.`,
           reason,
+          undefined,
+          undefined,
+          reference ? undefined : refusedStatement,
         );
         if (reference) return { admitted: 0, refused: 1, reason: reason as ReasonCode };
         continue;

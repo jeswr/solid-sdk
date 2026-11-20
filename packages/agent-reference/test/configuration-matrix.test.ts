@@ -56,78 +56,73 @@ it("upserts world and branch lists by id while preserving existing literal-array
   expect(() => patch(original, JSON.parse('{"script":{"__proto__":{"value":2}}}'))).toThrow();
 });
 
-it("runs scoped branches and the declared layer change in each matrix cell", async () => {
-  const { profile, scenario } = loadCase(root, "mortgage-main");
-  const results = await runScenario(profile, scenario, { configuration: "all" });
-  expect(results).toHaveLength(
-    4 +
-      scenario.configurations.reduce(
-        (count, entry) =>
-          count +
-          1 +
-          scenarioSchema
-            .parse(matrixWorld(scenario, entry))
-            .branches.filter((branch) => !branch.onlyUnder || branch.onlyUnder === entry.id).length,
-        0,
-      ),
-  );
-  expect(results.filter((result) => !result.configuration).map((result) => result.path)).toEqual([
+const mortgage = loadCase(root, "mortgage-main");
+
+it("runs the four unconfigured mortgage paths", async () => {
+  const results = await runScenario(mortgage.profile, mortgage.scenario);
+  expect(results.every((result) => result.configuration === undefined)).toBe(true);
+  expect(results.map((result) => result.path)).toEqual([
     "main",
     "fee-amount-differs",
     "fee-payee-differs",
     "fee-no-offer",
   ]);
-  for (const entry of scenario.configurations) {
-    const paths = results.filter((result) => result.configuration === entry.id);
-    expect(paths.map((result) => result.path)).toEqual([
-      "main",
-      ...scenarioSchema
-        .parse(matrixWorld(scenario, entry))
-        .branches.filter(
-          (branch) =>
-            !("onlyUnder" in branch) || !branch.onlyUnder || branch.onlyUnder === entry.id,
-        )
-        .map((branch) => branch.id),
-    ]);
-    if (configurationById(alternativeWireId(entry.id))?.status === "unresolved") {
-      for (const path of paths) {
-        expect(path.trace).toBeUndefined();
-        expect(path.blocked).toMatch(
-          /no executable runtime configuration|registered suite constraint/,
-        );
-      }
-      continue;
+}, 180_000);
+
+it.each(
+  mortgage.scenario.configurations.map(({ id }) => id),
+)("runs scoped branches and the declared layer change in %s", async (configuration) => {
+  const { profile, scenario } = mortgage;
+  const entry = scenario.configurations.find(({ id }) => id === configuration);
+  if (!entry) throw new Error("Missing matrix entry");
+  const paths = await runScenario(profile, scenario, { configuration });
+  expect(paths.every((path) => path.configuration === entry.id)).toBe(true);
+  expect(paths.map((result) => result.path)).toEqual([
+    "main",
+    ...scenarioSchema
+      .parse(matrixWorld(scenario, entry))
+      .branches.filter(
+        (branch) => !("onlyUnder" in branch) || !branch.onlyUnder || branch.onlyUnder === entry.id,
+      )
+      .map((branch) => branch.id),
+  ]);
+  if (configurationById(alternativeWireId(entry.id))?.status === "unresolved") {
+    for (const path of paths) {
+      expect(path.trace).toBeUndefined();
+      expect(path.blocked).toMatch(
+        /no executable runtime configuration|registered suite constraint/,
+      );
     }
-    const header = paths[0]?.trace?.configuration;
-    expect(header?.id).toBe(entry.id);
-    for (const event of paths[0]?.trace?.events ?? []) {
-      expect(event.caption).not.toMatch(/https?:\/\/|urn:/);
-      expect(event.rule?.text ?? "").not.toMatch(/https?:\/\/|urn:/);
-      // Exact text under principal review keeps its bytes (brief 31 §2.4): the drafted email
-      // and the exact action parameters an approval binds to are shown as they are.
-      const reviewed =
-        event.part === "core" &&
-        event.caption === "Agent-written plain text for exact principal review.";
-      const chat = reviewed ? "" : (event.chat?.text ?? "").split(" Parameters: ")[0];
-      expect(chat).not.toMatch(/https?:\/\/|urn:/);
-    }
-    expect(Object.keys(header?.layers ?? {})).toEqual(Object.keys(BASELINE.layers));
-    expect(
-      Object.keys(BASELINE.layers).filter(
-        (layer) =>
-          header?.layers[layer as keyof typeof BASELINE.layers] !==
-          BASELINE.layers[layer as keyof typeof BASELINE.layers],
-      ),
-    ).toEqual(
-      // With `requires`, the prerequisite's layer change is part of the cell (brief 31 item 4).
-      Object.keys(BASELINE.layers).filter(
-        (layer) =>
-          layer in entry.change || layer in (matrixPrerequisite(scenario, entry)?.change ?? {}),
-      ),
-    );
+    return;
   }
-  // The matrix now includes 34 more live paths; retain every assertion and budget the aggregate run.
-}, 900_000);
+  const header = paths[0]?.trace?.configuration;
+  expect(header?.id).toBe(entry.id);
+  for (const event of paths[0]?.trace?.events ?? []) {
+    expect(event.caption).not.toMatch(/https?:\/\/|urn:/);
+    expect(event.rule?.text ?? "").not.toMatch(/https?:\/\/|urn:/);
+    // Exact text under principal review keeps its bytes (brief 31 §2.4): the drafted email
+    // and the exact action parameters an approval binds to are shown as they are.
+    const reviewed =
+      event.part === "core" &&
+      event.caption === "Agent-written plain text for exact principal review.";
+    const chat = reviewed ? "" : (event.chat?.text ?? "").split(" Parameters: ")[0];
+    expect(chat).not.toMatch(/https?:\/\/|urn:/);
+  }
+  expect(Object.keys(header?.layers ?? {})).toEqual(Object.keys(BASELINE.layers));
+  expect(
+    Object.keys(BASELINE.layers).filter(
+      (layer) =>
+        header?.layers[layer as keyof typeof BASELINE.layers] !==
+        BASELINE.layers[layer as keyof typeof BASELINE.layers],
+    ),
+  ).toEqual(
+    // With `requires`, the prerequisite's layer change is part of the cell (brief 31 item 4).
+    Object.keys(BASELINE.layers).filter(
+      (layer) =>
+        layer in entry.change || layer in (matrixPrerequisite(scenario, entry)?.change ?? {}),
+    ),
+  );
+}, 180_000);
 
 it("refuses a signed opening under a configuration the receiver does not advertise", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-core");
@@ -137,13 +132,14 @@ it("refuses a signed opening under a configuration the receiver does not adverti
   if (!sender || !receiver) throw new Error("Missing agents");
   sender.configurations = ["transport-email"];
   receiver.configurations = ["baseline"];
+  scenario.script = scenario.script.slice(0, 3);
+  scenario.branches = [];
   scenario.configurations = [
     {
       id: "transport-email",
       change: { transport: "email" },
       world: {
         parties,
-        script: scenario.script.slice(0, 3),
         carriage: { parties: [sender.id, receiver.id] },
       },
     },
@@ -165,14 +161,16 @@ it("refuses a signed step down inside an already selected conversation", async (
     ...party,
     configurations: ["transport-email", "baseline"],
   }));
-  scenario.configurations = [
+  scenario.script = scenario.script.slice(0, 5);
+  scenario.branches = [
     {
-      id: "transport-email",
-      change: { transport: "email" },
-      world: {
-        parties,
-        script: scenario.script.slice(0, 5),
-        carriage: { parties: ["sam-agent", "north-agent"] },
+      id: "step-down",
+      what: "The sender signs an application under the wrong configuration.",
+      onlyUnder: "transport-email",
+      expect: { outcome: "admit", check: "integrity", reason: "intact" },
+      catalogueExpected: { outcome: "refuse", reason: "configuration-mismatch" },
+      outline: [],
+      change: {
         inject: [
           {
             step: "application-arrives",
@@ -185,7 +183,22 @@ it("refuses a signed step down inside an already selected conversation", async (
       },
     },
   ];
-  const result = (await runScenario(profile, scenario, { configuration: "transport-email" }))[0];
+  scenario.configurations = [
+    {
+      id: "transport-email",
+      change: { transport: "email" },
+      world: {
+        parties,
+        carriage: { parties: ["sam-agent", "north-agent"] },
+      },
+    },
+  ];
+  const paths = await runScenario(profile, scenario, { configuration: "transport-email" });
+  const result = paths.find((path) => path.path === "step-down");
+  expect(result).toMatchObject({
+    disagrees: false,
+    actual: { outcome: "refuse", reason: "configuration-mismatch" },
+  });
   expect(
     result?.trace?.events.some(
       (event) => event.outcome === "refuse" && event.reason === "configuration-mismatch",

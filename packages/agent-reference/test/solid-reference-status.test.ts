@@ -36,8 +36,7 @@ it("publishes a trace for each of the five Solid access paths", () => {
     const paths = manifest.paths.filter((p) => p.configuration === configuration);
     expect(paths.map((path) => path.path)).toEqual(names);
     for (const path of paths) {
-      // Ordered comparison reports the authorized withdrawal before the later read refusal.
-      expect(path.status).toBe(path.path === "read-after-withdrawal" ? "disagrees" : "runs");
+      expect(path.status).toBe("runs");
       expect(path.reason).toBeUndefined();
       expect(path.trace).toBeDefined();
       expect(trace(path.trace!).configuration.id).toBe(configuration);

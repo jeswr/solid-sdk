@@ -63,10 +63,18 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(0);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(5);
   expect(alternatives).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(109);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toMatchObject([
-    { scenario: "mortgage-main", path: "a2a-task-state-lies", configuration: "transport-a2a" },
-  ]);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(110);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toEqual([]);
+  expect(
+    alternatives.find(
+      (path) =>
+        path.scenario === "mortgage-main" &&
+        path.path === "a2a-task-state-lies" &&
+        path.configuration === "transport-a2a",
+    ),
+  ).toMatchObject({
+    notReached: [expect.objectContaining({ seq: 131 }), expect.objectContaining({ seq: 153 })],
+  });
   const blocked = manifest.paths.filter((path) => path.status === "blocked");
   expect(blocked).toHaveLength(5);
   expect(blocked.every((path) => !path.trace)).toBe(true);

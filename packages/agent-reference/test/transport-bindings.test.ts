@@ -334,10 +334,14 @@ it("runs the transport-specific adversarial branches through separately keyed ag
   const refusalPath = pathResult("a2a-task-state-lies");
   expect(refusalPath).toMatchObject({
     expected: { outcome: "admit", reason: "intact" },
-    disagrees: true,
-    note: "changed before the judged decision",
+    disagrees: false,
+    notReached: [
+      { seq: 131, agent: "bank", outcome: "ask-more", reason: "assurance-insufficient" },
+      { seq: 153, agent: "sams-agent", outcome: "ask-principal", reason: "approval-required" },
+    ],
   });
-  expect(refusalPath.actual).toEqual({ outcome: "admit" });
+  expect(refusalPath.note).toBeUndefined();
+  expect(refusalPath.actual).toEqual({ outcome: "admit", reason: "intact", check: "integrity" });
   const refusal = refusalPath.trace.events;
   const a2aMain = pathResult("main", "transport-a2a").trace;
   const witness = { outcome: "admit", check: "integrity", reason: "intact" };

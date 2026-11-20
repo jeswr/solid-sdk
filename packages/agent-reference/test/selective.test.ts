@@ -14,7 +14,7 @@ import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
 
 const root = join(import.meta.dirname, "..");
-it("runs ordinary right-to-work disclosure and passport refusal, leaving the hidden-date predicate blocked", async () => {
+it("admits a verified right-to-work predicate as attested and refuses the passport scan", async () => {
   const { profile, scenario } = loadCase(root, "right-to-work");
   const paths = await runScenario(profile, scenario);
   expect(paths[0]?.matches).toBe(true);
@@ -22,10 +22,23 @@ it("runs ordinary right-to-work disclosure and passport refusal, leaving the hid
     outcome: "stop",
     reason: "excessive-scope",
   });
-  expect(paths[2]?.blocked).toBe(
-    "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries.",
-  );
-  expect(paths[2]?.trace).toBeUndefined();
+  const hidden = paths.find((path) => path.path === "hidden-validity-proof");
+  expect(hidden?.disagrees).toBe(false);
+  expect(hidden?.actual).toEqual({ outcome: "admit", reason: "fit-for-use", check: "fitness" });
+  const answer = hidden?.trace?.events.findLast(
+    (event) => event.kind === "message-in" && event.agent === "employer-agent",
+  )?.packet;
+  expect(answer?.layers.evidence.raw).toEqual([
+    expect.objectContaining({
+      claimType: "right-to-work.answer",
+      value: true,
+      derivation: expect.objectContaining({
+        assurance: "attested",
+        proofBinds: ["rule", "issuers", "fresh"],
+      }),
+    }),
+  ]);
+  expect(JSON.stringify(answer)).not.toContain("2027-06-01");
   const trace = JSON.stringify(paths[0]?.trace);
   expect(trace).not.toContain("fictional-passport-image");
   expect(trace).not.toContain("2027-06-01");

@@ -149,6 +149,7 @@ import {
   continuedReleaseProblem,
   decisionsOf,
   describeStep,
+  type RefusedStatement,
   stoppedReleaseProblem,
   witnessedDecision,
 } from "./compare.js";
@@ -198,6 +199,7 @@ export interface PathResult {
   readonly actual?: { outcome: string; reason?: string; check?: string };
   readonly expected?: { outcome: string; reason: string };
   readonly consequences?: readonly ManifestDecision[];
+  readonly notReached?: readonly ManifestDecision[];
   readonly setup?: readonly ManifestDecision[];
   readonly disagrees?: boolean;
   readonly note?: string;
@@ -620,8 +622,9 @@ export async function runScenario(
     if (witness && !witnessed) {
       expectationProblem = `expected ${witness.check}/${witness.reason} -> ${witness.outcome}`;
     }
-    // Proof and joint paths retain their protocol-specific checks on subsequent releases.
-    if (witness && witnessed && !world.requiredMethods.length) {
+    // Protocol-specific outbound stops keep their checks. Inbound refusals always
+    // protect the rejected data, including on proof and joint paths.
+    if (witness && witnessed && (!world.requiredMethods.length || witnessed.outcome === "refuse")) {
       const later = trace.events.slice(witnessed.seq);
       if (
         witness.outcome === "stop" &&
@@ -679,6 +682,7 @@ export async function runScenario(
             }
           : undefined;
     const setup = comparison?.setup.map(manifestDecision);
+    const notReached = comparison?.notReached?.map(manifestDecision);
     const denial = comparison?.denial;
     const consequences = firstDifference
       ? [
@@ -701,6 +705,7 @@ export async function runScenario(
       actual,
       expected,
       consequences,
+      ...(notReached?.length ? { notReached } : {}),
       ...(setup?.length ? { setup } : {}),
       ...(guardFailure
         ? { note: "changed before the judged decision" }
@@ -801,7 +806,31 @@ async function runPath(
   let clock = Date.parse("2026-11-13T09:00:00.000Z");
   const now = () => new Date(clock);
   const ids = idSource(`engine-${scenario.id}-${path}`);
-  const recorder = new TraceRecorder();
+  const standaloneRefusals = new Map<number, RefusedStatement>();
+  const payloads = new Map<number, unknown>();
+  const recorder = new TraceRecorder((seq, observation) => {
+    if (observation.kind === "payload") {
+      if (standaloneRefusals.size) payloads.set(seq, observation.value);
+      return;
+    }
+    const { evidence } = observation;
+    let statement = observation.claim as JsonObject | undefined;
+    // A failed signature may leave only the original carriage to inspect.
+    if (!statement) {
+      try {
+        statement = unverifiedEvidenceClaim(evidence);
+      } catch {
+        return; // The blanket check applies to an unidentifiable refusal.
+      }
+    }
+    if (typeof statement.id === "string")
+      standaloneRefusals.set(seq, {
+        id: statement.id,
+        claimDigest: digestOf(statement),
+        wireDigest: digestBytes(evidence.value),
+        statement,
+      });
+  });
   const cast = new Cast(now, {
     keys: async (id) => ({
       owner: await testKey(`engine/${id}/owner`),
@@ -2962,7 +2991,6 @@ async function runPath(
   const steps = new Map<number, ComparisonStep>();
   const effectReleases = new Set<number>();
   const effectSupport = new Map<number, readonly string[]>();
-  const standaloneRefusals = new Map<number, string>();
   const approvedAsks = new Set<number>();
   const pendingAsks = new Map<string, number>();
   for (const [index, step] of scenario.script.entries()) {
@@ -4384,10 +4412,6 @@ async function runPath(
         throw new Error(
           `step ${step.id}: standalone gate decisions do not match the offered statements`,
         );
-      for (const [index, id] of step.statements.entries()) {
-        const decision = required(decisions[index]);
-        if (decision.outcome === "refuse") standaloneRefusals.set(decision.seq, statementId(id));
-      }
     }
     const outboundDecisions = events.filter(
       (event) =>
@@ -4560,9 +4584,11 @@ async function runPath(
     trace,
     events: trace.events,
     steps,
+    scriptIds: new Set(scenario.script.map((step) => step.id)),
     effectReleases,
     effectSupport,
     standaloneRefusals,
+    payloads,
     approvedAsks,
   };
 }

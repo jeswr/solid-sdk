@@ -423,7 +423,9 @@ export class AgentRuntime {
   private readonly ledger: EvidenceLedger;
   private readonly clock: () => Date;
   /** The writer may advance the checkpoint only when it opened at the saved head. */
-  private readonly ledgerAuditTrusted: boolean;
+  private ledgerAuditTrusted: boolean;
+  private readonly deferredMandateRecords: Array<{ record: LedgerRecord; at: string }> = [];
+  private readonly presentationSink?: import("../trace/recorder.js").TraceSink;
   private readonly newId: () => string;
   private readonly handlers = new Map<string, OperationHandler>();
   private readonly effectAdapters = new Map<string, EffectAdapter>();
@@ -570,11 +572,16 @@ export class AgentRuntime {
     this.state.domain.derivedRequests ??= {};
     this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;
+    this.presentationSink = originalSink;
     const recordChecks: Record<string, string[]> = {};
     const gateRuns = { "inbound-gate": 1, "outbound-gate": 1 };
     const auditSink = {
       agent: originalSink?.agent ?? this.identity.actor,
-      emit: (event: import("../trace/types.js").TraceEventInput) => {
+      observePayloads: originalSink?.observePayloads,
+      emit: (
+        event: import("../trace/types.js").TraceEventInput,
+        observation?: import("../trace/recorder.js").TraceObservation,
+      ) => {
         if (event.kind === "record" && event.fact?.claimType === "usage-model.opinion")
           this.record({ type: "usage-model-opinion", ...copyData(event.fact), at: this.now() });
         if (event.kind === "check") {
@@ -613,7 +620,10 @@ export class AgentRuntime {
                 : undefined;
         const gateRun = gate ? gateRuns[gate] - (event.kind === "message-out" ? 1 : 0) : undefined;
         if (gate && event.kind === "decision") gateRuns[gate]++;
-        originalSink?.emit(gateRun === undefined ? event : { ...event, gateRun });
+        originalSink?.emit(
+          gateRun === undefined ? event : { ...event, gateRun },
+          originalSink.observePayloads ? observation : undefined,
+        );
       },
     };
     this.options = { ...options, gates: { ...options.gates, sink: auditSink } };
@@ -1024,7 +1034,10 @@ export class AgentRuntime {
         })
       : options.trust;
     const rt = new AgentRuntime({ ...options, trust });
-    await rt.loadMandateInto();
+    await rt.loadMandateInto(
+      undefined,
+      !rt.ledgerAuditTrusted && !!rt.ledger.recoverUncommittedSuffix,
+    );
     for (const entry of Object.values(rt.state.outbox))
       if (isMessagePacket(entry.wire)) {
         const message = await inspectMessagePacket(entry.wire);
@@ -1045,7 +1058,7 @@ export class AgentRuntime {
         rt.inbound.rememberCredentials(read.message);
       }
     }
-    rt.notificationDuties();
+    if (rt.ledgerAuditTrusted || !rt.ledger.recoverUncommittedSuffix) rt.notificationDuties();
     if (rt.ledger.requiresTrustedCheckpoint && rt.ledgerAuditTrusted) rt.persist();
     return rt;
   }
@@ -1102,7 +1115,7 @@ export class AgentRuntime {
     return this.exclusive(() => this.loadMandateInto(jws));
   }
 
-  private async loadMandateInto(jws?: string): Promise<void> {
+  private async loadMandateInto(jws?: string, deferRecord = false): Promise<void> {
     const source = jws ?? this.options.mandateJws;
     if (!source) {
       this.mandate = undefined;
@@ -1117,12 +1130,16 @@ export class AgentRuntime {
           limits: this.limits,
           at: this.now(),
         });
-    this.record(result.ok ? result.loaded.verification : result.verification);
+    const recordMandate = <T extends LedgerRecord>(record: T) => {
+      if (deferRecord) this.deferredMandateRecords.push({ record, at: this.now() });
+      else this.record(record);
+    };
+    recordMandate(result.ok ? result.loaded.verification : result.verification);
     if (result.ok) {
       this.mandate = result.loaded;
       this.gateMemory.rememberIdentifiers("*", result.loaded.mandate);
       this.mandateFailure = undefined;
-      this.record({
+      recordMandate({
         type: "grant",
         id: result.loaded.mandate.id,
         kind: "owner-mandate",
@@ -3247,7 +3264,7 @@ export class AgentRuntime {
       });
       const at = this.now();
       const redactions = approvalRedactions.length ? { approvalRedactions } : {};
-      this.ledger.append({ type: "record-anchor-receipt", ...head, ...redactions }, at);
+      this.record({ type: "record-anchor-receipt", ...head, ...redactions });
       const receipt = {
         type: "RecordAnchorReceipt",
         actor: this.identity.actor,
@@ -3905,7 +3922,7 @@ export class AgentRuntime {
    */
   auditRecord(): Promise<RecordAuditResult> {
     return this.exclusive(async () => {
-      const sink = this.options.gates?.sink;
+      const sink = this.ledgerAuditTrusted ? this.options.gates?.sink : this.presentationSink;
       const at = this.now();
       const audit = await auditReleases(
         this.auditEntries(),
@@ -6951,7 +6968,7 @@ export class AgentRuntime {
         "direct-response",
       );
     }
-    this.outbound.sealEffect(plan.intent, plan.key);
+    this.outbound.sealEffect(plan.intent, plan.key, plan.params);
     if (!(await this.outbound.ensureRecord(plan.key))) {
       if (expiryGrant) return [];
       return this.conclude(
@@ -9544,6 +9561,17 @@ export class AgentRuntime {
   }
 
   private record<T extends LedgerRecord>(record: T): LedgerEntry {
+    if (!this.ledgerAuditTrusted && this.ledger.recoverUncommittedSuffix) {
+      const head = this.ledger.head?.();
+      const saved = this.state.ledgerAuditHead;
+      if (!saved || !head || head.seq <= saved.seq)
+        throw new Error("Cannot resume the evidence ledger without a valid saved prefix");
+      this.ledger.recoverUncommittedSuffix(saved);
+      this.ledgerAuditTrusted = true;
+      for (const pending of this.deferredMandateRecords)
+        this.ledger.append(jointLogView(pending.record), pending.at);
+      this.deferredMandateRecords.length = 0;
+    }
     return this.ledger.append(jointLogView(record), this.now());
   }
 

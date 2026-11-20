@@ -312,12 +312,10 @@ solidTest("read-after-withdrawal is refused at the source and the copy remains",
     },
     { branch: "read-after-withdrawal" },
   );
-  // The authorized withdrawal is the first changed decision. The read still must be refused.
-  expect(path.disagrees).toBe(true);
-  expect(path.actual).toEqual({ outcome: "go" });
-  expect(path.expected).toEqual({ outcome: "refuse", reason: "not-authorised" });
-  expect(path.consequences).toContainEqual(
-    expect.objectContaining({ agent: "lender", outcome: "refuse", reason: "not-authorised" }),
+  expect(path.disagrees).toBe(false);
+  expect(path.actual).toEqual({ outcome: "refuse", check: "source", reason: "not-authorised" });
+  expect(path.setup).toContainEqual(
+    expect.objectContaining({ agent: "sams-agent", outcome: "go" }),
   );
   expect(fixture!.stores.get("north-store")?.has(item)).toBe(true);
   expect(records(fixture!, "north-agent")).toContainEqual(

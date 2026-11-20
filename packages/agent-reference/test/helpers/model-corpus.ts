@@ -198,17 +198,16 @@ export async function captureModelCorpus(): Promise<Corpus> {
     return packet(...args);
   });
   const proto = AgentRuntime.prototype as unknown as {
-    authorise(intent: ActionIntent, quiet?: boolean): unknown;
+    authorise(intent: ActionIntent, ...options: unknown[]): unknown;
   };
   const authorise = proto.authorise;
   const authSpy = vi.spyOn(proto, "authorise").mockImplementation(function (
     this: typeof proto,
-    intent,
-    quiet,
+    ...args: Parameters<typeof authorise>
   ) {
     authSpy.mockClear();
-    intents.set(digestOf(intent), copyData(intent));
-    return authorise.call(this, intent, quiet);
+    intents.set(digestOf(args[0]), copyData(args[0]));
+    return authorise.apply(this, args);
   });
   const append = MemoryLedger.prototype.append;
   const ledgerSpy = vi.spyOn(MemoryLedger.prototype, "append").mockImplementation(function (

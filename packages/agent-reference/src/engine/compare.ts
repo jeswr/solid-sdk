@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
+import { digestBytes, digestOf } from "../core/canonical.js";
+import type { JsonObject } from "../core/types.js";
 import type { TraceEvent } from "../trace/types.js";
+import { decodeAdapterJson, decodeCompactPayload } from "../wire/inspect.js";
 import type { Scenario } from "./schema.js";
 
 export function decisionsOf(events: readonly TraceEvent[]) {
@@ -130,14 +133,23 @@ export interface ComparisonStep {
   readonly descriptor: StepDescriptor;
 }
 
+export interface RefusedStatement {
+  readonly id: string;
+  readonly claimDigest: string;
+  readonly wireDigest: string;
+  readonly statement: JsonObject;
+}
+
 export interface ComparisonRun {
   readonly events: readonly TraceEvent[];
   /** Keyed by event sequence because multiple script steps can share a trace step number. */
   readonly steps?: ReadonlyMap<number, ComparisonStep>;
+  readonly scriptIds?: ReadonlySet<string>;
   readonly effectReleases?: ReadonlySet<number>;
   readonly effectSupport?: ReadonlyMap<number, readonly string[]>;
-  /** Statement ID by the sequence of its standalone inbound refusal. */
-  readonly standaloneRefusals?: ReadonlyMap<number, string>;
+  /** Statement identity and content by the sequence of its standalone inbound refusal. */
+  readonly standaloneRefusals?: ReadonlyMap<number, RefusedStatement>;
+  readonly payloads?: ReadonlyMap<number, unknown>;
   readonly approvedAsks?: ReadonlySet<number>;
 }
 
@@ -365,10 +377,131 @@ function matchesMessageRelease(release: TraceEvent | undefined, send: TraceEvent
   );
 }
 
-function containsItem(value: unknown, id: string): boolean {
-  if (Array.isArray(value)) return value.some((entry) => containsItem(entry, id));
+function claimText(value: unknown): string[] {
+  if (typeof value === "string") return value ? [value.toLowerCase()] : [];
+  if (Array.isArray(value)) return value.flatMap(claimText);
   const record = object(value);
-  return !!record && (record.id === id || Object.values(record).some((v) => containsItem(v, id)));
+  return record ? Object.values(record).flatMap(claimText) : [];
+}
+
+function claimScalars(value: unknown): string[] {
+  if (typeof value === "number" || typeof value === "boolean") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap(claimScalars);
+  const record = object(value);
+  return record ? Object.values(record).flatMap(claimScalars) : [];
+}
+
+function refusedContent(refused: RefusedStatement) {
+  const {
+    id: _id,
+    issuer: _issuer,
+    subject: _subject,
+    claimType: _claimType,
+    method: _method,
+    asOf: _asOf,
+    issuedAt: _issuedAt,
+    validUntil: _validUntil,
+    period: _period,
+    terms: _terms,
+    derivation: _derivation,
+    ...fields
+  } = refused.statement;
+  const references = [refused.id, refused.claimDigest, refused.wireDigest];
+  const cites = (value: string) => references.some((reference) => value.includes(reference));
+  // Issuer and subject identifiers can independently appear as protocol participants.
+  const participants = new Set(claimText([refused.statement.issuer, refused.statement.subject]));
+  const texts = [
+    ...claimText(fields).filter((text) => !participants.has(text)),
+    ...claimText(fields.value),
+  ];
+  const scalars = new Set(claimScalars(fields));
+  const claimFields = Object.entries(fields);
+  const contains = (value: unknown, matchLiterals: boolean, field?: string): boolean => {
+    const original = field === undefined ? undefined : fields[field];
+    const matchField = matchLiterals || field === "value";
+    if (typeof value === "string") {
+      if (cites(value)) return true;
+      const plaintext = value.toLowerCase();
+      if (matchLiterals && texts.some((text) => plaintext.includes(text))) return true;
+      if (matchField && typeof original === "string" && plaintext === original.toLowerCase())
+        return true;
+      if (
+        matchField &&
+        (typeof original === "number" || typeof original === "boolean") &&
+        plaintext === String(original)
+      )
+        return true;
+      if (
+        matchLiterals &&
+        field === "text" &&
+        (plaintext.match(/\b(?:true|false|\d+(?:\.\d+)?)\b/g) ?? []).some((token) =>
+          scalars.has(token),
+        )
+      )
+        return true;
+      try {
+        if (/^[\w-]+\.[\w-]+\.[\w-]+$/.test(value))
+          return (
+            digestBytes(value) === refused.wireDigest ||
+            contains(decodeCompactPayload(value), matchLiterals)
+          );
+        if (/^\s*(?:\{|\[)/.test(value)) return contains(decodeAdapterJson(value), matchLiterals);
+      } catch {
+        // Text fields can resemble an encoded statement.
+      }
+      return false;
+    }
+    const expected =
+      (matchField ? original : undefined) ?? (object(value) ? fields.value : undefined);
+    if (
+      expected !== undefined &&
+      expected !== null &&
+      value != null &&
+      typeof expected !== "string" &&
+      digestOf(value) === digestOf(expected)
+    )
+      return true;
+    if (Array.isArray(value)) {
+      if (
+        field === "bytes" &&
+        value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+      )
+        return contains(new TextDecoder().decode(Uint8Array.from(value)), matchLiterals);
+      return value.some((item) => contains(item, matchLiterals, field));
+    }
+    const record = object(value);
+    if (!record) return false;
+    if (
+      record.claimType === refused.statement.claimType &&
+      digestOf(record) === refused.claimDigest
+    )
+      return true;
+    if (
+      claimFields.length &&
+      claimFields.every(
+        ([key, expected]) =>
+          record[key] !== undefined && digestOf(record[key]) === digestOf(expected),
+      )
+    )
+      return true;
+    return Object.entries(record).some(
+      ([key, child]) => cites(key) || contains(child, matchLiterals, key),
+    );
+  };
+  return (value: unknown, store: boolean) => {
+    const record = object(value);
+    const source = record?.issuer ?? record?.source;
+    // A different claim admitted from a different source can share an individual literal.
+    // Its complete claim fields and all references are still checked for a copy.
+    const independent =
+      store &&
+      typeof source === "string" &&
+      typeof refused.statement.issuer === "string" &&
+      source !== refused.statement.issuer &&
+      typeof record?.claimType === "string" &&
+      record.claimType !== refused.statement.claimType;
+    return contains(value, !independent);
+  };
 }
 
 export function stoppedReleaseProblem(
@@ -403,16 +536,24 @@ export function stoppedReleaseProblem(
     );
   }
 
+  const withheld = [refusedContent(refused)];
+  const containsRefused = (value: unknown, store = false) =>
+    withheld.some((contains) => contains(value, store));
   const allowed = new Map<number, TraceEvent>();
   let preceding: TraceEvent | undefined;
   for (const event of later) {
     if (event.agent !== stop.agent) continue;
+    const nextRefusal = run.standaloneRefusals?.get(event.seq);
+    if (nextRefusal) withheld.push(refusedContent(nextRefusal));
     if (event.kind === "decision") {
       preceding = event;
       if (event.part === "outbound-gate" && event.outcome === "go") {
+        const payload = run.payloads?.get(event.seq);
         if (
-          event.actionScope?.evidence.includes(refused) ||
-          run.effectSupport?.get(event.seq)?.includes(refused)
+          (event.effectRelease && payload === undefined) ||
+          containsRefused(event.actionScope) ||
+          containsRefused(run.effectSupport?.get(event.seq)) ||
+          containsRefused(payload)
         )
           return true;
         if (event.gateRun !== undefined) allowed.set(event.gateRun, event);
@@ -420,23 +561,24 @@ export function stoppedReleaseProblem(
     }
     if (event.kind === "store") {
       // A decision after the refusal must admit the store in this trace step.
+      const payload = run.payloads?.get(event.seq);
       if (
-        event.fact?.id === refused ||
+        (!event.fact && payload === undefined) ||
+        containsRefused(event.fact, true) ||
+        containsRefused(payload, true) ||
         preceding?.part !== "inbound-gate" ||
         preceding.outcome !== "admit" ||
-        preceding.step !== event.step
+        !sameScriptStep(run, preceding, event)
       )
         return true;
     }
     if (event.kind === "message-out") {
       const release = event.gateRun === undefined ? undefined : allowed.get(event.gateRun);
-      const layers = event.packet?.layers;
       if (
         event.messageId === undefined ||
         !matchesMessageRelease(release, event) ||
-        containsItem(layers?.evidence.raw, refused) ||
-        containsItem(layers?.authority.raw, refused) ||
-        containsItem(layers?.content.raw, refused)
+        containsRefused(event.packet) ||
+        containsRefused(run.payloads?.get(event.seq))
       )
         return true;
     }
@@ -599,14 +741,9 @@ function prefixGuard(
   const unexplained = setup.find(
     (event) => !changedSteps.has(branch.steps?.get(event.seq)?.id ?? ""),
   );
-  if (permissive) return { setup, failure: unexplained };
+  if (permissive) return { setup, failure: unexplained, notReached: [] };
 
-  const mainBars = mainDecisions.filter((event) => !passing(event));
   const branchBars = prefix.filter((event) => !passing(event));
-  const changed = branchBars.find((event, i) => {
-    const expected = mainBars[i];
-    return !expected || !sameDecision(expected, event);
-  });
   // A shared release reaches its actual main position, even when earlier steps were skipped.
   const comparable = prefix.filter((event) => !passing(event) || aligned.has(event.seq));
   const lastShared = releases.findLast((event) => aligned.has(event.seq));
@@ -616,16 +753,39 @@ function prefixGuard(
       (boundary ? event.seq < boundary.seq : index < comparable.length) ||
       (reached !== undefined && event.seq <= reached.seq),
   );
-  const missing = mainPrefix.filter((event) => !passing(event))[branchBars.length];
+  const branchStepIds = new Set(branch.scriptIds);
+  for (const step of branch.steps?.values() ?? []) branchStepIds.add(step.id);
+  const notReached = mainPrefix.filter((event) => {
+    if (passing(event) || !branch.scriptIds) return false;
+    const step = main.steps?.get(event.seq);
+    return step !== undefined && !branchStepIds.has(step.id);
+  });
+  const dropped = new Set(notReached);
+  const mainBars = mainDecisions.filter((event) => !passing(event) && !dropped.has(event));
+  const changed = branchBars.find((event, i) => {
+    const expected = mainBars[i];
+    return !expected || !sameDecision(expected, event);
+  });
+  // A bar must occur before every shared release it preceded on the main path.
+  const missing = mainBars.find((bar, index) => {
+    if (!mainPrefix.includes(bar)) return false;
+    const match = branchBars[index];
+    return (
+      !match ||
+      releases.some(
+        (release) => (aligned.get(release.seq)?.seq ?? 0) > bar.seq && match.seq > release.seq,
+      )
+    );
+  });
   const skipped =
     missing &&
-    (comparable[mainPrefix.indexOf(missing)] ??
-      releases.find((event) => (aligned.get(event.seq)?.seq ?? 0) > missing.seq) ??
+    (releases.find((event) => (aligned.get(event.seq)?.seq ?? 0) > missing.seq) ??
+      comparable[mainPrefix.indexOf(missing)] ??
       missing);
   const failure = [unexplained, changed, skipped]
     .filter((event) => event !== undefined)
     .sort((a, b) => a.seq - b.seq)[0];
-  return { setup, failure };
+  return { setup, failure, notReached };
 }
 
 export function compareBranch(
@@ -643,6 +803,7 @@ export function compareBranch(
   failure?: TraceEvent;
   denial?: TraceEvent;
   setup: TraceEvent[];
+  notReached?: TraceEvent[];
 } {
   const { judgedAgent, witness, expectedOutcome, changedSteps } = options;
   const decisions = decisionsOf(branch.events);
@@ -707,6 +868,7 @@ export function compareBranch(
     judged,
     diverges: !!(judged || permissive || fault),
     failure: guarded.failure,
+    notReached: guarded.notReached,
     denial: ask ? difference : undefined,
     setup: [...setup, ...guarded.setup].sort((a, b) => a.seq - b.seq),
   };
