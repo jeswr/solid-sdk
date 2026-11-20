@@ -1,0 +1,158 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "mcp": "https://jeswr.org/ns/mcp#",
+    "dcterms": "http://purl.org/dc/terms/",
+    "dpv": "https://w3id.org/dpv#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "sh": "http://www.w3.org/ns/shacl#"
+  },
+  "entities": [
+    {
+      "name": "ClientConnection",
+      "typeIris": [
+        "https://jeswr.org/ns/mcp#ClientConnection"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "access",
+          "predicate": "https://jeswr.org/ns/mcp#access",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/mcp#ReadOnly",
+            "https://jeswr.org/ns/mcp#ReadWrite"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "client",
+          "predicate": "https://jeswr.org/ns/mcp#client",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "expiresAt",
+          "predicate": "https://jeswr.org/ns/mcp#expiresAt",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "lastUsed",
+          "predicate": "https://jeswr.org/ns/mcp#lastUsed",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "personalDataMode",
+          "predicate": "https://jeswr.org/ns/mcp#personalDataMode",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "https://jeswr.org/ns/mcp#OwnerPolicy",
+            "https://jeswr.org/ns/mcp#Mandate",
+            "https://jeswr.org/ns/mcp#NoPersonalData"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "redirectOrigin",
+          "predicate": "https://jeswr.org/ns/mcp#redirectOrigin",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "resource",
+          "predicate": "https://jeswr.org/ns/mcp#resource",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https",
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "revokedAt",
+          "predicate": "https://jeswr.org/ns/mcp#revokedAt",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "scope",
+          "predicate": "https://jeswr.org/ns/mcp#scope",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "purposes",
+          "predicate": "https://w3id.org/dpv#hasPurpose",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        }
+      ]
+    }
+  ]
+}

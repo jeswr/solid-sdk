@@ -95,6 +95,9 @@ export interface PodScopeOptions {
 }
 
 // @public
+export function readBoundedText(response: Response, maxBytes: number, signal?: AbortSignal): Promise<string>;
+
+// @public
 export function redactUserinfo(value: string): string;
 
 // @public
@@ -120,6 +123,11 @@ export interface ResolvedAddress {
     readonly address: string;
     // (undocumented)
     readonly family: number;
+}
+
+// @public
+export class ResponseBodyLimitError extends RangeError {
+    constructor();
 }
 
 // @public

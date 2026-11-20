@@ -281,3 +281,45 @@ it.each([
   await expect(store.put(await medicalFact())).rejects.toThrow("strong ETag");
   expect(write).not.toHaveBeenCalled();
 });
+
+it("direct owner-only helper protects a dedicated connection container without changing shared ancestors", async () => {
+  const { ensureOwnerOnlyContainer } = await import("../src/index.js");
+  const { pod, memory, write } = fixture();
+  await seedAncestors(memory);
+  const target = `${ROOT}private/pkg/clients/`;
+  await ensureOwnerOnlyContainer(pod, target, boundary);
+  const rules = await parseRdf(decode((await pod.read(policy(target))).body), "text/turtle");
+  const rule = new RdfNode(`${policy(target)}#owner`, rules);
+  expect(rule.oneIri(`${ACL}agent`)).toBe(options.owner);
+  expect(rule.oneIri(`${ACL}default`)).toBe(target);
+  expect([...rule.terms(`${ACL}mode`)].map((term) => term.value).sort()).toEqual(
+    ["Control", "Read", "Write"].map((mode) => ACL + mode),
+  );
+  expect(write.mock.calls.some(([url]) => url === FIRST)).toBe(false);
+  await ensureOwnerOnlyContainer(pod, target, boundary);
+  expect(write.mock.calls.some(([url, , , cond]) => url === policy(target) && !!cond.ifMatch)).toBe(
+    true,
+  );
+});
+it("direct owner-only helper rejects unsafe targets and absent WAC before private writes", async () => {
+  const { ensureOwnerOnlyContainer } = await import("../src/index.js");
+  for (const target of [
+    ROOT,
+    "https://foreign.example/clients/",
+    `${ROOT}private/pkg/clients`,
+    `${ROOT}private/pkg/clients/?q=x`,
+    `${ROOT}private/pkg/clients/#f`,
+    `${ROOT}private/pkg/a%2fb/`,
+  ]) {
+    const { pod, write } = fixture();
+    await expect(ensureOwnerOnlyContainer(pod, target)).rejects.toThrow(
+      "WAC protection unavailable",
+    );
+    expect(write).not.toHaveBeenCalled();
+  }
+  const { memory, write } = fixture();
+  await expect(ensureOwnerOnlyContainer(memory, `${ROOT}private/pkg/clients/`)).rejects.toThrow(
+    "WAC protection unavailable",
+  );
+  expect(write).not.toHaveBeenCalled();
+});

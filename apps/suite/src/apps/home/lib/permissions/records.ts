@@ -5,8 +5,8 @@ import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { Store } from "n3";
+import { dpvPurposeLabel } from "@/shell/lib/dpv-labels";
 import { readResource, subjectOf } from "../model/rdf";
-import { dpvPurposeLabel } from "./dpvLabels";
 import type { GrantRecord, GrantRecordIndex, ModeId } from "./types";
 import { ACL, DPV, ODRL } from "./vocab";
 

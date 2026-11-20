@@ -274,3 +274,18 @@ assertion would invalidate its content-derived identifier. The reference builder
 implicit `health:` and `core:` prefixes in `parseAssertion` stay legacy for the
 same reason. Use typed templates or explicitly declare canonical prefixes when
 authoring new Turtle assertions. Existing Python fixture identifiers remain valid.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`ensureOwnerOnlyContainer(pod, containerUrl, options?)` is the shared WAC provisioning helper.
+It validates the canonical pod root, owner and descendant container, preserves existing shared
+ancestors and their ACLs, protects new ancestors before creation, and establishes a dedicated
+owner-only Read/Write/Control ACL with an inheritable default on the target. Only discovered
+WAC ACL URLs are used; missing WAC/ACP, non-dedicated ACLs or unsafe discovery fail closed.
+Existing ACL replacement requires a strong ETag and If-Match; absent ACLs use If-None-Match: *.
+The optional allowAclUrl predicate constrains every discovered ACL before access. Transport and
+conditional-write failures propagate. NanopubStore uses this same helper without changing its
+existing Memory protection unavailable or storage-error contracts.
+
+`SPECIAL_CATEGORIES` is the frozen, readonly inventory behind `isSpecialCategory`.
+Browser consumers can import it from `@jeswr/pkg-memory/categories`, which has no Node
+or RDF imports. The root entry also exports it; financial data remains separate.

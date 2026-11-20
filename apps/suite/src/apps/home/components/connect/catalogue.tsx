@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
+import { useOnline } from "@/shell/lib/use-online";
 import { filterCatalogue } from "../../lib/connect/catalogue";
 import { relativeSync } from "../../lib/connect/copy";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
@@ -12,7 +13,6 @@ import { useConnectors } from "../../state/connectors";
 import { useHomeSession } from "../home-app";
 import { entries } from "./config";
 import { ConnectorLogo, StatusBadge } from "./shared";
-import { useOnline } from "./use-online";
 
 const domains = [...DOMAINS, UNCATEGORISED];
 export function ConnectCatalogue() {

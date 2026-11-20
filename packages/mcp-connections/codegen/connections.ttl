@@ -1,0 +1,25 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix mcp: <https://jeswr.org/ns/mcp#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dpv: <https://w3id.org/dpv#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+mcp:ClientConnection a owl:Class ; rdfs:label "Client connection"@en ; rdfs:comment "An owner-controlled denial record for a vault-backed MCP grant."@en .
+mcp:resource a owl:ObjectProperty ; rdfs:label "resource"@en ; rdfs:comment "Connection resource."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range rdfs:Resource .
+mcp:client a owl:ObjectProperty ; rdfs:label "client"@en ; rdfs:comment "Connection client."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range rdfs:Resource .
+mcp:redirectOrigin a owl:ObjectProperty ; rdfs:label "redirectOrigin"@en ; rdfs:comment "Connection redirectOrigin."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range rdfs:Resource .
+mcp:scope a owl:DatatypeProperty ; rdfs:label "scope"@en ; rdfs:comment "Connection scope."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range xsd:string .
+mcp:access a owl:ObjectProperty ; rdfs:label "access"@en ; rdfs:comment "Connection access."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range rdfs:Resource .
+mcp:personalDataMode a owl:ObjectProperty ; rdfs:label "personalDataMode"@en ; rdfs:comment "Connection personalDataMode."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range rdfs:Resource .
+mcp:expiresAt a owl:DatatypeProperty ; rdfs:label "expiresAt"@en ; rdfs:comment "Connection expiresAt."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range xsd:dateTime .
+mcp:lastUsed a owl:DatatypeProperty ; rdfs:label "lastUsed"@en ; rdfs:comment "Connection lastUsed."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range xsd:date .
+mcp:revokedAt a owl:DatatypeProperty ; rdfs:label "revokedAt"@en ; rdfs:comment "Connection revokedAt."@en ; rdfs:domain mcp:ClientConnection ; rdfs:range xsd:dateTime .
+mcp:ReadOnly a owl:NamedIndividual ; rdfs:label "ReadOnly"@en ; rdfs:comment "Connection policy value ReadOnly; descriptive only, never grants authority."@en .
+mcp:ReadWrite a owl:NamedIndividual ; rdfs:label "ReadWrite"@en ; rdfs:comment "Connection policy value ReadWrite; descriptive only, never grants authority."@en .
+mcp:OwnerPolicy a owl:NamedIndividual ; rdfs:label "OwnerPolicy"@en ; rdfs:comment "Connection policy value OwnerPolicy; descriptive only, never grants authority."@en .
+mcp:Mandate a owl:NamedIndividual ; rdfs:label "Mandate"@en ; rdfs:comment "Connection policy value Mandate; descriptive only, never grants authority."@en .
+mcp:NoPersonalData a owl:NamedIndividual ; rdfs:label "NoPersonalData"@en ; rdfs:comment "Connection policy value NoPersonalData; descriptive only, never grants authority."@en .

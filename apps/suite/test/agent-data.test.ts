@@ -303,6 +303,36 @@ describe("agent paths and discovery", () => {
 });
 
 describe("agent client", () => {
+  it("fails closed on invalid UTF-8 and preserves body errors", async () => {
+    for (const bytes of [[255], [0xc3]])
+      await expect(
+        readRdfDocument(
+          new Response(new Uint8Array(bytes), {
+            headers: { "content-type": "text/turtle" },
+          }),
+        ),
+      ).rejects.toThrow(TypeError);
+    const failure = new RangeError("body failed");
+    await expect(
+      readRdfDocument(
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              controller.error(failure);
+            },
+          }),
+          { headers: { "content-type": "text/turtle" } },
+        ),
+      ),
+    ).rejects.toBe(failure);
+    expect(
+      await readRdfDocument(
+        new Response(null, {
+          headers: { "content-type": "text/turtle", etag: '"empty"' },
+        }),
+      ),
+    ).toEqual({ text: "", contentType: "text/turtle", etag: '"empty"' });
+  });
   it("bounds and checks the format of every listing and discovery document", async () => {
     const seed = await buildDemoSeed(NOW);
     const pod = createDemoPod({ root: DEMO_ROOT, seed });

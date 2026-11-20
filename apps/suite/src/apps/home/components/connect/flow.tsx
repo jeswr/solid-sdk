@@ -14,6 +14,7 @@ import { EmptyState, ErrorState, Progress } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
+import { useOnline } from "@/shell/lib/use-online";
 import { type ConnectorEntry, destinationsFor } from "../../lib/connect/catalogue";
 import type { ConnectionMode } from "../../lib/connect/connection-state";
 import {
@@ -40,7 +41,6 @@ import {
 import { login, sourceFetch } from "./oauth-login";
 import { requiredScopesFor, withRequiredScopes, withSelectedScopes } from "./scopes";
 import { ConnectorLogo, StatusBadge } from "./shared";
-import { useOnline } from "./use-online";
 
 /** Abort reason when the connection drops: the user did not cancel. */
 class WentOffline extends Error {

@@ -1,0 +1,25 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Title maxLength 256 is enforced strictly by the facade: generator admission
+# currently refuses sh:maxLength. No SHACL constraint is silently discarded.
+@prefix mcp: <https://jeswr.org/ns/mcp#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix dpv: <https://w3id.org/dpv#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+[] a sh:NodeShape ; sh:targetClass mcp:ClientConnection ;
+  sh:property [ sh:path mcp:resource ; sh:name "resource" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:client ; sh:name "client" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dcterms:title ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:redirectOrigin ; sh:name "redirectOrigin" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:scope ; sh:name "scope" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:access ; sh:name "access" ; sh:nodeKind sh:IRI ; sh:in (mcp:ReadOnly mcp:ReadWrite) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:personalDataMode ; sh:name "personalDataMode" ; sh:nodeKind sh:IRI ; sh:in (mcp:OwnerPolicy mcp:Mandate mcp:NoPersonalData) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dpv:hasPurpose ; sh:name "purposes" ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path dcterms:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:expiresAt ; sh:name "expiresAt" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:lastUsed ; sh:name "lastUsed" ; sh:datatype xsd:date ; sh:maxCount 1 ] ;
+  sh:property [ sh:path mcp:revokedAt ; sh:name "revokedAt" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] .

@@ -1,0 +1,31 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "shapesBase": "https://jeswr.org/ns/mcp/shapes#",
+  "prefixes": {
+    "mcp": "https://jeswr.org/ns/mcp#",
+    "dcterms": "http://purl.org/dc/terms/",
+    "dpv": "https://w3id.org/dpv#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "sh": "http://www.w3.org/ns/shacl#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://jeswr.org/ns/mcp#ClientConnection",
+      "name": "ClientConnection",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "title": {
+          "sanitizeText": false
+        },
+        "scope": {
+          "sanitizeText": false
+        }
+      }
+    }
+  ]
+}
