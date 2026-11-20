@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 import { DataFactory } from "n3";
 import { expect, it } from "vitest";
 import { canonicalJson, digestBytes, digestOf } from "../src/core/canonical.js";
-import type { AnyMessage, JsonObject } from "../src/core/types.js";
+import type { AnyMessage, EvidenceItem, JsonObject } from "../src/core/types.js";
 import { verifierRegistry } from "../src/derive/verifiers.js";
 import {
   type ComparisonRun,
@@ -20,13 +20,15 @@ import {
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import type { Scenario } from "../src/engine/schema.js";
+import { TYP } from "../src/mechanisms/statements.js";
 import { MessageNode } from "../src/model/message-nodes.js";
 import { NamedValueNode, NamedValuesNode, SCHEMA, scopedId } from "../src/model/named-values.js";
 import { CONFIG_PUBLIC } from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
-import { signClaim } from "../src/scenarios/common.js";
+import { Cast, mandateOf, signClaim } from "../src/scenarios/common.js";
 import type { PacketView, TraceEvent } from "../src/trace/types.js";
+import { inspectEvidenceJws } from "../src/wire/evidence-jws.js";
 import { signCompact } from "../src/wire/jws-compact.js";
 import { inspectMessagePacket, writeMessagePacket } from "../src/wire/message-packet.js";
 import { ToyJointProtocol } from "./doubles/joint.js";
@@ -218,6 +220,7 @@ function afterRefusal(
   payloads?: ReadonlyMap<number, unknown>,
   observations?: Pick<ComparisonRun, "admissions" | "effectSupport">,
   statement = refusedStatement,
+  scenario?: Scenario,
 ) {
   return stoppedReleaseProblem(
     {
@@ -228,6 +231,7 @@ function afterRefusal(
     },
     stop,
     "stop",
+    scenario,
   );
 }
 
@@ -312,11 +316,9 @@ it("preserves the fee acceptance and the P4 stop in the recorded invoice branch"
     commit: generated.commit,
   });
   const branch = paths.find((path) => path.path === "branch-1");
-  // The separate OwnerMandate evidence contains two more uses of the verb.
   expect(branch).toMatchObject({
-    disagrees: true,
+    disagrees: false,
     actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
-    note: "an effect followed a stop",
   });
   expect(branch?.trace?.events[9]).toMatchObject({ kind: "decision", outcome: "admit" });
   expect(branch?.trace?.events[10]).toMatchObject({
@@ -435,6 +437,44 @@ it.each([
     ).toBe(true);
 });
 
+it("compares an overwritten JSON object as a canonical whole value", () => {
+  const statement = { ...refusedClaim, value: { quota: 12, limit: 5 } };
+  const refused = { ...refusedStatement, claimDigest: digestOf(statement), statement };
+  const check = (details: string) =>
+    afterRefusal(
+      [laterAdmit, stored],
+      checked(1),
+      refusal,
+      new Map([[stored.seq, { details }]]),
+      undefined,
+      refused,
+    );
+  expect(check('{"value":{"limit":5,"quota":12},"value":{"quota":13}}')).toBe(true);
+  expect(check('{"value":{"limit":5,"quota":11},"value":{"quota":13}}')).toBe(false);
+});
+
+it.each([
+  true,
+  false,
+])("checks a refused boolean %s against case-insensitive same-field text", (approved) => {
+  const statement = { ...refusedClaim, approved };
+  const refused = { ...refusedStatement, claimDigest: digestOf(statement), statement };
+  const check = (details: unknown) =>
+    afterRefusal(
+      [laterAdmit, stored],
+      checked(1),
+      refusal,
+      new Map([[stored.seq, { details }]]),
+      undefined,
+      refused,
+    );
+  expect(check({ approved: String(approved).toUpperCase() })).toBe(true);
+  expect(check(`{"approved":"${String(approved).toUpperCase()}","approved":${!approved}}`)).toBe(
+    true,
+  );
+  expect(check({ approved: String(!approved).toUpperCase() })).toBe(false);
+});
+
 it("checks JSON-carried values without counting a matching property name", () => {
   const checkStore = (details: unknown) =>
     afterRefusal(
@@ -454,13 +494,18 @@ const externalClaim = {
   destination: refusedClaim.account,
 };
 
-function admittedClaim(statement: JsonObject = externalClaim, wire = "verified statement bytes") {
+function admittedClaim(
+  statement: JsonObject = externalClaim,
+  wire = "verified statement bytes",
+  seq = laterAdmit.seq,
+  party = "urn:agent",
+) {
   return new Map([
     [
-      laterAdmit.seq,
+      seq,
       {
         kind: "admitted-statements" as const,
-        party: "urn:agent",
+        party,
         statements: [
           { statement, claimDigest: digestOf(statement), wireDigest: digestBytes(wire) },
         ],
@@ -471,6 +516,7 @@ function admittedClaim(statement: JsonObject = externalClaim, wire = "verified s
 
 const useRule = { id: "urn:rule:paid-service", action: "use", target: "urn:op:service" };
 const ownParty = "urn:party:agent";
+const ownActor = "urn:actor:agent";
 const peerParty = "urn:party:peer";
 const proposalId = "urn:message:proposal";
 const termsDigest = digestOf({ fee: 1 });
@@ -496,6 +542,19 @@ interface ActionSlotFixture {
   readonly admit?: Partial<TraceEvent> | null;
   readonly cite?: boolean;
   readonly revoke?: boolean;
+  readonly mandateEvidence?:
+    | "unchanged"
+    | "body copy"
+    | "body bytes"
+    | "re-signed"
+    | "edited"
+    | "extended"
+    | "inbound"
+    | "other issuer"
+    | "other slot"
+    | "before refusal"
+    | "silent revocation"
+    | "future revocation";
   readonly native?: "valid" | "other subject" | "payee" | "duplicate recipient" | "attachment";
 }
 
@@ -518,6 +577,7 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     admit = {},
     cite,
     revoke,
+    mandateEvidence,
     native,
   } = options;
   const operation = useRule.target;
@@ -528,13 +588,13 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
       .slice(0, 2)
       .map((party) =>
         party.runs === "agent"
-          ? { ...party, id: "agent", actsFor: "owner" }
+          ? { ...party, id: "agent", actsFor: "owner", actor: ownActor }
           : { ...party, id: "owner", identity: ownParty },
       ),
     mandates: [
       {
         agent: "agent",
-        autonomous: rule ? [rule] : [],
+        autonomous: rule ? [{ ...rule, type: "permission" }] : [],
         withApproval: [],
         prohibitions: [],
         standingRules: [],
@@ -584,20 +644,91 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     format: "awp-action-intent/0.1",
     value: bytes,
   } as const;
+  const evidence: EvidenceItem[] = mandateEvidence ? [] : [intentEvidence];
+  let copy: string | undefined;
+  let inboundMandate: { statement: JsonObject; wire: string } | undefined;
+  if (mandateEvidence) {
+    const cast = new Cast(() => new Date("2026-11-13T09:00:00.000Z"), {
+      keys: async (id) => ({
+        owner: await testKey(`engine/${id}/owner`),
+        actor: await testKey(`engine/${id}/actor`),
+      }),
+    });
+    const provisioned = await cast.add(
+      { name: "agent", party: ownParty, actor: ownActor },
+      mandateOf(world.id, [{ ...useRule, type: "permission", action: "use" }]),
+      [operation],
+    );
+    const original = provisioned.mandateJws;
+    const { payload } = inspectEvidenceJws(original);
+    let credential = original;
+    switch (mandateEvidence) {
+      case "body copy":
+        copy = "use";
+        break;
+      case "body bytes":
+        copy = original;
+        break;
+      case "re-signed":
+        credential = await signCompact(
+          provisioned.ownerKey,
+          TYP.mandate,
+          JSON.parse(canonicalJson(payload)),
+        );
+        break;
+      case "edited": {
+        const [header, , signature] = original.split(".");
+        const bytes = Buffer.from(JSON.stringify({ ...payload, note: "Edited" }));
+        credential = `${header}.${bytes.toString("base64url")}.${signature}`;
+        break;
+      }
+      case "extended":
+        credential = await signCompact(provisioned.ownerKey, TYP.mandate, {
+          ...payload,
+          extra: "extension",
+        });
+        break;
+      case "inbound": {
+        const statement = { ...payload, id: acceptedId };
+        credential = await signCompact(provisioned.ownerKey, TYP.mandate, statement);
+        inboundMandate = { statement, wire: credential };
+        break;
+      }
+      case "other issuer":
+        credential = await signCompact(key, TYP.mandate, { ...payload, issuer: peerParty });
+        break;
+    }
+    evidence.push({
+      role: mandateEvidence === "other slot" ? "credential" : "authorisation",
+      format: "jws-compact",
+      value: credential,
+    });
+  }
   const message = {
     profile: PILOT_PROFILE,
     configuration: CONFIG_PUBLIC,
     id: gated.messageId,
     conversation: scope.conversation,
-    kind: "accept" as const,
-    from: { actor: "urn:actor:agent", onBehalfOf: ownParty },
+    from: { actor: ownActor, onBehalfOf: ownParty },
     to: { actor: "urn:actor:peer", party: recipient },
     inReplyTo: proposalId,
     createdAt: "2026-11-13T09:00:00Z",
     expiresAt: "2026-11-13T10:00:00Z",
-    body: { proposal: proposalId, termsDigest, agreement: "urn:agreement", ...body },
-    ...(content ? { contents: content } : {}),
-    evidence: [intentEvidence],
+    ...(mandateEvidence
+      ? {
+          kind: "refuse" as const,
+          body: {
+            ref: proposalId,
+            reason: "source-not-authoritative",
+            ...(copy && { detail: copy }),
+          },
+        }
+      : {
+          kind: "accept" as const,
+          body: { proposal: proposalId, termsDigest, agreement: "urn:agreement", ...body },
+          ...(content ? { contents: content } : {}),
+        }),
+    evidence,
   };
   let wire: unknown;
   let observed: unknown = message;
@@ -605,7 +736,7 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     const support = await signClaim(key, { ...externalClaim, destination: "unrelated" });
     const node = MessageNode.toNode({
       ...message,
-      evidence: [{ role: "authorisation", format: "jws-compact", value: support }, intentEvidence],
+      evidence: [{ role: "authorisation", format: "jws-compact", value: support }, ...evidence],
     } as AnyMessage);
     if (native === "other subject") {
       NamedValuesNode.from({ recipient }, "urn:outside-intent", node.dataset);
@@ -638,6 +769,8 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
       );
     observed = await inspectMessagePacket(packet);
     expect(observed).toMatchObject({ id: message.id, to: { party: recipient } });
+    if (mandateEvidence)
+      expect(observed).toMatchObject({ evidence: expect.arrayContaining(evidence) });
     wire = packet;
   } else {
     wire = { format: "awp-jws-compact/0.1", jws: await signCompact(key, "message+jws", message) };
@@ -717,18 +850,28 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     },
   ];
   const statement = { ...refusedFields, id: refusedId, claimType: "test.refused" };
+  const steps = new Map<number, ComparisonStep>();
+  if (revoke || mandateEvidence === "before refusal")
+    steps.set(revoke ? 3 : 1, { id: "revoked", descriptor: { type: "revoke-mandate", items: [] } });
+  if (mandateEvidence === "silent revocation" || mandateEvidence === "future revocation") {
+    const revokeStep = { id: "revoked", agent: "agent", type: "revoke-mandate" } as const;
+    const sendStep = { id: "send", agent: "agent", type: "instruct", text: "Send" } as const;
+    world.script =
+      mandateEvidence === "silent revocation" ? [revokeStep, sendStep] : [sendStep, revokeStep];
+    steps.set(9, { id: sendStep.id, descriptor: describeStep(sendStep) });
+  }
   return stoppedReleaseProblem(
     {
       events,
-      steps: revoke
-        ? new Map([[3, { id: "revoked", descriptor: { type: "revoke-mandate", items: [] } }]])
-        : undefined,
+      steps: steps.size ? steps : undefined,
       standaloneRefusals: new Map([
         [refusal.seq, { ...refusedStatement, statement, claimDigest: digestOf(statement) }],
       ]),
-      admissions: cite
-        ? admittedClaim({ ...externalClaim, destination: recipient, value: { payee: recipient } })
-        : undefined,
+      admissions: inboundMandate
+        ? admittedClaim(inboundMandate.statement, inboundMandate.wire, 5, ownParty)
+        : cite
+          ? admittedClaim({ ...externalClaim, destination: recipient, value: { payee: recipient } })
+          : undefined,
       payloads: new Map<number, unknown>([
         [release.seq, parameters],
         [9, { message: observed, wire }],
@@ -743,6 +886,34 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
 it("masks the action of a passed scenario mandate and the recipient of the admitted proposal", async () => {
   expect(await checkActionSlots({ refusedFields: { terms: { action: "use" } } })).toBe(false);
   expect(await checkActionSlots({ refusedFields: { value: { payee: peerParty } } })).toBe(false);
+});
+
+it.each([
+  ["unchanged", undefined, false],
+  ["unchanged", "valid", false],
+  ["body copy", undefined, true],
+  ["body copy", "valid", true],
+  ["body bytes", undefined, true],
+  ["body bytes", "valid", true],
+  ["re-signed", undefined, true],
+  ["edited", undefined, true],
+  ["extended", undefined, true],
+  ["inbound", undefined, true],
+  ["other issuer", undefined, true],
+  ["other slot", undefined, true],
+  ["other slot", "valid", true],
+  ["before refusal", undefined, true],
+  ["silent revocation", undefined, true],
+  ["future revocation", undefined, false],
+] as const)("checks provisioned mandate evidence (%s, %s)", async (mandateEvidence, native, problem) => {
+  expect(
+    await checkActionSlots({
+      action: "read",
+      mandateEvidence,
+      native,
+      refusedFields: { terms: { action: "use" } },
+    }),
+  ).toBe(problem);
 });
 
 it("requires the scenario register's exact party for the operation named by the recipient check", async () => {
@@ -849,13 +1020,49 @@ it("allows matching values in a verified independent store at the admitted diges
   expect(checkStore({ ...externalClaim, claimType: "test.changed" })).toBe(true);
 });
 
-it("rejects a matching value in a statement the agent issued even after its admit decision", () => {
-  const reading = { ...externalClaim, issuer: "urn:agent", claimType: "test.reading" };
+it.each([
+  ["urn:agent", true],
+  [ownActor, true],
+  [externalClaim.issuer, false],
+])("checks whether issuer %s can explain a store or citation", (issuer, problem) => {
+  const { scenario } = loadCase(root, "pay-an-invoice");
+  const world = {
+    ...scenario,
+    parties: [
+      {
+        id: "agent",
+        name: "Agent",
+        role: "agent",
+        identity: "urn:another-identity",
+        actor: ownActor,
+        actsFor: "owner",
+        runs: "agent",
+        handlers: [],
+        configurations: [],
+      },
+      {
+        id: "owner",
+        name: "Owner",
+        role: "principal",
+        identity: "urn:agent",
+        runs: "issuer-only",
+        handlers: [],
+        configurations: [],
+      },
+    ],
+  } satisfies Scenario;
+  const reading = { ...externalClaim, issuer, claimType: "test.reading" };
   expect(
-    afterRefusal([laterAdmit, stored], checked(1), refusal, new Map([[stored.seq, reading]]), {
-      admissions: admittedClaim(reading),
-    }),
-  ).toBe(true);
+    afterRefusal(
+      [laterAdmit, stored],
+      checked(1),
+      refusal,
+      new Map([[stored.seq, reading]]),
+      { admissions: admittedClaim(reading) },
+      refusedStatement,
+      world,
+    ),
+  ).toBe(problem);
   expect(
     afterRefusal(
       [laterAdmit, gated, sent],
@@ -863,13 +1070,20 @@ it("rejects a matching value in a statement the agent issued even after its admi
       refusal,
       new Map([[sent.seq, { message: { body: { destination: reading.destination } }, wire: {} }]]),
       { admissions: admittedClaim(reading) },
+      refusedStatement,
+      world,
     ),
-  ).toBe(true);
+  ).toBe(problem);
 });
 
 it.each([
   ["urn:account:123", "urn:account:1234"],
   ["urn:account:1234", "urn:account:123"],
+  ["https://pay.example/account", "https://pay.example/account?alias=other"],
+  ["https://pay.example/account?alias=other", "https://pay.example/account"],
+  ["https://pay.example/account", "https://pay.example/account#alias"],
+  ["https://pay.example/account#alias", "https://pay.example/account"],
+  ["https://pay.example/account?alias=o", "https://pay.example/account?alias=o'neil"],
 ])("matches whole values in releases and citations (%s, %s)", (refusedAccount, otherAccount) => {
   const statement = { ...refusedClaim, account: refusedAccount };
   const refused = { ...refusedStatement, claimDigest: digestOf(statement), statement };

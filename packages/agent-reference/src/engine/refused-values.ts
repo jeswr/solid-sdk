@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
-import { digestBytes, digestOf } from "../core/canonical.js";
+import { digestBytes, digestOf, isIri } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
 import type { VerifiedStatement } from "../trace/recorder.js";
 import { decodeAdapterJson } from "../wire/inspect.js";
@@ -68,6 +68,7 @@ function sourceValues(
     readonly object?: SourceObject;
     readonly owner?: SourceObject;
     readonly path?: JsonPath;
+    readonly start: number;
     field?: string;
     index: number;
   };
@@ -87,11 +88,23 @@ function sourceValues(
       const childPath = stringAt ? path(frame) : undefined;
       frames.push(
         source === "{"
-          ? { object: { members: Object.create(null), parent: owner }, index: 0, path: childPath }
-          : { field: frame?.field, owner, index: 0, path: childPath },
+          ? {
+              object: { members: Object.create(null), parent: owner },
+              index: 0,
+              path: childPath,
+              start: token.index,
+            }
+          : { field: frame?.field, owner, index: 0, path: childPath, start: token.index },
       );
     } else if (source === "}" || source === "]") {
-      frames.pop();
+      const closed = frames.pop();
+      const parent = frames.at(-1);
+      if (!stringAt && closed)
+        values.push({
+          source: json.slice(closed.start, token.index + 1),
+          field: parent?.field,
+          owner: parent?.object ?? parent?.owner,
+        });
     } else if (source === ",") {
       if (stringAt && frame && !frame.object) frame.index++;
     } else if (source !== ":") {
@@ -166,7 +179,8 @@ export function refusedContent(refused: RefusedStatement) {
   const textValues = new Set(
     values.filter((value): value is string => typeof value === "string" && !!value),
   );
-  const texts = [...textValues].map(wholeValue);
+  const texts = [...textValues].filter((value) => !isIri(value)).map(wholeValue);
+  const iris = new Set([...textValues].filter(isIri).map((value) => value.toLowerCase()));
   const exactTexts = new Set([...textValues].map((value) => value.toLowerCase()));
   const scalars = [...new Set(values.filter(scalar).map(String))].map((value) => ({
     pattern: wholeValue(value),
@@ -181,10 +195,26 @@ export function refusedContent(refused: RefusedStatement) {
       field !== undefined && Object.hasOwn(fields, field) ? fields[field] : undefined;
     const referenceIn = (value: string) =>
       checkReferences && references.some((reference) => reference && value.includes(reference));
-    const scalarMatch = (value: string) => matchValue(`scalar:${value}`);
+    const scalarMatch = (value: string) => matchValue(`scalar:${value.toLowerCase()}`);
     const textMatch = (value: string) => matchValue(`text:${value}`);
     const hasValue = (pattern: RegExp, value: string, match: (value: string) => boolean) => {
       for (const [occurrence] of value.matchAll(pattern)) if (match(occurrence)) return true;
+      return false;
+    };
+
+    const hasIri = (value: string) => {
+      if (!iris.size || isIri(value)) return false; // Entire IRIs are checked as exact strings.
+      for (const match of value.matchAll(/[A-Za-z][A-Za-z0-9+.-]*:[^\s<>"{}|\\^\x60]+/g)) {
+        const [token] = match;
+        if (iris.has(token.toLowerCase()) && textMatch(token)) return true;
+        // Strip prose punctuation without dropping a query or fragment delimiter.
+        let iri = token.replace(/[.,;!]+$/, "");
+        const opener = value[match.index - 1];
+        const closer = opener === "(" ? ")" : opener === "[" ? "]" : opener;
+        if (closer && (opener === "(" || opener === "[" || opener === "'") && iri.endsWith(closer))
+          iri = iri.slice(0, -1);
+        if (iris.has(iri.toLowerCase()) && textMatch(iri)) return true;
+      }
       return false;
     };
 
@@ -193,8 +223,9 @@ export function refusedContent(refused: RefusedStatement) {
       if (referencesOnly) return false;
       const original = fieldValue(field);
       return (
+        hasIri(value) ||
         texts.some((pattern) => hasValue(pattern, value, textMatch)) ||
-        (scalar(original) && value === String(original) && scalarMatch(value)) ||
+        (scalar(original) && value.toLowerCase() === String(original) && scalarMatch(value)) ||
         scalars.some(
           ({ pattern, long }) =>
             (long || field === "text" || !checkReferences) && hasValue(pattern, value, scalarMatch),
@@ -249,6 +280,18 @@ export function refusedContent(refused: RefusedStatement) {
               plain(raw, context.field, onlyReferences)) ||
             scanString(decoded, context.field, onlyReferences, false)
           );
+        }
+        if (source.startsWith("{") || source.startsWith("[")) {
+          const original =
+            fieldValue(context.field) ?? (source.startsWith("{") ? fields.value : undefined);
+          if (onlyReferences || !original || typeof original !== "object") return false;
+          let decoded: unknown;
+          try {
+            decoded = decodeAdapterJson(source);
+          } catch {
+            return false;
+          }
+          return structured(decoded, original);
         }
         // A number or boolean in an overwritten member gets the same check as a parsed scalar.
         if (!onlyReferences && /^(?:true|false|-?\d)/.test(source)) {
@@ -310,6 +353,12 @@ export function refusedContent(refused: RefusedStatement) {
       );
     }
 
+    function structured(value: unknown, original: unknown): boolean {
+      if (!original || typeof original !== "object" || value == null) return false;
+      const digest = digestOf(original);
+      return digestOf(value) === digest && matchValue(digest);
+    }
+
     function scan(
       value: unknown,
       field?: string,
@@ -326,12 +375,7 @@ export function refusedContent(refused: RefusedStatement) {
       if (
         !referencesOnly &&
         !projectedValue &&
-        ((original &&
-          typeof original === "object" &&
-          value != null &&
-          digestOf(value) === digestOf(original) &&
-          matchValue(digestOf(original))) ||
-          primitive(value, original))
+        (structured(value, original) || primitive(value, original))
       )
         return true;
       if (Array.isArray(value)) {

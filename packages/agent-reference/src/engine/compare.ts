@@ -1,12 +1,18 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
+import { bitstringStatusListEntry } from "@jeswr/solid-vc";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { createPrivateKey, createPublicKey, sign } from "crypto";
 import { DataFactory, type Store } from "n3";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath } from "url";
 import { digestBytes, digestOf, isIri } from "../core/canonical.js";
-import { attachmentGraph, attachmentGraphs } from "../model/attachments.js";
+import { mandateSchema } from "../mechanisms/mandate.js";
+import { TYP } from "../mechanisms/statements.js";
+import { attachmentGraph, attachmentGraphs, materializeAttachments } from "../model/attachments.js";
 import { NamedValuesNode, SCHEMA, scopedId } from "../model/named-values.js";
 import { AWP } from "../profile/vocabulary.js";
+import { mandateOf } from "../scenarios/common.js";
 import type { TraceObservation, VerifiedStatement } from "../trace/recorder.js";
 import type { TraceEvent, TraceFile } from "../trace/types.js";
 import { assertUniqueKeys } from "../wire/document.js";
@@ -442,23 +448,36 @@ const actionSlots = ["action", "recipient"] as const;
 type ActionSlot = (typeof actionSlots)[number];
 type ActionSlots = Partial<Record<ActionSlot, string>>;
 
-function boundActionEnvelope(run: ComparisonRun, go: TraceEvent, send: TraceEvent) {
-  if (!go.actionScope || !go.actionDigest || go.effectRelease || !matchesMessageRelease(go, send))
-    return undefined;
+function boundMessage(run: ComparisonRun, go: TraceEvent, send: TraceEvent) {
+  if (go.effectRelease || !matchesMessageRelease(go, send)) return undefined;
   const observed = object(run.payloads?.get(send.seq));
   const wire = observed?.wire;
   try {
     const compact = object(wire);
     const native = isMessagePacket(wire) ? cachedMessageProjection(wire) : undefined;
     const jws = compact?.format === "awp-jws-compact/0.1" ? string(compact.jws) : undefined;
-    const message =
-      native && isMessagePacket(wire) && documentConfiguration(wire).signed
-        ? object(native.node.live)
-        : jws && inspectEvidenceJws(jws).payload;
+    const message = native ? object(native.node.live) : jws && inspectEvidenceJws(jws).payload;
     if (!message || message.id !== go.messageId || digestOf(message) !== go.messageDigest)
       return undefined;
     if (jws && digestOf(observed?.message) !== go.messageDigest) return undefined;
-    if (!Array.isArray(message.evidence)) return undefined;
+    return {
+      message,
+      native,
+      jws,
+      signed: !!jws || (isMessagePacket(wire) && documentConfiguration(wire).signed),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+type BoundMessage = NonNullable<ReturnType<typeof boundMessage>>;
+
+function boundActionEnvelope(bound: BoundMessage, go: TraceEvent) {
+  const { message } = bound;
+  if (!bound.signed || !go.actionScope || !go.actionDigest || !Array.isArray(message.evidence))
+    return undefined;
+  try {
     const indexes = message.evidence.flatMap((item, index) =>
       object(item)?.format === intentFormat ? [index] : [],
     );
@@ -477,13 +496,148 @@ function boundActionEnvelope(run: ComparisonRun, go: TraceEvent, send: TraceEven
       intent.target !== go.actionScope.target
     )
       return undefined;
-    return { message, intent, bytes, index, native, jws };
+    return { ...bound, intent, bytes, index };
   } catch {
     return undefined;
   }
 }
 
 type BoundActionEnvelope = NonNullable<ReturnType<typeof boundActionEnvelope>>;
+
+function signingAgents(scenario: Scenario | undefined, traceId: string) {
+  return (
+    scenario?.parties.filter(
+      (party) => party.runs === "agent" && (party.traceId ?? party.id) === traceId,
+    ) ?? []
+  );
+}
+
+// The scripted runner provisions fixed Ed25519 keys. Rebuild the exact initial credential
+// here so the synchronous comparator can compare wire digests without using inbound bytes.
+function syntheticKey(agent: string, role: "owner" | "actor") {
+  const seed = digestBytes(`agent-reference test key: engine/${agent}/${role}`).slice(8);
+  const key = createPrivateKey({
+    key: Buffer.from(`302e020100300506032b657004220420${seed}`, "hex"),
+    format: "der",
+    type: "pkcs8",
+  });
+  const { crv, kty, x } = createPublicKey(key).export({ format: "jwk" });
+  const kid = Buffer.from(digestOf({ crv, kty, x }).slice(8), "hex").toString("base64url");
+  return { key, kid };
+}
+
+function provisionedMandateDigest(
+  scenario: Scenario,
+  agent: Scenario["parties"][number],
+  owner: string,
+  configuration?: string,
+) {
+  const mandate = scenario.mandates.find((entry) => entry.agent === agent.id);
+  if (!mandate || !agent.actor) return undefined;
+  const keyAgent =
+    scenario.parties.find(
+      (party) =>
+        party.runs === "agent" &&
+        scenario.parties.find((principal) => principal.id === party.actsFor)?.identity === owner,
+    )?.id ?? agent.id;
+  const { key, kid } = syntheticKey(keyAgent, "owner");
+  const issuedAt = Date.parse("2026-11-13T09:00:00.000Z");
+  const base = mandateOf(
+    scenario.id,
+    mandate.autonomous as unknown as Parameters<typeof mandateOf>[1],
+    mandate.withApproval as unknown as Parameters<typeof mandateOf>[2],
+    mandate.prohibitions as unknown as Parameters<typeof mandateOf>[3],
+    mandate.standingRules as unknown as Parameters<typeof mandateOf>[4],
+    mandate.duties ?? [],
+  )({
+    owner,
+    actor: agent.actor,
+    validFrom: new Date(issuedAt - 60_000).toISOString(),
+    validUntil: new Date(issuedAt + 60 * 86_400_000).toISOString(),
+  });
+  const payload =
+    configuration === "authority-mandate-credential" && agent.id === "sam-agent"
+      ? {
+          ...mandateSchema.parse(base),
+          actorKid: syntheticKey(agent.id, "actor").kid,
+          credentialStatus: (["suspension", "revocation"] as const).map((statusPurpose) =>
+            bitstringStatusListEntry({
+              statusPurpose,
+              statusListIndex: 42,
+              statusListCredential: `https://mandate-status.example/${kid}/${statusPurpose}`,
+            }),
+          ),
+        }
+      : base;
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const input = `${encode({ alg: "EdDSA", kid, typ: TYP.mandate })}.${encode(payload)}`;
+  return digestBytes(`${input}.${sign(null, Buffer.from(input), key).toString("base64url")}`);
+}
+
+function mandateRevoked(
+  run: ComparisonRun,
+  scenario: Scenario,
+  agent: string,
+  send: TraceEvent,
+): boolean {
+  if (
+    run.events.some(
+      (event) =>
+        event.seq < send.seq &&
+        event.agent === send.agent &&
+        run.steps?.get(event.seq)?.descriptor.type === "revoke-mandate",
+    )
+  )
+    return true;
+  // Local revocation steps need not emit a trace event. The authored script orders them.
+  const sendStep = scenario.script.findIndex(({ id }) => id === run.steps?.get(send.seq)?.id);
+  const status =
+    run.trace?.configuration.id === "authority-mandate-credential" &&
+    agent === "sam-agent" &&
+    scenario.mandateStatusFault;
+  return scenario.script.some(
+    (step, index) =>
+      (sendStep < 0 || index <= sendStep) &&
+      ((step.type === "revoke-mandate" && step.agent === agent) ||
+        (status && status.purpose === "revocation" && step.id === status.at)),
+  );
+}
+
+function provisionedMandateSlots(
+  run: ComparisonRun,
+  scenario: Scenario,
+  send: TraceEvent,
+  { message }: BoundMessage,
+): ReadonlySet<number> {
+  const slots = new Set<number>();
+  if (!Array.isArray(message.evidence)) return slots;
+  const from = object(message.from);
+  const agent = signingAgents(scenario, send.agent).find(({ actor }) => actor === from?.actor);
+  const owner = scenario.parties.find(({ id }) => id === agent?.actsFor)?.identity;
+  if (
+    !agent ||
+    !owner ||
+    from?.onBehalfOf !== owner ||
+    mandateRevoked(run, scenario, agent.id, send)
+  )
+    return slots;
+  let expected: string | undefined;
+  for (const [index, item] of message.evidence.entries()) {
+    const entry = object(item);
+    const value = string(entry?.value);
+    if (entry?.role !== "authorisation" || entry.format !== "jws-compact" || !value) continue;
+    try {
+      const { header, payload } = inspectEvidenceJws(value);
+      if (header.typ !== TYP.mandate || payload.type !== "OwnerMandate" || payload.issuer !== owner)
+        continue;
+      expected ??= provisionedMandateDigest(scenario, agent, owner, run.trace?.configuration.id);
+      if (digestBytes(value) === expected) slots.add(index);
+    } catch {
+      // An unproved credential remains visible to the ordinary refusal scan.
+    }
+  }
+  return slots;
+}
 
 function replyRecipientEstablished(
   run: ComparisonRun,
@@ -668,22 +822,24 @@ function maskIntent(bytes: string, slots: ActionSlots): string {
   );
 }
 
-function maskCompactMessage(envelope: BoundActionEnvelope, slots: ActionSlots, bytes: string) {
-  if (!envelope.jws) return undefined;
-  const [header, payload, signature] = envelope.jws.split(".");
+function maskCompactMessage(
+  jws: string,
+  replacements: ReadonlyMap<number, string | null>,
+  recipient?: string,
+) {
+  const [header, payload, signature] = jws.split(".");
   if (payload === undefined) return undefined;
   const json = Buffer.from(payload, "base64url").toString("utf8");
   const masked = maskJsonStrings(json, (path, value) => {
-    if (path.length === 2 && path[0] === "to" && path[1] === "party" && value === slots.recipient)
+    if (path.length === 2 && path[0] === "to" && path[1] === "party" && value === recipient)
       return null;
     if (
       path.length === 3 &&
       path[0] === "evidence" &&
-      path[1] === envelope.index &&
-      path[2] === "value" &&
-      value === envelope.bytes
+      typeof path[1] === "number" &&
+      path[2] === "value"
     )
-      return bytes;
+      return replacements.get(path[1]);
     return undefined;
   });
   return `${header}.${Buffer.from(masked).toString("base64url")}.${signature}`;
@@ -790,6 +946,54 @@ function nativeSlotMask(
   };
 }
 
+function addMandateProjection(
+  native: NonNullable<BoundMessage["native"]>,
+  index: number,
+  bytes: string,
+  subjects: Set<string>,
+  intentIndex?: number,
+): void {
+  const node = native.node.evidence?.[index];
+  const credential = node?.credential;
+  if (!credential || node.role !== "authorisation" || node.statement !== bytes) return;
+  const projection = credential.projectionSubjects(node.format);
+  if (!projection.size) return;
+  const intent =
+    intentIndex === undefined ? undefined : native.node.evidence?.[intentIndex]?.credential;
+  // The action intent's presentation can link to its sibling authorisation credential.
+  // Further incoming links would also carry the credential through another slot.
+  for (const quad of materializeAttachments(native.node.dataset)) {
+    if (
+      quad.object.termType === "NamedNode" &&
+      projection.has(quad.object.value) &&
+      !projection.has(quad.subject.value) &&
+      !(
+        (quad.subject.value === node.id || quad.subject.value === intent?.id) &&
+        quad.object.value === credential.id &&
+        quad.predicate.value === "https://www.w3.org/2018/credentials#verifiableCredential"
+      )
+    )
+      return;
+  }
+  for (const subject of projection) subjects.add(subject);
+}
+
+function mandateAttachment(dataset: Store, digest: string, subjects: ReadonlySet<string>) {
+  if (!subjects.size) return false;
+  const refs = dataset.getSubjects(
+    DataFactory.namedNode(`${AWP}attachmentDigest`),
+    DataFactory.literal(digest),
+    null,
+  );
+  return (
+    refs.length > 0 &&
+    refs.every((ref) => {
+      const links = dataset.getQuads(null, null, ref, null);
+      return links.length > 0 && links.every((quad) => subjects.has(quad.subject.value));
+    })
+  );
+}
+
 function packetCopies(
   content: RefusedContent,
   event: TraceEvent,
@@ -797,6 +1001,7 @@ function packetCopies(
   cited: readonly VerifiedStatement[],
   admitted: readonly VerifiedStatement[],
   established?: { envelope: BoundActionEnvelope; slots: ActionSlots },
+  mandateProof?: { indexes: ReadonlySet<number>; bound: BoundMessage; intentIndex?: number },
 ): boolean {
   const matchValue = explainedValues(content, cited);
   const observed = object(payload);
@@ -814,6 +1019,9 @@ function packetCopies(
   const maskedBytes = envelope && slots && maskIntent(envelope.bytes, slots);
   const carried = new Set<string>();
   const subjects = new Set<string>();
+  const mandateSubjects = new Set<string>();
+  const replacements = new Map<number, string | null>();
+  if (envelope && maskedBytes !== undefined) replacements.set(envelope.index, maskedBytes);
   if (Array.isArray(evidence)) {
     for (const [index, item] of evidence.entries()) {
       const entry = object(item);
@@ -822,7 +1030,20 @@ function packetCopies(
         entry?.role === "credential" && value !== undefined
           ? admitted.find(({ wireDigest }) => wireDigest === digestBytes(value))
           : undefined;
-      if (statement && entry && value !== undefined) {
+      if (mandateProof?.indexes.has(index) && entry && value !== undefined) {
+        const { value: _value, ...metadata } = entry;
+        if (content.inspect(metadata) || content.inspect(value, { referencesOnly: true }))
+          return true;
+        replacements.set(index, null);
+        if (materialized)
+          addMandateProjection(
+            materialized,
+            index,
+            value,
+            mandateSubjects,
+            mandateProof.intentIndex,
+          );
+      } else if (statement && entry && value !== undefined) {
         const { value: _value, ...metadata } = entry;
         if (
           content.inspect(metadata, { matchValue }) ||
@@ -853,11 +1074,8 @@ function packetCopies(
     fields.to = { ...to, party: undefined };
   if (content.inspect(fields, { matchValue })) return true;
   if (!native) {
-    const jws =
-      envelope &&
-      slots &&
-      maskedBytes !== undefined &&
-      maskCompactMessage(envelope, slots, maskedBytes);
+    const compact = mandateProof?.bound.jws ?? envelope?.jws;
+    const jws = compact && maskCompactMessage(compact, replacements, slots?.recipient);
     return content.inspect(jws ? { ...object(wire), jws } : wire, { matchValue, carried });
   }
   const nativeMask =
@@ -870,7 +1088,8 @@ function packetCopies(
     const property = DataFactory.namedNode(SCHEMA + "PropertyValue");
     for (const graph of attachmentGraphs(materialized.node.dataset)) {
       for (const quad of graph) {
-        const referencesOnly = subjects.has(quad.subject.value);
+        const referencesOnly =
+          subjects.has(quad.subject.value) || mandateSubjects.has(quad.subject.value);
         const structuralKey =
           [SCHEMA + "name", SCHEMA + "propertyID"].includes(quad.predicate.value) &&
           graph.countQuads(quad.subject, type, property, null) > 0;
@@ -895,7 +1114,10 @@ function packetCopies(
     content.inspect(nativeMask?.json ?? native.jsonld, {
       matchValue,
       projection: materialized
-        ? { subjects, repeatedProof: materialized.repeatedProof }
+        ? {
+            subjects: new Set([...subjects, ...mandateSubjects]),
+            repeatedProof: materialized.repeatedProof,
+          }
         : undefined,
     }) ||
     native.attachments.some(({ bytes, ...attachment }) => {
@@ -910,6 +1132,9 @@ function packetCopies(
             {
               matchValue,
               carried,
+              referencesOnly:
+                !!materialized &&
+                mandateAttachment(materialized.node.dataset, attachment.digest, mandateSubjects),
             },
           ))
       );
@@ -950,6 +1175,8 @@ export function stoppedReleaseProblem(
     );
   }
 
+  scenario ??= authoredScenario(run.trace);
+  const ownActors = new Set(signingAgents(scenario, stop.agent).map(({ actor }) => actor));
   const withheld = [refusedContent(refused)];
   const admitted = new Map<string, { statement: VerifiedStatement; decision: TraceEvent }>();
   const remember = (event: TraceEvent) => {
@@ -968,7 +1195,12 @@ export function stoppedReleaseProblem(
       if (typeof id !== "string") continue;
       // A subsequent admission of the same ID must not leave an older citation usable.
       admitted.delete(id);
-      if (typeof issuer === "string" && admission.party !== undefined && issuer !== admission.party)
+      if (
+        typeof issuer === "string" &&
+        admission.party !== undefined &&
+        issuer !== admission.party &&
+        !ownActors.has(issuer)
+      )
         admitted.set(id, { statement, decision: event });
     }
   };
@@ -1018,9 +1250,9 @@ export function stoppedReleaseProblem(
               candidate.gateRun === event.gateRun &&
               matchesMessageRelease(event, candidate),
           );
-          const envelope = send && boundActionEnvelope(run, event, send);
+          const message = send && boundMessage(run, event, send);
+          const envelope = message && boundActionEnvelope(message, event);
           if (send && envelope) {
-            scenario ??= authoredScenario(run.trace);
             if (scenario) {
               const world = scenario;
               slots = new Map(
@@ -1085,6 +1317,11 @@ export function stoppedReleaseProblem(
     }
     if (event.kind === "message-out") {
       const release = event.gateRun === undefined ? undefined : allowed.get(event.gateRun);
+      const bound =
+        release &&
+        scenario &&
+        (established.get(event.seq)?.envelope ?? boundMessage(run, release, event));
+      const indexes = scenario && bound && provisionedMandateSlots(run, scenario, event, bound);
       if (
         event.messageId === undefined ||
         !release ||
@@ -1100,6 +1337,9 @@ export function stoppedReleaseProblem(
             [...admitted.values()].map(({ statement }) => statement).filter(eligible),
             proof && (slots?.action || slots?.recipient)
               ? { envelope: proof.envelope, slots }
+              : undefined,
+            bound && indexes?.size
+              ? { bound, indexes, intentIndex: proof?.envelope.index }
               : undefined,
           );
         })
