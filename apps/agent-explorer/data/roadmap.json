@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-20T13:00Z",
+  "updated": "2026-11-20T19:30Z",
   "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
@@ -81,8 +81,9 @@
           "id": "P9.11",
           "title": "Two gate gaps found by the first evaluation pass",
           "detail": "Settled: both are real gaps in the gates. First, a message that leaves out a claim its operation needs was admitted and nothing asked for it (six cases in three use cases). Second, a permission to use something was read as also allowing it to be passed on (682 cases). Two new core clauses say what must happen, and a build brief is written (brief 27). It runs once the RDF build has landed, because it changes the same gate code. Still open: whether a person's own instructions and reads from memory count as admitted input in the evaluation's third property. The rest of the evaluation stays paused.",
-          "status": "next",
-          "owner": "Fable (settled), Codex (fix)"
+          "status": "done",
+          "owner": "Fable (settled), Codex (fix)",
+          "note": "Both gate gaps fixed (brief 27) and merged to main with the engine on 20 Nov."
         }
       ]
     },
@@ -116,8 +117,9 @@
           "id": "P1.4",
           "title": "Reference agent package",
           "detail": "Two gates, stores, a suite registry and a trace for every decision. Built; in review before merge (pull request 635).",
-          "status": "doing",
-          "owner": "Opus (to Fable's brief)"
+          "status": "done",
+          "owner": "Opus (to Fable's brief)",
+          "note": "Built and merged to main on 20 Nov (pull request 646) after eleven rounds of independent review."
         },
         {
           "id": "P1.5",
@@ -130,8 +132,9 @@
           "id": "P1.6",
           "title": "Swap the transport",
           "detail": "Direct transport and plain email both run through the same gates. The other transports are in the first section of this roadmap.",
-          "status": "doing",
-          "owner": "Opus (to Fable's brief)"
+          "status": "done",
+          "owner": "Opus (to Fable's brief)",
+          "note": "Direct, email, A2A, MCP and Solid inbox transports all run through the same gates; merged to main on 20 Nov."
         },
         {
           "id": "P1.7",
