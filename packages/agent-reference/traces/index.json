@@ -8578,13 +8578,13 @@
       }
     },
     "configuration": "accountability-regulator-claim",
-    "events": 765
+    "events": 769
   },
   {
     "file": "mortgage-main--entry-withheld--accountability-regulator-claim.json",
     "scenario": {
       "id": "mortgage-main--entry-withheld",
-      "title": "A mortgage in principle: The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable.",
+      "title": "A mortgage in principle: The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer.",
       "steps": {
         "1": "Sam signs a mandate.",
         "2": "Sam asks for a mortgage in principle.",
@@ -8628,7 +8628,7 @@
       }
     },
     "configuration": "accountability-regulator-claim",
-    "events": 751
+    "events": 755
   },
   {
     "file": "mortgage-main--identity-email-endpoint.json",
@@ -8928,7 +8928,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 826
+    "events": 830
   },
   {
     "file": "mortgage-main--post-about-a-person--accountability-reputation-post.json",
@@ -8978,13 +8978,13 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 779
+    "events": 783
   },
   {
     "file": "mortgage-main--evidence-not-publishable--accountability-reputation-post.json",
     "scenario": {
       "id": "mortgage-main--evidence-not-publishable",
-      "title": "A mortgage in principle: Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached.",
+      "title": "A mortgage in principle: Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves.",
       "steps": {
         "1": "Sam signs a mandate.",
         "2": "Sam asks for a mortgage in principle.",
@@ -9028,7 +9028,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 777
+    "events": 781
   },
   {
     "file": "mortgage-main--meaning-plain-language-upgrade.json",
@@ -9179,5 +9179,310 @@
     },
     "configuration": "meaning-plain-language-upgrade",
     "events": 633
+  },
+  {
+    "file": "mortgage-main--data-access-by-reference-solid.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "A mortgage in principle",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record.",
+        "15": "Look up a registered valuer.",
+        "16": "Valuation lookup.",
+        "17": "Valuation lookup arrives.",
+        "18": "Valuation found.",
+        "19": "Valuation account admitted.",
+        "20": "The valuer offers a valuation.",
+        "21": "Sam’s gate checks the offer.",
+        "22": "Sam approves the valuation agreement.",
+        "23": "Fee accept arrives.",
+        "24": "Fee accept confirmed.",
+        "25": "The valuer requests the agreed fee.",
+        "26": "Fee invoice statement.",
+        "27": "Fee invoice send.",
+        "28": "Fee invoice arrives.",
+        "29": "Sam’s gate checks the payment.",
+        "30": "Sam approves the exact payment order.",
+        "31": "Provider receives.",
+        "32": "Provider settles.",
+        "33": "Provider receipt statement.",
+        "34": "Provider receipt.",
+        "35": "Provider receipt arrives.",
+        "36": "Fee agreement state.",
+        "37": "Fee forward receipt.",
+        "38": "Fee payee receives.",
+        "39": "Fee acknowledged."
+      }
+    },
+    "configuration": "data-access-by-reference-solid",
+    "events": 594
+  },
+  {
+    "file": "mortgage-main--grant-wider-than-terms--data-access-by-reference-solid.json",
+    "scenario": {
+      "id": "mortgage-main--grant-wider-than-terms",
+      "title": "A mortgage in principle: The core asks to grant access to the folder instead of the balance resource.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record.",
+        "15": "Look up a registered valuer.",
+        "16": "Valuation lookup.",
+        "17": "Valuation lookup arrives.",
+        "18": "Valuation found.",
+        "19": "Valuation account admitted.",
+        "20": "The valuer offers a valuation.",
+        "21": "Sam’s gate checks the offer.",
+        "22": "Sam approves the valuation agreement.",
+        "23": "Fee accept arrives.",
+        "24": "Fee accept confirmed.",
+        "25": "The valuer requests the agreed fee.",
+        "26": "Fee invoice statement.",
+        "27": "Fee invoice send.",
+        "28": "Fee invoice arrives.",
+        "29": "Sam’s gate checks the payment.",
+        "30": "Sam approves the exact payment order.",
+        "31": "Provider receives.",
+        "32": "Provider settles.",
+        "33": "Provider receipt statement.",
+        "34": "Provider receipt.",
+        "35": "Provider receipt arrives.",
+        "36": "Fee agreement state.",
+        "37": "Fee forward receipt.",
+        "38": "Fee payee receives.",
+        "39": "Fee acknowledged."
+      }
+    },
+    "configuration": "data-access-by-reference-solid",
+    "events": 218
+  },
+  {
+    "file": "mortgage-main--read-after-withdrawal--data-access-by-reference-solid.json",
+    "scenario": {
+      "id": "mortgage-main--read-after-withdrawal",
+      "title": "A mortgage in principle: The lender reads again after Sam withdraws access; the source refuses and the permitted copy remains recorded.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record.",
+        "15": "Look up a registered valuer.",
+        "16": "Valuation lookup.",
+        "17": "Valuation lookup arrives.",
+        "18": "Valuation found.",
+        "19": "Valuation account admitted.",
+        "20": "The valuer offers a valuation.",
+        "21": "Sam’s gate checks the offer.",
+        "22": "Sam approves the valuation agreement.",
+        "23": "Fee accept arrives.",
+        "24": "Fee accept confirmed.",
+        "25": "The valuer requests the agreed fee.",
+        "26": "Fee invoice statement.",
+        "27": "Fee invoice send.",
+        "28": "Fee invoice arrives.",
+        "29": "Sam’s gate checks the payment.",
+        "30": "Sam approves the exact payment order.",
+        "31": "Provider receives.",
+        "32": "Provider settles.",
+        "33": "Provider receipt statement.",
+        "34": "Provider receipt.",
+        "35": "Provider receipt arrives.",
+        "36": "Fee agreement state.",
+        "37": "Fee forward receipt.",
+        "38": "Fee payee receives.",
+        "39": "Fee acknowledged."
+      }
+    },
+    "configuration": "data-access-by-reference-solid",
+    "events": 606
+  },
+  {
+    "file": "mortgage-main--usage-control-solid-access-control.json",
+    "scenario": {
+      "id": "mortgage-main",
+      "title": "A mortgage in principle",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record.",
+        "15": "Look up a registered valuer.",
+        "16": "Valuation lookup.",
+        "17": "Valuation lookup arrives.",
+        "18": "Valuation found.",
+        "19": "Valuation account admitted.",
+        "20": "The valuer offers a valuation.",
+        "21": "Sam’s gate checks the offer.",
+        "22": "Sam approves the valuation agreement.",
+        "23": "Fee accept arrives.",
+        "24": "Fee accept confirmed.",
+        "25": "The valuer requests the agreed fee.",
+        "26": "Fee invoice statement.",
+        "27": "Fee invoice send.",
+        "28": "Fee invoice arrives.",
+        "29": "Sam’s gate checks the payment.",
+        "30": "Sam approves the exact payment order.",
+        "31": "Provider receives.",
+        "32": "Provider settles.",
+        "33": "Provider receipt statement.",
+        "34": "Provider receipt.",
+        "35": "Provider receipt arrives.",
+        "36": "Fee agreement state.",
+        "37": "Fee forward receipt.",
+        "38": "Fee payee receives.",
+        "39": "Fee acknowledged."
+      }
+    },
+    "configuration": "usage-control-solid-access-control",
+    "events": 594
+  },
+  {
+    "file": "mortgage-main--translation-grants-more--usage-control-solid-access-control.json",
+    "scenario": {
+      "id": "mortgage-main--translation-grants-more",
+      "title": "A mortgage in principle: The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied.",
+      "steps": {
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record.",
+        "15": "Look up a registered valuer.",
+        "16": "Valuation lookup.",
+        "17": "Valuation lookup arrives.",
+        "18": "Valuation found.",
+        "19": "Valuation account admitted.",
+        "20": "The valuer offers a valuation.",
+        "21": "Sam’s gate checks the offer.",
+        "22": "Sam approves the valuation agreement.",
+        "23": "Fee accept arrives.",
+        "24": "Fee accept confirmed.",
+        "25": "The valuer requests the agreed fee.",
+        "26": "Fee invoice statement.",
+        "27": "Fee invoice send.",
+        "28": "Fee invoice arrives.",
+        "29": "Sam’s gate checks the payment.",
+        "30": "Sam approves the exact payment order.",
+        "31": "Provider receives.",
+        "32": "Provider settles.",
+        "33": "Provider receipt statement.",
+        "34": "Provider receipt.",
+        "35": "Provider receipt arrives.",
+        "36": "Fee agreement state.",
+        "37": "Fee forward receipt.",
+        "38": "Fee payee receives.",
+        "39": "Fee acknowledged."
+      }
+    },
+    "configuration": "usage-control-solid-access-control",
+    "events": 220
+  },
+  {
+    "file": "age-check--baseline.json",
+    "scenario": {
+      "id": "age-check",
+      "title": "Proving age to buy something",
+      "steps": {}
+    },
+    "configuration": "baseline",
+    "events": 70
+  },
+  {
+    "file": "introduction--baseline.json",
+    "scenario": {
+      "id": "introduction",
+      "title": "Being introduced to a stranger safely",
+      "steps": {}
+    },
+    "configuration": "baseline",
+    "events": 140
+  },
+  {
+    "file": "right-to-work--hidden-validity-proof--baseline.json",
+    "scenario": {
+      "id": "right-to-work--hidden-validity-proof",
+      "title": "Hiring: right to work and qualifications: Show valid until at least a date while hiding the actual date",
+      "steps": {
+        "1": "The candidate’s agent checks and admits the signed statements.",
+        "2": "The candidate’s agent sends a signed request.",
+        "3": "The employer’s agent checks the incoming message and prepares a response.",
+        "4": "The employer’s agent checks the durable record."
+      }
+    },
+    "configuration": "right-to-work-local",
+    "events": 70
+  },
+  {
+    "file": "tenancy-application--baseline.json",
+    "scenario": {
+      "id": "tenancy-application",
+      "title": "Applying to rent a home",
+      "steps": {}
+    },
+    "configuration": "baseline",
+    "events": 111
+  },
+  {
+    "file": "visa-application--baseline.json",
+    "scenario": {
+      "id": "visa-application",
+      "title": "Applying for a visa",
+      "steps": {}
+    },
+    "configuration": "baseline",
+    "events": 111
   }
 ]

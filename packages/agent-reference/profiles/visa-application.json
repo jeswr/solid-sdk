@@ -158,6 +158,18 @@
         "urn:purpose:visa-application"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:supporting-statements",
+      "version": "0.1",
+      "label": "Send the signed supporting statements",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "actionClaims": [
@@ -171,6 +183,13 @@
       "action": "urn:op:visa-application:proof-answer",
       "claims": [
         "visa-application.answer"
+      ]
+    },
+    {
+      "action": "urn:op:visa-application:supporting-statements",
+      "claims": [
+        "employment.letter",
+        "travel.itinerary"
       ]
     }
   ],

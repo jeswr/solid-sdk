@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
 
@@ -105,7 +106,7 @@ import { carry } from "../settlement/carried.js";
 import { selectedSettlement } from "../settlement/configurations.js";
 import { Ledger as PaymentLedger } from "../settlement/ledger.js";
 import { FictionalDeliberationPlatform } from "../standins/deliberation.js";
-import { FictionalDidDirectory, renameIdentities } from "../standins/did.js";
+import { FictionalDidDirectory } from "../standins/did.js";
 import { presentFederation } from "../standins/federation.js";
 import { FictionalOriginDirectory } from "../standins/origin-hosted.js";
 import { EvidencePod } from "../standins/pod-access.js";
@@ -158,6 +159,7 @@ import {
   writeFaultyRelease,
 } from "./faulty-gate.js";
 import { installHandler } from "./handlers.js";
+import { applyIdentityNames } from "./identity-names.js";
 import { validateReferences } from "./load.js";
 import {
   advertisedConfigurations,
@@ -479,8 +481,7 @@ export async function runScenario(
       const differences = identityNameDifferences(scenario, world, pathProfile);
       if (differences.length)
         throw new Error(`${alternative.id}: C3 refused: ${differences.join("; ")}`);
-      Object.assign(pathProfile, renameIdentities(pathProfile, world.identityNames));
-      Object.assign(world, renameIdentities(world, world.identityNames));
+      applyIdentityNames(pathProfile, world);
     }
     validateReferences(pathProfile, world, { pathWorld: true });
     let verifiers = options.registry ?? emptyVerifiers;
@@ -2288,7 +2289,10 @@ async function runPath(
       ...(profile.singleUse.length
         ? {
             singleUse: {
-              actions: profile.singleUse,
+              actions: profile.singleUse.map(({ parameters, ...rule }) => ({
+                ...rule,
+                ...(parameters ? { parametersDigest: digestOf(parameters) } : {}),
+              })),
               registers: singleUseRegisters,
               evidence: Object.values(signed).map((s) => s.jws),
               acceptances: escrowAcceptances,
@@ -3584,7 +3588,7 @@ async function runPath(
                 segment: template<string>(step.segment),
                 at: now().toISOString(),
               };
-        // The runtime derives the range disclosure list from these exact signed bytes.
+        // The runtime derives the disclosure list from these exact signed bytes.
         const anchored = (
           decodeCompactPayload(template<string>(step.segment)) as { anchor?: { seq?: unknown } }
         ).anchor?.seq;
@@ -3601,18 +3605,26 @@ async function runPath(
             : service.identity;
         const purpose = "urn:purpose:redress";
         const proofGrants = [];
-        if (step.proofOwners?.length && recordFrom !== undefined) {
+        if (step.proofOwners?.length) {
           const inventory = await runtime.recordReleaseProofs(
             recordSegmentSchema.parse(decodeCompactPayload(request.segment)),
             "agreement" in request ? request.agreement : undefined,
+            recordFrom !== undefined
+              ? undefined
+              : {
+                  segment: request.segment,
+                  observation: "observation" in request ? request.observation : undefined,
+                },
           );
           for (const { digest, issuer } of inventory?.proofs ?? []) {
             const owner = step.proofOwners
-              .map((name) => cast.get(name))
-              .find((party) => party.identity.party === issuer);
-            if (owner)
+              .map((name) => ({ agent: cast.agents.get(name), party: parties.get(name) }))
+              .find(({ agent, party }) => (agent?.identity.party ?? party?.identity) === issuer);
+            const ownerKey =
+              owner?.agent?.ownerKey ?? (owner?.party && sourceKeys.get(owner.party.id));
+            if (ownerKey)
               proofGrants.push(
-                await signStatement(owner.ownerKey, RECORD_PROOF_GRANT_TYP, {
+                await signStatement(ownerKey, RECORD_PROOF_GRANT_TYP, {
                   issuer,
                   digest,
                   holder: actor.identity.actor,
@@ -3626,7 +3638,7 @@ async function runPath(
         const params = {
           ...(proofGrants.length ? { proofGrants } : {}),
           ...(recordFrom !== undefined ? { recordFrom } : {}),
-          evidence: recordFrom === undefined ? runtime.recordDisclosures() : [],
+          evidence: [],
           operation: step.type === "forum-claim" ? "submit" : "answer",
           request: await signStatement(
             actor.actorKey,

@@ -82,7 +82,8 @@
             "urn:op:tenancy-application",
             "urn:op:tenancy-application:request",
             "urn:op:tenancy-application:proof-request",
-            "urn:op:tenancy-application:proof-answer"
+            "urn:op:tenancy-application:proof-answer",
+            "urn:op:tenancy-application:supporting-statements"
           ]
         }
       ],
@@ -93,7 +94,8 @@
             "urn:op:tenancy-application",
             "urn:op:tenancy-application:request",
             "urn:op:tenancy-application:proof-request",
-            "urn:op:tenancy-application:proof-answer"
+            "urn:op:tenancy-application:proof-answer",
+            "urn:op:tenancy-application:supporting-statements"
           ]
         }
       ]
@@ -391,6 +393,11 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:tenancy-application:proof-answer"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:tenancy-application:supporting-statements"
         }
       ],
       "withApproval": []
@@ -563,7 +570,7 @@
       "type": "start",
       "peer": "receiver-agent",
       "kind": "invoke",
-      "operation": "urn:op:tenancy-application:proof-answer",
+      "operation": "urn:op:tenancy-application:supporting-statements",
       "contents": {
         "items": [
           "urn:scenario:tenancy-application:rental-entitlement",
@@ -572,8 +579,8 @@
       },
       "intent": {
         "action": "distribute",
-        "operation": "urn:op:tenancy-application:proof-answer",
-        "target": "urn:op:tenancy-application:proof-answer",
+        "operation": "urn:op:tenancy-application:supporting-statements",
+        "target": "urn:op:tenancy-application:supporting-statements",
         "recipient": "urn:fictional:tenancy-application:receiver",
         "purpose": "urn:purpose:tenancy-application",
         "parameters": {}

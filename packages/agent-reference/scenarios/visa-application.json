@@ -68,7 +68,8 @@
             "urn:op:visa-application",
             "urn:op:visa-application:request",
             "urn:op:visa-application:proof-request",
-            "urn:op:visa-application:proof-answer"
+            "urn:op:visa-application:proof-answer",
+            "urn:op:visa-application:supporting-statements"
           ]
         }
       ],
@@ -79,7 +80,8 @@
             "urn:op:visa-application",
             "urn:op:visa-application:request",
             "urn:op:visa-application:proof-request",
-            "urn:op:visa-application:proof-answer"
+            "urn:op:visa-application:proof-answer",
+            "urn:op:visa-application:supporting-statements"
           ]
         }
       ]
@@ -366,6 +368,11 @@
           "type": "permission",
           "action": "distribute",
           "target": "urn:op:visa-application:proof-answer"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:visa-application:supporting-statements"
         }
       ],
       "withApproval": []
@@ -533,7 +540,7 @@
       "type": "start",
       "peer": "receiver-agent",
       "kind": "invoke",
-      "operation": "urn:op:visa-application:proof-answer",
+      "operation": "urn:op:visa-application:supporting-statements",
       "contents": {
         "items": [
           "urn:scenario:visa-application:employment-letter",
@@ -542,8 +549,8 @@
       },
       "intent": {
         "action": "distribute",
-        "operation": "urn:op:visa-application:proof-answer",
-        "target": "urn:op:visa-application:proof-answer",
+        "operation": "urn:op:visa-application:supporting-statements",
+        "target": "urn:op:visa-application:supporting-statements",
         "recipient": "urn:fictional:visa-application:receiver",
         "purpose": "urn:purpose:visa-application",
         "parameters": {}

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { type DatasetCore, parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
@@ -55,7 +56,7 @@ export function refusal(error: unknown): Refusal {
   if (error instanceof BoundsError)
     return {
       ok: false,
-      reason: error.code === "not-json" ? "malformed" : "bounds-exceeded",
+      reason: ["not-json", "duplicate-key"].includes(error.code) ? "malformed" : "bounds-exceeded",
       detail: error.code,
     };
   return { ok: false, reason: "malformed", detail: "invalid-rdf-document" };
@@ -68,7 +69,6 @@ export function readJson(
   const text =
     typeof bytes === "string" ? bytes : new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const document = parseBoundedJson(text, limits);
-  assertUniqueKeys(text);
   checkDocumentTerms(document);
   return document;
 }

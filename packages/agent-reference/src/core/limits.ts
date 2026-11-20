@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 /**
  * Resource bounds for untrusted input and workflow execution (R15).
  *
@@ -104,6 +105,7 @@ export class BoundsError extends Error {
       | "too-many-nodes"
       | "string-too-long"
       | "array-too-long"
+      | "duplicate-key"
       | "not-json",
     message: string,
   ) {

@@ -2139,7 +2139,7 @@
       "seq": 52,
       "step": 7,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2148,7 +2148,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2174,7 +2174,7 @@
       "seq": 53,
       "step": 7,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2183,7 +2183,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2220,7 +2220,7 @@
       "seq": 54,
       "step": 7,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2229,7 +2229,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2254,7 +2254,7 @@
       "seq": 55,
       "step": 7,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2263,7 +2263,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2288,7 +2288,7 @@
       "seq": 56,
       "step": 7,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2297,7 +2297,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -2325,7 +2325,7 @@
       "agent": "owner-agent",
       "part": "principal",
       "kind": "principal-reply",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "approvalDecision": "approve",
       "chat": {
         "who": "principal",
@@ -2337,7 +2337,7 @@
       "seq": 59,
       "step": 8,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2346,7 +2346,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2372,7 +2372,7 @@
       "seq": 60,
       "step": 8,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2381,7 +2381,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2418,7 +2418,7 @@
       "seq": 61,
       "step": 8,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2427,7 +2427,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2452,7 +2452,7 @@
       "seq": 62,
       "step": 8,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2461,7 +2461,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2477,7 +2477,7 @@
       "reason": "approval-given",
       "rule": {
         "id": "urn:awp:engine-fee-dispute-main:owner-agent-approval:0001",
-        "text": "Sam's signed approval, bound to digest sha-256:61feedad…."
+        "text": "Sam's signed approval, bound to digest sha-256:2c5c0f81…."
       },
       "caption": "Sam approved this exact action.",
       "gateRun": 3
@@ -2486,7 +2486,7 @@
       "seq": 63,
       "step": 8,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2495,7 +2495,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2514,7 +2514,7 @@
         }
       ],
       "rule": {
-        "id": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+        "id": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
@@ -2525,7 +2525,7 @@
       "seq": 64,
       "step": 8,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:61feedad7cf1e2063d988be8281856ab190b4d746da58c0e9279f7512c319770",
+      "actionDigest": "sha-256:2c5c0f81447c64531015d44e785b3d74cfbe9186b00df9ed45ff8f7a6c95130c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2534,7 +2534,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:8c4d68a74d0c224f3811525c0ab1f5abfeab442890395f2ba6f6a454aa70425b"
+        "otherParametersDigest": "sha-256:5bb3e21d068a1d6e4a076a10905bd806ec5c3bc434f8343a9d94e450e14d5a4d"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -2630,7 +2630,7 @@
       "seq": 72,
       "step": 9,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2639,7 +2639,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2665,7 +2665,7 @@
       "seq": 73,
       "step": 9,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2674,7 +2674,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2711,7 +2711,7 @@
       "seq": 74,
       "step": 9,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2720,7 +2720,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2745,7 +2745,7 @@
       "seq": 75,
       "step": 9,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2754,7 +2754,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2779,7 +2779,7 @@
       "seq": 76,
       "step": 9,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2788,7 +2788,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -2816,7 +2816,7 @@
       "agent": "lender-agent",
       "part": "principal",
       "kind": "principal-reply",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "approvalDecision": "approve",
       "chat": {
         "who": "principal",
@@ -2828,7 +2828,7 @@
       "seq": 79,
       "step": 10,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2837,7 +2837,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2863,7 +2863,7 @@
       "seq": 80,
       "step": 10,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2872,7 +2872,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2909,7 +2909,7 @@
       "seq": 81,
       "step": 10,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2918,7 +2918,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2943,7 +2943,7 @@
       "seq": 82,
       "step": 10,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2952,7 +2952,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2968,7 +2968,7 @@
       "reason": "approval-given",
       "rule": {
         "id": "urn:awp:engine-fee-dispute-main:lender-agent-approval:0001",
-        "text": "The lender's signed approval, bound to digest sha-256:ce9d0efa…."
+        "text": "The lender's signed approval, bound to digest sha-256:e9dca458…."
       },
       "caption": "The lender approved this exact action.",
       "gateRun": 4
@@ -2977,7 +2977,7 @@
       "seq": 83,
       "step": 10,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -2986,7 +2986,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3005,7 +3005,7 @@
         }
       ],
       "rule": {
-        "id": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+        "id": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
@@ -3016,7 +3016,7 @@
       "seq": 84,
       "step": 10,
       "agent": "lender-agent",
-      "actionDigest": "sha-256:ce9d0efa8ddccf3da533ac39458b76e3a3e87d202ba69cada25edeb8907ac136",
+      "actionDigest": "sha-256:e9dca45876ee5ef8b63361fbb206efa7eb2e38cd6f0ed556495ba7a74af6ec05",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3025,7 +3025,7 @@
         "recipient": "urn:fictional:fee-dispute:forum",
         "purpose": "urn:purpose:redress",
         "evidence": [],
-        "otherParametersDigest": "sha-256:df9510eb28093131689b2443f852878dc4f3f77c02fae1b6de9a7fdcca915ea2"
+        "otherParametersDigest": "sha-256:5bb679049ae54f8ad6bdd88662797152a507d44cdc7fad28325b878d095d58ef"
       },
       "part": "outbound-gate",
       "kind": "decision",

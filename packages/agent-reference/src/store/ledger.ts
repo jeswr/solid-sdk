@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 /**
  * The evidence ledger: an append-only, hash-chained JSONL log of the separate records
  * (verification, representation, source authority, authorisation, agreement, grant,
@@ -48,9 +49,16 @@ export interface LedgerEntry {
 export type LedgerRangeEntry =
   | LedgerEntry
   | (Omit<LedgerEntry, "record" | "recordDigest"> & {
-      readonly recordDigest: string;
+      readonly recordDigest?: string;
       readonly record: null;
     });
+
+/** The public chain fields a peer may attest after reviewing a private legacy approval row. */
+export function legacyApprovalRedaction(entry: LedgerEntry): LedgerRangeEntry | undefined {
+  if (entry.record.type !== "approval" || typeof entry.record.jws !== "string") return undefined;
+  const { seq, at, prev, hash, recordDigest } = entry;
+  return { seq, at, prev, hash, record: null, ...(recordDigest ? { recordDigest } : {}) };
+}
 
 const GENESIS = "sha-256:genesis";
 
@@ -321,6 +329,7 @@ export function verifyLedgerRange(
   entries: readonly LedgerRangeEntry[],
   anchor: LedgerHead,
   terminal?: LedgerHead,
+  witnessedApprovals?: ReadonlySet<string>,
 ): LedgerCheck {
   const scope =
     "chain integrity of the entries after an attested anchor; does not establish entries before the anchor or after the last one";
@@ -340,7 +349,11 @@ export function verifyLedgerRange(
     if (!e) break;
     if (e.seq !== anchor.seq + 1 + i) return fail(e, "sequence gap");
     if (e.prev !== prev) return fail(e, i === 0 ? "anchor link" : "broken link");
-    if (!validSeal(e)) return fail(e, "hash mismatch");
+    if (
+      !validSeal(e) &&
+      !(e.record === null && e.recordDigest === undefined && witnessedApprovals?.has(digestOf(e)))
+    )
+      return fail(e, "hash mismatch");
     prev = e.hash;
   }
   if (terminal.seq !== tail.seq || terminal.hash !== tail.hash)

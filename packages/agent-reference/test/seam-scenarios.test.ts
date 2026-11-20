@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
@@ -147,8 +148,8 @@ it.each([
         true,
       );
     else if (id === "salary-benchmark") {
-      expect(path.actual).toMatchObject({ outcome: "admit", reason: "fit-for-use" });
-      expect(path.disagrees).toBe(true);
+      expect(path.actual).toMatchObject({ outcome: "stop", reason: "prohibited" });
+      expect(path.disagrees).toBe(false);
       expect(path.expected).toMatchObject({ outcome: "stop", reason: "prohibited" });
     } else
       expect(path.actual).toMatchObject({

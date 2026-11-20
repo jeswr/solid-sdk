@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Claude Opus 5.5
 // Brief 31 §2.9: after the regulator claim, Sam's agent publishes only Sam's own statement and
 // the forum's signed decision to a host with no gate; the lender's signed reply is attached;
@@ -55,7 +56,12 @@ it("publishes Sam's statement and the forum decision; the reader checks each hos
 
   // Measured: the disclosure check runs before the bank's terms are reached.
   const evidence = paths.find((path) => path.path === "evidence-not-publishable");
-  expect(evidence?.disagrees).toBe(true);
+  expect(evidence?.disagrees).toBe(false);
+  expect(evidence?.actual).toMatchObject({
+    outcome: "stop",
+    reason: "excessive-scope",
+    check: "disclosure",
+  });
   const first = evidence?.trace?.events.find(
     (e) => e.agent === "sams-agent" && e.kind === "check" && e.verdict === "fail",
   );

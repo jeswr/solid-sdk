@@ -438,9 +438,15 @@ export async function verifyOpaqueDerivation(input: {
       return fail("derivation-not-verified");
     const sources = rule.inputsFrom.map((s) => gate.sourceAliases?.[s] ?? s);
     const kinds = ruleInputs(rule);
+    const conditions = "conditions" in rule.params ? rule.params.conditions : undefined;
+    const positiveKinds = kinds.filter(
+      (kind) =>
+        !conditions?.some((c) => c.input === kind && c.operator === "not-in") ||
+        conditions.some((c) => c.input === kind && c.operator !== "not-in"),
+    );
     const sourcesOk = dataset
       ? sources.every((issuer) => dataset.coverage.some((source) => source.issuer === issuer)) &&
-        kinds.every((kind) =>
+        positiveKinds.every((kind) =>
           dataset.coverage.some((source) => source.claimTypes.includes(kind)),
         ) &&
         dataset.coverage.every((source) => {
@@ -482,7 +488,7 @@ export async function verifyOpaqueDerivation(input: {
         sourcesOk,
         "source-not-authoritative",
         dataset
-          ? "The pinned dataset covers every required source and claim kind with independently accepted issuer keys."
+          ? "The pinned dataset covers every required source and positive input with independently accepted issuer keys. Absence is checked against the complete dataset."
           : "This method does not bind an issuer to each fact. Every reported issuer key must therefore be independently accepted for every kind of claim the rule reads.",
       )
     )

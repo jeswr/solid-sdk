@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Claude Opus 5.5
 // Brief 31 §2.9 decision: `extends` builds one configuration on another of the same layer.
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
 import { patchDifferences } from "../src/engine/confinement.js";
+import { applyIdentityNames } from "../src/engine/identity-names.js";
 import { loadCase } from "../src/engine/load.js";
 import { matrixExtended, matrixPrerequisite, matrixWorld } from "../src/engine/matrix.js";
 import { runScenario } from "../src/engine/run.js";
@@ -130,6 +132,7 @@ it("refuses DID aliases for policy identifiers and refuses two parties sharing o
     [scenario.trust.root!.id, "did:web:forged-register.example"],
     ["https://northbank.example/#org", "did:web:sam.identity.example"],
     ["https://northbank.example/#org", "did:web:sam.identity.example:.well-known"],
+    ["urn:fictional:valuer-agent:actor", "did:web:valuer-agent-identity.identity.example"],
   ] as const) {
     const changed = withEntry(scenario, id, {
       world: {
@@ -144,6 +147,24 @@ it("refuses DID aliases for policy identifiers and refuses two parties sharing o
       /C3 refused.*identityNames/,
     );
   }
+});
+
+it("renames a terms-acceptance actor while preserving opaque values and rejecting map collisions", () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const actor = "https://agents.hostco.example/sam#agent";
+  const alias = "did:web:sam-agent.identity.example";
+  profile.termsAcceptance[actor] = { purposes: ["urn:test:actor-purpose"] };
+  scenario.identityNames = { [actor]: alias };
+  const statement = scenario.statements[0]!;
+  statement.subject = actor;
+  statement.value = { [actor]: actor, subject: actor };
+  applyIdentityNames(profile, scenario);
+  expect(profile.termsAcceptance[alias]).toEqual({ purposes: ["urn:test:actor-purpose"] });
+  expect(statement.subject).toBe(alias);
+  expect(statement.value).toEqual({ [actor]: actor, subject: actor });
+
+  profile.termsAcceptance[actor] = { purposes: ["urn:test:other-purpose"] };
+  expect(() => applyIdentityNames(profile, scenario)).toThrow(/collides in a policy map/);
 });
 
 it("confines Solid reference additions to the receipt field and the withdrawal permission", () => {

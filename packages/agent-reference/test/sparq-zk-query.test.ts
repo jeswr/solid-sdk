@@ -14,11 +14,13 @@ import {
   SPARQ_ZK_QUERY,
   SparqZkQuery,
 } from "../src/derive/adapters/sparq-zk-query.js";
-import { ruleSchema } from "../src/derive/rules.js";
+import { queryFor, ruleSchema } from "../src/derive/rules.js";
+import { verifyOpaqueDerivation } from "../src/derive/verification.js";
 import {
   DERIVATION_LIMITS,
   type DerivedRequest,
   type ProofBinds,
+  type ProofSystem,
   verifierRegistry,
 } from "../src/derive/verifiers.js";
 import { loadCase } from "../src/engine/load.js";
@@ -35,6 +37,101 @@ import type { TraceEventInput } from "../src/trace/types.js";
 const local = join(import.meta.dirname, "../.sparq/sparq-zk-query");
 const root = join(import.meta.dirname, "..");
 const installed = existsSync(join(process.env.ANSWERABLE_SPARQ_ZK_QUERY ?? local, "index.js"));
+
+it("checks absence against the complete pinned dataset without requiring a medication credential", async () => {
+  const { profile } = loadCase(root, "trial-eligibility");
+  const rule = ruleSchema.parse(profile.rules[0]);
+  const subject = "urn:trial:subject";
+  const purpose = "urn:purpose:trial-eligibility";
+  const issuer = "urn:trial:issuer";
+  rule.inputsFrom = [issuer];
+  const key = { publicKey: "00".repeat(32) };
+  const inputs = ["trial.age", "trial.diagnosis", "trial.medication-complete"];
+  const ruleDigest = digestOf(rule);
+  const nonce = "trial-absence";
+  const policy = { inputCommitment: "00".repeat(32) };
+  const checked = async (complete: boolean, coverageKinds: string[]) => {
+    const binds: ProofBinds[] = ["rule", "issuers", "fresh"];
+    if (complete) binds.push("complete");
+    const verify: ProofSystem["verify"] = async (input) => {
+      expect(input).toMatchObject({ booleanResult: true, policy, nonce });
+      return { ok: true, released: true, binds, issuerKeys: [key] };
+    };
+    const system = {
+      method: SPARQ_ZK_QUERY.method,
+      kind: "real" as const,
+      binds,
+      verify,
+      issue: vi.fn(),
+      issuerKeygen: vi.fn(),
+      prove: vi.fn(),
+    };
+    const request: DerivedRequest = {
+      rule: rule.id,
+      ruleDigest,
+      subject,
+      purpose,
+      nonce,
+      assurances: ["attested"],
+      query: queryFor(rule),
+      policy,
+      consumed: false,
+    };
+    return verifyOpaqueDerivation({
+      statement: {
+        subject,
+        issuer: subject,
+        claimType: rule.output,
+        method: "derived",
+        value: true,
+        derivation: {
+          rule: rule.id,
+          ruleDigest,
+          assurance: "attested",
+          deriver: subject,
+          outputDigest: digestOf(true),
+          proofBinds: binds,
+          proof: { method: system.method, nonce, presentation: {} },
+        },
+      },
+      gate: {
+        ...verifierRegistry([system]),
+        rules: [rule],
+        acceptedProofs: [
+          {
+            rule: rule.id,
+            method: system.method,
+            assurance: "attested",
+            purposes: [purpose],
+            binds: ["rule", "issuers", "fresh"],
+          },
+        ],
+        derivedRequests: { [nonce]: request },
+        proofIssuerKeys: [{ issuer, key, claimTypes: inputs }],
+        queryProofPolicies: [
+          {
+            rule: rule.id,
+            subject,
+            policy,
+            coverage: [{ issuer, key, claimTypes: coverageKinds }],
+          },
+        ],
+      },
+      purpose,
+      acceptsSource: (source, kind) => source === issuer && inputs.includes(kind),
+      event: () => {},
+    });
+  };
+  expect(await checked(true, inputs)).toMatchObject({ ok: true });
+  expect(await checked(false, inputs)).toMatchObject({
+    ok: false,
+    reason: "derivation-not-verified",
+  });
+  expect(await checked(true, inputs.slice(0, -1))).toMatchObject({
+    ok: false,
+    reason: "source-not-authoritative",
+  });
+});
 
 it("omits the query verifier when its optional package is missing", async () => {
   vi.stubEnv("ANSWERABLE_SPARQ_ZK_QUERY", join(local, "missing-package"));

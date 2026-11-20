@@ -29950,11 +29950,11 @@
           "urn:fictional:mossbridge-payment-desk": "did:web:payment-provider.identity.example",
           "urn:fictional:valuation-register": "did:web:valuer-register.identity.example",
           "urn:fictional:other-valuer": "did:web:other-valuer.identity.example",
-          "urn:fictional:valuer-agent": "did:web:valuer-agent.identity.example",
+          "urn:fictional:valuer-agent": "did:web:valuer-agent-identity.identity.example",
           "urn:fictional:valuer-agent:actor": "did:web:valuer-agent.identity.example",
-          "urn:fictional:payment-provider-agent": "did:web:payment-provider-agent.identity.example",
+          "urn:fictional:payment-provider-agent": "did:web:payment-provider-agent-identity.identity.example",
           "urn:fictional:payment-provider-agent:actor": "did:web:payment-provider-agent.identity.example",
-          "urn:fictional:valuer-register-agent": "did:web:valuer-register-agent.identity.example",
+          "urn:fictional:valuer-register-agent": "did:web:valuer-register-agent-identity.identity.example",
           "urn:fictional:valuer-register-agent:actor": "did:web:valuer-register-agent.identity.example"
         },
         "parties": {

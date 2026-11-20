@@ -347,6 +347,7 @@
       "id": "file-claim",
       "agent": "owner-agent",
       "type": "forum-claim",
+      "proofOwners": ["owner-agent", "lender-agent"],
       "case": "urn:case:fee-dispute",
       "conversation": {
         "$ref": "steps.agreement-offer.conversation"
@@ -371,6 +372,7 @@
       "id": "answer",
       "agent": "lender-agent",
       "type": "forum-answer",
+      "proofOwners": ["owner-agent", "lender-agent"],
       "case": "urn:case:fee-dispute",
       "segment": {
         "$ref": "steps.respondent-record.jws"
@@ -517,6 +519,7 @@
             "id": "file-claim",
             "agent": "owner-agent",
             "type": "forum-claim",
+            "proofOwners": ["owner-agent", "lender-agent"],
             "case": "urn:case:fee-dispute",
             "conversation": {
               "$ref": "steps.agreement-offer.conversation"
@@ -541,6 +544,7 @@
             "id": "answer",
             "agent": "lender-agent",
             "type": "forum-answer",
+            "proofOwners": ["owner-agent", "lender-agent"],
             "case": "urn:case:fee-dispute",
             "segment": {
               "$ref": "steps.respondent-record.jws"

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
@@ -39,9 +40,9 @@ export const recordEntrySchema = z
     recordDigest: chainDigest.optional(),
   })
   .strict();
-const rangeEntrySchema = z.union([
+export const rangeEntrySchema = z.union([
   recordEntrySchema,
-  recordEntrySchema.extend({ record: z.null(), recordDigest: chainDigest }),
+  recordEntrySchema.extend({ record: z.null() }),
 ]);
 export const recordSegmentSchema = z.strictObject({
   type: z.literal("RecordSegment"),
@@ -76,6 +77,7 @@ export const anchorReceiptSchema = z.strictObject({
       ]),
     })
     .optional(),
+  approvalRedactions: z.array(chainDigest).max(4096).optional(),
 });
 export const RECORD_PROOF_GRANT_TYP = "awp-record-proof-grant+jws";
 export const recordProofGrantSchema = z.strictObject({
@@ -112,6 +114,15 @@ export const forumAnswerSchema = z.strictObject({
   request: z.string(),
   segment: z.string(),
   at: iso,
+});
+export const recordRequestSchema = z.strictObject({
+  type: z.literal("RecordRequest"),
+  issuer: id,
+  case: id,
+  conversation: id,
+  respondent: id,
+  through: witnessedPoint.optional(),
+  deadline: iso,
 });
 const messageSchema = z
   .object({
@@ -271,14 +282,14 @@ export class LocalForum {
     segment: { actor: string; party: string },
     peer: string,
     interval?: { conversation: string; from: { seq: number; hash: string } },
-  ): Promise<boolean> {
+  ) {
     const receipt = await this.readWitnessedPoint(anchor, peer);
-    return (
-      !!receipt &&
+    return !!receipt &&
       receipt.subject === segment.actor &&
       receipt.subjectParty === segment.party &&
       digestOf(receipt.interval ?? null) === digestOf(interval ?? null)
-    );
+      ? receipt
+      : undefined;
   }
 
   private async readWitnessedPoint(point: z.infer<typeof witnessedPoint>, peer: string) {
@@ -341,23 +352,26 @@ export class LocalForum {
         reason: "evidence-invalid",
         point: { problem: "anchor-not-attested", sequence: segment.anchor.seq },
       };
-    if (
-      (expectedTerminal &&
-        (!segment.terminal || digestOf(segment.terminal) !== digestOf(expectedTerminal))) ||
-      !segment.terminal ||
-      !(await this.anchorAttested(segment.terminal, segment, peer, {
+    const terminal =
+      segment.terminal &&
+      (await this.anchorAttested(segment.terminal, segment, peer, {
         conversation,
         from: segment.anchor
           ? { seq: segment.anchor.seq, hash: segment.anchor.hash }
           : LEDGER_GENESIS,
-      }))
+      }));
+    if (
+      (expectedTerminal &&
+        (!segment.terminal || digestOf(segment.terminal) !== digestOf(expectedTerminal))) ||
+      !terminal
     )
       return {
         ok: false,
         reason: "record-unavailable",
         point: { problem: "terminal-not-attested" },
       };
-    const chain = verifyLedgerRange(range, segment.anchor ?? LEDGER_GENESIS, segment.terminal);
+    const approvals = new Set(terminal.approvalRedactions);
+    const chain = verifyLedgerRange(range, segment.anchor ?? LEDGER_GENESIS, terminal, approvals);
     if (!chain.ok)
       return {
         ok: false,
@@ -513,7 +527,7 @@ export class LocalForum {
         entries,
         messages,
         directions,
-        redacted: range.length !== entries.length,
+        redacted: range.some((entry) => entry.record === null && !approvals.has(digestOf(entry))),
       },
     };
   }

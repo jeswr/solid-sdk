@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
@@ -10,8 +11,9 @@ import { LocalForum, RECORD_LIMITS } from "../src/mechanisms/forum.js";
 import { signStatement, TYP, verifyStatement } from "../src/mechanisms/statements.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
-import { LEDGER_GENESIS, MemoryLedger } from "../src/store/ledger.js";
+import { LEDGER_GENESIS, legacyApprovalRedaction, MemoryLedger } from "../src/store/ledger.js";
 import { MemoryStateStore } from "../src/store/state.js";
+import { decodeCompactPayload } from "../src/wire/inspect.js";
 
 const AT = "2026-11-13T09:00:00.000Z";
 async function fixture(attack = "none") {
@@ -112,11 +114,28 @@ async function fixture(attack = "none") {
       },
       AT,
     );
+    const withhold = actor === 2 && attack.startsWith("legacy-approval");
+    const redacted = withhold
+      ? required(
+          legacyApprovalRedaction(
+            ledger.append(
+              {
+                type: "approval",
+                jws: "PRIVATE LEGACY APPROVAL",
+              },
+              AT,
+            ),
+          ),
+        )
+      : undefined;
     const entries = await Promise.all(
-      ledger.entries().map(async (entry) => ({
-        entry: structuredClone(entry),
-        proof: await signStatement(required(keys[actor]), "awp-record-entry+jws", entry),
-      })),
+      ledger.entries().map(async (entry) => {
+        const exported = redacted?.seq === entry.seq ? redacted : structuredClone(entry);
+        return {
+          entry: exported,
+          proof: await signStatement(required(keys[actor]), "awp-record-entry+jws", exported),
+        };
+      }),
     );
     if (attack === "signature" && actor === 2)
       required(entries[0]).proof = await signStatement(
@@ -127,7 +146,9 @@ async function fixture(attack = "none") {
     if (attack === "gap" && actor === 2) entries.splice(1, 1);
     if (attack === "truncated" && actor === 2) entries.pop();
     if (attack === "tamper" && actor === 2)
-      Object.assign(required(entries[0]).entry.record, { digest: "sha-256:tampered" });
+      Object.assign(required(required(entries[0]).entry.record ?? undefined), {
+        digest: "sha-256:tampered",
+      });
     const peer = actor === 1 ? 2 : 1;
     const head = ledger.head();
     const terminal = {
@@ -141,6 +162,17 @@ async function fixture(attack = "none") {
         ...head,
         at: AT,
         interval: { conversation: common.conversation, from: LEDGER_GENESIS },
+        ...(redacted && attack !== "legacy-approval-unwitnessed"
+          ? {
+              approvalRedactions: [
+                digestOf(
+                  attack === "legacy-approval-other"
+                    ? { ...redacted, seq: redacted.seq - 1 }
+                    : redacted,
+                ),
+              ],
+            }
+          : {}),
       }),
     };
     return {
@@ -203,12 +235,49 @@ async function fixture(attack = "none") {
     claim,
     answer,
     decision,
+    respondentRecord: b.jws,
     advance: () => {
       at = "2026-11-13T09:01:01.000Z";
     },
     events,
   };
 }
+it("accepts a peer-attested legacy approval redaction without exposing the approval", async () => {
+  for (const [mode, reason] of [
+    ["legacy-approval-witnessed", "evidence-missing"],
+    ["legacy-approval-unwitnessed", "record-unavailable"],
+    ["legacy-approval-other", "record-unavailable"],
+  ] as const) {
+    const f = await fixture(mode);
+    const record = decodeCompactPayload(f.respondentRecord);
+    expect(JSON.stringify(record)).not.toContain("PRIVATE LEGACY APPROVAL");
+    expect(record.entries).toContainEqual(
+      expect.objectContaining({
+        entry: expect.objectContaining({ record: null }),
+      }),
+    );
+    expect(await f.forum.submit(f.claim)).toMatchObject({ ok: true });
+    await f.answer();
+    expect(await f.decision()).toMatchObject({ reason });
+  }
+});
+
+it("withholds a whole record when the exact signed payload has no grant", async () => {
+  const { profile, scenario } = loadCase(join(import.meta.dirname, ".."), "fee-dispute");
+  scenario.branches = [];
+  scenario.stopAfter = "file-claim";
+  const claim = scenario.script.find((step) => step.type === "forum-claim");
+  if (!claim || claim.type !== "forum-claim") throw Error("missing fee claim fixture");
+  claim.proofOwners = [];
+  const [path] = await runScenario(profile, scenario, { compare: false });
+  expect(path?.trace?.events.findLast(({ kind }) => kind === "decision")).toMatchObject({
+    agent: "owner-agent",
+    part: "outbound-gate",
+    outcome: "stop",
+    reason: "evidence-invalid",
+  });
+  expect(path?.trace?.events.some(({ agent }) => agent === "forum")).toBe(false);
+});
 it("verifies each segment independently and identifies tampering, sequence gaps, missing messages and check citations", async () => {
   for (const attack of [
     "none",

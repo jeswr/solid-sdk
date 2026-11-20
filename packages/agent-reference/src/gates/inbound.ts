@@ -2008,6 +2008,9 @@ export class InboundGate {
       identifiers: identifiersIn(c),
       id: c.id ?? digestOf(c),
       digest: digestOf(c),
+      ...(item.format === "jws-compact" && !mapped
+        ? { compactProofDigest: digestOf(item.value) }
+        : {}),
       label,
       claimType: c.claimType,
       source: c.issuer,

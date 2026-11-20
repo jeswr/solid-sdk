@@ -122,6 +122,11 @@ export interface OutboundDeps {
   readonly referencePeer?: (conversation: string) => { actor: string; party: string } | undefined;
   readonly referenceAgreementId?: (intent: ActionIntent) => string | undefined;
   readonly recordRelease?: (intent: ActionIntent) => boolean;
+  readonly authoredProofSupports?: (
+    intent: ActionIntent,
+    item: EvidenceItem,
+    claimType: string,
+  ) => boolean;
   /** Brief 32: whether the agent's own record supports a record-backed outgoing statement. */
   readonly recordBacks?: (claim: Readonly<Record<string, unknown>>, recipient: string) => boolean;
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
@@ -1238,6 +1243,45 @@ export class OutboundGate {
     );
     const relianceIds = new Set(reliance.map((h) => String(h.statement.id)));
 
+    // Check the evidence actually offered when a receiver requested a less revealing answer.
+    // A raw input does not become suitable support merely because a required result is absent.
+    const narrower =
+      requiredClaims.length > 0 &&
+      evidence.some((item) => {
+        if (!isClaimEvidence(item)) return false;
+        try {
+          return this.narrowerAnswer(unverifiedEvidenceClaim(item), scope.purpose, scope.recipient);
+        } catch {
+          return false; // The message gate refuses uninspectable evidence.
+        }
+      });
+    if (narrower) {
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        "fail",
+        "The receiver's request and profile allow a less revealing answer than the proposed evidence.",
+        {
+          reason: "excessive-scope",
+          rule: {
+            id: "DER-21",
+            text: "Prefer an available proof to disclosing its private inputs.",
+          },
+        },
+      );
+      this.decide(
+        "stop",
+        "The private input is held for the less revealing answer.",
+        "excessive-scope",
+      );
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "excessive-scope" },
+      };
+    }
+
     for (const claimType of requiredClaims) {
       const admitted = [...this.deps.memory.facts.values()].some(
         (f) =>
@@ -1268,7 +1312,10 @@ export class OutboundGate {
         (i) =>
           i.kind === "reading" && (i.claimType === claimType || proposedSupport.includes(i.id)),
       );
-      if (!admitted) {
+      if (
+        !admitted &&
+        !evidence.some((item) => this.deps.authoredProofSupports?.(intent, item, claimType))
+      ) {
         if (reliance.some((h) => h.statement.claimType === claimType)) continue;
         const refusal = Object.entries(this.deps.memory.refusals).find(([key]) =>
           key.startsWith(`${ctx.taskId ?? scope.conversation}|${claimType}|`),
@@ -1980,6 +2027,15 @@ export class OutboundGate {
         registeredRole: true,
         at: this.deps.now(),
       }).outcome === "accepted"
+    );
+  }
+
+  private missingRecipientRole(terms: ItemTerms | undefined, recipient: Iri | undefined): boolean {
+    return (
+      (!!terms?.recipientMustBe && !this.recipientAllows(recipient, terms.recipientMustBe.task)) ||
+      !!terms?.inherited?.some(({ terms }) =>
+        this.missingRecipientRole(terms ?? undefined, recipient),
+      )
     );
   }
 
@@ -3024,6 +3080,18 @@ export class OutboundGate {
     if (free.length > 0) {
       // Every item is assessed separately, including items about someone other than our principal.
       for (const item of context) {
+        if (this.missingRecipientRole(item.terms, intent.recipient)) {
+          this.verdict(
+            verdicts,
+            digest,
+            "data-terms",
+            "fail",
+            `${item.label}: the recipient lacks the registration its terms require.`,
+            { reason: "not-authorised" },
+          );
+          this.decide("stop", "The required recipient registration is missing.", "not-authorised");
+          return finish("stop", "not-authorised");
+        }
         const minimal = !!needed?.includes(item.claimType);
         this.verdict(
           verdicts,

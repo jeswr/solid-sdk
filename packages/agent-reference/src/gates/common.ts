@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
@@ -125,6 +126,8 @@ export interface AdmittedFact {
   readonly claimType: string;
   readonly source: string;
   readonly digest?: string;
+  /** Exact compact statement admitted by the gate, when this fact was admitted directly. */
+  readonly compactProofDigest?: string;
   readonly subject?: string;
   readonly method?: string;
   readonly asOf?: string;
@@ -411,7 +414,7 @@ export interface GateContext {
       item: string;
       operation: "redeem" | "release";
       maxAgeSeconds: number;
-      parameters?: import("../core/types.js").JsonObject;
+      parametersDigest?: string;
     }[];
     readonly registers: Readonly<
       Record<string, import("../mechanisms/single-use.js").SingleUseRegister>

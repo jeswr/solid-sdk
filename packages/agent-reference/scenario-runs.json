@@ -7,8 +7,14 @@
       "useCase": "age-check",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "blocked",
-      "reason": "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "age-check--baseline.json"
     },
     {
       "scenario": "age-check",
@@ -605,7 +611,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
+      "reason": "Blocked: @sparq-org/zk-result rejects the issuer-scoped FILTER IN membership with \"operator outside positive BGP/JOIN/FILTER\"; @sparq-org/zk-query has no catalogue plan for the scoped BSc-or-MSc query."
     },
     {
       "scenario": "degree-recognition",
@@ -1518,7 +1524,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact count-and-completeness query. The preferred absence alternative lacks an xsd prefix and has no catalogue plan even with the prefix declared."
     },
     {
       "scenario": "insurance-quote",
@@ -1563,8 +1569,14 @@
       "useCase": "introduction",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "blocked",
-      "reason": "Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with \"operator outside positive BGP/JOIN/FILTER\"."
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "introduction--baseline.json"
     },
     {
       "scenario": "introduction",
@@ -3300,8 +3312,280 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "data-access-by-reference-solid",
-      "status": "blocked",
-      "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite"
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 205,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 213,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 221,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 231,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 245,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 253,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 263,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 285,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 293,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 301,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 310,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 318,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 327,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 335,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 343,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 351,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 361,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 371,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 379,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 388,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 396,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 403,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 410,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 420,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 428,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 435,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 444,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 452,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 459,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 467,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 477,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 485,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 494,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 526,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 534,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 542,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 550,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 559,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 569,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 578,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 586,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 594,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 1,
+      "trace": "mortgage-main--data-access-by-reference-solid.json"
     },
     {
       "scenario": "mortgage-main",
@@ -3310,8 +3594,19 @@
       "settlement": "rdf-order",
       "configuration": "data-access-by-reference-solid",
       "what": "The core asks to grant access to the folder instead of the balance resource.",
-      "status": "blocked",
-      "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite"
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "excessive-scope"
+      },
+      "consequences": [],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--grant-wider-than-terms--data-access-by-reference-solid.json"
     },
     {
       "scenario": "mortgage-main",
@@ -3320,8 +3615,24 @@
       "settlement": "rdf-order",
       "configuration": "data-access-by-reference-solid",
       "what": "The lender reads again after Sam withdraws access; the source refuses and the permitted copy remains recorded.",
-      "status": "blocked",
-      "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite"
+      "status": "disagrees",
+      "actual": {
+        "outcome": "go"
+      },
+      "expected": {
+        "outcome": "refuse",
+        "reason": "not-authorised"
+      },
+      "consequences": [
+        {
+          "seq": 606,
+          "agent": "lender",
+          "outcome": "refuse",
+          "reason": "not-authorised"
+        }
+      ],
+      "addedExchanges": 1,
+      "trace": "mortgage-main--read-after-withdrawal--data-access-by-reference-solid.json"
     },
     {
       "scenario": "mortgage-main",
@@ -4096,8 +4407,280 @@
       "path": "main",
       "settlement": "rdf-order",
       "configuration": "usage-control-solid-access-control",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy."
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient",
+        "check": "authority"
+      },
+      "consequences": [
+        {
+          "seq": 137,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 145,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 152,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 159,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 171,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 179,
+          "agent": "bank",
+          "outcome": "admit"
+        },
+        {
+          "seq": 189,
+          "agent": "bank",
+          "outcome": "go"
+        },
+        {
+          "seq": 197,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 205,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 213,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 221,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 231,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 245,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 253,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 263,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 271,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 279,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 285,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 293,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 301,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 310,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 318,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 327,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 335,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 343,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 351,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 361,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 371,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 379,
+          "agent": "valuer-register-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 388,
+          "agent": "valuer-register-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 396,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 403,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 410,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 420,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 428,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 435,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 444,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 452,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 459,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 467,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 477,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 485,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 494,
+          "agent": "sams-agent",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 526,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 534,
+          "agent": "payment-provider-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 542,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 550,
+          "agent": "payment-provider-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 559,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 569,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 578,
+          "agent": "valuer-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 586,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 594,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 1,
+      "trace": "mortgage-main--usage-control-solid-access-control.json"
     },
     {
       "scenario": "mortgage-main",
@@ -4106,8 +4689,19 @@
       "settlement": "rdf-order",
       "configuration": "usage-control-solid-access-control",
       "what": "The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied.",
-      "status": "blocked",
-      "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy."
+      "status": "runs",
+      "actual": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "expected": {
+        "outcome": "stop",
+        "reason": "prohibited"
+      },
+      "consequences": [],
+      "addedExchanges": 0,
+      "trace": "mortgage-main--translation-grants-more--usage-control-solid-access-control.json"
     },
     {
       "scenario": "mortgage-main",
@@ -13442,40 +14036,40 @@
           "outcome": "admit"
         },
         {
-          "seq": 708,
+          "seq": 709,
           "agent": "sams-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 721,
+          "seq": 723,
           "agent": "sams-agent",
           "outcome": "go"
         },
         {
-          "seq": 735,
+          "seq": 738,
           "agent": "lender",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 745,
+          "seq": 749,
           "agent": "lender",
           "outcome": "go"
         },
         {
-          "seq": 751,
+          "seq": 755,
           "agent": "forum",
           "outcome": "admit",
           "reason": "not-authorised"
         },
         {
-          "seq": 757,
+          "seq": 761,
           "agent": "sams-agent",
           "outcome": "admit"
         },
         {
-          "seq": 764,
+          "seq": 768,
           "agent": "lender",
           "outcome": "admit"
         }
@@ -13489,8 +14083,8 @@
       "path": "entry-withheld",
       "settlement": "rdf-order",
       "configuration": "accountability-regulator-claim",
-      "what": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable.",
-      "status": "disagrees",
+      "what": "The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer.",
+      "status": "runs",
       "actual": {
         "outcome": "refuse",
         "reason": "record-unavailable",
@@ -13498,7 +14092,7 @@
       },
       "expected": {
         "outcome": "refuse",
-        "reason": "evidence-invalid"
+        "reason": "record-unavailable"
       },
       "consequences": [],
       "addedExchanges": 5,
@@ -14439,81 +15033,81 @@
           "outcome": "admit"
         },
         {
-          "seq": 708,
+          "seq": 709,
           "agent": "sams-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 721,
+          "seq": 723,
           "agent": "sams-agent",
           "outcome": "go"
         },
         {
-          "seq": 735,
+          "seq": 738,
           "agent": "lender",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 745,
+          "seq": 749,
           "agent": "lender",
           "outcome": "go"
         },
         {
-          "seq": 751,
+          "seq": 755,
           "agent": "forum",
           "outcome": "admit",
           "reason": "not-authorised"
         },
         {
-          "seq": 757,
+          "seq": 761,
           "agent": "sams-agent",
           "outcome": "admit"
         },
         {
-          "seq": 764,
+          "seq": 768,
           "agent": "lender",
           "outcome": "admit"
         },
         {
-          "seq": 771,
+          "seq": 775,
           "agent": "sams-agent",
           "outcome": "admit"
         },
         {
-          "seq": 780,
+          "seq": 784,
           "agent": "sams-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 790,
+          "seq": 794,
           "agent": "sams-agent",
           "outcome": "go"
         },
         {
-          "seq": 796,
+          "seq": 800,
           "agent": "lender",
           "outcome": "admit"
         },
         {
-          "seq": 805,
+          "seq": 809,
           "agent": "lender",
           "outcome": "go"
         },
         {
-          "seq": 811,
+          "seq": 815,
           "agent": "post-reader-agent",
           "outcome": "admit"
         },
         {
-          "seq": 818,
+          "seq": 822,
           "agent": "post-reader-agent",
           "outcome": "admit"
         },
         {
-          "seq": 825,
+          "seq": 829,
           "agent": "post-reader-agent",
           "outcome": "admit"
         }
@@ -14548,8 +15142,8 @@
       "path": "evidence-not-publishable",
       "settlement": "rdf-order",
       "configuration": "accountability-reputation-post",
-      "what": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached.",
-      "status": "disagrees",
+      "what": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves.",
+      "status": "runs",
       "actual": {
         "outcome": "stop",
         "reason": "excessive-scope",
@@ -14557,7 +15151,7 @@
       },
       "expected": {
         "outcome": "stop",
-        "reason": "prohibited"
+        "reason": "excessive-scope"
       },
       "consequences": [],
       "addedExchanges": 5,
@@ -15421,7 +16015,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
     },
     {
       "scenario": "recycled-content",
@@ -15683,8 +16277,19 @@
       "path": "hidden-validity-proof",
       "settlement": "rdf-order",
       "what": "Show valid until at least a date while hiding the actual date",
-      "status": "blocked",
-      "reason": "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
+      "status": "disagrees",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "expected": {
+        "outcome": "ask-more",
+        "reason": "assurance-insufficient"
+      },
+      "consequences": [],
+      "note": "branch does not diverge from the main path",
+      "trace": "right-to-work--hidden-validity-proof--baseline.json"
     },
     {
       "scenario": "salary-account-change",
@@ -16236,8 +16841,14 @@
       "useCase": "tenancy-application",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "blocked",
-      "reason": "Blocked: needs a hidden integer comparison, due in sparq’s next result-proof build. Projecting income would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "tenancy-application--baseline.json"
     },
     {
       "scenario": "tenancy-application",
@@ -16283,7 +16894,7 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "blocked",
-      "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact age, diagnosis, medication exclusion and completeness query. The published scoped target changes the query and its per-node bounds."
     },
     {
       "scenario": "trial-eligibility",
@@ -16378,8 +16989,14 @@
       "useCase": "visa-application",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "blocked",
-      "reason": "Blocked: needs a hidden integer comparison, due in sparq’s next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
+      "status": "runs",
+      "actual": {
+        "outcome": "admit",
+        "reason": "fit-for-use",
+        "check": "fitness"
+      },
+      "consequences": [],
+      "trace": "visa-application--baseline.json"
     },
     {
       "scenario": "visa-application",
@@ -16438,6 +17055,15 @@
         }
       ],
       "trace": "wearable-data--branch-1--baseline.json"
+    },
+    {
+      "scenario": "recycled-content",
+      "useCase": "recycled-content",
+      "path": "supplier-below-threshold",
+      "settlement": "rdf-order",
+      "what": "One supplier reports 0.29 and the verified minimum condition releases false.",
+      "status": "blocked",
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
     }
   ]
 }

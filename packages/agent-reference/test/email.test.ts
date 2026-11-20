@@ -1,6 +1,8 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { CompactSign } from "jose";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
@@ -8,8 +10,10 @@ import { join } from "path";
 import { expect, it } from "vitest";
 import { ScriptedMailbox } from "../src/bindings/email.js";
 import { digestOf } from "../src/core/canonical.js";
+import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import { verifyCompact } from "../src/mechanisms/jws.js";
 import { actionDigest } from "../src/mechanisms/mandate.js";
 import { signStatement, TYP } from "../src/mechanisms/statements.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
@@ -271,7 +275,7 @@ it("never interprets an acceptance or an instruction in prose as claims, command
       method: "model-output",
       originalDigest: received.digest,
     });
-    expect(f.runtime.recordDisclosures()).toEqual([]);
+    expect(f.runtime.admittedStatements()).toEqual([]);
     expect(f.mailbox.inbox()).toEqual([]);
     expect(
       f.ledger
@@ -542,6 +546,32 @@ it("binds publication to the admitted fact digest and the host's resolved identi
     ...original,
     period: { ...original.period, privateNote: "not admitted" },
   });
+  const key = f.cast.get("a").ownerKey;
+  const signBytes = (payload: string) =>
+    new CompactSign(new TextEncoder().encode(payload))
+      .setProtectedHeader({ alg: key.alg, kid: key.kid, typ: TYP.statement })
+      .sign(key.privateKey);
+  const reformatted = await signBytes(JSON.stringify(original, null, 2));
+  const duplicate = await signBytes(
+    JSON.stringify(original).replace(
+      '"value":"admitted"',
+      '"\\u0076alue":"private","value":"admitted"',
+    ),
+  );
+  const verify = (proof: string) =>
+    verifyCompact(proof, {
+      typ: TYP.statement,
+      allowedAlgs: [key.alg],
+      limits: DEFAULT_LIMITS,
+      resolve: () => key,
+    });
+  expect(await verify(reformatted)).toMatchObject({ outcome: "valid", payload: original });
+  expect(await verify(duplicate)).toMatchObject({ outcome: "invalid", reason: "malformed" });
+  expect(
+    await f.runtime.admitStatements([{ jws: duplicate }], { task: "urn:task", purpose }),
+  ).toMatchObject({ admitted: 0, refused: 1 });
+  await publish("urn:publish:reformatted", host, reformatted);
+  await publish("urn:publish:duplicate", host, duplicate);
   await publish("urn:publish:hidden-period", host, extra);
   await publish("urn:publish:replacement", host, await sign("unchecked"));
   await publish("urn:publish:redirect", "urn:other:host", held);
@@ -620,7 +650,7 @@ it("recovers delivery and persists mailbox challenge activation and consumption 
   }
 });
 
-it("recovers the file ledger checkpoint and treats a missing historical approval key as indeterminate", async () => {
+it("uses the durable file checkpoint and treats a missing historical approval key as indeterminate", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-audit-"));
   const f = await fixture({ stateDir: dir, emailApprovalOnly: true });
   try {
@@ -635,22 +665,50 @@ it("recovers the file ledger checkpoint and treats a missing historical approval
     expect((await f.runtime.auditRecord()).released).toContainEqual(
       expect.objectContaining({ verdict: "inside" }),
     );
-    const suffix = new FileLedger(join(dir, "record.jsonl"));
-    const entry = suffix.append(
-      { type: "crash-before-state-checkpoint" },
-      "2026-11-13T09:00:00.000Z",
-    );
+    const beforeRestart = f.runtime.recordHead();
     await f.reopen(false);
-    expect(f.runtime.recordHead().seq).toBeGreaterThanOrEqual(entry.seq);
+    expect(f.runtime.recordHead().seq).toBeGreaterThanOrEqual(beforeRestart.seq);
     const report = await f.runtime.auditRecord();
     expect(report.outside).toEqual([]);
     expect(report.released).toContainEqual(expect.objectContaining({ verdict: "indeterminate" }));
     f.runtime.close();
     const state = new FileStateStore(join(dir, "state.json"));
     try {
-      expect(state.load().ledgerAuditHead?.seq).toBeGreaterThanOrEqual(entry.seq);
+      expect(state.load().ledgerAuditHead?.seq).toBeGreaterThanOrEqual(beforeRestart.seq);
     } finally {
       state.close();
+    }
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("keeps a self-consistent file suffix outside the durable audit head across retries", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-unwitnessed-audit-"));
+  const f = await fixture({ stateDir: dir });
+  try {
+    await f.send();
+    const checkpoint = f.runtime.recordHead();
+    const rogue = new FileLedger(join(dir, "record.jsonl")).append(
+      { type: "gate-decision", gate: "outbound-gate", outcome: "go" },
+      "2026-11-13T09:00:00.000Z",
+    );
+    expect(rogue.prev).toBe(checkpoint.hash);
+    for (let restart = 0; restart < 2; restart++) {
+      await f.reopen();
+      expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
+      await expect(f.runtime.exportRecord("urn:unrelated")).rejects.toThrow(
+        "record head is unavailable",
+      );
+      expect(await f.runtime.auditRecord()).toMatchObject({ ok: false, released: [] });
+    }
+    f.runtime.close();
+    const store = new FileStateStore(join(dir, "state.json"));
+    try {
+      expect(store.load().ledgerAuditHead).toEqual(checkpoint);
+    } finally {
+      store.close();
     }
   } finally {
     f.runtime.close();

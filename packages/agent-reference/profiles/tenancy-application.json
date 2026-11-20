@@ -204,6 +204,18 @@
         "urn:purpose:tenancy-application"
       ],
       "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:supporting-statements",
+      "version": "0.1",
+      "label": "Send the signed supporting statements",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
     }
   ],
   "acceptedProofs": [
@@ -232,6 +244,13 @@
       "action": "urn:op:tenancy-application:proof-answer",
       "claims": [
         "tenancy-application.answer"
+      ]
+    },
+    {
+      "action": "urn:op:tenancy-application:supporting-statements",
+      "claims": [
+        "rental.entitled",
+        "rental.reference"
       ]
     }
   ],

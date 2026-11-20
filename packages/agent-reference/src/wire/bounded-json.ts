@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { assertJsonBounds, BoundsError, DEFAULT_LIMITS, type PilotLimits } from "../core/limits.js";
+import { rejectDuplicateJsonMembers } from "./strict-json.js";
 
 /**
  * Parse untrusted JSON text under the size/depth/node bounds. The nesting depth is
@@ -34,6 +36,11 @@ export function parseBoundedJson(text: string, limits: PilotLimits = DEFAULT_LIM
     value = JSON.parse(text);
   } catch {
     throw new BoundsError("not-json", "input is not valid JSON");
+  }
+  try {
+    rejectDuplicateJsonMembers(text);
+  } catch {
+    throw new BoundsError("duplicate-key", "duplicate JSON object member");
   }
   assertJsonBounds(value, limits);
   return value;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /** A closed did:web resolver. Host control locates keys; signed commitments bind their lifetime. */
 import type { createGuardedFetch } from "@jeswr/guarded-fetch";
@@ -184,15 +185,4 @@ export class FictionalDidDirectory {
   async swap(id: string, key: SigningKey) {
     await this.publish(id, key);
   }
-}
-
-/** Identity aliases are exact world names, including names used in profile constraints. */
-export function renameIdentities<T>(input: T, names: Readonly<Record<string, string>>): T {
-  if (typeof input === "string") return (names[input] ?? input) as T;
-  if (Array.isArray(input)) return input.map((x) => renameIdentities(x, names)) as T;
-  if (input && typeof input === "object")
-    return Object.fromEntries(
-      Object.entries(input).map(([k, v]) => [names[k] ?? k, renameIdentities(v, names)]),
-    ) as T;
-  return input;
 }

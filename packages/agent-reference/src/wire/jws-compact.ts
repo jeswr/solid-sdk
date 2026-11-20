@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /**
  * Integrity mechanism: JWS compact serialisation (RFC 7515) with EdDSA/Ed25519
@@ -222,7 +223,9 @@ export async function verifyCompact<R extends PublicKeyRecord>(
     return {
       outcome: "invalid",
       reason:
-        error instanceof BoundsError && error.code !== "not-json" ? "bounds-exceeded" : "malformed",
+        error instanceof BoundsError && !["not-json", "duplicate-key"].includes(error.code)
+          ? "bounds-exceeded"
+          : "malformed",
       detail: "payload is not bounded JSON",
       digest,
       kid,

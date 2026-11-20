@@ -11,7 +11,8 @@ import { resolve } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { z } from "zod";
 import { queryCredentialGraphs } from "../../model/sparq-query.js";
-import type { ProofBinds, ProofSystem } from "../verifiers.js";
+import { strictJson } from "../../wire/strict-json.js";
+import { DERIVATION_LIMITS, type ProofBinds, type ProofSystem } from "../verifiers.js";
 import { trustMember } from "./sparq-zk-result.js";
 
 export const SPARQ_ZK_QUERY = {
@@ -196,7 +197,7 @@ export class SparqZkQuery implements ProofSystem {
   /** Compute a pin for the verifier's independently selected scenario fixture dataset. */
   fixtureInputCommitment(input: Parameters<ProofSystem["prove"]>[0]): string {
     if (!this.prepareFixture) throw new Error("Query fixture commitment host unavailable");
-    const prepared: unknown = JSON.parse(
+    const prepared = strictJson(
       this.prepareFixture(
         JSON.stringify({
           request: this.request(input.query, input.policy, input.nonce),
@@ -205,6 +206,7 @@ export class SparqZkQuery implements ProofSystem {
           presentationSaltHex: word.parse(input.presentationSaltHex),
         }),
       ),
+      DERIVATION_LIMITS.maxEnvelopeBytes,
     );
     return z.object({ presentationSkeleton: z.object({ inputCommitment: word }) }).parse(prepared)
       .presentationSkeleton.inputCommitment;

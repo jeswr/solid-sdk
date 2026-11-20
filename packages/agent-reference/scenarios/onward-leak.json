@@ -541,6 +541,7 @@
       "id": "file-claim",
       "agent": "person-agent",
       "type": "forum-claim",
+      "proofOwners": ["person-agent", "owner-agent", "observer"],
       "case": "urn:case:onward-leak",
       "conversation": {
         "$ref": "steps.restricted-offer.conversation"
@@ -568,6 +569,7 @@
       "id": "answer",
       "agent": "owner-agent",
       "type": "forum-answer",
+      "proofOwners": ["person-agent", "owner-agent"],
       "case": "urn:case:onward-leak",
       "segment": {
         "$ref": "steps.respondent-record.jws"

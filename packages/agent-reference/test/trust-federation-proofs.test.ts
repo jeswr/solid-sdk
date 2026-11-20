@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import { signCompact } from "../src/mechanisms/jws.js";
@@ -103,6 +104,9 @@ it("expires a previously presented chain before another source or recipient deci
     policy,
   );
   expect((await resolver.present(await presentFederation(input), at)).ok).toBe(true);
+  const mortgage = { party: policy.subject, task: "urn:mortgage", taskLabel: "a mortgage", at };
+  expect(resolver.resolveRecipient(mortgage).outcome).toBe("accepted");
+  expect(resolver.resolveRecipient({ ...mortgage, registeredRole: true }).outcome).toBe("no-route");
   expect(
     resolver.resolveSource({
       evaluator: "urn:sam-agent",

@@ -103,7 +103,7 @@ export function identityNameDifferences(
     }
   };
   const declaredDocuments = new Set([...declared].map(documentUrl).filter(Boolean));
-  const sourcesByDocument = new Map<string, { source: string; target: string }>();
+  const sourcesByDocument = new Map<string, string>();
   const policy = canonicalJson({
     mandates: reference.mandates,
     trust: reference.trust,
@@ -120,18 +120,12 @@ export function identityNameDifferences(
       continue;
     }
     const previous = sourcesByDocument.get(document);
-    if (
-      previous &&
-      (previous.target !== target ||
-        !reference.parties.some(
-          ({ identity, actor }) =>
-            (source === identity && previous.source === actor) ||
-            (source === actor && previous.source === identity),
-        ))
-    )
-      problems.push(`identityNames:${source} aliases a different party`);
-    sourcesByDocument.set(document, { source, target });
+    if (previous) problems.push(`identityNames:${source} shares a DID document with ${previous}`);
+    sourcesByDocument.set(document, source);
   }
+  for (const { identity, actor } of world.parties)
+    if (actor && actor === identity && documentUrl(actor))
+      problems.push(`identityNames:${actor} identifies both a party and its actor`);
   return problems;
 }
 

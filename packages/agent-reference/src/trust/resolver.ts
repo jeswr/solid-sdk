@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Trust as a lookup, not one stored list (trust suite `register-chain`). A question goes
@@ -368,14 +369,12 @@ export class TrustResolver {
         checkedAt: input.at,
       };
     }
-    const register = this.delegates(root, input.at).find((r) =>
-      r.entries.some(
-        (e) =>
-          e.party === input.party &&
-          (!input.registeredRole || e.authorizedFor.includes(input.task)),
-      ),
-    );
-    if (!register) {
+    const matches = (entry: RegisterEntry) =>
+      entry.party === input.party &&
+      (!input.registeredRole || entry.authorizedFor.includes(input.task));
+    const register = this.delegates(root, input.at).find((r) => r.entries.some(matches));
+    const entry = register?.entries.find(matches);
+    if (!register || !entry) {
       path.push({
         at: root.name,
         kind: "root",
@@ -394,7 +393,6 @@ export class TrustResolver {
       kind: "root",
       says: `${register.answersFor[0]?.toUpperCase()}${register.answersFor.slice(1)} are answered by the ${register.name}.`,
     });
-    const entry = register.entries.find((e) => e.party === input.party) as RegisterEntry;
     const expires =
       entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString();
     const ok =

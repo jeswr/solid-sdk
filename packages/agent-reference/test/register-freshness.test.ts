@@ -88,6 +88,12 @@ it("requires explicit registered-role evidence even with a matching own-list ent
               status: "authorized",
             },
             {
+              id: "urn:entry:lender:operation",
+              party: lender,
+              authorizedFor: [ownOperation],
+              status: "authorized",
+            },
+            {
               id: "urn:entry:lender",
               party: lender,
               authorizedFor: [task],

@@ -4,7 +4,7 @@
   "useCase": "mortgage-in-principle",
   "path": {
     "index": 1,
-    "what": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable."
+    "what": "The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer."
   },
   "parties": [
     {
@@ -90,7 +90,7 @@
   ],
   "scenario": {
     "id": "mortgage-main--entry-withheld",
-    "title": "A mortgage in principle: The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable.",
+    "title": "A mortgage in principle: The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer.",
     "steps": {
       "1": "Sam signs a mandate.",
       "2": "Sam asks for a mortgage in principle.",
@@ -35420,14 +35420,14 @@
       "segment": "payment",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share The fictional lender's fee charged statement, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation with The fictional mortgage ombudsman.",
+      "caption": "The core proposes to share The fictional lender's fee charged statement, Signed fee invoke, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation with The fictional mortgage ombudsman.",
       "addedBy": "accountability-regulator-claim"
     },
     {
       "seq": 699,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35437,12 +35437,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35473,7 +35474,7 @@
       "seq": 700,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35483,12 +35484,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35526,7 +35528,7 @@
       "seq": 701,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35536,12 +35538,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35559,7 +35562,7 @@
         "id": "undefined",
         "text": "The request asks for fee charged, record proof, register dispute route and forum decision; by value is the only form in this configuration."
       },
-      "caption": "Only what the request needs goes: The fictional lender's fee charged statement, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation (nothing held for register dispute route and forum decision).",
+      "caption": "Only what the request needs goes: The fictional lender's fee charged statement, Signed fee invoke, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation (nothing held for register dispute route and forum decision).",
       "gateRun": 19,
       "addedBy": "accountability-regulator-claim"
     },
@@ -35567,7 +35570,7 @@
       "seq": 702,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35577,12 +35580,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35608,7 +35612,7 @@
       "seq": 703,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35618,12 +35622,55 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:record-proof-grant:04d54e54a24705958ffd1ea679e9c30c",
+        "text": "The issuer's terms: share for Redress. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "Signed fee invoke: its terms allow this: share for Redress.",
+      "gateRun": 19,
+      "addedBy": "accountability-regulator-claim"
+    },
+    {
+      "seq": 704,
+      "step": 43,
+      "agent": "sams-agent",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:forum-claim",
+        "operation": "urn:op:forum-claim",
+        "conversation": "urn:scenario:mortgage-main:file-claim",
+        "recipient": "urn:fictional:mortgage-ombudsman",
+        "purpose": "urn:purpose:redress",
+        "evidence": [
+          "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
+          "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
+          "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
+          "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
+          "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
+        ],
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35646,10 +35693,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 704,
+      "seq": 705,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35659,12 +35706,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35687,10 +35735,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 705,
+      "seq": 706,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35700,12 +35748,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35728,10 +35777,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 706,
+      "seq": 707,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35741,12 +35790,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35769,10 +35819,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 707,
+      "seq": 708,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35782,12 +35832,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35810,10 +35861,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 708,
+      "seq": 709,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35823,12 +35874,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -35840,25 +35892,25 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 709,
+      "seq": 710,
       "step": 43,
       "agent": "sams-agent",
       "part": "principal",
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "The fictional mortgage ombudsman asks for 5 of your statements: The fictional lender's fee charged statement (fee.charged), Signed representation (record.proof), Signed agreement offer (record.proof), Signed agreement acceptance (record.proof) and Signed representation (record.proof). They would use them for Redress. May I share them?"
+        "text": "The fictional mortgage ombudsman asks for 6 of your statements: The fictional lender's fee charged statement (fee.charged), Signed fee invoke (record.proof), Signed representation (record.proof), Signed agreement offer (record.proof), Signed agreement acceptance (record.proof) and Signed representation (record.proof). They would use them for Redress. May I share them?"
       },
       "caption": "Sam, the fictional applicant is asked to approve this exact action; the approval will be bound to its digest.",
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 710,
+      "seq": 711,
       "step": 43,
       "agent": "sams-agent",
       "part": "principal",
       "kind": "principal-reply",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "approvalDecision": "approve",
       "chat": {
         "who": "principal",
@@ -35868,10 +35920,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 711,
+      "seq": 712,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35881,12 +35933,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35914,10 +35967,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 712,
+      "seq": 713,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35927,12 +35980,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -35967,10 +36021,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 713,
+      "seq": 714,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -35980,12 +36034,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36003,15 +36058,15 @@
         "id": "undefined",
         "text": "The request asks for fee charged, record proof, register dispute route and forum decision; by value is the only form in this configuration."
       },
-      "caption": "Only what the request needs goes: The fictional lender's fee charged statement, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation (nothing held for register dispute route and forum decision).",
+      "caption": "Only what the request needs goes: The fictional lender's fee charged statement, Signed fee invoke, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation (nothing held for register dispute route and forum decision).",
       "gateRun": 20,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 714,
+      "seq": 715,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36021,12 +36076,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36049,10 +36105,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 715,
+      "seq": 716,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36062,12 +36118,55 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:record-proof-grant:04d54e54a24705958ffd1ea679e9c30c",
+        "text": "The issuer's terms: share for Redress. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "Signed fee invoke: its terms allow this: share for Redress.",
+      "gateRun": 20,
+      "addedBy": "accountability-regulator-claim"
+    },
+    {
+      "seq": 717,
+      "step": 43,
+      "agent": "sams-agent",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:forum-claim",
+        "operation": "urn:op:forum-claim",
+        "conversation": "urn:scenario:mortgage-main:file-claim",
+        "recipient": "urn:fictional:mortgage-ombudsman",
+        "purpose": "urn:purpose:redress",
+        "evidence": [
+          "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
+          "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
+          "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
+          "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
+          "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
+        ],
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36090,10 +36189,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 716,
+      "seq": 718,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36103,12 +36202,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36131,10 +36231,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 717,
+      "seq": 719,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36144,12 +36244,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36172,10 +36273,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 718,
+      "seq": 720,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36185,12 +36286,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36213,10 +36315,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 719,
+      "seq": 721,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36226,12 +36328,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36247,17 +36350,17 @@
       "reason": "approval-given",
       "rule": {
         "id": "urn:awp:engine-mortgage-main-entry-withheld:sam-agent-approval:0005",
-        "text": "Sam, the fictional applicant's signed approval, bound to digest sha-256:6c77e014…."
+        "text": "Sam, the fictional applicant's signed approval, bound to digest sha-256:c6e2c329…."
       },
       "caption": "Sam, the fictional applicant approved this exact action.",
       "gateRun": 20,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 720,
+      "seq": 722,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36267,12 +36370,13 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36291,7 +36395,7 @@
         }
       ],
       "rule": {
-        "id": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+        "id": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
@@ -36300,10 +36404,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 721,
+      "seq": 723,
       "step": 43,
       "agent": "sams-agent",
-      "actionDigest": "sha-256:6c77e0143de443807a8929c89a41094587a9808ff5a8695eb21588c49a7eb83a",
+      "actionDigest": "sha-256:c6e2c329d1b3059ce1975c4a167bc8b4568a2e1241de39d2b5e7a587ec3114de",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -36313,24 +36417,25 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:bf23ad13c6aec3152e168a623068de08",
           "urn:awp:record-proof:76aa10b03272a92153a94b2c0da316d5",
           "urn:awp:record-proof:f011d7b2216937d85c06e33cb6a42de5",
           "urn:awp:record-proof:1dfa848b1d830656619d66be86331c06",
           "urn:awp:record-proof:8e4968e134d7133ccfe9958715fa13cd"
         ],
-        "otherParametersDigest": "sha-256:bfd7e982bb16a8c94362e889c4a2994efa9468ee152562f2a8b137d1c0ebbe17"
+        "otherParametersDigest": "sha-256:ddaa4ef0f43f73b07dd6df105b31e32000e3c471de2fa101bfbae3ba956e87d1"
       },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
       "effectRelease": true,
-      "caption": "The action goes: share The fictional lender's fee charged statement, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation with The fictional mortgage ombudsman.",
+      "caption": "The action goes: share The fictional lender's fee charged statement, Signed fee invoke, Signed representation, Signed agreement offer, Signed agreement acceptance and Signed representation with The fictional mortgage ombudsman.",
       "gateRun": 20,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 722,
+      "seq": 724,
       "step": 43,
       "agent": "forum",
       "part": "inbound-gate",
@@ -36342,7 +36447,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 723,
+      "seq": 725,
       "step": 43,
       "agent": "forum",
       "part": "inbound-gate",
@@ -36354,7 +36459,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 724,
+      "seq": 726,
       "step": 43,
       "agent": "forum",
       "part": "inbound-gate",
@@ -36366,7 +36471,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 725,
+      "seq": 727,
       "step": 43,
       "agent": "forum",
       "part": "inbound-gate",
@@ -36378,7 +36483,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 726,
+      "seq": 728,
       "step": 43,
       "agent": "forum",
       "part": "inbound-gate",
@@ -36390,7 +36495,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 727,
+      "seq": 729,
       "step": 43,
       "agent": "forum",
       "part": "outbound-gate",
@@ -36409,20 +36514,20 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 728,
+      "seq": 730,
       "step": 44,
       "agent": "lender",
       "segment": "payment",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share The fictional lender's fee charged statement and Signed representation with The fictional mortgage ombudsman.",
+      "caption": "The core proposes to share The fictional lender's fee charged statement, Signed fee invoke and Signed representation with The fictional mortgage ombudsman.",
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 729,
+      "seq": 731,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36432,9 +36537,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36462,10 +36568,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 730,
+      "seq": 732,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36475,9 +36581,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36512,10 +36619,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 731,
+      "seq": 733,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36525,9 +36632,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36545,15 +36653,15 @@
         "id": "undefined",
         "text": "The request asks for fee charged, record proof, register dispute route and forum decision; by value is the only form in this configuration."
       },
-      "caption": "Only what the request needs goes: The fictional lender's fee charged statement and Signed representation (nothing held for register dispute route and forum decision).",
+      "caption": "Only what the request needs goes: The fictional lender's fee charged statement, Signed fee invoke and Signed representation (nothing held for register dispute route and forum decision).",
       "gateRun": 7,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 732,
+      "seq": 734,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36563,9 +36671,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36588,10 +36697,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 733,
+      "seq": 735,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36601,9 +36710,49 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:record-proof-grant:0ea9b20f17b1903778fbcdfe066727b9",
+        "text": "The issuer's terms: share for Redress. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "Signed fee invoke: its terms allow this: share for Redress.",
+      "gateRun": 7,
+      "addedBy": "accountability-regulator-claim"
+    },
+    {
+      "seq": 736,
+      "step": 44,
+      "agent": "lender",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:forum-answer",
+        "operation": "urn:op:forum-answer",
+        "conversation": "urn:scenario:mortgage-main:answer",
+        "recipient": "urn:fictional:mortgage-ombudsman",
+        "purpose": "urn:purpose:redress",
+        "evidence": [
+          "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
+          "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
+        ],
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36626,10 +36775,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 734,
+      "seq": 737,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36639,9 +36788,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36664,10 +36814,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 735,
+      "seq": 738,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36677,9 +36827,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -36691,25 +36842,25 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 736,
+      "seq": 739,
       "step": 44,
       "agent": "lender",
       "part": "principal",
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "The fictional mortgage ombudsman asks for two of your statements: The fictional lender's fee charged statement (fee.charged) and Signed representation (record.proof). They would use them for Redress. May I share them?"
+        "text": "The fictional mortgage ombudsman asks for 3 of your statements: The fictional lender's fee charged statement (fee.charged), Signed fee invoke (record.proof) and Signed representation (record.proof). They would use them for Redress. May I share them?"
       },
       "caption": "The fictional lender is asked to approve this exact action; the approval will be bound to its digest.",
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 737,
+      "seq": 740,
       "step": 44,
       "agent": "lender",
       "part": "principal",
       "kind": "principal-reply",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "approvalDecision": "approve",
       "chat": {
         "who": "principal",
@@ -36719,10 +36870,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 738,
+      "seq": 741,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36732,9 +36883,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36762,10 +36914,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 739,
+      "seq": 742,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36775,9 +36927,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36812,10 +36965,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 740,
+      "seq": 743,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36825,9 +36978,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36845,15 +36999,15 @@
         "id": "undefined",
         "text": "The request asks for fee charged, record proof, register dispute route and forum decision; by value is the only form in this configuration."
       },
-      "caption": "Only what the request needs goes: The fictional lender's fee charged statement and Signed representation (nothing held for register dispute route and forum decision).",
+      "caption": "Only what the request needs goes: The fictional lender's fee charged statement, Signed fee invoke and Signed representation (nothing held for register dispute route and forum decision).",
       "gateRun": 8,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 741,
+      "seq": 744,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36863,9 +37017,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36888,10 +37043,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 742,
+      "seq": 745,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36901,9 +37056,49 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:awp:record-proof-grant:0ea9b20f17b1903778fbcdfe066727b9",
+        "text": "The issuer's terms: share for Redress. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "Signed fee invoke: its terms allow this: share for Redress.",
+      "gateRun": 8,
+      "addedBy": "accountability-regulator-claim"
+    },
+    {
+      "seq": 746,
+      "step": 44,
+      "agent": "lender",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:forum-answer",
+        "operation": "urn:op:forum-answer",
+        "conversation": "urn:scenario:mortgage-main:answer",
+        "recipient": "urn:fictional:mortgage-ombudsman",
+        "purpose": "urn:purpose:redress",
+        "evidence": [
+          "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
+          "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
+        ],
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36926,10 +37121,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 743,
+      "seq": 747,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36939,9 +37134,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36957,17 +37153,17 @@
       "reason": "approval-given",
       "rule": {
         "id": "urn:awp:engine-mortgage-main-entry-withheld:north-agent-approval:0001",
-        "text": "The fictional lender's signed approval, bound to digest sha-256:ce657c81…."
+        "text": "The fictional lender's signed approval, bound to digest sha-256:8b4874a6…."
       },
       "caption": "The fictional lender approved this exact action.",
       "gateRun": 8,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 744,
+      "seq": 748,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -36977,9 +37173,10 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -36998,7 +37195,7 @@
         }
       ],
       "rule": {
-        "id": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+        "id": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
@@ -37007,10 +37204,10 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 745,
+      "seq": 749,
       "step": 44,
       "agent": "lender",
-      "actionDigest": "sha-256:ce657c81e5c5dc2805aafb9fbf961696e801f15ee7eb29b3938016f84b0596ba",
+      "actionDigest": "sha-256:8b4874a6eaa8b88d994bf8490ba5cfcc649c4a7b2933f836822f177ce7ffc81c",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -37020,21 +37217,22 @@
         "purpose": "urn:purpose:redress",
         "evidence": [
           "urn:scenario:mortgage-main:fee-statement",
+          "urn:awp:record-proof:b47ef54167985726e17d9605b3a463c3",
           "urn:awp:record-proof:3bc649a278e2f14dd6e4c47e4a92b8ef"
         ],
-        "otherParametersDigest": "sha-256:b255a86354eb67960f52f79248f991430c2a87fc3ae2c1c168a190d3880d0ffd"
+        "otherParametersDigest": "sha-256:e33e380221e5626838152d18e13e1156b289bca36b83899c6ea63c180ec2d931"
       },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
       "effectRelease": true,
-      "caption": "The action goes: share The fictional lender's fee charged statement and Signed representation with The fictional mortgage ombudsman.",
+      "caption": "The action goes: share The fictional lender's fee charged statement, Signed fee invoke and Signed representation with The fictional mortgage ombudsman.",
       "gateRun": 8,
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 746,
+      "seq": 750,
       "step": 44,
       "agent": "forum",
       "part": "inbound-gate",
@@ -37046,7 +37244,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 747,
+      "seq": 751,
       "step": 44,
       "agent": "forum",
       "part": "inbound-gate",
@@ -37058,7 +37256,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 748,
+      "seq": 752,
       "step": 44,
       "agent": "forum",
       "part": "inbound-gate",
@@ -37070,7 +37268,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 749,
+      "seq": 753,
       "step": 44,
       "agent": "forum",
       "part": "inbound-gate",
@@ -37082,7 +37280,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 750,
+      "seq": 754,
       "step": 44,
       "agent": "forum",
       "part": "inbound-gate",
@@ -37094,7 +37292,7 @@
       "addedBy": "accountability-regulator-claim"
     },
     {
-      "seq": 751,
+      "seq": 755,
       "step": 44,
       "agent": "forum",
       "part": "inbound-gate",

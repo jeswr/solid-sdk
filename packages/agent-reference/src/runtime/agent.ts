@@ -72,7 +72,9 @@ import {
   forumClaimSchema,
   RECORD_LIMITS,
   RECORD_PROOF_GRANT_TYP,
+  rangeEntrySchema,
   recordProofGrantSchema,
+  recordRequestSchema,
   recordSegmentSchema,
 } from "../mechanisms/forum.js";
 import { jointPayloadSchema } from "../mechanisms/joint.js";
@@ -142,6 +144,7 @@ import {
   type LedgerHead,
   type LedgerRangeEntry,
   type LedgerRecord,
+  legacyApprovalRedaction,
   verifyLedger,
   verifyLedgerAtHead,
   verifyLedgerRange,
@@ -553,22 +556,8 @@ export class AgentRuntime {
     this.ledgerAuditTrusted =
       !!head &&
       (!this.ledger.requiresTrustedCheckpoint ||
-        (head.seq === 0 && !checkpoint) ||
-        (!!checkpoint &&
-          ((head.seq === checkpoint.seq && head.hash === checkpoint.hash) ||
-            (head.seq > checkpoint.seq &&
-              verifyLedgerRange(
-                this.ledger.entries().filter(({ seq }) => seq > checkpoint.seq),
-                checkpoint,
-                head,
-              ).ok &&
-              verifyLedgerAtHead(this.ledger.entries(), head).ok))));
-    if (
-      this.ledger.requiresTrustedCheckpoint &&
-      this.ledgerAuditTrusted &&
-      (checkpoint?.seq !== head?.seq || checkpoint?.hash !== head?.hash)
-    )
-      this.persist();
+        (head.seq === LEDGER_GENESIS.seq && head.hash === LEDGER_GENESIS.hash && !checkpoint) ||
+        (head.seq === checkpoint?.seq && head.hash === checkpoint.hash));
     this.state.domain.derivedRequests ??= {};
     this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;
@@ -767,6 +756,8 @@ export class AgentRuntime {
         return undefined;
       },
       recordRelease: (intent) => this.recordReleaseDigest === actionDigest(intent),
+      authoredProofSupports: (intent, item, claimType) =>
+        this.authoredProofSupports(intent, item, claimType),
       recordBacks: (claim, recipient) => this.recordBacks(claim, recipient),
       mandate: () =>
         this.mandate && !this.isRevoked(this.mandate) ? this.mandate.mandate : undefined,
@@ -1042,6 +1033,7 @@ export class AgentRuntime {
       }
     }
     rt.notificationDuties();
+    if (rt.ledger.requiresTrustedCheckpoint && rt.ledgerAuditTrusted) rt.persist();
     return rt;
   }
 
@@ -2597,10 +2589,79 @@ export class AgentRuntime {
       const key = this.options.sourceKey;
       if (!key) return { ok: false as const, reason: "unknown-key" };
       const jws = await signCompact(key, TYP.statement, statement);
-      this.record({ type: "proof-derivation", statement, requestDigest: digestOf(args), cached });
+      this.record({
+        type: "proof-derivation",
+        statement,
+        requestDigest: digestOf(args),
+        proofDigest: digestOf(jws),
+        recipient: input.recipient,
+        purpose: input.request.purpose,
+        cached,
+      });
       this.persist();
       return { ok: true as const, statement, jws };
     });
+  }
+
+  /** A sender may present its own gate-produced answer in the exact request's scope. */
+  private authoredProofSupports(
+    intent: ActionIntent,
+    item: EvidenceItem,
+    claimType: string,
+  ): boolean {
+    if (
+      intent.action !== "distribute" ||
+      item.role !== "credential" ||
+      item.format !== "derivation+jws"
+    )
+      return false;
+    const entries = this.ledger.entries();
+    if (
+      this.ledger.requiresTrustedCheckpoint &&
+      !verifyLedgerAtHead(entries, this.trustedAuditHead()).ok
+    )
+      return false;
+    const proofDigest = digestOf(item.value);
+    const record = entries.findLast(
+      ({ record }) =>
+        record.type === "proof-derivation" &&
+        record.producer !== "core" &&
+        record.proofDigest === proofDigest &&
+        record.recipient === intent.recipient &&
+        record.purpose === intent.purpose,
+    )?.record;
+    const statement = record?.statement as JsonObject | undefined;
+    if (!statement || statement.claimType !== claimType || !intent.purpose || !intent.recipient)
+      return false;
+    const at = this.now();
+    const derivation = statement.derivation as JsonObject;
+    const inputs = derivation.inputs as { id: string; digest: string }[];
+    return (
+      fitnessOf(
+        StatementQualityNode.from(
+          statement as unknown as import("../gates/quality.js").QualityClaim,
+        ),
+        this.options.gates?.reliance,
+        at,
+      ).verdict === "pass" &&
+      inputs.every(({ id, digest }) => {
+        const fact = this.gateMemory.facts.get(id);
+        return (
+          fact?.digest === digest &&
+          (["use", "distribute"] as const).every(
+            (action) =>
+              evaluateItemTerms(fact.terms, {
+                agent: this.identity.actor,
+                action,
+                target: id,
+                purpose: intent.purpose,
+                recipient: intent.recipient,
+                at,
+              }).verdict === "pass",
+          )
+        );
+      })
+    );
   }
   derive(input: {
     rule: string;
@@ -3064,13 +3125,6 @@ export class AgentRuntime {
       )
       .map((item) => copyData(item.statement!));
   }
-  /** Legacy whole-record release scope. Ranges are inspected from their signed payload. */
-  recordDisclosures() {
-    return [...this.gateMemory.facts.values()]
-      .filter(({ claimType }) => claimType !== "record.proof")
-      .map(({ id }) => id);
-  }
-
   /**
    * The agreement this agent formed in one conversation, named by its terms digest, with
    * the two signed messages that formed it as this agent recorded them.
@@ -3099,18 +3153,34 @@ export class AgentRuntime {
    * Brief 31 item 4: sign a receipt for a peer's record head that this agent was shown, and
    * keep it in this agent's own record. A forum accepts a range segment anchored there.
    */
-  witnessRecordHead(head: {
-    actor: string;
-    party: string;
-    seq: number;
-    hash: string;
-    interval?: { conversation: string; from: LedgerHead };
-  }): Promise<{ jws: string }> {
+  witnessRecordHead(
+    head: {
+      actor: string;
+      party: string;
+      seq: number;
+      hash: string;
+      interval?: { conversation: string; from: LedgerHead };
+    },
+    legacyApprovals: readonly LedgerEntry[] = [],
+  ): Promise<{ jws: string }> {
     return this.exclusive(async () => {
       const key = this.keysByAlg.get("EdDSA");
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
+      const approvalRedactions = legacyApprovals.map((entry) => {
+        const redacted = legacyApprovalRedaction(entry);
+        if (
+          !redacted ||
+          !head.interval ||
+          entry.seq > head.seq ||
+          entry.seq <= head.interval.from.seq ||
+          !verifyLedgerRange([entry], { seq: entry.seq - 1, hash: entry.prev }, entry).ok
+        )
+          throw Error("invalid approval row for the witnessed interval");
+        return digestOf(redacted);
+      });
       const at = this.now();
-      this.ledger.append({ type: "record-anchor-receipt", ...head }, at);
+      const redactions = approvalRedactions.length ? { approvalRedactions } : {};
+      this.ledger.append({ type: "record-anchor-receipt", ...head, ...redactions }, at);
       const receipt = {
         type: "RecordAnchorReceipt",
         actor: this.identity.actor,
@@ -3120,6 +3190,7 @@ export class AgentRuntime {
         seq: head.seq,
         hash: head.hash,
         ...(head.interval ? { interval: head.interval } : {}),
+        ...redactions,
         at,
       };
       this.persist();
@@ -3142,11 +3213,46 @@ export class AgentRuntime {
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
       if (anchor && !terminal) throw Error("a range needs a witnessed terminal");
       const all = this.ledger.entries();
+      if (
+        this.ledger.requiresTrustedCheckpoint &&
+        !verifyLedgerAtHead(all, this.trustedAuditHead()).ok
+      )
+        throw Error("this agent's record head is unavailable");
       const entries = all.filter(
         (entry) => entry.seq > (anchor?.seq ?? 0) && (!terminal || entry.seq <= terminal.seq),
       );
       if (terminal && !verifyLedgerRange(entries, anchor ?? LEDGER_GENESIS, terminal).ok)
         throw Error("the retained record does not match the witnessed interval");
+      let witnessedApprovals: readonly string[] = [];
+      if (
+        terminal &&
+        entries.some((entry) => legacyApprovalRedaction(entry) && !entry.recordDigest)
+      ) {
+        const verified = await verifyStatement(terminal.receipt, {
+          trust: this.trust,
+          typ: "awp-record-anchor+jws",
+          role: "actor",
+          schema: anchorReceiptSchema,
+          limits: RECORD_LIMITS,
+          at: this.now(),
+          verifier: this.identity.actor,
+        });
+        const receipt = verified.payload;
+        if (
+          receipt &&
+          verified.signer?.subject === receipt.actor &&
+          verified.signer.party === receipt.party &&
+          receipt.party !== this.identity.party &&
+          receipt.subject === this.identity.actor &&
+          receipt.subjectParty === this.identity.party &&
+          receipt.seq === terminal.seq &&
+          receipt.hash === terminal.hash &&
+          receipt.interval?.conversation === conversation &&
+          digestOf(receipt.interval.from) ===
+            digestOf(anchor ? { seq: anchor.seq, hash: anchor.hash } : LEDGER_GENESIS)
+        )
+          witnessedApprovals = receipt.approvalRedactions ?? [];
+      }
       const messages: { direction: "in" | "out"; digest: string; jws: string }[] = [];
       for (const { direction, digest, jws, conversation: recorded } of Object.values(
         this.state.recordMessages,
@@ -3167,8 +3273,9 @@ export class AgentRuntime {
       const signed = await Promise.all(
         entries.map(async (entry) => {
           let disclosed: LedgerRangeEntry = entry;
+          const approval = legacyApprovalRedaction(entry);
           if (
-            (entry.record.type === "approval" && "jws" in entry.record) ||
+            approval ||
             (anchor &&
               !messages.some(
                 ({ direction, digest }) =>
@@ -3177,8 +3284,12 @@ export class AgentRuntime {
                   entry.record.digest === digest,
               ))
           ) {
-            if (!entry.recordDigest) throw Error("record has no commitment for redaction");
-            disclosed = { ...entry, record: null, recordDigest: entry.recordDigest };
+            if (
+              !entry.recordDigest &&
+              (!approval || !witnessedApprovals.includes(digestOf(approval)))
+            )
+              throw Error("record has no commitment for redaction");
+            disclosed = approval ?? { ...entry, record: null };
           }
           return {
             entry: disclosed,
@@ -3317,17 +3428,6 @@ export class AgentRuntime {
     return claim.id;
   }
 
-  private isRangeRequest(parameters: NamedValuesNode): boolean {
-    try {
-      const params = parameters.live;
-      if (Array.isArray(params) || typeof params.request !== "string") return false;
-      const request = decodeCompactPayload(params.request) as { segment: string };
-      return !!(decodeCompactPayload(request.segment) as { anchor?: unknown }).anchor;
-    } catch {
-      return false;
-    }
-  }
-
   private async readOwnRecordProof(jws: string, typ: string): Promise<unknown> {
     const checked = await verifyCompact(jws, {
       typ,
@@ -3338,10 +3438,30 @@ export class AgentRuntime {
     return checked.outcome === "valid" ? checked.payload : undefined;
   }
 
+  /** Whole-record rows may repeat original statements. Inspect both the row and its proof. */
+  private wholeRecordItems(value: unknown, items: Set<string>): boolean {
+    if (typeof value === "string")
+      return !value.startsWith("awp-jsonld-gzip:") && !/^eyJ[\w-]*\.[\w-]+\.[\w-]+$/.test(value);
+    if (!value || typeof value !== "object") return true;
+    if (Array.isArray(value)) return value.every((item) => this.wholeRecordItems(item, items));
+    const record = value as Record<string, unknown>;
+    if (record.type === "approval" && "jws" in record) return false;
+    if (typeof record.claimType === "string" && typeof record.issuer === "string") {
+      if (
+        typeof record.id !== "string" ||
+        this.gateMemory.facts.get(record.id)?.digest !== digestOf(record)
+      )
+        return false;
+      items.add(record.id);
+    }
+    return Object.values(record).every((item) => this.wholeRecordItems(item, items));
+  }
+
   /** Inventory signed companion payloads by their exact proof bytes and authenticated owner. */
   async recordReleaseProofs(
     segment: import("zod").infer<typeof recordSegmentSchema>,
     agreement?: { offer: string; acceptance: string },
+    whole?: { segment: string; observation?: string },
   ) {
     const proofs = new Map<string, { digest: string; issuer: string; label: string }>();
     const credentials = new Set<string>();
@@ -3349,12 +3469,15 @@ export class AgentRuntime {
       const digest = digestOf(proof);
       proofs.set(digest, { digest, issuer, label });
     };
-    for (const [proof, kind] of [
-      ...segment.messages.map(({ jws }) => [jws, "invoke"] as const),
+    if (whole) add(whole.segment, segment.party, "Signed whole record");
+    for (const [proof, kind, archived] of [
+      ...segment.messages.map(
+        (message) => [message.jws, whole ? undefined : "invoke", message] as const,
+      ),
       ...(agreement
         ? ([
-            [agreement.offer, "propose"],
-            [agreement.acceptance, "accept"],
+            [agreement.offer, "propose", undefined],
+            [agreement.acceptance, "accept", undefined],
           ] as const)
         : []),
     ]) {
@@ -3362,18 +3485,26 @@ export class AgentRuntime {
       const message = verified?.message;
       if (
         !message ||
-        message.kind !== kind ||
+        (kind && message.kind !== kind) ||
+        (archived &&
+          (message.conversation !== segment.conversation ||
+            digestOf(message) !== archived.digest)) ||
         message.from.actor !== verified.pinned.subject ||
         !message.from.onBehalfOf ||
         message.from.onBehalfOf !== verified.pinned.party
       )
         return undefined;
-      if (kind !== "invoke")
-        add(
-          proof,
-          message.from.onBehalfOf,
-          kind === "propose" ? "Signed agreement offer" : "Signed agreement acceptance",
-        );
+      add(
+        proof,
+        message.from.onBehalfOf,
+        kind === "propose"
+          ? "Signed agreement offer"
+          : kind === "accept"
+            ? "Signed agreement acceptance"
+            : kind === "invoke"
+              ? "Signed fee invoke"
+              : "Signed record message",
+      );
       for (const item of message.evidence ?? []) {
         if (item.format !== "jws-compact") return undefined;
         if (item.role === "credential") {
@@ -3401,6 +3532,24 @@ export class AgentRuntime {
         add(item.value, signed.payload.party, "Signed representation");
       }
     }
+    if (whole?.observation) {
+      const checked = await verifyStatement(whole.observation, {
+        trust: this.trust,
+        typ: TYP.statement,
+        role: "issuer",
+        schema: claimSchema,
+        limits: this.limits,
+        verifier: this.identity.actor,
+        at: this.now(),
+      });
+      const claim = checked.payload;
+      if (!claim || checked.signer?.subject !== claim.issuer) return undefined;
+      const id = await this.rangeCredential(whole.observation, false);
+      if (id) credentials.add(id);
+      else if (claim.claimType !== "onward.observation" || claim.terms !== undefined)
+        return undefined;
+      add(whole.observation, claim.issuer, "Signed observation");
+    }
     return { proofs: [...proofs.values()], credentials: [...credentials] };
   }
 
@@ -3408,24 +3557,29 @@ export class AgentRuntime {
     inventory: NonNullable<Awaited<ReturnType<AgentRuntime["recordReleaseProofs"]>>>,
     grants: readonly unknown[],
     intent: ActionIntent,
+    whole: boolean,
   ): Promise<string[] | undefined> {
     const available = new Map(inventory.proofs.map((proof) => [proof.digest, proof]));
     const facts: import("../gates/common.js").AdmittedFact[] = [];
     for (const jws of grants) {
       if (typeof jws !== "string") return undefined;
-      const { payload, signer } = await verifyStatement(jws, {
+      const options = {
         trust: this.trust,
         typ: RECORD_PROOF_GRANT_TYP,
-        role: "party",
         schema: recordProofGrantSchema,
         limits: this.limits,
         at: this.now(),
         verifier: this.identity.actor,
-      });
+      };
+      let checked = await verifyStatement(jws, { ...options, role: "party" });
+      if (whole && checked.verification.outcome === "unknown-key")
+        checked = await verifyStatement(jws, { ...options, role: "issuer" });
+      const { payload, signer } = checked;
       if (!payload) return undefined;
       const proof = available.get(payload.digest);
       if (
         !proof ||
+        (signer?.role === "issuer" && proof.label !== "Signed observation") ||
         payload.issuer !== proof.issuer ||
         signer?.subject !== proof.issuer ||
         payload.holder !== this.identity.actor ||
@@ -3469,19 +3623,22 @@ export class AgentRuntime {
       )
     )
       return undefined;
+    if (whole) return inventory.credentials;
     for (const fact of facts) this.gateMemory.facts.set(fact.id, fact);
     return [...inventory.credentials, ...facts.map(({ id }) => id)];
   }
 
-  /** Derive the terms-check input from the actual signed request and nested range. */
-  private async rangeDisclosures(
+  /** Derive disclosure from the actual signed request, record and companion proofs. */
+  private async recordDisclosures(
     parameters: NamedValuesNode,
     intent: ActionIntent,
+    rangeOnly: boolean,
   ): Promise<string[] | undefined> {
     const params = parameters.live;
     if (
       Array.isArray(params) ||
       typeof params.request !== "string" ||
+      (params.operation !== "submit" && params.operation !== "answer") ||
       Object.keys(params).some(
         (key) => !["operation", "recordFrom", "evidence", "request", "proofGrants"].includes(key),
       )
@@ -3499,15 +3656,38 @@ export class AgentRuntime {
         await this.readOwnRecordProof(request.segment, "awp-record-segment+jws"),
       );
       if (
-        !segment.anchor ||
         !segment.terminal ||
-        segment.anchor.seq !== params.recordFrom ||
+        (rangeOnly && !segment.anchor) ||
+        segment.anchor?.seq !== params.recordFrom ||
         segment.actor !== this.identity.actor ||
         segment.party !== this.identity.party ||
         request.actor !== segment.actor ||
         request.party !== segment.party
       )
         return undefined;
+      const grants = params.proofGrants ?? [];
+      if (!Array.isArray(grants)) return undefined;
+      if (request.type === "ForumAnswer") {
+        const checked = await verifyStatement(request.request, {
+          typ: "awp-record-request+jws",
+          trust: this.trust,
+          role: "issuer",
+          schema: recordRequestSchema,
+          limits: RECORD_LIMITS,
+          verifier: this.identity.actor,
+          at: this.now(),
+        });
+        const charge = checked.payload;
+        if (
+          !charge ||
+          charge.issuer !== intent.recipient ||
+          checked.signer?.subject !== charge.issuer ||
+          charge.case !== request.case ||
+          charge.respondent !== segment.party ||
+          charge.conversation !== segment.conversation
+        )
+          return undefined;
+      }
       for (const point of [
         segment.anchor,
         segment.terminal,
@@ -3523,12 +3703,39 @@ export class AgentRuntime {
           verifier: this.identity.actor,
           at: this.now(),
         });
-        let receipt = checked.payload;
-        if (!receipt)
-          receipt = anchorReceiptSchema.parse(
-            await this.readOwnRecordProof(point.receipt, "awp-record-anchor+jws"),
+        const receipt = checked.payload;
+        if (
+          !receipt ||
+          checked.signer?.subject !== receipt.actor ||
+          checked.signer.party !== receipt.party ||
+          receipt.seq !== point.seq ||
+          receipt.hash !== point.hash
+        )
+          return undefined;
+      }
+      if (!segment.anchor) {
+        const items = new Set<string>();
+        for (const { entry, proof } of segment.entries) {
+          const signed = rangeEntrySchema.parse(
+            await this.readOwnRecordProof(proof, "awp-record-entry+jws"),
           );
-        if (receipt.seq !== point.seq || receipt.hash !== point.hash) return undefined;
+          if (
+            !this.wholeRecordItems(entry.record, items) ||
+            !this.wholeRecordItems(signed.record, items)
+          )
+            return undefined;
+        }
+        const inventory = await this.recordReleaseProofs(
+          segment,
+          "agreement" in request ? request.agreement : undefined,
+          {
+            segment: request.segment,
+            observation: "observation" in request ? request.observation : undefined,
+          },
+        );
+        if (!inventory) return undefined;
+        const allowed = await this.recordProofItems(inventory, grants, intent, true);
+        return allowed && [...new Set([...allowed, ...items])];
       }
       const entries = segment.entries.map(({ entry }) => entry) as LedgerRangeEntry[];
       const hasMessage = (entry: LedgerRangeEntry, digest: string, direction: string) =>
@@ -3580,9 +3787,8 @@ export class AgentRuntime {
         segment,
         "agreement" in request ? request.agreement : undefined,
       );
-      const grants = params.proofGrants ?? [];
-      if (!inventory || !Array.isArray(grants)) return undefined;
-      const proofs = await this.recordProofItems(inventory, grants, intent);
+      if (!inventory) return undefined;
+      const proofs = await this.recordProofItems(inventory, grants, intent, false);
       if (!proofs) return undefined;
       return [...new Set([...items, ...proofs])];
     } catch {
@@ -6324,7 +6530,7 @@ export class AgentRuntime {
     if (!key || !this.identity.party || !policy) return fail("not-authorised");
     for (const rule of rules) {
       if (plan.intent.parameters.item !== rule.item) return fail("evidence-invalid");
-      if (rule.parameters && digestOf(plan.intent.parameters) !== digestOf(rule.parameters))
+      if (rule.parametersDigest && digestOf(plan.intent.parameters) !== rule.parametersDigest)
         return fail("terms-digest-mismatch");
       const service = policy.registers[rule.register];
       if (!service || service.identity !== rule.register) return fail("lookup-failed");
@@ -6434,7 +6640,7 @@ export class AgentRuntime {
       if (typeof jws !== "string" || typeof evidence[index] !== "string") return false;
       const id = String(evidence[index]);
       const fact = this.gateMemory.facts.get(id);
-      if (!fact?.digest) return false;
+      if (!fact?.digest || fact.compactProofDigest !== digestOf(jws)) return false;
       const verify = (role: "issuer" | "party") =>
         verifyStatement(jws, {
           trust: this.trust,
@@ -6462,11 +6668,7 @@ export class AgentRuntime {
   private recordEvidenceFor(adapter: EffectAdapter, plan: EffectPlan) {
     if (plan.intent.action !== "distribute") return undefined;
     const parameters = ActionIntentNode.toNode(plan.intent).parameters;
-    return adapter.recordRangeOnly ||
-      this.isRangeRequest(parameters) ||
-      typeof plan.params.recordFrom === "number"
-      ? this.rangeDisclosures(parameters, plan.intent)
-      : this.recordDisclosures();
+    return this.recordDisclosures(parameters, plan.intent, adapter.recordRangeOnly === true);
   }
 
   private async runEffect(
@@ -7251,7 +7453,7 @@ export class AgentRuntime {
     const condition = this.conditionFailure(entry);
     if (condition) return ["condition-failed", condition];
     if (!entry.intent) return undefined; // declared metadata rule: authentic + unexpired
-    const decision = this.authorise(entry.intent, true);
+    const decision = this.authorise(entry.intent, true, message.evidence);
     if (decision.outcome === "permit") return undefined;
     if (decision.outcome === "approval-required")
       return ["approval-required", "the action needs a current owner approval"];

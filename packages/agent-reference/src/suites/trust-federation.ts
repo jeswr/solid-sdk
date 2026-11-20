@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /** A presenter supplies a bounded chain. No register or resolver is queried during verification. */
 import type { EvidenceItem } from "../core/types.js";
@@ -154,7 +155,7 @@ export class PresentedFederationResolver extends TrustResolver {
       : super.resolveSource(input);
   }
   override resolveRecipient(input: Parameters<TrustResolver["resolveRecipient"]>[0]): Resolution {
-    return input.party === this.policy.subject
+    return input.party === this.policy.subject && !input.registeredRole
       ? this.result(
           "Does the presented lender’s federation policy cover this application?",
           input.at,

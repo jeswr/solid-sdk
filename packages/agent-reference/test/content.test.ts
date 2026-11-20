@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -61,6 +62,7 @@ function fixture(
   allowApproval = true,
   recipientPurpose = PURPOSE,
   overrides: Partial<GateContext> = {},
+  itemTerms = terms,
 ) {
   const memory = new GateMemory();
   memory.enter("urn:test:conversation", {
@@ -71,7 +73,7 @@ function fixture(
     claimType: "balance",
     subject: SAM.party,
     source: BANK.party,
-    terms,
+    terms: itemTerms,
   });
   memory.rememberIdentifiers("urn:test:conversation", ["urn:test:request", "urn:test:activity"]);
   const recorder = new TraceRecorder();
@@ -99,6 +101,23 @@ function fixture(
 }
 
 describe("UNS context and text", () => {
+  it("stops structured free text for an unregistered recipient before or after approval", () => {
+    const restricted: ItemTerms = {
+      policy: { id: "urn:test:terms", permissions: [{ type: "permission", action: "distribute" }] },
+      recipientMustBe: { task: "urn:test:regulated-role", label: "a registered lender" },
+    };
+    for (const approved of [false, true]) {
+      const { gate, recorder } = fixture(true, PURPOSE, {}, restricted);
+      expect(gate.checkMessage(receipt(), { operation: OP.id, approved })).toMatchObject({
+        outcome: "stop",
+        reason: "not-authorised",
+      });
+      expect(recorder.events()).toContainEqual(
+        expect.objectContaining({ check: "data-terms", verdict: "fail", reason: "not-authorised" }),
+      );
+      expect(recorder.events().some((event) => event.kind === "ask-principal")).toBe(false);
+    }
+  });
   it("F1: a receipt note cannot leak a balance whose terms prohibit distribution", () => {
     const { gate, recorder } = fixture();
     expect(gate.checkMessage(receipt(), { operation: OP.id })).toMatchObject({

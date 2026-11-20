@@ -2659,7 +2659,7 @@
       "seq": 62,
       "step": 9,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2670,7 +2670,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2696,7 +2696,7 @@
       "seq": 63,
       "step": 9,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2707,7 +2707,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2744,7 +2744,7 @@
       "seq": 64,
       "step": 9,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2755,7 +2755,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2780,7 +2780,7 @@
       "seq": 65,
       "step": 9,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2791,7 +2791,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2816,7 +2816,7 @@
       "seq": 66,
       "step": 9,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2827,7 +2827,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2852,7 +2852,7 @@
       "seq": 67,
       "step": 9,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2863,7 +2863,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -2891,7 +2891,7 @@
       "agent": "person-agent",
       "part": "principal",
       "kind": "principal-reply",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "approvalDecision": "approve",
       "chat": {
         "who": "principal",
@@ -2903,7 +2903,7 @@
       "seq": 70,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2914,7 +2914,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2940,7 +2940,7 @@
       "seq": 71,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2951,7 +2951,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -2988,7 +2988,7 @@
       "seq": 72,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -2999,7 +2999,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3024,7 +3024,7 @@
       "seq": 73,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -3035,7 +3035,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3060,7 +3060,7 @@
       "seq": 74,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -3071,7 +3071,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3087,7 +3087,7 @@
       "reason": "approval-given",
       "rule": {
         "id": "urn:awp:engine-onward-leak-main:person-agent-approval:0001",
-        "text": "The person's signed approval, bound to digest sha-256:128b6d25…."
+        "text": "The person's signed approval, bound to digest sha-256:92d4c485…."
       },
       "caption": "The person approved this exact action.",
       "gateRun": 4
@@ -3096,7 +3096,7 @@
       "seq": 75,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -3107,7 +3107,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3126,7 +3126,7 @@
         }
       ],
       "rule": {
-        "id": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+        "id": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
@@ -3137,7 +3137,7 @@
       "seq": 76,
       "step": 10,
       "agent": "person-agent",
-      "actionDigest": "sha-256:128b6d2527461ca64e71d0caaee4df27207716a0ca9005ff932436cfc6e698a2",
+      "actionDigest": "sha-256:92d4c4854a463faa120db6af5283a757dee4e564443034bd8a12719583a690a5",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-claim",
@@ -3148,7 +3148,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:4bd354e5dcaedeb303ca1e2d891385fc3ba29f51afcbea4b60aabac2af8083b7"
+        "otherParametersDigest": "sha-256:f7f309aecf12d5839677e0119453771d2f2eda6becdaf30d3444a083ea0447b8"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -3244,7 +3244,7 @@
       "seq": 84,
       "step": 11,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3255,7 +3255,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3281,7 +3281,7 @@
       "seq": 85,
       "step": 11,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3292,7 +3292,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3329,7 +3329,7 @@
       "seq": 86,
       "step": 11,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3340,7 +3340,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3365,7 +3365,7 @@
       "seq": 87,
       "step": 11,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3376,7 +3376,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3401,7 +3401,7 @@
       "seq": 88,
       "step": 11,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3412,7 +3412,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3437,7 +3437,7 @@
       "seq": 89,
       "step": 11,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3448,7 +3448,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "decision",
@@ -3476,7 +3476,7 @@
       "agent": "owner-agent",
       "part": "principal",
       "kind": "principal-reply",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "approvalDecision": "approve",
       "chat": {
         "who": "principal",
@@ -3488,7 +3488,7 @@
       "seq": 92,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3499,7 +3499,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3525,7 +3525,7 @@
       "seq": 93,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3536,7 +3536,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3573,7 +3573,7 @@
       "seq": 94,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3584,7 +3584,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3609,7 +3609,7 @@
       "seq": 95,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3620,7 +3620,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3645,7 +3645,7 @@
       "seq": 96,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3656,7 +3656,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3672,7 +3672,7 @@
       "reason": "approval-given",
       "rule": {
         "id": "urn:awp:engine-onward-leak-main:owner-agent-approval:0001",
-        "text": "The lender's signed approval, bound to digest sha-256:961825b3…."
+        "text": "The lender's signed approval, bound to digest sha-256:6c9f0e99…."
       },
       "caption": "The lender approved this exact action.",
       "gateRun": 3
@@ -3681,7 +3681,7 @@
       "seq": 97,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3692,7 +3692,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "check",
@@ -3711,7 +3711,7 @@
         }
       ],
       "rule": {
-        "id": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+        "id": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
@@ -3722,7 +3722,7 @@
       "seq": 98,
       "step": 12,
       "agent": "owner-agent",
-      "actionDigest": "sha-256:961825b39296601cd1166b8de1fcecb5c6fc2d4adbf94d1920070fa5fdaba061",
+      "actionDigest": "sha-256:6c9f0e996cc18dd97b812c097ccfd49852712068e447d80754bcc1bcef1100fc",
       "actionScope": {
         "action": "distribute",
         "target": "urn:op:forum-answer",
@@ -3733,7 +3733,7 @@
         "evidence": [
           "urn:scenario:onward-leak:income"
         ],
-        "otherParametersDigest": "sha-256:d756fa27180a29b1afed58b4adf9a7b011ed56470a9cad058a2b342701c3a2c6"
+        "otherParametersDigest": "sha-256:c6374262b0fd8f04544c5a8e2967c46d03ece98fbb172362487d3df75882b6db"
       },
       "part": "outbound-gate",
       "kind": "decision",

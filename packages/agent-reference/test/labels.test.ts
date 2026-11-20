@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
@@ -50,24 +51,16 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   }
   const baseline = manifest.paths.filter((path) => !path.configuration);
   const alternatives = manifest.paths.filter((path) => path.configuration);
-  expect(traces).toBe(164 + alternatives.filter((path) => path.trace).length);
-  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(152);
-  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(12);
-  expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(9);
-  // 26e, settlement, 26c, 26d and 26f rows; brief 31 adds supplier-terms-hold and runs the
-  // regulator claim (entry-withheld disagrees) and the email endpoint
-  // (mailbox-reply-as-evidence disagrees). The reputation-score suite and its two blocked
-  // rows are removed, and withheld-claim-asked-for runs as a stop scoped to one proposal
-  // (maintainer decisions, 15 Nov). Brief 32 runs vendor-fault: main and the gate-fault branch
-  // run, fault-was-the-principals disagrees (Sam is asked before the record-backed stop).
-  // Brief 31 §2.9 runs reputation-post: main and post-about-a-person run,
-  // evidence-not-publishable disagrees (the disclosure check stops it before the terms).
-  // The integration snapshot includes the Brief 36b classifications.
-  // The five Solid access paths are still blocked in this snapshot, pending regeneration.
+  expect(traces).toBe(279);
+  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(156);
+  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(13);
+  expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(5);
+  // The five Solid configurations now have traces. The regulator gap and the reputation
+  // disclosure stop match their declared outcomes under the ordered comparator.
   expect(alternatives).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(97);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(8);
-  const blocked = alternatives.filter((path) => path.status === "blocked");
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(103);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(7);
+  const blocked = manifest.paths.filter((path) => path.status === "blocked");
   expect(blocked).toHaveLength(5);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(

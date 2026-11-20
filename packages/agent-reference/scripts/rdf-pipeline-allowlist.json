@@ -157,7 +157,7 @@
     "file": "src/gates/common.ts",
     "function": "GateContext",
     "rule": "json-signature",
-    "count": 8,
+    "count": 7,
     "reason": "Admitted facts, reliance holds and gate/profile callbacks still carry legacy statement/terms objects. Complete credential, terms and context dataset storage are unfinished; these are visible migration exceptions."
   },
   {

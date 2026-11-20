@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // Moved here from src/settlement/http.ts by Claude Opus 5.5: payment protocol bytes are
 // foreign, and foreign bytes are parsed only in src/wire.
@@ -12,6 +13,12 @@ export function strictJson(value: string | Uint8Array, maxBytes = 65_536): unkno
       throw new Error("non-finite JSON number");
     return item;
   });
+  rejectDuplicateJsonMembers(text);
+  return result;
+}
+
+/** Check member names after the JSON syntax has been validated. */
+export function rejectDuplicateJsonMembers(text: string): void {
   const stack: (Set<string> | null)[] = [];
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
@@ -35,5 +42,4 @@ export function strictJson(value: string | Uint8Array, maxBytes = 65_536): unkno
       }
     }
   }
-  return result;
 }
