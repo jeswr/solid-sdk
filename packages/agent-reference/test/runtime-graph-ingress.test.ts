@@ -14,6 +14,9 @@ import { StatementQualityNode } from "../src/model/quality.js";
 import { CONFIG_ED25519, CONFIG_PUBLIC } from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
+import { AgentRuntime } from "../src/runtime/agent.js";
+import { MemoryLedger } from "../src/store/ledger.js";
+import { MemoryStateStore } from "../src/store/state.js";
 import { writeAttachmentDocument } from "../src/wire/attachments.js";
 import { sign } from "../src/wire/authenticity.js";
 import { signCompact } from "../src/wire/jws-compact.js";
@@ -66,7 +69,7 @@ it.each([
   });
 });
 
-it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
+async function credentialFixture() {
   const actor = await testKey("22d/graph-actor"),
     source = await testKey("22d/graph-source");
   const trust = await TrustStore.load({
@@ -82,8 +85,35 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
       publicJwk,
       role: role as "actor" | "issuer",
       subject,
+      ...(role === "actor" ? { party: "urn:test:principal" } : {}),
     })),
   });
+  const jws = await signCompact(source, "awp-statement+jws", {
+    issuer: "urn:test:source",
+    claimType: "count",
+    subject: "urn:test:sender",
+    count: 1,
+  });
+  const packet = async (node: MessageNode) => {
+    const prepared = await writeAttachmentDocument(node);
+    return {
+      format: "awp-jsonld/0.1" as const,
+      jsonld: JSON.stringify(
+        await sign(prepared.document, {
+          suite: "jws",
+          key: actor,
+          verificationMethod: "urn:awp:key:" + actor.kid,
+          created: at,
+        }),
+      ),
+      attachments: prepared.attachments,
+    };
+  };
+  return { trust, jws, packet };
+}
+
+it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
+  const { trust, jws, packet } = await credentialFixture();
   const records: unknown[] = [];
   const gate = new InboundGate({
     identity: { actor: "urn:test:receiver" },
@@ -94,12 +124,6 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
     gate: {},
     memory: new GateMemory(),
     agreementTerms: () => undefined,
-  });
-  const jws = await signCompact(source, "awp-statement+jws", {
-    issuer: "urn:test:source",
-    claimType: "count",
-    subject: "urn:test:sender",
-    count: 1,
   });
   const make = (id: string) =>
     MessageNode.toNode({
@@ -118,27 +142,13 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
         basis: { kind: "public" },
       },
     });
-  const packet = async (node: MessageNode) => {
-    const prepared = await writeAttachmentDocument(node);
-    return {
-      format: "awp-jsonld/0.1" as const,
-      jsonld: JSON.stringify(
-        await sign(prepared.document, {
-          suite: "jws",
-          key: actor,
-          verificationMethod: "urn:awp:key:" + actor.kid,
-          created: at,
-        }),
-      ),
-      attachments: prepared.attachments,
-    };
-  };
   const first = make("first");
   first.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
   const signed = await packet(first);
   const accepted = await gate.verifyIntegrity(signed, {}, () => false);
   expect(accepted.ok).toBe(true);
   if (!accepted.ok) throw new Error(accepted.detail);
+  gate.stageCredentials(accepted.message)();
   expect(records).toContainEqual(
     expect.objectContaining({
       type: "verification",
@@ -221,4 +231,83 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
     reason: "evidence-invalid",
     detail: "original-credential-projection-mismatch",
   });
+});
+
+it("leaves credential references unresolved after a refused message", async () => {
+  const { trust, jws, packet } = await credentialFixture();
+  const receiver = await testKey("38d/graph-receiver");
+  const store = new MemoryStateStore();
+  const open = (state = new MemoryStateStore()) =>
+    AgentRuntime.create({
+      identity: { actor: "urn:test:receiver" },
+      actorKeys: [receiver],
+      accepted: [CONFIG_ED25519],
+      handlers: [],
+      trust,
+      store: state,
+      ledger: new MemoryLedger(),
+      now: () => new Date(at),
+    });
+  const describe = (
+    id: string,
+    { to = "urn:test:receiver", profile = PILOT_PROFILE }: { to?: string; profile?: string } = {},
+  ) =>
+    MessageNode.toNode({
+      profile,
+      configuration: CONFIG_ED25519,
+      id: `urn:test:${id}`,
+      conversation: `urn:test:conversation:${id}`,
+      kind: "describe",
+      from: { actor: "urn:test:sender", onBehalfOf: "urn:test:principal" },
+      to: { actor: to },
+      createdAt: at,
+      expiresAt: "2026-11-13T10:00:00.000Z",
+      body: {},
+    });
+  const carrying = describe("carrying");
+  carrying.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  const carryingWire = await packet(carrying);
+  const citing = describe("citing");
+  citing.evidence = [
+    EvidenceItemNode.byDigest(
+      { role: "credential", format: "jws-compact", digest: digestBytes(jws) },
+      "urn:test:previous",
+      citing.dataset,
+    ),
+  ];
+  const citingWire = await packet(citing);
+  const control = await open();
+  const baseline = await control.receive(citingWire);
+  expect(baseline).toMatchObject({
+    disposition: "rejected",
+    reason: "evidence-invalid",
+    detail: "prior-credential-missing-or-digest-mismatch",
+  });
+  const runtime = await open(store);
+  expect(
+    await runtime.receive(carryingWire, {
+      binding: "email-mime/0.1",
+      checkEmailParity: () => "the footer differs",
+    }),
+  ).toMatchObject({ disposition: "rejected", reason: "human-parity-mismatch" });
+  expect(await runtime.receive(citingWire)).toEqual(baseline);
+  const misaddressed = describe("misaddressed", { to: "urn:test:other-receiver" });
+  misaddressed.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  expect(await runtime.receive(await packet(misaddressed))).toMatchObject({
+    disposition: "rejected",
+    reason: "wrong-audience",
+  });
+  expect(await runtime.receive(citingWire)).toEqual(baseline);
+  const unsupported = describe("unsupported", { profile: "urn:test:unsupported-profile" });
+  unsupported.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  expect(await runtime.receive(await packet(unsupported))).toMatchObject({
+    reason: "unsupported-profile",
+  });
+  expect(await runtime.receive(citingWire)).toEqual(baseline);
+  expect(await (await open(store)).receive(citingWire)).toEqual(baseline);
+  const admitted = await runtime.receive(carryingWire);
+  expect(admitted.disposition, `${admitted.reason}: ${admitted.detail}`).toBe("accepted");
+  const restarted = await open(store);
+  for (const rt of [runtime, restarted])
+    expect(await rt.receive(citingWire)).toMatchObject({ disposition: "accepted" });
 });

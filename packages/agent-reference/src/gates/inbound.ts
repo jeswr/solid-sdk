@@ -190,20 +190,27 @@ export class InboundGate {
     });
   }
 
-  rememberCredentials(message: AnyMessage): void {
+  /** Capture the carried bytes before dispatch, and publish them only after admission. */
+  stageCredentials(message: AnyMessage): () => void {
     if (message instanceof MessageNode)
       bindCredentialResolver(message.dataset, (digest) => this.credentialBytes.get(digest));
+    const credentials: [string, string][] = [];
     for (const item of message.evidence ?? []) {
       try {
+        if (item instanceof EvidenceItemNode && !item.credential) continue;
         const value = item.value;
-        const digest = credentialDigest(value);
-        if (!this.credentialBytes.has(digest) && this.credentialBytes.size >= 4096)
-          this.credentialBytes.delete(this.credentialBytes.keys().next().value!);
-        this.credentialBytes.set(digest, value);
+        credentials.push([credentialDigest(value), value]);
       } catch {
         /* Missing prior digests fail at integrity, never fetch. */
       }
     }
+    return () => {
+      for (const [digest, value] of credentials) {
+        if (!this.credentialBytes.has(digest) && this.credentialBytes.size >= 4096)
+          this.credentialBytes.delete(this.credentialBytes.keys().next().value!);
+        this.credentialBytes.set(digest, value);
+      }
+    };
   }
   /** A published mapping version cannot change within this agent's lifetime (SM-1). */
   private readonly mappingVersions = new Map<string, string>();
@@ -561,7 +568,6 @@ export class InboundGate {
         if (item.credential && !item.credential.projectionMatches(item.format))
           return fail("evidence-invalid", "original-credential-projection-mismatch");
       }
-      this.rememberCredentials(msg);
     }
     for (const item of msg.evidence ?? [])
       if (item.format === "selective-disclosure+jws") {
@@ -2444,6 +2450,10 @@ export class Admission {
 
   get decided(): boolean {
     return this.outcome !== undefined;
+  }
+
+  get admitted(): boolean {
+    return this.outcome === "admit";
   }
 
   private organizations(): OrganizationChecks | undefined {

@@ -38,7 +38,7 @@ import type { WireMessage } from "../store/state.js";
 import {
   emailMessageIdFor,
   rawFromGmailMessage,
-  validateOutboundEmail,
+  validateReviewedEmail,
   verifyProviderCopy,
 } from "./email.js";
 import { hasProof } from "./message-packet.js";
@@ -117,6 +117,18 @@ export type SendOutcome =
   | { readonly status: "not-sent"; readonly reason: string }
   | { readonly status: "uncertain"; readonly reason: string };
 
+type CheckedEmail = {
+  ok: true;
+  raw: Buffer;
+  to: string;
+  from: string;
+  wire: WireMessage;
+  agentDescription?: string;
+  threadId?: string;
+  request: TransmitRequest;
+  sendRefusal?: string;
+};
+
 export class GmailProviderAdapter {
   private readonly allowed: ReadonlySet<string>;
   readonly dryRun: boolean;
@@ -151,18 +163,14 @@ export class GmailProviderAdapter {
   }
 
   /** Re-derive and check the exact bytes; returns the raw to send, or why not. */
-  async revalidate(item: ProcessedOutbound): Promise<
-    | {
-        ok: true;
-        raw: Buffer;
-        to: string;
-        from: string;
-        wire: WireMessage;
-        agentDescription?: string;
-        request: TransmitRequest;
-      }
-    | { ok: false; reason: string }
-  > {
+  async revalidate(item: ProcessedOutbound): Promise<CheckedEmail | { ok: false; reason: string }> {
+    const checked = await this.checkReviewedItem(item);
+    return checked.ok && checked.sendRefusal ? { ok: false, reason: checked.sendRefusal } : checked;
+  }
+
+  private async checkReviewedItem(
+    item: ProcessedOutbound,
+  ): Promise<CheckedEmail | { ok: false; reason: string }> {
     if (!item.email) return { ok: false, reason: "no email in the item" };
     if (item.status === "blocked") return { ok: false, reason: "item was blocked at review" };
     if (!this.verifier || !this.sourceAccount)
@@ -178,10 +186,10 @@ export class GmailProviderAdapter {
     const threadId = item.email.gmailSend.threadId;
     if (threadId !== undefined && !/^[A-Za-z0-9]{1,64}$/.test(threadId))
       return { ok: false, reason: "invalid threadId" };
-    if (!hasProof(item.envelope))
-      return { ok: false, reason: "only signed envelopes are sent by email" };
+    const wire = structuredClone(item.envelope);
+    if (!hasProof(wire)) return { ok: false, reason: "only signed envelopes are sent by email" };
     const own = await this.verifier.verifyOwnEnvelope(
-      item.envelope.format === "awp-jws-compact/0.1" ? item.envelope.jws : item.envelope,
+      wire.format === "awp-jws-compact/0.1" ? wire.jws : wire,
     );
     if (!own.ok)
       return {
@@ -197,26 +205,33 @@ export class GmailProviderAdapter {
     const to = (pinned[0] as string).slice("mailto:".length);
     if (!this.allowed.has(to))
       return { ok: false, reason: "pinned recipient is not in the allow-list" };
-    const agentDescription = this.verifier.emailDescriptionAddress?.();
-    const exact = await validateOutboundEmail(raw, {
+    const exact = await validateReviewedEmail(raw, {
       from: this.sourceAccount,
       to,
-      wire: item.envelope,
-      ...(agentDescription ? { agentDescription } : {}),
+      wire,
     });
     if (!exact.ok) return { ok: false, reason: exact.problems.join("; ") };
+    const { agentDescription } = exact;
+    const sendRefusal =
+      agentDescription !== this.verifier.emailDescriptionAddress?.()
+        ? "Agent-Description differs from the expected header"
+        : exact.historicalRendering
+          ? "the reviewed MIME uses the historical rendering without a footer"
+          : undefined;
     return {
       ok: true,
       raw,
       to,
       from: this.sourceAccount,
-      wire: item.envelope,
+      wire,
       ...(agentDescription ? { agentDescription } : {}),
+      ...(threadId ? { threadId } : {}),
+      ...(sendRefusal ? { sendRefusal } : {}),
       request: {
         messageId: own.messageId,
         binding: GMAIL_BINDING,
         externalId: emailMessageIdFor(own.messageId),
-        wireDigest: wireDigest(item.envelope),
+        wireDigest: wireDigest(wire),
       },
     };
   }
@@ -229,23 +244,24 @@ export class GmailProviderAdapter {
    * final absence).
    */
   async sendReviewed(item: ProcessedOutbound): Promise<SendOutcome> {
-    const checked = await this.revalidate(item);
+    const checked = await this.checkReviewedItem(item);
     if (!checked.ok) return { status: "refused", reason: checked.reason };
     const verifier = this.verifier as OutboundVerifier;
     if (this.dryRun || !this.transport) {
+      if (checked.sendRefusal) return { status: "refused", reason: checked.sendRefusal };
       const now = await verifier.checkTransmission(checked.request);
       if ("ok" in now)
         return { status: "dry-run", wouldSendTo: checked.to, bytes: checked.raw.length };
       return toOutcome(now);
     }
     const transport = this.transport;
-    const threadId = item.email?.gmailSend.threadId;
     const io: TransmissionIo = {
       send: async () => {
+        if (checked.sendRefusal) return { outcome: "rejected", detail: checked.sendRefusal };
         try {
           const r = await transport.send({
             raw: checked.raw.toString("base64url"),
-            ...(threadId ? { threadId } : {}),
+            ...(checked.threadId ? { threadId: checked.threadId } : {}),
           });
           return { outcome: "accepted", providerRef: r.id };
         } catch (error) {
@@ -254,6 +270,7 @@ export class GmailProviderAdapter {
           throw error;
         }
       },
+      ...(checked.sendRefusal ? { sendRefusal: checked.sendRefusal } : {}),
       ...(transport.findByMessageId ? { lookup: () => this.findVerifiedCopy(checked) } : {}),
       // No `finalAbsence`: a Gmail search miss never permits another send.
     };
@@ -261,14 +278,7 @@ export class GmailProviderAdapter {
   }
 
   /** Positive evidence only: a stored copy that is exactly the message this agent sent. */
-  private async findVerifiedCopy(checked: {
-    raw: Buffer;
-    to: string;
-    from: string;
-    wire: WireMessage;
-    agentDescription?: string;
-    request: TransmitRequest;
-  }): Promise<ProviderLookupResult> {
+  private async findVerifiedCopy(checked: CheckedEmail): Promise<ProviderLookupResult> {
     const transport = this.transport as GmailTransport;
     const search = searchResultOf(
       await (transport.findByMessageId as NonNullable<GmailTransport["findByMessageId"]>)(

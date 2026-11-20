@@ -130,8 +130,9 @@ agent:* link.
   what the sender hopes to be.
 - **BL-5.** The footer MUST NOT claim that the message is safe, verified or trustworthy.
   Those are conclusions for the receiver's own checks.
-- **BL-6.** The message MUST also carry the address of the sender's agent description in the header field
-  `Agent-Description`, whose value is one `https` address. The header is an unverified hint.
+- **BL-6.** When the sender has a configured agent description address, the message MUST carry it in
+  the `Agent-Description` header as one `https` address. Otherwise the sender MUST omit the header.
+  The header is an unverified hint.
   Any description used for negotiation MUST be verified as a claim (CORE-L-10). The reference
   engine and pilot use the signed description exchange. They do not resolve the address, and
   the header never selects or upgrades a configuration. A receiver MUST NOT act on the footer

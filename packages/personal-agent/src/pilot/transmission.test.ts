@@ -25,7 +25,7 @@ import {
 import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "./domains/scheduling.js";
 import { CONFIG_ED25519 } from "./profile/configurations.js";
 import type { OutboundMessage } from "./runtime/agent.js";
-import type { TransmissionIo } from "./runtime/transmission.js";
+import { type TransmissionIo, wireDigest } from "./runtime/transmission.js";
 import {
   ALICE,
   BOB,
@@ -311,6 +311,80 @@ describe("review item 2 — durable provider-send records", () => {
     mb.lookup("real");
     expect(await a.sendReviewed(i)).toEqual({ status: "sent", providerId: "g1", reconciled: true });
     expect(mb.accepted).toHaveLength(1);
+    expect(mb.sends()).toBe(1);
+  });
+
+  it.each([
+    { label: "with a footer", historical: false },
+    { label: "before the footer existed", historical: true },
+  ])("reconciles a headerless email reviewed $label", async ({ historical }) => {
+    const { alice, bob, clock } = await world();
+    const { propose } = await alicePropose(alice, bob, clock.now());
+    const reviewed = await item(alice, propose, clock.now());
+    if (!reviewed.email) throw new Error("No reviewed email");
+    const headerless = reviewed.email.raw.replace(/^Agent-Description: [^\r\n]+\r\n/im, "");
+    const raw = historical
+      ? headerless.replace(
+          /(Content-Type: text\/(?:plain|html); charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n)([A-Za-z0-9+/=\r\n]+?)(?=\r\n--)/g,
+          (_, head: string, body: string) => {
+            const text = Buffer.from(body, "base64").toString("utf8");
+            const oldRendering = text.replace(/\n\nSent by [\s\S]+$|<p>Sent by [\s\S]+?<\/p>/, "");
+            expect(oldRendering).not.toBe(text);
+            return head + Buffer.from(oldRendering).toString("base64");
+          },
+        )
+      : headerless;
+    const legacy = {
+      ...reviewed,
+      email: { ...reviewed.email, raw, gmailSend: { raw: Buffer.from(raw).toString("base64url") } },
+    };
+    const mb = mailbox();
+    const verifier = alice.runtime.outboundVerifier();
+    const open = (agentDescription?: string) =>
+      new GmailProviderAdapter(mb.transport, {
+        allowedRecipients: [BOB.email as string],
+        sourceAccount: ALICE.email as string,
+        verifier: { ...verifier, emailDescriptionAddress: () => agentDescription },
+        dryRun: false,
+      });
+    const url = "https://descriptions.example/alice/v2";
+    const current = open(url);
+    expect(await current.sendReviewed(legacy)).toMatchObject({
+      status: "refused",
+      reason: expect.stringContaining("Agent-Description differs"),
+    });
+    expect(alice.runtime.transmissions()).toEqual([]);
+    mb.set("lose-response");
+    const attempt = await verifier.transmit(
+      {
+        messageId: propose.id,
+        binding: "gmail-api",
+        externalId: emailMessageIdFor(propose.id),
+        wireDigest: wireDigest(propose.wire),
+      },
+      {
+        send: async () => {
+          const accepted = await mb.transport.send(legacy.email.gmailSend);
+          return { outcome: "accepted", providerRef: accepted.id };
+        },
+      },
+    );
+    expect(attempt).toMatchObject({ status: "uncertain" });
+    const copy = mb.accepted[0];
+    if (!copy) throw new Error("Provider did not record the original send");
+    expect(copy.raw).toBe(raw);
+    copy.raw = `Agent-Description: ${url}\r\n${raw}`;
+    expect(await current.sendReviewed(legacy)).toMatchObject({ status: "uncertain" });
+    if (historical) {
+      copy.raw = headerless;
+      expect(await current.sendReviewed(legacy)).toMatchObject({ status: "uncertain" });
+    }
+    copy.raw = raw;
+    expect(await current.sendReviewed(legacy)).toEqual({
+      status: "sent",
+      providerId: "g1",
+      reconciled: true,
+    });
     expect(mb.sends()).toBe(1);
   });
 

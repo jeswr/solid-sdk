@@ -138,6 +138,7 @@ export async function receiveCarriage(
   let readable: string | undefined;
   try {
     const notices: CarriageNotice[] = [];
+    let hasDescriptionHint = false;
     if (!isDelivery(input)) wire = carriageWire(input as ByteMessage);
     else {
       for (const notice of input.notices ?? [])
@@ -147,6 +148,7 @@ export async function receiveCarriage(
           const recovered = readEmail(input.frame as ByteMessage);
           wire = carriageWire(recovered.message);
           readable = recovered.readable;
+          hasDescriptionHint = recovered.description !== undefined;
           break;
         }
         case "a2a-request":
@@ -204,12 +206,14 @@ export async function receiveCarriage(
           "The readable email says something different from the signed message.",
         );
       // The description URL has no resolver here. Discovery uses an admitted signed message.
-      notices.push({
-        caption:
-          checked.message.from.onBehalfOf === undefined
-            ? "Agent-Description is an unverified hint and does not select a configuration."
-            : "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration.",
-      });
+      const captions: string[] = [];
+      if (checked.message.from.onBehalfOf !== undefined)
+        captions.push("The standard footer matched the signed message.");
+      if (hasDescriptionHint)
+        captions.push(
+          "Agent-Description is an unverified hint and does not select a configuration.",
+        );
+      if (captions.length > 0) notices.push({ caption: captions.join(" ") });
     }
     for (const { caption, fault } of notices)
       gate.emit({ part: "transport", kind: "record", caption, ...(fault ? { fault } : {}) });

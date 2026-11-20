@@ -10,20 +10,10 @@ export function isAgentDescriptionAddress(value: string): boolean {
   return /^https:\/\/[^/]/i.test(value) && !/[\s\p{Cc}<>\\]/u.test(value) && URL.canParse(value);
 }
 
-export function descriptionAddressForActor(actor: string): string | undefined {
-  if (!isAgentDescriptionAddress(actor)) return undefined;
-  const url = new URL(actor);
-  if (url.username || url.password) return undefined;
-  url.hash = "";
-  url.search = "";
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/description`;
-  return url.href;
-}
-
 export function writeEmail(
   message: ByteMessage,
   readable: string,
-  description: string,
+  description?: string,
   routing: { from: string; to: string; date: string; messageId: string } = {
     from: "sender@fictional.example",
     to: "receiver@fictional.example",
@@ -32,7 +22,7 @@ export function writeEmail(
   },
 ): ByteMessage {
   if (
-    !isAgentDescriptionAddress(description) ||
+    (description !== undefined && !isAgentDescriptionAddress(description)) ||
     /[\r\n]/.test(message.mediaType) ||
     Object.values(routing).some((value) => /[\r\n<>]/.test(value))
   )
@@ -44,7 +34,7 @@ export function writeEmail(
     `Message-ID: <${routing.messageId}>`,
     "Subject: An automated signed message",
     "MIME-Version: 1.0",
-    `Agent-Description: ${description}`,
+    ...(description === undefined ? [] : [`Agent-Description: ${description}`]),
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     "",
     `--${boundary}`,
@@ -66,7 +56,7 @@ export function writeEmail(
 export function readEmail(mail: ByteMessage): {
   message: ByteMessage;
   readable: string;
-  description: string;
+  description?: string;
 } {
   if (mail.bytes.length > 2_000_000)
     throw new CarriageError("bounds-exceeded", "The email exceeds the carriage bound.");
@@ -110,9 +100,12 @@ export function readEmail(mail: ByteMessage): {
     throw new CarriageError("human-parity-mismatch", "One readable copy is required.");
   const message = oneCopy(copies);
   const [description, duplicate] = headerValues(head, "Agent-Description");
-  if (!description || duplicate !== undefined || !isAgentDescriptionAddress(description))
-    throw new CarriageError("malformed", "The email requires one HTTPS agent description address.");
-  return { message, readable: readable[0] as string, description };
+  if (
+    duplicate !== undefined ||
+    (description !== undefined && !isAgentDescriptionAddress(description))
+  )
+    throw new CarriageError("malformed", "Agent-Description must contain one HTTPS address.");
+  return { message, readable: readable[0] as string, ...(description ? { description } : {}) };
 }
 
 function headerValues(head: string, name: string): string[] {

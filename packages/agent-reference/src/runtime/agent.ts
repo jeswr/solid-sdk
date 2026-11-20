@@ -20,7 +20,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { randomBytes } from "crypto";
 import type { JWK } from "jose";
 import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
-import { descriptionAddressForActor } from "../bindings/email-mime.js";
+import { isAgentDescriptionAddress } from "../bindings/email-mime.js";
 import {
   canonicalJson,
   derivedUrn,
@@ -232,6 +232,7 @@ export interface AgentIdentity {
   readonly actor: Iri;
   readonly party?: Iri;
   readonly operator?: Iri;
+  readonly descriptionUrl?: string;
 }
 
 export interface AgentRuntimeOptions {
@@ -1051,7 +1052,7 @@ export class AgentRuntime {
     for (const entry of Object.values(rt.state.outbox))
       if (isMessagePacket(entry.wire)) {
         const message = await inspectMessagePacket(entry.wire);
-        if (message) rt.inbound.rememberCredentials(message);
+        if (message) rt.inbound.stageCredentials(message)();
       }
     for (const agreement of Object.values(rt.state.agreements)) {
       if (!agreement.terms.compensation) continue;
@@ -1065,7 +1066,8 @@ export class AgentRuntime {
       const read = await verifyRecordedMessage(record.jws, rt.trust);
       if (read) {
         rt.retainedMessageViews.set(id, read.message);
-        rt.inbound.rememberCredentials(read.message);
+        const remember = rt.inbound.stageCredentials(read.message);
+        if (record.direction === "out" || record.credentialsAdmitted) remember();
       }
     }
     if (rt.ledgerAuditTrusted || !rt.ledger.recoverUncommittedSuffix) rt.notificationDuties();
@@ -1244,10 +1246,14 @@ export class AgentRuntime {
     });
   }
 
-  /** The advertised address is a routing hint derived from this agent's configured identity. */
+  /** The configured description address is advertised as an unverified email hint. */
   emailDescriptionAddress(): string | undefined {
-    const address = descriptionAddressForActor(this.identity.actor);
-    return address && address.length <= 200 ? address : undefined;
+    const address = this.identity.descriptionUrl;
+    return typeof address === "string" &&
+      address.length <= 200 &&
+      isAgentDescriptionAddress(address)
+      ? address
+      : undefined;
   }
 
   /**
@@ -4792,6 +4798,9 @@ export class AgentRuntime {
       }
     }
     this.gateMemory.rememberIdentifiers(msg.conversation, msg);
+    const rememberCredentials = isMessagePacket(wire)
+      ? this.inbound.stageCredentials(msg)
+      : undefined;
     this.state.seen[msg.id] = {
       digest: msgDigest,
       ...(admittedDocumentDigest ? { documentDigest: admittedDocumentDigest } : {}),
@@ -4825,6 +4834,11 @@ export class AgentRuntime {
       };
     this.retainedMessageViews.set(msg.id, msg);
     const outbound = await this.dispatch(msg);
+    const record = this.state.recordMessages[msg.id];
+    const cacheCredentials =
+      admission.admitted && outbound.disposition === "accepted" && outbound.reason === undefined;
+    if (cacheCredentials && rememberCredentials && record)
+      this.state.recordMessages[msg.id] = { ...record, credentialsAdmitted: true };
     const conv = this.state.conversations[msg.conversation];
     const recorded = this.state.seen[msg.id]?.responses ?? [];
     this.state.seen[msg.id] = {
@@ -4836,6 +4850,7 @@ export class AgentRuntime {
       conversation: msg.conversation,
     };
     this.persist();
+    if (cacheCredentials) rememberCredentials?.();
     return this.result(outbound.disposition, {
       messageId: msg.id,
       kind: msg.kind,
@@ -7535,6 +7550,8 @@ export class AgentRuntime {
    * unresolved: refusing a resend is not evidence that the earlier request was not delivered.
    */
   private transmitAttempt(req: TransmitRequest, io: TransmissionIo, resend: boolean): TransmitStep {
+    if (io.sendRefusal !== undefined)
+      return { result: this.refuseTransmission(req, "wire-mismatch", io.sendRefusal) };
     const refusal = this.transmissionRefusal(req);
     if (refusal) return { result: this.refuseTransmission(req, refusal[0], refusal[1]) };
     const attempts = this.state.transmissions[req.messageId]?.attempts ?? 0;

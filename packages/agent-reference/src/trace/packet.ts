@@ -7,7 +7,7 @@
  * scenario.
  */
 
-import { digestOf } from "../core/canonical.js";
+import { digestBytes, digestOf } from "../core/canonical.js";
 import type { AnyMessage, EvidenceItem, JsonObject } from "../core/types.js";
 import { unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import {
@@ -148,6 +148,14 @@ export function packetView(
   const reps = evidenceOf(message, "representation");
   const creds = evidenceOf(message, "credential");
   const terms = termsOf(message);
+  let messageDigest: string;
+  try {
+    messageDigest = digestOf(message);
+  } catch (error) {
+    // A native message referencing unavailable prior credentials has no complete projection.
+    if (!isMessagePacket(wire)) throw error;
+    messageDigest = digestBytes(wire.jsonld);
+  }
   const header: PacketLayerView = {
     present: true,
     summary: `From ${name(message.from.actor)} to ${name(message.to?.actor)}; ${message.kind}; ${
@@ -167,7 +175,7 @@ export function packetView(
       ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
       ...(jwsHeader ? { proof: jwsHeader } : {}),
     },
-    digest: digestOf(message),
+    digest: messageDigest,
   };
   const authority: PacketLayerView =
     reps.length > 0

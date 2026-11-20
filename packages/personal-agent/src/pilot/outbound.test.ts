@@ -161,8 +161,8 @@ describe("finding 1 — the provider adapter revalidates the exact outbound byte
         withRaw(
           item,
           raw.replace(
-            /^Agent-Description: [^\r\n]+/m,
-            "Agent-Description: https://unrelated.example/description",
+            "MIME-Version:",
+            "Agent-Description: https://unrelated.example/description\r\nMIME-Version:",
           ),
         ),
       ),
@@ -279,7 +279,7 @@ describe("finding 7 — strict parity covers every human-visible part", () => {
     const lenient = await parseInboundEmail(extra, { strictParity: false });
     expect(lenient.ok && lenient.parity).toBe("unverified");
     // Round trip of a freshly built message remains exact.
-    const again = buildEmail({
+    const again = await buildEmail({
       out: start.outbound[0] as OutboundMessage,
       from: ALICE.email as string,
       to: BOB.email as string,

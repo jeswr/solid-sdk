@@ -166,7 +166,14 @@ export interface RuntimeState {
   pendingPodGrants: Record<string, import("../standins/pod-access.js").PodGrantAttempt>;
   recordMessages: Record<
     string,
-    { direction: "in" | "out"; conversation: string; digest: string; jws: string }
+    {
+      direction: "in" | "out";
+      conversation: string;
+      digest: string;
+      jws: string;
+      /** Inbound credential bytes are eligible for reuse only after completed admission. */
+      credentialsAdmitted?: true;
+    }
   >;
   precedenceHolds: Record<string, import("../gates/common.js").AdmittedFact>;
   readonly version: 1;

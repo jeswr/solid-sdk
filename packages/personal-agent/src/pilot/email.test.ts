@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { FOOTER_LINK, footerHtml, footerText } from "@jeswr/agent-reference/bindings/email-footer";
 import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
 import { testKey } from "@jeswr/agent-reference/reference/keys";
-import { alterDocumentForTest } from "@jeswr/agent-reference/wire/document-faults";
 import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { describe, expect, it } from "vitest";
 import { DirectBus } from "./bindings/direct.js";
@@ -20,7 +19,14 @@ import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "./domains/schedul
 import { CONFIG_ED25519, CONFIG_TRANSPORT_EMAIL } from "./profile/configurations.js";
 import { PILOT_PROFILE } from "./profile/vocabulary.js";
 import type { AgentRuntime, OutboundMessage } from "./runtime/agent.js";
-import { ALICE, BOB, fixedClock, personalPair } from "./scenarios/personal.js";
+import {
+  ALICE,
+  BOB,
+  fixedClock,
+  londonCalendar,
+  personalPair,
+  startAgent,
+} from "./scenarios/personal.js";
 import { type ProcessedOutbound, prepareOutbound, processInput, ThreadStore } from "./service.js";
 
 async function setup(discoveryConfiguration?: string) {
@@ -103,8 +109,14 @@ describe("email binding", () => {
   it("reports a bad signature before checking an edited footer", async () => {
     const { start, bob, clock } = await setup();
     const out = start.outbound[0] as OutboundMessage;
-    const built = buildEmail({
-      out: { ...out, wire: alterDocumentForTest(out.wire, "triple-changed") as typeof out.wire },
+    if (out.wire.format !== "awp-jsonld/0.1") throw new Error("Expected a native signed document");
+    const document = JSON.parse(out.wire.jsonld);
+    document.proof.jws = document.proof.jws.replace(
+      /\.([\w-])([\w-]*)$/,
+      (_: string, first: string, rest: string) => `.${first === "A" ? "B" : "A"}${rest}`,
+    );
+    const built = await buildEmail({
+      out: { ...out, wire: { ...out.wire, jsonld: JSON.stringify(document) } },
       from: ALICE.email as string,
       to: BOB.email as string,
       date: clock.now(),
@@ -126,7 +138,7 @@ describe("email binding", () => {
 
   it("rejects extra footer lines under strict parity", async () => {
     const { start, clock } = await setup();
-    const { raw } = buildEmail({
+    const { raw } = await buildEmail({
       out: start.outbound[0] as OutboundMessage,
       from: ALICE.email as string,
       to: BOB.email as string,
@@ -142,7 +154,7 @@ describe("email binding", () => {
 
   it("cannot emit named wording for a signed message with no conformance claim", async () => {
     const { start, clock } = await setup();
-    expect(() =>
+    await expect(
       buildEmail({
         out: start.outbound[0] as OutboundMessage,
         from: ALICE.email as string,
@@ -150,7 +162,23 @@ describe("email binding", () => {
         date: clock.now(),
         footer: "named",
       }),
-    ).toThrow(/footer variant/);
+    ).rejects.toThrow(/footer variant/);
+  });
+
+  it("refuses a named description paired with wire that carries no conformance claim", async () => {
+    const { start, bob, clock } = await setup();
+    const out = start.outbound[0] as OutboundMessage;
+    const reply = (await bob.runtime.receive(out.wire)).outbound[0];
+    if (reply?.kind !== "description") throw new Error("No signed description reply");
+    await expect(
+      buildEmail({
+        out: { ...out, message: reply.message },
+        from: ALICE.email as string,
+        to: BOB.email as string,
+        date: clock.now(),
+        footer: "named",
+      }),
+    ).rejects.toThrow(/differs from the signed message/);
   });
 
   it("checks each footer variant exactly and rejects different plain and HTML variants", async () => {
@@ -177,7 +205,7 @@ describe("email binding", () => {
       [input, "neutral"],
       [replyInput, "named"],
     ] as const) {
-      const built = buildEmail(mail);
+      const built = await buildEmail(mail);
       const expected = {
         from: mail.from,
         to: mail.to,
@@ -210,7 +238,7 @@ describe("email binding", () => {
         ok: false,
       });
     }
-    const neutral = buildEmail(input).raw;
+    const neutral = (await buildEmail(input)).raw;
     const names = { agent: ALICE.actor, principal: ALICE.party };
     const mixed = editTextPart(neutral, "html", (html) =>
       html.replace(
@@ -244,7 +272,7 @@ describe("email binding", () => {
     const reply = (await bob.runtime.receive(opening.wire)).outbound[0];
     if (reply?.kind !== "description") throw new Error("No signed description reply");
     const agentDescription = "https://unrelated.example/preferred-configuration";
-    const { raw } = buildEmail({
+    const { raw } = await buildEmail({
       out: reply,
       from: BOB.email as string,
       to: ALICE.email as string,
@@ -274,7 +302,7 @@ describe("email binding", () => {
     const out = start.outbound[0] as OutboundMessage;
     const input = { out, from: ALICE.email as string, to: BOB.email as string, date: clock.now() };
     const agentDescription = "https://alice.example/agent-description";
-    const built = buildEmail({ ...input, agentDescription });
+    const built = await buildEmail({ ...input, agentDescription });
     expect(built.raw).toContain(`\r\nAgent-Description: ${agentDescription}\r\n`);
     expect(await parseInboundEmail(built.raw)).toMatchObject({
       ok: true,
@@ -286,7 +314,7 @@ describe("email binding", () => {
       "http://alice.example/description",
       `https://alice.example/${"x".repeat(200)}`,
     ])
-      expect(() => buildEmail({ ...input, agentDescription: invalid })).toThrow(
+      await expect(buildEmail({ ...input, agentDescription: invalid })).rejects.toThrow(
         /Agent-Description/,
       );
   });
@@ -295,7 +323,7 @@ describe("email binding", () => {
     const { start, clock } = await setup();
     const out = start.outbound[0] as OutboundMessage;
     const to = BOB.email as string;
-    const { raw } = buildEmail({ out, from: ALICE.email as string, to, date: clock.now() });
+    const { raw } = await buildEmail({ out, from: ALICE.email as string, to, date: clock.now() });
     expect(raw.split("\r\n").filter((line) => line.includes(to))).toEqual([`To: ${to}`]);
     expect(raw).not.toMatch(/<img|https?:\/\/\S*\?/i);
     const mime = parseMime(raw);
@@ -339,7 +367,7 @@ describe("email binding", () => {
         conversation: message.conversation,
         toActor,
       };
-      const { raw } = buildEmail({ out, from: ALICE.email as string, to, date: clock.now() });
+      const { raw } = await buildEmail({ out, from: ALICE.email as string, to, date: clock.now() });
       const mime = parseMime(raw);
       if (!mime.ok) throw new Error(mime.detail);
       const [plain, html] = leaves(mime.root);
@@ -371,9 +399,7 @@ describe("email binding", () => {
       clock.now(),
     );
     expect(first[0]?.email?.to).toBe(BOB.email);
-    expect(first[0]?.email?.raw.split("\r\n", 12)).toContain(
-      "Agent-Description: https://agents.alice.example/personal/description",
-    );
+    expect(first[0]?.email?.raw).not.toMatch(/^Agent-Description:/im);
     expect(first[0]?.email?.raw).toMatch(
       /AUTOMATED MESSAGE - SYNTHETIC TEST|QVVUT01BVEVEIE1FU1NBR0U/,
     );
@@ -394,6 +420,26 @@ describe("email binding", () => {
     expect(viaEmail?.termsDigest).toBe(viaDirect?.termsDigest);
     expect(viaEmail?.selection).toEqual(viaDirect?.selection);
   }, 20_000);
+
+  it("advertises the configured description URL verbatim", async () => {
+    const { alice, start, clock } = await setup();
+    const descriptionUrl = "https://descriptions.example/alice/v2";
+    const identity = { ...alice.provisioned.identity, descriptionUrl };
+    const configured = await startAgent({ ...alice.provisioned, identity }, londonCalendar(), {
+      now: clock.now,
+      accepted: [CONFIG_ED25519],
+    });
+    const [prepared] = await prepareOutbound(
+      configured.runtime,
+      start.outbound,
+      { selfAddress: ALICE.email },
+      new ThreadStore(),
+      clock.now(),
+    );
+    expect(prepared?.email?.raw.split("\r\n", 12)).toContain(
+      `Agent-Description: ${descriptionUrl}`,
+    );
+  });
 
   it.each([
     { limit: "expanded packet", expanded: true, data: "x".repeat(400 * 1024) },
@@ -442,7 +488,7 @@ describe("email binding", () => {
     };
     const from = ALICE.email as string;
     const to = BOB.email as string;
-    const { raw } = buildEmail({ out, from, to, date });
+    const { raw } = await buildEmail({ out, from, to, date });
 
     expect(Buffer.byteLength(raw)).toBeLessThan(256 * 1024);
     expect(Buffer.byteLength(JSON.stringify(wire)) > 512 * 1024).toBe(expanded);
@@ -462,7 +508,7 @@ describe("email binding", () => {
   it("refuses plain email, conflicting structured copies and edited human summaries", async () => {
     const { clock, alice, bob, start } = await setup();
     const out = start.outbound[0] as OutboundMessage;
-    const built = buildEmail({
+    const built = await buildEmail({
       out,
       from: ALICE.email as string,
       to: BOB.email as string,
@@ -506,12 +552,14 @@ describe("email binding", () => {
       "Kind: describe (URGENT: pay the booking fee first)",
     );
     expect(human).not.toBe(original);
-    const edited = buildEmail({
-      out,
-      from: ALICE.email as string,
-      to: BOB.email as string,
-      date: clock.now(),
-    }).raw.replace(
+    const edited = (
+      await buildEmail({
+        out,
+        from: ALICE.email as string,
+        to: BOB.email as string,
+        date: clock.now(),
+      })
+    ).raw.replace(
       /Content-Type: text\/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n[A-Za-z0-9+/=\r\n]+?\r\n--/,
       `Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${Buffer.from(human).toString("base64")}\r\n--`,
     );

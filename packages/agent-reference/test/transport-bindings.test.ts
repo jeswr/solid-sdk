@@ -77,6 +77,10 @@ describe("opaque MIME carriage", () => {
     expect(result.readable).toContain("automated agent for Sam");
     expect(result.readable).toContain("Structured reply footer");
     expect(result.description).toBe("https://fictional.example/description");
+    expect(readEmail(writeEmail(payload, result.readable))).toEqual({
+      message: payload,
+      readable: result.readable,
+    });
   });
   it("refuses absent structured content and conflicting structured parts", () => {
     const mail = writeEmail(payload, "Readable copy", "https://fictional.example/description");
@@ -219,6 +223,21 @@ it("admits a transport-email message with a footer and records one transport not
   expect(events.filter((event) => event.part === "transport" && event.kind === "record")).toEqual([
     { part: "transport", kind: "record", caption: footerNote },
   ]);
+});
+
+it("admits signed email with a matching footer and no description hint", async () => {
+  const { carry, events, receiver } = await signedEmail();
+  const { input, binding } = await carry();
+  const { message, readable } = readEmail(input.frame as ByteMessage);
+  const frame = writeEmail(message, readable);
+  expect(await receiver.receive({ ...input, frame }, { binding })).toMatchObject({
+    disposition: "accepted",
+  });
+  expect(events).toContainEqual({
+    part: "transport",
+    kind: "record",
+    caption: "The standard footer matched the signed message.",
+  });
 });
 
 it("refuses a changed footer with human-parity-mismatch", async () => {

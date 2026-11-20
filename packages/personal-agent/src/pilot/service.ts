@@ -199,22 +199,16 @@ export async function prepareOutbound(
     );
     const mailto = endpoints.find((e) => e.startsWith("mailto:"));
     let email: ProcessedOutbound["email"];
-    if (mailto && settings.selfAddress && hasProof(out.wire) && !agentDescription) {
-      checks.push({
-        check: "agent-description-address",
-        ok: false,
-        detail: "the agent identity needs an HTTPS description address of at most 200 characters",
-      });
-    } else if (mailto && settings.selfAddress && hasProof(out.wire) && agentDescription) {
+    if (mailto && settings.selfAddress && hasProof(out.wire)) {
       const to = mailto.slice("mailto:".length);
       const thread = threads.get(out.conversation);
       const lastId = thread?.emailMessageIds.at(-1);
-      const built = buildEmail({
+      const built = await buildEmail({
         out,
         from: settings.selfAddress,
         to,
         date: now,
-        agentDescription,
+        ...(agentDescription ? { agentDescription } : {}),
         ...(lastId ? { inReplyToEmailId: lastId } : {}),
         ...(thread ? { references: thread.emailMessageIds } : {}),
       });
@@ -239,7 +233,7 @@ export async function prepareOutbound(
         from: settings.selfAddress,
         to,
         wire: out.wire,
-        agentDescription,
+        ...(agentDescription ? { agentDescription } : {}),
       });
       checks.push({
         check: "exact-outbound-bytes",

@@ -252,11 +252,13 @@ Outbound MIME is exactly
 - The signed message determines the footer. The named variant requires the sender's own
   description with a conformance claim in that message. Other messages with a represented
   principal use the neutral footer. The footer link has the same address in every message.
-- Normal sends include `Agent-Description` at the local HTTPS actor's `/description` address
-  (up to 200 characters). The pilot records it as an unverified hint in `EmailObservation`.
+- Sends include `Agent-Description` when the local agent has a configured HTTPS description URL
+  of up to 200 characters. Set `descriptionUrl` in the agent's identity or pass
+  `--description-url` to `init`. With no URL configured, the sender omits the header.
+  The pilot records the address as an unverified hint in `EmailObservation`.
   Discovery uses signed messages and refuses a selection that differs from the discovery
-  configuration. Outbound and provider-copy validation check the expected address and
-  derive the footer variant from the signed message.
+  configuration. New sends check the configured address. Gmail recovery checks the provider
+  copy against the reviewed MIME, including the header's presence or absence at review time.
 - Outbound `Message-ID` is derived from the signed message id, and `X-AWP-Message` must equal
   that id.
 

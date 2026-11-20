@@ -84,6 +84,8 @@ export interface TransmissionIo {
    * a result that is not a well-formed `ProviderSendResult` is treated as `uncertain`.
    */
   send(): Promise<ProviderSendResult>;
+  /** Current binding validation can refuse a new send while permitting recovery by lookup. */
+  readonly sendRefusal?: string;
   /** Look up an earlier request. Without it, an uncertain send stays uncertain. */
   lookup?(): Promise<ProviderLookupResult>;
   /**

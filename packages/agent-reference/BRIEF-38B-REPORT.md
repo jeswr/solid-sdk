@@ -108,3 +108,38 @@ zero disagreements, and five blocked paths.
 - All 20 explorer Node tests passed. The engine trace import and
   `node scripts/bundle-data.mjs` succeeded. The bundled baseline and all 13
   revised captions matched the source.
+
+## Review fixes (38d)
+
+- Inbound integrity verification leaves the credential cache untouched. The runtime
+  captures carried bytes before dispatch and publishes them after successful admission.
+  Restart restores inbound bytes only from records marked as admitted. Older inbound
+  records lack this marker, so a new message must carry the full credential before a
+  later message can cite it by digest. The regression compares a later citation with
+  a clean runtime after footer parity, audience, and profile refusals. It also checks
+  that an admitted credential resolves both immediately and after restart. Restoring
+  the early cache write made the footer case admit the citation incorrectly.
+- Gmail reconciles uncertain sends against the reviewed MIME, including the absence of
+  `Agent-Description` and the exact rendering used before the footer was introduced.
+  Current header and footer requirements still apply to new attempts. Tests recover an
+  original provider copy, reject copies with an added header or changed rendering, and
+  verify that the provider received only one send request in each case.
+- The pilot advertises its configured `descriptionUrl` verbatim. The header is optional
+  when the agent has no configured address. Both bindings accept its absence, and BL-6,
+  the pilot profile, and the explorer bundle reflect that behavior.
+- `buildEmail` now returns a promise because it decodes the attached RDF wire document.
+  It checks agreement with the supplied message before using the decoded document to
+  render both MIME alternatives. The regression pairs a named description with wire
+  that carries no conformance claim and checks that the builder refuses it.
+
+The two fresh `mortgage-main` email runs match the committed traces after excluding
+generation metadata. The main run has 582 events and the readable-copy fault branch
+has 211. Both manifests remain at **283 paths, 278 runs, zero disagreements, and five
+blocked**. The explorer bundle includes the revised BL-6.
+
+- The agent-reference library-only rebuild, 82 focused tests, three oracle tests,
+  typecheck, lint, and `check:rdf-pipeline` passed. Lint reported repository warnings.
+  The RDF check reported zero failures and 212 tracked exceptions.
+- All 47 personal-agent email, outbound, and transmission tests passed, along with
+  typecheck and lint. The Vitest runs used `--maxWorkers=2`.
+- All 20 explorer Node tests and `node scripts/bundle-data.mjs` passed.
