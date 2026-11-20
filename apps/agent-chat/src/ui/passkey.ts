@@ -6,11 +6,19 @@
  * userVerification "required". The first approval registers the passkey; later ones assert
  * with it. Each challenge is bound to the approval payload. The response must match the
  * challenge, origin and relying party, and the authenticator must report user verification.
+ * Assertions must also carry a valid signature from the registered credential.
  *
  * This is a gate in the browser, not a server check: the approval itself is still the record
  * the engine signs with the device key. A cancelled, unavailable or failed ceremony never
  * authorizes signing.
  */
+import {
+  b64url,
+  fromB64url,
+  importCoseKey,
+  registrationKey,
+  verifyAssertionSignature,
+} from "./passkey-keys.js";
 
 export type UserCheck =
   | { status: "verified"; method: "passkey"; registered: boolean }
@@ -32,17 +40,6 @@ export const STORE_KEY = "errand.passkey.v1";
 const UV = 0x04;
 const UP = 0x01;
 
-function b64url(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function fromB64url(s: string): Uint8Array<ArrayBuffer> {
-  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
-}
 function bytes(buf: ArrayBuffer | ArrayBufferView): Uint8Array {
   return buf instanceof ArrayBuffer
     ? new Uint8Array(buf)
@@ -87,7 +84,8 @@ export function browserEnv(): PasskeyEnv {
     allows: (ceremony) => {
       const policy = doc?.permissionsPolicy ?? doc?.featurePolicy;
       const feature = `publickey-credentials-${ceremony}`;
-      if (policy?.features?.().includes(feature)) return policy.allowsFeature(feature);
+      if (policy?.allowsFeature(feature)) return true;
+      if (policy?.features?.().includes(feature)) return false;
       // Older browsers can support WebAuthn without exposing its policy directive.
       return w.self === w.top;
     },
@@ -99,7 +97,7 @@ export function browserEnv(): PasskeyEnv {
   };
 }
 
-/** Forget the registered credential ID, surfacing a blocked storage reset to the caller. */
+/** Forget the registered credential, surfacing a blocked storage reset to the caller. */
 export function forgetPasskey(env: PasskeyEnv = browserEnv()): void {
   if (!env.storage) throw new Error("Passkey storage is unavailable.");
   env.storage.removeItem(STORE_KEY);
@@ -163,13 +161,30 @@ function errorName(e: unknown): string {
 
 const failed = (reason: string): UserCheck => ({ status: "failed", reason });
 
+async function loadPasskey(
+  subtle: SubtleCrypto,
+  stored: string,
+): Promise<{ id: Uint8Array<ArrayBuffer>; key: CryptoKey } | null> {
+  try {
+    const record = JSON.parse(stored) as { id?: unknown; publicKey?: unknown } | null;
+    if (typeof record?.id !== "string" || typeof record.publicKey !== "string") return null;
+    const id = fromB64url(record.id);
+    if (id.length === 0) return null;
+    return { id, key: await importCoseKey(subtle, fromB64url(record.publicKey)) };
+  } catch {
+    return null;
+  }
+}
+
 async function assertPasskey(
   env: PasskeyEnv,
   credentials: NonNullable<PasskeyEnv["credentials"]>,
   id: Uint8Array<ArrayBuffer>,
+  key: CryptoKey,
   challenge: Uint8Array<ArrayBuffer>,
   signal?: AbortSignal,
 ): Promise<UserCheck> {
+  signal?.throwIfAborted();
   const cred = (await credentials.get({
     signal,
     publicKey: {
@@ -191,7 +206,13 @@ async function assertPasskey(
     res.authenticatorData,
   );
   signal?.throwIfAborted();
-  return bad ? failed(bad) : { status: "verified", method: "passkey", registered: false };
+  if (bad) return failed(bad);
+  if (!res.signature?.byteLength) return failed("no passkey signature");
+  const valid = await verifyAssertionSignature(env.subtle, key, res);
+  signal?.throwIfAborted();
+  return valid
+    ? { status: "verified", method: "passkey", registered: false }
+    : failed("invalid passkey signature");
 }
 
 /** Verify the principal for the engine's prepared signing payload. */
@@ -231,8 +252,12 @@ export async function verifyUser(
     if (!available) return failed("this device has no Face ID or screen lock passkey");
     const challenge = await challengeFor(env, digest);
     signal?.throwIfAborted();
-    if (stored !== null)
-      return await assertPasskey(env, credentials, fromB64url(stored), challenge, signal);
+    if (stored !== null) {
+      const passkey = await loadPasskey(env.subtle, stored);
+      if (!passkey)
+        return failed("the saved passkey has no usable public key; reset it and try again");
+      return await assertPasskey(env, credentials, passkey.id, passkey.key, challenge, signal);
+    }
 
     const cred = (await credentials.create({
       signal,
@@ -261,29 +286,37 @@ export async function verifyUser(
     const id = new Uint8Array(cred.rawId);
     if (id.length === 0) return failed("registration returned no credential ID");
     const res = cred.response as AuthenticatorAttestationResponse;
-    if (typeof res.getAuthenticatorData === "function") {
-      const bad = await checkResponse(
-        env,
-        "webauthn.create",
-        challenge,
-        res.clientDataJSON,
-        res.getAuthenticatorData(),
-      );
-      if (bad) return failed(bad);
-    } else {
-      const bad = checkClientData(env, "webauthn.create", challenge, res.clientDataJSON);
-      if (bad) return failed(bad);
-      // For browsers without registration authenticator data, verify with the new ID once.
+    const hasAuthData = typeof res.getAuthenticatorData === "function";
+    const authData = res.getAuthenticatorData?.();
+    const bad = hasAuthData
+      ? await checkResponse(env, "webauthn.create", challenge, res.clientDataJSON, authData)
+      : checkClientData(env, "webauthn.create", challenge, res.clientDataJSON);
+    signal?.throwIfAborted();
+    if (bad) return failed(bad);
+    const registered = await registrationKey(env.subtle, res, id, authData).catch(() => null);
+    signal?.throwIfAborted();
+    if (!registered) return failed("registration returned no usable passkey public key");
+    if (!hasAuthData) {
+      // Older browsers need an assertion with the new key to confirm user verification.
       const denied = permissionFailure("get");
       if (denied) return failed(denied);
       const fallbackChallenge = await challengeFor(env, digest);
-      signal?.throwIfAborted();
-      const result = await assertPasskey(env, credentials, id, fallbackChallenge, signal);
+      const result = await assertPasskey(
+        env,
+        credentials,
+        id,
+        registered.key,
+        fallbackChallenge,
+        signal,
+      );
       if (result.status !== "verified") return result;
     }
     signal?.throwIfAborted();
     try {
-      env.storage.setItem(STORE_KEY, b64url(id));
+      env.storage.setItem(
+        STORE_KEY,
+        JSON.stringify({ id: b64url(id), publicKey: b64url(registered.cose) }),
+      );
     } catch {
       return failed("could not save the new passkey");
     }

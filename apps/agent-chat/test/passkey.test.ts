@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import {
   type ApprovalRequest,
   actionDigest,
@@ -80,21 +81,85 @@ function env(fake: Fake, over: Partial<PasskeyEnv> = {}): PasskeyEnv & { calls: 
   };
 }
 const RAW = new Uint8Array([1, 2, 3, 4]);
+const ec = generateKeyPairSync("ec", { namedCurve: "P-256" });
+const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const otherEc = generateKeyPairSync("ec", { namedCurve: "P-256" });
+
+function coseKey(publicKey: KeyObject): Buffer {
+  const jwk = publicKey.export({ format: "jwk" });
+  if (jwk.x && jwk.y) {
+    return Buffer.concat([
+      Buffer.from("a5010203262001215820", "hex"),
+      Buffer.from(jwk.x, "base64url"),
+      Buffer.from("225820", "hex"),
+      Buffer.from(jwk.y, "base64url"),
+    ]);
+  }
+  if (!jwk.n || !jwk.e) throw new Error("expected a test RSA key");
+  return Buffer.concat([
+    Buffer.from("a401030339010020590100", "hex"),
+    Buffer.from(jwk.n, "base64url"),
+    Buffer.from("2143", "hex"),
+    Buffer.from(jwk.e, "base64url"),
+  ]);
+}
+
+function storedPasskey() {
+  return memoryStorage({
+    [STORE_KEY]: JSON.stringify({
+      id: b64url(RAW),
+      publicKey: coseKey(ec.publicKey).toString("base64url"),
+    }),
+  });
+}
 
 const verifyUser = (digest: string, displayName: string, environment: PasskeyEnv) =>
   runVerification(digest, displayName, () => environment);
 
-function registration(options: { flags?: number; tamper?: boolean; legacy?: boolean } = {}) {
+function registration(
+  options: {
+    flags?: number;
+    tamper?: boolean;
+    legacy?: boolean;
+    coseOnly?: boolean;
+    noKey?: boolean;
+    publicKey?: KeyObject;
+  } = {},
+) {
   return async (o: CredentialCreationOptions) => {
     const challenge = options.tamper
       ? new Uint8Array(48)
       : (o.publicKey?.challenge as BufferSource);
-    const ad = await authData(options.flags ?? 0x45);
+    const key = options.publicKey ?? ec.publicKey;
+    const header = Buffer.from(await authData(options.flags ?? 0x45));
+    const cose = options.noKey ? Buffer.alloc(0) : coseKey(key);
+    const ad = Uint8Array.from(
+      Buffer.concat([header, Buffer.alloc(16), Buffer.from([0, RAW.length]), RAW, cose]),
+    ).buffer;
+    const length =
+      ad.byteLength < 256
+        ? [0x58, ad.byteLength]
+        : [0x59, ad.byteLength >> 8, ad.byteLength & 0xff];
+    const attestationObject = Uint8Array.from(
+      Buffer.concat([
+        Buffer.from("a363666d74646e6f6e656761747453746d74a0686175746844617461", "hex"),
+        Buffer.from(length),
+        Buffer.from(ad),
+      ]),
+    ).buffer;
     return {
       rawId: RAW.buffer,
       response: {
         clientDataJSON: clientData("webauthn.create", challenge),
+        attestationObject,
         ...(options.legacy ? {} : { getAuthenticatorData: () => ad }),
+        ...(options.legacy || options.coseOnly || options.noKey
+          ? {}
+          : {
+              getPublicKey: () =>
+                Uint8Array.from(key.export({ type: "spki", format: "der" })).buffer,
+              getPublicKeyAlgorithm: () => (key.asymmetricKeyType === "rsa" ? -257 : -7),
+            }),
       },
     };
   };
@@ -102,17 +167,38 @@ function registration(options: { flags?: number; tamper?: boolean; legacy?: bool
 
 function assertion(
   flags = 0x05,
-  opts: { type?: string; rp?: string; raw?: Uint8Array; tamper?: boolean } = {},
+  opts: {
+    type?: string;
+    rp?: string;
+    raw?: Uint8Array;
+    tamper?: boolean;
+    signature?: "missing" | "invalid" | "malformed" | "wrong-key";
+    privateKey?: KeyObject;
+  } = {},
 ) {
   return async (o: CredentialRequestOptions) => {
     const pk = o.publicKey as PublicKeyCredentialRequestOptions;
     expect(pk.userVerification).toBe("required");
     const challenge = opts.tamper ? new Uint8Array(48) : (pk.challenge as Uint8Array);
+    const clientDataJSON = clientData(opts.type ?? "webauthn.get", challenge);
+    const authenticatorData = await authData(flags, opts.rp);
+    let signature: ArrayBuffer | undefined;
+    if (opts.signature !== "missing") {
+      const hash = await subtle.digest("SHA-256", clientDataJSON);
+      const signed = Buffer.concat([Buffer.from(authenticatorData), Buffer.from(hash)]);
+      if (opts.signature === "invalid") signed[36] = 1;
+      const key =
+        opts.signature === "wrong-key" ? otherEc.privateKey : (opts.privateKey ?? ec.privateKey);
+      const der = sign("sha256", signed, key);
+      if (opts.signature === "malformed") der[0] = 0x31;
+      signature = Uint8Array.from(der).buffer;
+    }
     return {
       rawId: (opts.raw ?? RAW).buffer,
       response: {
-        clientDataJSON: clientData(opts.type ?? "webauthn.get", challenge),
-        authenticatorData: await authData(flags, opts.rp),
+        clientDataJSON,
+        authenticatorData,
+        signature,
       },
     };
   };
@@ -120,15 +206,18 @@ function assertion(
 
 describe("browser WebAuthn policy", () => {
   it.each([
-    { recognized: false, topLevel: true, allowed: false, expected: true },
-    { recognized: false, topLevel: false, allowed: false, expected: false },
-    { recognized: true, topLevel: true, allowed: false, expected: false },
-    { recognized: true, topLevel: false, allowed: true, expected: true },
-  ])("preflights registration with $recognized recognition, $topLevel top-level, and $allowed permission", async ({
+    { recognized: false, topLevel: true, allowed: false, expected: true, enumerates: true },
+    { recognized: false, topLevel: false, allowed: false, expected: false, enumerates: true },
+    { recognized: true, topLevel: true, allowed: false, expected: false, enumerates: true },
+    { recognized: true, topLevel: false, allowed: true, expected: true, enumerates: true },
+    { recognized: false, topLevel: false, allowed: true, expected: true, enumerates: false },
+    { recognized: false, topLevel: false, allowed: false, expected: false, enumerates: false },
+  ])("preflights with $recognized recognition, $topLevel top-level, $allowed permission and $enumerates enumeration", async ({
     recognized,
     topLevel,
     allowed,
     expected,
+    enumerates,
   }) => {
     const self = {};
     const feature = "publickey-credentials-create";
@@ -137,7 +226,9 @@ describe("browser WebAuthn policy", () => {
     vi.stubGlobal("top", topLevel ? self : {});
     vi.stubGlobal("document", {
       featurePolicy: {
-        features: () => ["publickey-credentials-get", ...(recognized ? [feature] : [])],
+        ...(enumerates
+          ? { features: () => ["publickey-credentials-get", ...(recognized ? [feature] : [])] }
+          : {}),
         allowsFeature,
       },
     });
@@ -146,7 +237,7 @@ describe("browser WebAuthn policy", () => {
       const result = await verifyUser(DIGEST, "Sam", e);
       expect(result.status).toBe(expected ? "verified" : "failed");
       expect(e.calls).toEqual(expected ? ["create"] : []);
-      expect(allowsFeature.mock.calls).toEqual(recognized ? [[feature]] : []);
+      expect(allowsFeature.mock.calls).toEqual([[feature]]);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -156,23 +247,22 @@ describe("browser WebAuthn policy", () => {
 describe("verifyUser", () => {
   it("registers a platform passkey on first use, requiring user verification", async () => {
     let seen: PublicKeyCredentialCreationOptions | undefined;
+    const getPublicKey = vi.fn(
+      () => Uint8Array.from(ec.publicKey.export({ type: "spki", format: "der" })).buffer,
+    );
+    const getPublicKeyAlgorithm = vi.fn(() => -7);
     const sync = env({
       create: async (o) => {
-        const pk = o.publicKey as PublicKeyCredentialCreationOptions;
-        seen = pk;
-        const ad = await authData(0x45);
-        return {
-          rawId: RAW.buffer,
-          response: {
-            clientDataJSON: clientData("webauthn.create", pk.challenge),
-            getAuthenticatorData: () => ad,
-          },
-        };
+        seen = o.publicKey;
+        const cred = await registration({ coseOnly: true })(o);
+        return { ...cred, response: { ...cred.response, getPublicKey, getPublicKeyAlgorithm } };
       },
     });
     const r = await verifyUser(DIGEST, "Sam", sync);
     expect(r).toEqual({ status: "verified", method: "passkey", registered: true });
-    expect(sync.storage?.getItem(STORE_KEY)).toBe(b64url(RAW));
+    expect(sync.storage?.getItem(STORE_KEY)).toBe(storedPasskey().getItem(STORE_KEY));
+    expect(getPublicKey).toHaveBeenCalledOnce();
+    expect(getPublicKeyAlgorithm).toHaveBeenCalledOnce();
     expect(seen?.authenticatorSelection).toMatchObject({
       authenticatorAttachment: "platform",
       userVerification: "required",
@@ -193,7 +283,7 @@ describe("verifyUser", () => {
           return assertion()(o);
         },
       },
-      { storage: memoryStorage({ [STORE_KEY]: b64url(RAW) }) },
+      { storage: storedPasskey() },
     );
     await verifyUser(DIGEST, "Sam", e);
     await verifyUser("sha-256:other", "Sam", e);
@@ -205,7 +295,7 @@ describe("verifyUser", () => {
   });
 
   it("asserts with the stored passkey and accepts only a user-verified answer", async () => {
-    const stored = { storage: memoryStorage({ [STORE_KEY]: b64url(RAW) }) };
+    const stored = { storage: storedPasskey() };
     const ok = env({ get: assertion(0x05) }, stored);
     expect(await verifyUser(DIGEST, "Sam", ok)).toEqual({
       status: "verified",
@@ -213,18 +303,67 @@ describe("verifyUser", () => {
       registered: false,
     });
     expect(ok.calls).toEqual(["get"]);
-    const noUv = env(
-      { get: assertion(0x01) },
-      { storage: memoryStorage({ [STORE_KEY]: b64url(RAW) }) },
-    );
+    const noUv = env({ get: assertion(0x01) }, { storage: storedPasskey() });
     expect(await verifyUser(DIGEST, "Sam", noUv)).toEqual({
       status: "failed",
       reason: "the device did not verify the user",
     });
   });
 
+  it.each([
+    "missing",
+    "invalid",
+    "malformed",
+    "wrong-key",
+  ] as const)("rejects an assertion with a %s signature", async (signature) => {
+    const e = env({ get: assertion(0x05, { signature }) }, { storage: storedPasskey() });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: signature === "missing" ? "no passkey signature" : "invalid passkey signature",
+    });
+    expect(e.calls).toEqual(["get"]);
+  });
+
+  it.each([
+    { keys: ec, coseOnly: true },
+    { keys: rsa, coseOnly: false },
+    { keys: rsa, coseOnly: true },
+  ])("verifies with a persisted $keys.publicKey.asymmetricKeyType key (COSE fallback: $coseOnly)", async ({
+    keys,
+    coseOnly,
+  }) => {
+    const e = env({
+      create: registration({ publicKey: keys.publicKey, coseOnly }),
+      get: assertion(0x05, { privateKey: keys.privateKey }),
+    });
+    expect(await verifyUser(DIGEST, "Sam", e)).toMatchObject({
+      status: "verified",
+      registered: true,
+    });
+    expect(JSON.parse(e.storage?.getItem(STORE_KEY) ?? "null")).toEqual({
+      id: b64url(RAW),
+      publicKey: coseKey(keys.publicKey).toString("base64url"),
+    });
+    expect(await verifyUser(DIGEST, "Sam", e)).toMatchObject({
+      status: "verified",
+      registered: false,
+    });
+    expect(e.calls).toEqual(["create", "get"]);
+  });
+
+  it("requires a reset for an older stored ID without a public key", async () => {
+    const e = env({ get: assertion() }, { storage: memoryStorage({ [STORE_KEY]: b64url(RAW) }) });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "the saved passkey has no usable public key; reset it and try again",
+    });
+    expect(e.calls).toEqual([]);
+    forgetPasskey(e);
+    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
+  });
+
   it("rejects a wrong challenge, ceremony, site or credential", async () => {
-    const s = () => ({ storage: memoryStorage({ [STORE_KEY]: b64url(RAW) }) });
+    const s = () => ({ storage: storedPasskey() });
     expect(
       (await verifyUser(DIGEST, "Sam", env({ get: assertion(0x05, { tamper: true }) }, s())))
         .status,
@@ -261,15 +400,11 @@ describe("verifyUser", () => {
           throw err;
         },
       },
-      { storage: memoryStorage({ [STORE_KEY]: b64url(RAW) }) },
+      { storage: storedPasskey() },
     );
     expect(await verifyUser(DIGEST, "Sam", e)).toEqual({ status: "cancelled" });
     expect(
-      await verifyUser(
-        DIGEST,
-        "Sam",
-        env({ get: async () => null }, { storage: memoryStorage({ [STORE_KEY]: "AQ" }) }),
-      ),
+      await verifyUser(DIGEST, "Sam", env({ get: async () => null }, { storage: storedPasskey() })),
     ).toEqual({ status: "cancelled" });
   });
 
@@ -309,6 +444,8 @@ describe("verifyUser", () => {
     { flags: 0x41 },
     { tamper: true },
     { tamper: true, legacy: true },
+    { noKey: true },
+    { noKey: true, legacy: true },
   ])("does not persist or assert an invalid registration (%j)", async (options) => {
     const e = env({ create: registration(options), get: assertion() });
     expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("failed");
@@ -330,7 +467,9 @@ describe("verifyUser", () => {
           expect(storage.getItem(STORE_KEY)).toBeNull();
           expect(options.publicKey?.allowCredentials?.[0]?.id).toEqual(RAW);
           if (status === "cancelled") return null;
-          return assertion(status === "failed" ? 0x01 : 0x05)(options);
+          return assertion(0x05, { signature: status === "failed" ? "wrong-key" : undefined })(
+            options,
+          );
         },
       },
       { storage, allows },
@@ -338,7 +477,9 @@ describe("verifyUser", () => {
     expect((await verifyUser(DIGEST, "Sam", e)).status).toBe(status);
     expect(e.calls).toEqual(["create", "get"]);
     expect(allows.mock.calls).toEqual([["create"], ["get"]]);
-    expect(storage.getItem(STORE_KEY)).toBe(status === "verified" ? b64url(RAW) : null);
+    expect(storage.getItem(STORE_KEY)).toBe(
+      status === "verified" ? storedPasskey().getItem(STORE_KEY) : null,
+    );
   });
 
   it("surfaces storage read, save, and reset failures", async () => {
