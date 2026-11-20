@@ -1,8 +1,20 @@
 // AUTHORED-BY Codex GPT-6
+import { createHash } from "node:crypto";
+import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
+import { testKey } from "@jeswr/agent-reference/reference/keys";
+import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { describe, expect, it } from "vitest";
 import { DirectBus } from "./bindings/direct.js";
-import { buildEmail, carrierFor, parseInboundEmail, renderHuman } from "./bindings/email.js";
+import {
+  buildEmail,
+  carrierFor,
+  parseInboundEmail,
+  renderHuman,
+  validateOutboundEmail,
+} from "./bindings/email.js";
 import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "./domains/scheduling.js";
+import { CONFIG_ED25519 } from "./profile/configurations.js";
+import { PILOT_PROFILE } from "./profile/vocabulary.js";
 import type { AgentRuntime, OutboundMessage } from "./runtime/agent.js";
 import { ALICE, BOB, fixedClock, personalPair } from "./scenarios/personal.js";
 import { type ProcessedOutbound, prepareOutbound, processInput, ThreadStore } from "./service.js";
@@ -99,6 +111,62 @@ describe("email binding", () => {
     expect(viaEmail?.termsDigest).toBe(viaDirect?.termsDigest);
     expect(viaEmail?.selection).toEqual(viaDirect?.selection);
   }, 20_000);
+
+  it.each([
+    { limit: "expanded packet", expanded: true, data: "x".repeat(400 * 1024) },
+    {
+      limit: "JSON-LD carrier",
+      expanded: false,
+      data: createHash("shake256", { outputLength: 46 * 1024 })
+        .update("email carrier limit fixture")
+        .digest("base64"),
+    },
+  ])("refuses a signed message above the $limit limit in both directions", async ({
+    data,
+    expanded,
+  }) => {
+    const date = fixedClock().now();
+    const message = {
+      profile: PILOT_PROFILE,
+      configuration: CONFIG_ED25519,
+      id: "urn:test:email-carrier-bounds",
+      conversation: "urn:test:email-conversation",
+      kind: "invoke",
+      from: { actor: ALICE.actor },
+      to: { actor: BOB.actor },
+      createdAt: date.toISOString(),
+      expiresAt: new Date(date.getTime() + 60_000).toISOString(),
+      body: {
+        operation: { id: "urn:test:operation", version: "1" },
+        input: { data },
+        basis: { kind: "public" },
+      },
+    } as const;
+    const key = await testKey("36m/email-carrier-bounds");
+    const wire = await writeMessagePacket(MessageNode.toNode(message), {
+      suite: "jws",
+      key,
+      verificationMethod: `urn:awp:key:${key.kid}`,
+      created: message.createdAt,
+    });
+    const out = {
+      id: message.id,
+      conversation: message.conversation,
+      kind: message.kind,
+      endpoints: [],
+      message,
+      wire,
+    };
+    const from = ALICE.email as string;
+    const to = BOB.email as string;
+    const { raw } = buildEmail({ out, from, to, date });
+
+    expect(Buffer.byteLength(raw)).toBeLessThan(256 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(wire)) > 512 * 1024).toBe(expanded);
+    expect(Buffer.byteLength(carrierFor(wire)) > 64 * 1024).toBe(!expanded);
+    expect(await parseInboundEmail(raw)).toMatchObject({ ok: false });
+    expect(await validateOutboundEmail(raw, { from, to, wire })).toMatchObject({ ok: false });
+  });
 
   it("labels software representation and synthetic scope in the human fallback", async () => {
     const { start } = await setup();

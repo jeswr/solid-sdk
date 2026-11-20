@@ -59,10 +59,15 @@ export async function runConventional(clock: {
     canaryHits++;
     res.end("canary");
   });
-  await new Promise<void>((r) => canary.listen(0, "127.0.0.1", () => r()));
-  const canaryPort = (canary.address() as { port: number }).port;
-
   try {
+    await new Promise<void>((resolve, reject) => {
+      canary.once("error", reject);
+      canary.listen(0, "127.0.0.1", () => {
+        canary.off("error", reject);
+        resolve();
+      });
+    });
+    const canaryPort = (canary.address() as { port: number }).port;
     const cast = new Cast(now);
     await cast.add(PRIYA, personalMandate({ knownParties: [], knownContacts: [MATEO] }), []);
     const clients = new Map([["synthetic-slots/1", new SlotsClient(base, 1_000)]]);
@@ -344,6 +349,6 @@ export async function runConventional(clock: {
     return { obs: obs as JsonObject & Record<string, unknown> };
   } finally {
     await service.close();
-    await new Promise<void>((r) => canary.close(() => r()));
+    if (canary.listening) await new Promise<void>((r) => canary.close(() => r()));
   }
 }

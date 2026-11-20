@@ -520,7 +520,7 @@ export class InboundGate {
           `unsigned ${kind} not permitted by ${envelope.configuration}`,
         );
       }
-      if (sender.actor || sender.onBehalfOf || (msg.evidence ?? []).length > 0) {
+      if (sender.actor || sender.onBehalfOf || sender.operator || (msg.evidence ?? []).length > 0) {
         return fail(
           "unsigned-not-allowed",
           "an unsigned message cannot claim an identity or carry evidence",

@@ -384,14 +384,13 @@ async function messageOf(wire: WireMessage): Promise<AnyMessage | undefined> {
 }
 
 /**
- * Exact parity of every human-visible part with the renderings derived from `wire`.
+ * Exact parity of every human-visible part and the attachment with the decoded carrier.
  * Returns undefined when the email matches, else what differs.
  */
-export function parityProblem(
+function parityProblem(
   root: MimeNode,
   message: AnyMessage,
-  wire: WireMessage,
-  carrierText = carrierFor(wire),
+  carrierText: string,
 ): string | undefined {
   const shape = shapeOf(root);
   if (shape !== SUPPORTED_SHAPE) return `unsupported MIME layout ${shape}`;
@@ -401,7 +400,10 @@ export function parityProblem(
     return "text/plain part differs from the signed statement's rendering";
   if (lines(html?.text ?? "") !== lines(expected.html))
     return "text/html part differs from the signed statement's rendering";
-  if (lines(carrier?.text ?? "") !== lines(expected.carrier))
+  const attachment = carrier?.text ?? "";
+  if (Buffer.byteLength(attachment) > CARRIER_LIMITS.maxEnvelopeBytes)
+    return "attachment exceeds the structured copy size limit";
+  if (lines(attachment) !== lines(expected.carrier))
     return "attachment differs from the structured copy";
   for (const leaf of leaves(root)) {
     const extra = leaf.headers.filter(
@@ -438,12 +440,15 @@ function readCarrier(
   return undefined;
 }
 
-/** Parse a provider-delivered email into a wire message, applying the binding rules. */
-export async function parseInboundEmail(
-  raw: string | Uint8Array,
-  options: { strictParity?: boolean } = {},
-): Promise<InboundEmailResult> {
-  const strict = options.strictParity ?? true;
+function readEmailCarrier(raw: string | Uint8Array):
+  | Extract<InboundEmailResult, { ok: false }>
+  | {
+      ok: true;
+      wire: WireMessage;
+      carrierText: string;
+      email: EmailObservation;
+      structuredCopies: number;
+    } {
   let parsed: ReturnType<typeof parseEmail>;
   try {
     parsed = parseEmail(raw);
@@ -518,11 +523,23 @@ export async function parseInboundEmail(
     };
   }
   const [carrierText, wire] = copy;
+  return { ok: true, wire, carrierText, email, structuredCopies: claimed };
+}
+
+/** Parse a provider-delivered email into a wire message, applying the binding rules. */
+export async function parseInboundEmail(
+  raw: string | Uint8Array,
+  options: { strictParity?: boolean } = {},
+): Promise<InboundEmailResult> {
+  const strict = options.strictParity ?? true;
+  const carried = readEmailCarrier(raw);
+  if (!carried.ok) return carried;
+  const { carrierText, wire, email, structuredCopies } = carried;
   const message = await messageOf(wire);
-  if (!message) return { ok: true, wire, email, parity: "unchecked", structuredCopies: claimed };
+  if (!message) return { ok: true, wire, email, parity: "unchecked", structuredCopies };
   const mime = parseMime(raw);
   const problem = mime.ok
-    ? parityProblem(mime.root, message, wire, carrierText)
+    ? parityProblem(mime.root, message, carrierText)
     : `unparseable MIME: ${mime.detail}`;
   if (problem) {
     if (strict) {
@@ -531,7 +548,7 @@ export async function parseInboundEmail(
         reason: "human-parity-mismatch",
         detail: problem,
         email,
-        structuredCopies: claimed,
+        structuredCopies,
       };
     }
     return {
@@ -540,10 +557,10 @@ export async function parseInboundEmail(
       email,
       parity: "unverified",
       parityDetail: problem,
-      structuredCopies: claimed,
+      structuredCopies,
     };
   }
-  return { ok: true, wire, email, parity: "match", structuredCopies: claimed };
+  return { ok: true, wire, email, parity: "match", structuredCopies };
 }
 
 /** Top-level headers this binding emits. Anything else in an outbound message is refused. */
@@ -607,32 +624,21 @@ export async function validateOutboundEmail(
   if (from !== expected.from) problems.push("From is not the configured source account");
   if (to !== expected.to || !isValidEmailAddress(to ?? ""))
     problems.push("To is not exactly the expected single pinned recipient");
-  const wire = expectedWire(expected);
-  const message = hasProof(wire) ? await messageOf(wire) : undefined;
-  if (!message) problems.push("structured copy does not decode");
+  const carried = readEmailCarrier(raw);
+  if (!carried.ok) problems.push(`${carried.reason}: ${carried.detail}`);
+  else if (wireDigest(carried.wire) !== wireDigest(expectedWire(expected)))
+    problems.push("signed envelope differs");
   else {
-    if (headerValues(mime.root, "message-id")[0] !== emailMessageIdFor(message.id))
-      problems.push("Message-ID is not the one derived from the signed message id");
-    if (headerValues(mime.root, "x-awp-message")[0] !== message.id)
-      problems.push("X-AWP-Message is not the signed message id");
-    let carried: ReturnType<typeof readCarrier>;
-    if (shapeOf(mime.root) === SUPPORTED_SHAPE) {
-      try {
-        const attachment = leaves(mime.root)[2]?.text ?? "";
-        carried = readCarrier(
-          parseBoundedJson(attachment, CARRIER_LIMITS) as Record<string, unknown>,
-        );
-      } catch {
-        // The parity check below refuses an unparseable or mismatched attachment.
-      }
+    const message = await messageOf(carried.wire);
+    if (!message) problems.push("structured copy does not decode");
+    else {
+      if (headerValues(mime.root, "message-id")[0] !== emailMessageIdFor(message.id))
+        problems.push("Message-ID is not the one derived from the signed message id");
+      if (headerValues(mime.root, "x-awp-message")[0] !== message.id)
+        problems.push("X-AWP-Message is not the signed message id");
+      const problem = parityProblem(mime.root, message, carried.carrierText);
+      if (problem) problems.push(problem);
     }
-    const problem = parityProblem(
-      mime.root,
-      message,
-      wire,
-      carried && wireDigest(carried.wire) === wireDigest(wire) ? carried.text : undefined,
-    );
-    if (problem) problems.push(problem);
   }
   return problems.length === 0 ? { ok: true } : { ok: false, problems };
 }

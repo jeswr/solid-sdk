@@ -109,6 +109,7 @@ export async function runEnergy(now: () => Date) {
       comparatorRequests: comparatorOut.length,
       identityFreeRequests: comparatorOut.every(
         (o) =>
+          o.wire.format === "awp-jsonld/0.1" &&
           isUnsignedRequest(o.wire) &&
           Object.keys(o.message.from).length === 0 &&
           (o.message.evidence ?? []).length === 0,

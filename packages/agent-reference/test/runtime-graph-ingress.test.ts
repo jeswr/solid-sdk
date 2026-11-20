@@ -11,14 +11,61 @@ import { CoreNode } from "../src/model/core-node.js";
 import { EvidenceItemNode } from "../src/model/evidence-item.js";
 import { MessageNode } from "../src/model/message-nodes.js";
 import { StatementQualityNode } from "../src/model/quality.js";
-import { CONFIG_ED25519 } from "../src/profile/configurations.js";
+import { CONFIG_ED25519, CONFIG_PUBLIC } from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
 import { writeAttachmentDocument } from "../src/wire/attachments.js";
 import { sign } from "../src/wire/authenticity.js";
 import { signCompact } from "../src/wire/jws-compact.js";
+import { writeMessagePacket } from "../src/wire/message-packet.js";
 
 const at = "2026-11-13T09:00:00.000Z";
+
+it.each([
+  "native",
+  "legacy",
+])("refuses an operator-only sender on a %s unsigned request", async (format) => {
+  const receiver = "urn:test:receiver";
+  const gate = new InboundGate({
+    identity: { actor: receiver },
+    trust: await TrustStore.load({ version: 1, owner: receiver, keys: [], sourceAuthority: [] }),
+    limits: DEFAULT_LIMITS,
+    now: () => at,
+    record: () => {},
+    gate: {},
+    memory: new GateMemory(),
+    agreementTerms: () => undefined,
+  });
+  const request = {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_PUBLIC,
+    id: "urn:test:unsigned-request",
+    conversation: "urn:test:conversation",
+    kind: "invoke",
+    from: {},
+    to: { actor: receiver },
+    createdAt: at,
+    expiresAt: "2026-11-13T10:00:00.000Z",
+    body: {
+      operation: { id: "urn:test:operation", version: "1" },
+      input: {},
+      basis: { kind: "public" },
+    },
+  } as const;
+  const verify = async (message: typeof request) => {
+    const wire =
+      format === "native"
+        ? await writeMessagePacket(MessageNode.toNode(message), { unsigned: true })
+        : { format: "awp-unsigned-json/0.1", payload: JSON.stringify(message) };
+    return gate.verifyIntegrity(wire, {}, () => false);
+  };
+  expect(await verify(request)).toMatchObject({ ok: true });
+  expect(await verify({ ...request, from: { operator: "urn:test:operator" } })).toMatchObject({
+    ok: false,
+    reason: "unsigned-not-allowed",
+  });
+});
+
 it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
   const actor = await testKey("22d/graph-actor"),
     source = await testKey("22d/graph-source");

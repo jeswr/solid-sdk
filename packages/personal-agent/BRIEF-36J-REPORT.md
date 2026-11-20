@@ -46,3 +46,25 @@ The sandbox denies loopback listeners with `listen EPERM` and fixture subprocess
 ## Summary
 
 The pilots sign patient consent with an explicit issuer, exchange native message packets, and retain reply audit observations across restart. The engine oracle and the in-process recovery checks pass. Real loopback and subprocess verification still depends on a runner that permits those operations.
+
+## Review fixes (36m)
+
+- Gmail outbound revalidation uses the same MIME extraction, carrier bounds, and packet decoding as inbound parsing. It compares the decoded packet with the reviewed packet and checks the attachment and human renderings against the decoded carrier. The two regression cases exercise the 512 KiB expanded packet cap and the 64 KiB carrier cap independently. Both messages fit under the pilot's default 256 KiB MIME limit. [`bindings/email.ts:390`](src/pilot/bindings/email.ts#L390), [`bindings/email.ts:443`](src/pilot/bindings/email.ts#L443), [`bindings/email.ts:607`](src/pilot/bindings/email.ts#L607), [`email.test.ts:124`](src/pilot/email.test.ts#L124)
+- The engine refuses an unsigned public request that names an operator. Both native and legacy engine cases pair the refusal with a successful request whose sender is empty. [`agent-reference/src/gates/inbound.ts:523`](../agent-reference/src/gates/inbound.ts#L523), [`agent-reference/test/runtime-graph-ingress.test.ts:27`](../agent-reference/test/runtime-graph-ingress.test.ts#L27)
+- The energy scenario requires proof-free native JSON-LD carriage as part of its identity-free request assertion. The regression delivers follow-up invocations using legacy unsigned carriage and shows that the scenario flags the format even though the service completes the invocation. [`scenarios/energy.ts:112`](src/pilot/scenarios/energy.ts#L112), [`energy.test.ts:40`](src/pilot/energy.test.ts#L40)
+- A canary startup error rejects the startup promise and closes the already-started booking service. The test injects an asynchronous listen error and expects rejection before the next event-loop turn. The demo uses its original 60-second budget. [`scenarios/conventional.ts:64`](src/pilot/scenarios/conventional.ts#L64), [`scenarios/conventional.ts:352`](src/pilot/scenarios/conventional.ts#L352), [`conventional.test.ts:8`](src/pilot/conventional.test.ts#L8), [`demo.test.ts:13`](src/pilot/demo.test.ts#L13)
+
+All six new regression cases failed at the intended assertions before their fixes. Verification used Node 24 offline and at most two workers per Vitest run.
+
+| Run | Result |
+| --- | --- |
+| Personal-agent email, Gmail outbound, energy, and security | 27 passed across four files. |
+| Gmail transmission and provider-copy checks | Three selected tests passed. |
+| Canary startup failure | One selected test passed. |
+| Conventional scheduling and full demo with in-process HTTP transport | Two tests passed. All 14 demo scenarios passed in 37.6 seconds. |
+| Personal-agent typecheck and lint | Passed. |
+| Agent-reference library rebuild | `tsc -p tsconfig.build.json` and `node scripts/copy-generated.mjs` passed. |
+| Agent-reference graph ingress, runtime packets, and anonymous paths | 10 passed across four files. |
+| Agent-reference `test/oracle` | Three tests passed across two files. All 163 recorded scenario paths matched the oracle. |
+
+Real loopback and fixture subprocess tests are reserved for the orchestrator's runner.
