@@ -9,7 +9,18 @@ The Client Identifier Document (`/clientid.jsonld`) is pre-rendered at build tim
 set at build time** via the `APP_ORIGIN` env var. It defaults to
 `http://localhost:3200` for local builds.
 
-## Static export (Caddy `file_server` — the `issues.solid-test.jeswr.org` deploy)
+## GitHub Pages (current)
+
+The live app is <https://jeswr.github.io/solid-sdk/issues/>, built by `scripts/build-pages.mjs`
+(the `pages` workflow) with `APP_STATIC_EXPORT=1`, `APP_ORIGIN=https://jeswr.github.io` and
+`NEXT_PUBLIC_BASE_PATH=/solid-sdk/issues`. The base path prefixes the Client Identifier
+Document's `client_id`, `redirect_uris` and `client_uri`, and the URLs the session builds at
+runtime (`src/lib/base-path.ts`).
+
+## Static export (Caddy `file_server` — the retired `issues.solid-test.jeswr.org` deploy)
+
+That host was retired in November 2026 to stop AWS costs; the recipe below still works for any
+static file server at a domain root.
 
 Build a fully static site (plain HTML + assets + a pre-rendered `clientid.jsonld`)
 into `out/`, with the deploy origin baked in:
