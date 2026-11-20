@@ -183,6 +183,7 @@ export async function runFhir(clock: { now: () => Date; advance: (ms: number) =>
   const patientAuth = await signStatement(maya.ownerKey, TYP.statement, {
     type: "PatientAuthorisation",
     id: newUrn(),
+    issuer: MAYA_PARTY,
     patient: MAYA_PARTY,
     patientId: PATIENT_ID,
     client: CAREBRIEF.actor,

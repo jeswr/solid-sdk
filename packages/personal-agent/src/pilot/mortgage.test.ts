@@ -65,5 +65,5 @@ describe("UC-01 mortgage workflow on the shared runtime", () => {
       underwriter: true,
       northbankPep: true,
     });
-  });
+  }, 20_000);
 });

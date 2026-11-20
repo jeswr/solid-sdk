@@ -3,6 +3,7 @@ import { DataFactory } from "n3";
 import { expect, it } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
+import type { VerificationResult } from "../src/core/types.js";
 import { GateMemory } from "../src/gates/common.js";
 import { InboundGate } from "../src/gates/inbound.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
@@ -10,14 +11,61 @@ import { CoreNode } from "../src/model/core-node.js";
 import { EvidenceItemNode } from "../src/model/evidence-item.js";
 import { MessageNode } from "../src/model/message-nodes.js";
 import { StatementQualityNode } from "../src/model/quality.js";
-import { CONFIG_ED25519 } from "../src/profile/configurations.js";
+import { CONFIG_ED25519, CONFIG_PUBLIC } from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
 import { writeAttachmentDocument } from "../src/wire/attachments.js";
 import { sign } from "../src/wire/authenticity.js";
 import { signCompact } from "../src/wire/jws-compact.js";
+import { writeMessagePacket } from "../src/wire/message-packet.js";
 
 const at = "2026-11-13T09:00:00.000Z";
+
+it.each([
+  "native",
+  "legacy",
+])("refuses an operator-only sender on a %s unsigned request", async (format) => {
+  const receiver = "urn:test:receiver";
+  const gate = new InboundGate({
+    identity: { actor: receiver },
+    trust: await TrustStore.load({ version: 1, owner: receiver, keys: [], sourceAuthority: [] }),
+    limits: DEFAULT_LIMITS,
+    now: () => at,
+    record: () => {},
+    gate: {},
+    memory: new GateMemory(),
+    agreementTerms: () => undefined,
+  });
+  const request = {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_PUBLIC,
+    id: "urn:test:unsigned-request",
+    conversation: "urn:test:conversation",
+    kind: "invoke",
+    from: {},
+    to: { actor: receiver },
+    createdAt: at,
+    expiresAt: "2026-11-13T10:00:00.000Z",
+    body: {
+      operation: { id: "urn:test:operation", version: "1" },
+      input: {},
+      basis: { kind: "public" },
+    },
+  } as const;
+  const verify = async (message: typeof request) => {
+    const wire =
+      format === "native"
+        ? await writeMessagePacket(MessageNode.toNode(message), { unsigned: true })
+        : { format: "awp-unsigned-json/0.1", payload: JSON.stringify(message) };
+    return gate.verifyIntegrity(wire, {}, () => false);
+  };
+  expect(await verify(request)).toMatchObject({ ok: true });
+  expect(await verify({ ...request, from: { operator: "urn:test:operator" } })).toMatchObject({
+    ok: false,
+    reason: "unsigned-not-allowed",
+  });
+});
+
 it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
   const actor = await testKey("22d/graph-actor"),
     source = await testKey("22d/graph-source");
@@ -36,12 +84,13 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
       subject,
     })),
   });
+  const records: unknown[] = [];
   const gate = new InboundGate({
     identity: { actor: "urn:test:receiver" },
     trust,
     limits: DEFAULT_LIMITS,
     now: () => at,
-    record: () => {},
+    record: (record) => records.push(record),
     gate: {},
     memory: new GateMemory(),
     agreementTerms: () => undefined,
@@ -86,9 +135,32 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
   };
   const first = make("first");
   first.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
-  const accepted = await gate.verifyIntegrity(await packet(first), {}, () => false);
+  const signed = await packet(first);
+  const accepted = await gate.verifyIntegrity(signed, {}, () => false);
   expect(accepted.ok).toBe(true);
   if (!accepted.ok) throw new Error(accepted.detail);
+  expect(records).toContainEqual(
+    expect.objectContaining({
+      type: "verification",
+      protectedObject: digestBytes(signed.jsonld),
+      outcome: "valid",
+      attributedTo: "urn:test:sender",
+    }),
+  );
+  const doc = JSON.parse(signed.jsonld);
+  doc.expiresAt = "2026-11-13T09:30:00.000Z";
+  const tampered = { ...signed, jsonld: JSON.stringify(doc) };
+  expect(await gate.verifyIntegrity(tampered, {}, () => false)).toMatchObject({
+    ok: false,
+    reason: "bad-signature",
+  });
+  const refused = records.at(-1) as VerificationResult;
+  expect(refused).toMatchObject({
+    type: "verification",
+    protectedObject: digestBytes(tampered.jsonld),
+    outcome: "invalid",
+  });
+  expect(refused).not.toHaveProperty("attributedTo");
   expect(accepted.message).toBeInstanceOf(MessageNode);
   expect(accepted.message.body).toBeInstanceOf(CoreNode);
   const view = accepted.message as unknown as MessageNode;

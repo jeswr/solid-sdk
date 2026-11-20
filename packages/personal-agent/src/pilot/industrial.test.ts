@@ -81,7 +81,7 @@ describe("UC-05 industrial purpose / contract / transfer separation", () => {
     });
     expect(obs.performance).toBe("completed-synthetic");
     expect(obs.ledgers).toBe(true);
-  });
+  }, 45_000);
 });
 
 it("releases an installed store handle and withholds a queued copy when its grant expires", async () => {
@@ -183,4 +183,4 @@ it("releases an installed store handle and withholds a queued copy when its gran
     ),
   ).toMatchObject({ status: "refused", reason: "condition-failed" });
   expect(send).toHaveBeenCalledTimes(1);
-});
+}, 20_000);

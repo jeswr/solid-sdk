@@ -34,17 +34,19 @@ import type {
 } from "../runtime/transmission.js";
 import { wireDigest } from "../runtime/transmission.js";
 import type { ProcessedOutbound } from "../service.js";
+import type { WireMessage } from "../store/state.js";
 import {
   emailMessageIdFor,
   rawFromGmailMessage,
   validateOutboundEmail,
   verifyProviderCopy,
 } from "./email.js";
+import { hasProof } from "./message-packet.js";
 
 /** What the adapter needs from the agent runtime (see `AgentRuntime.outboundVerifier`). */
 export interface OutboundVerifier {
   verifyOwnEnvelope(
-    jws: string,
+    envelope: string | WireMessage,
   ): Promise<{ ok: boolean; audienceActor?: string; messageId?: string; detail: string }>;
   endpointsFor(actor: string): readonly string[];
   /** The runtime's transmission gate (authorisation at send time + durable records). */
@@ -148,10 +150,15 @@ export class GmailProviderAdapter {
   }
 
   /** Re-derive and check the exact bytes; returns the raw to send, or why not. */
-  async revalidate(
-    item: ProcessedOutbound,
-  ): Promise<
-    | { ok: true; raw: Buffer; to: string; from: string; jws: string; request: TransmitRequest }
+  async revalidate(item: ProcessedOutbound): Promise<
+    | {
+        ok: true;
+        raw: Buffer;
+        to: string;
+        from: string;
+        wire: WireMessage;
+        request: TransmitRequest;
+      }
     | { ok: false; reason: string }
   > {
     if (!item.email) return { ok: false, reason: "no email in the item" };
@@ -169,10 +176,17 @@ export class GmailProviderAdapter {
     const threadId = item.email.gmailSend.threadId;
     if (threadId !== undefined && !/^[A-Za-z0-9]{1,64}$/.test(threadId))
       return { ok: false, reason: "invalid threadId" };
-    if (item.envelope.format !== "awp-jws-compact/0.1")
+    if (!hasProof(item.envelope))
       return { ok: false, reason: "only signed envelopes are sent by email" };
-    const own = await this.verifier.verifyOwnEnvelope(item.envelope.jws);
-    if (!own.ok || !own.audienceActor || !own.messageId) return { ok: false, reason: own.detail };
+    const own = await this.verifier.verifyOwnEnvelope(
+      item.envelope.format === "awp-jws-compact/0.1" ? item.envelope.jws : item.envelope,
+    );
+    if (!own.ok)
+      return {
+        ok: false,
+        reason: own.detail === "unknown-key" ? "not signed by this agent: unknown-key" : own.detail,
+      };
+    if (!own.audienceActor || !own.messageId) return { ok: false, reason: own.detail };
     const pinned = this.verifier
       .endpointsFor(own.audienceActor)
       .filter((e) => e.startsWith("mailto:"));
@@ -181,10 +195,10 @@ export class GmailProviderAdapter {
     const to = (pinned[0] as string).slice("mailto:".length);
     if (!this.allowed.has(to))
       return { ok: false, reason: "pinned recipient is not in the allow-list" };
-    const exact = validateOutboundEmail(raw, {
+    const exact = await validateOutboundEmail(raw, {
       from: this.sourceAccount,
       to,
-      jws: item.envelope.jws,
+      wire: item.envelope,
     });
     if (!exact.ok) return { ok: false, reason: exact.problems.join("; ") };
     return {
@@ -192,7 +206,7 @@ export class GmailProviderAdapter {
       raw,
       to,
       from: this.sourceAccount,
-      jws: item.envelope.jws,
+      wire: item.envelope,
       request: {
         messageId: own.messageId,
         binding: GMAIL_BINDING,
@@ -246,7 +260,7 @@ export class GmailProviderAdapter {
     raw: Buffer;
     to: string;
     from: string;
-    jws: string;
+    wire: WireMessage;
     request: TransmitRequest;
   }): Promise<ProviderLookupResult> {
     const transport = this.transport as GmailTransport;
@@ -270,10 +284,10 @@ export class GmailProviderAdapter {
           problems.push(`${id}: provider returned a different message`);
           continue;
         }
-        const check = verifyProviderCopy(rawFromGmailMessage(copy), {
+        const check = await verifyProviderCopy(rawFromGmailMessage(copy), {
           from: checked.from,
           to: checked.to,
-          jws: checked.jws,
+          wire: checked.wire,
           emailMessageId: checked.request.externalId,
           sent: checked.raw,
         });

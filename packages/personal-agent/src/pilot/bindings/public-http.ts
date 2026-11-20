@@ -9,7 +9,7 @@
  * Boundaries:
  *  - loopback listener only (127.0.0.1/::1), Host header must name that literal address,
  *    browser-originated requests (Origin) refused;
- *  - accepts ONLY `awp-unsigned-json/0.1` requests (the runtime then admits them only for
+ *  - accepts only proof-free requests (the runtime then admits them only for
  *    operations whose declared access is public and kinds the public configuration allows);
  *  - bounds: request body ≤ 64 KiB (Content-Length required), response read ≤ 256 KiB, at most
  *    8 requests in progress (503 otherwise), per-request deadline;
@@ -34,6 +34,7 @@ import {
   wireDigest,
 } from "../runtime/transmission.js";
 import type { WireMessage } from "../store/state.js";
+import { hasProof, isUnsignedRequest, messagePacketSchema } from "./message-packet.js";
 
 export const PUBLIC_BINDING = "public-http/0.1";
 export const PUBLIC_PATH = "/awp/public";
@@ -62,15 +63,17 @@ const endpointCardSchema = z.strictObject({
   binding: z.literal(PUBLIC_BINDING),
   note: z.string().max(500).optional(),
 });
-const unsignedWire = z.strictObject({
+const legacyUnsignedWire = z.strictObject({
   format: z.literal("awp-unsigned-json/0.1"),
   payload: z.string().min(2).max(MAX_PUBLIC_BODY_BYTES),
 });
+const unsignedWire = z.union([messagePacketSchema, legacyUnsignedWire]).refine(isUnsignedRequest);
 const requestSchema = z.strictObject({ wire: unsignedWire });
-const signedWire = z.strictObject({
+const legacySignedWire = z.strictObject({
   format: z.literal("awp-jws-compact/0.1"),
   jws: z.string().min(16).max(MAX_PUBLIC_RESPONSE_BYTES),
 });
+const signedWire = z.union([messagePacketSchema, legacySignedWire]).refine(hasProof);
 const responseSchema = z.strictObject({
   binding: z.literal(PUBLIC_BINDING),
   disposition: z.string().max(32),
@@ -416,7 +419,7 @@ export class PublicDispatcher {
         });
         const disposition = rep.step?.disposition ?? "rejected";
         dispositions.push(disposition);
-        rt.recordBindingEvent({
+        await rt.commitBindingEvent({
           type: "public-reply-processed",
           binding: PUBLIC_BINDING,
           request: r.request,
@@ -495,7 +498,16 @@ export class PublicDispatcher {
       }
       // Identical re-sends only for anonymous public requests (read-only profile, receiver
       // deduplicates by message id); anything else keeps the default (no resend).
-      const publicRead = m.wire.format === "awp-unsigned-json/0.1";
+      if (!isUnsignedRequest(m.wire)) {
+        failed.push({
+          id: m.id,
+          kind: m.kind,
+          toActor: m.toActor,
+          status: "refused",
+          detail: "only anonymous unsigned requests use this binding",
+        });
+        continue;
+      }
       let result: TransmitResult;
       try {
         result = await rt.transmit(
@@ -506,9 +518,8 @@ export class PublicDispatcher {
             wireDigest: wireDigest(m.wire),
           },
           {
-            ...(publicRead
-              ? { idempotentResend: true as const, maxAttempts: PUBLIC_MAX_ATTEMPTS }
-              : {}),
+            idempotentResend: true,
+            maxAttempts: PUBLIC_MAX_ATTEMPTS,
             send: async (): Promise<ProviderSendResult> => {
               const r = await this.#post(peer, m.wire);
               if (r.kind === "refused") return { outcome: "rejected", detail: r.detail };
@@ -519,7 +530,7 @@ export class PublicDispatcher {
                 toActor: m.toActor,
                 receivedAt: new Date().toISOString(),
                 bytes: r.bytes,
-                wires: r.outbound as z.infer<typeof signedWire>[],
+                wires: r.outbound,
               });
               return { outcome: "accepted", providerRef: `public-http:${r.status}` };
             },
@@ -530,7 +541,7 @@ export class PublicDispatcher {
       }
       const retained = this.#spool.list().find((r) => r.request === m.id);
       if ((result.status === "sent" || result.status === "duplicate") && retained) {
-        rt.recordBindingEvent({
+        await rt.commitBindingEvent({
           type: "public-reply-received",
           binding: PUBLIC_BINDING,
           request: m.id,
@@ -570,7 +581,7 @@ export class PublicDispatcher {
     peer: PublicPeer,
     wire: WireMessage,
   ): Promise<
-    | { kind: "ok"; status: number; bytes: number; outbound: WireMessage[] }
+    | { kind: "ok"; status: number; bytes: number; outbound: z.infer<typeof signedWire>[] }
     | { kind: "refused"; detail: string }
     | { kind: "unknown"; detail: string }
   > {
@@ -602,7 +613,7 @@ export class PublicDispatcher {
         kind: "ok",
         status: res.status,
         bytes: Buffer.byteLength(text),
-        outbound: parsed.outbound as WireMessage[],
+        outbound: parsed.outbound,
       };
     } catch {
       return { kind: "unknown", detail: "malformed public response" };

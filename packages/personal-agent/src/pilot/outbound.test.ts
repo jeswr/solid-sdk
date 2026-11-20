@@ -237,7 +237,7 @@ describe("finding 7 — strict parity covers every human-visible part", () => {
   it("accepts only the exact rendering; HTML/plain disagreement, duplicate summaries and extra parts are refused", async () => {
     const { item, start, clock } = await setup();
     const raw = item.email?.raw as string;
-    expect(parseInboundEmail(raw).ok).toBe(true);
+    expect((await parseInboundEmail(raw)).ok).toBe(true);
     const html = decodePart(raw, "text/html");
     const plain = decodePart(raw, "text/plain");
     const htmlLie = replacePart(
@@ -245,26 +245,26 @@ describe("finding 7 — strict parity covers every human-visible part", () => {
       "text/html",
       html.replace("Kind: describe", "Kind: describe (booking fee: 500 GBP)"),
     );
-    const r1 = parseInboundEmail(htmlLie);
+    const r1 = await parseInboundEmail(htmlLie);
     expect(r1.ok ? "ok" : r1.detail).toMatch(/text\/html part differs/);
     const hidden = replacePart(
       raw,
       "text/html",
       html.replace("<pre>", '<pre><span style="display:none">x</span>'),
     );
-    expect(parseInboundEmail(hidden).ok).toBe(false);
+    expect((await parseInboundEmail(hidden)).ok).toBe(false);
     const doubled = replacePart(raw, "text/plain", `${plain}\n${plain}`);
-    const r2 = parseInboundEmail(doubled);
+    const r2 = await parseInboundEmail(doubled);
     expect(r2.ok ? "ok" : r2.detail).toMatch(/text\/plain part differs/);
     // An extra human-readable part changes the layout.
     const extra = raw.replace(
       /(--awp-mixed-[0-9a-f]+)--/,
       "$1\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nPlease also pay 500 GBP.\r\n$1--",
     );
-    const r3 = parseInboundEmail(extra);
+    const r3 = await parseInboundEmail(extra);
     expect(r3.ok ? "ok" : r3.detail).toMatch(/unsupported MIME layout/);
     // Lenient mode still extracts the signed copy but claims nothing about the human text.
-    const lenient = parseInboundEmail(extra, { strictParity: false });
+    const lenient = await parseInboundEmail(extra, { strictParity: false });
     expect(lenient.ok && lenient.parity).toBe("unverified");
     // Round trip of a freshly built message remains exact.
     const again = buildEmail({
