@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { readFileSync } from "fs";
+import { DataFactory } from "n3";
 import { expect, it } from "vitest";
-import { digestBytes, digestOf } from "../src/core/canonical.js";
+import { canonicalJson, digestBytes, digestOf } from "../src/core/canonical.js";
+import type { AnyMessage, JsonObject } from "../src/core/types.js";
 import { verifierRegistry } from "../src/derive/verifiers.js";
 import {
   type ComparisonRun,
@@ -15,12 +19,15 @@ import {
 } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import type { Scenario } from "../src/engine/schema.js";
 import { MessageNode } from "../src/model/message-nodes.js";
+import { NamedValueNode, NamedValuesNode, SCHEMA, scopedId } from "../src/model/named-values.js";
 import { CONFIG_PUBLIC } from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
 import { signClaim } from "../src/scenarios/common.js";
 import type { PacketView, TraceEvent } from "../src/trace/types.js";
+import { signCompact } from "../src/wire/jws-compact.js";
 import { inspectMessagePacket, writeMessagePacket } from "../src/wire/message-packet.js";
 import { ToyJointProtocol } from "./doubles/joint.js";
 import { ToyProofSystem } from "./doubles/proof.js";
@@ -293,14 +300,28 @@ it("rejects even one refused field in a different issuer's separately admitted c
   ).toBe(true);
 });
 
-it("flags uncited values in the fee acceptance while payment still stops at P4", async () => {
+it("preserves the fee acceptance and the P4 stop in the recorded invoice branch", async () => {
   const { profile, scenario } = loadCase(root, "pay-an-invoice");
-  const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
+  const traceBytes = readFileSync(
+    new URL("../traces/pay-an-invoice--branch-1--baseline.json", import.meta.url),
+    "utf8",
+  );
+  const { generated } = JSON.parse(traceBytes);
+  const paths = await runScenario(profile, scenario, {
+    reportExpectationFailures: true,
+    commit: generated.commit,
+  });
   const branch = paths.find((path) => path.path === "branch-1");
+  // The separate OwnerMandate evidence contains two more uses of the verb.
   expect(branch).toMatchObject({
     disagrees: true,
     actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
     note: "an effect followed a stop",
+  });
+  expect(branch?.trace?.events[9]).toMatchObject({ kind: "decision", outcome: "admit" });
+  expect(branch?.trace?.events[10]).toMatchObject({
+    kind: "store",
+    fact: { id: "urn:scenario:pay-an-invoice:invoice" },
   });
   const storedInvoice = branch?.trace?.events.find(
     (event) =>
@@ -317,6 +338,7 @@ it("flags uncited values in the fee acceptance while payment still stops at P4",
   });
   expect(branch?.trace?.events).toContainEqual(
     expect.objectContaining({
+      seq: 4,
       agent: "business-agent",
       part: "inbound-gate",
       outcome: "refuse",
@@ -325,6 +347,7 @@ it("flags uncited values in the fee acceptance while payment still stops at P4",
   );
   expect(branch?.trace?.events).toContainEqual(
     expect.objectContaining({
+      seq: 84,
       agent: "business-agent",
       part: "outbound-gate",
       kind: "decision",
@@ -334,6 +357,7 @@ it("flags uncited values in the fee acceptance while payment still stops at P4",
   );
   expect(branch?.trace?.events).toContainEqual(
     expect.objectContaining({
+      seq: 83,
       agent: "business-agent",
       check: "P4",
       verdict: "fail",
@@ -350,7 +374,12 @@ it("flags uncited values in the fee acceptance while payment still stops at P4",
     evidence: [],
   });
   expect(released?.[0]?.seq).toBeLessThan(storedInvoice?.seq ?? -1);
+  expect(branch?.trace?.events[35]).toMatchObject({ seq: 36, kind: "decision", outcome: "go" });
+  expect(released?.[0]?.seq).toBe(37);
   expect(JSON.stringify(released)).not.toContain("urn:account:supplier");
+  expect(`${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...branch?.trace }, null, 2)}\n`).toBe(
+    traceBytes,
+  );
 }, 120_000);
 
 it("rejects a refused terms policy ID copied under a different field", () => {
@@ -425,7 +454,7 @@ const externalClaim = {
   destination: refusedClaim.account,
 };
 
-function admittedClaim(statement = externalClaim, wire = "verified statement bytes") {
+function admittedClaim(statement: JsonObject = externalClaim, wire = "verified statement bytes") {
   return new Map([
     [
       laterAdmit.seq,
@@ -439,6 +468,377 @@ function admittedClaim(statement = externalClaim, wire = "verified statement byt
     ],
   ]);
 }
+
+const useRule = { id: "urn:rule:paid-service", action: "use", target: "urn:op:service" };
+const ownParty = "urn:party:agent";
+const peerParty = "urn:party:peer";
+const proposalId = "urn:message:proposal";
+const termsDigest = digestOf({ fee: 1 });
+const proposalDigest = digestOf({ id: proposalId });
+const checkedMandate = { verdict: "pass", rule: { id: useRule.id, text: "" } } as const;
+const registrationId = "urn:registration:peer";
+
+interface ActionSlotFixture {
+  readonly action?: string;
+  readonly recipient?: string;
+  readonly trustedParty?: string | null;
+  readonly registeredParty?: string;
+  readonly sender?: string;
+  readonly mandate?: Partial<TraceEvent> | null;
+  readonly recipientCheck?: Partial<TraceEvent> | null;
+  readonly rule?: typeof useRule | null;
+  readonly refusedFields?: RefusedStatement["statement"];
+  readonly parameters?: Record<string, string>;
+  readonly body?: Record<string, string>;
+  readonly content?: Record<string, string>;
+  readonly envelope?: (bytes: string) => string;
+  readonly scopeDigest?: string;
+  readonly admit?: Partial<TraceEvent> | null;
+  readonly cite?: boolean;
+  readonly revoke?: boolean;
+  readonly native?: "valid" | "other subject" | "payee" | "duplicate recipient" | "attachment";
+}
+
+async function checkActionSlots(options: ActionSlotFixture = {}) {
+  const {
+    action = "use",
+    recipient = peerParty,
+    trustedParty = recipient,
+    registeredParty,
+    sender = recipient,
+    mandate = checkedMandate,
+    recipientCheck = {},
+    rule = useRule,
+    refusedFields = { terms: { action: "use" }, value: { payee: recipient } },
+    parameters = {},
+    body = {},
+    content,
+    envelope = (bytes) => bytes,
+    scopeDigest,
+    admit = {},
+    cite,
+    revoke,
+    native,
+  } = options;
+  const operation = useRule.target;
+  const { scenario } = loadCase(root, "pay-an-invoice");
+  const world: Scenario = {
+    ...scenario,
+    parties: scenario.parties
+      .slice(0, 2)
+      .map((party) =>
+        party.runs === "agent"
+          ? { ...party, id: "agent", actsFor: "owner" }
+          : { ...party, id: "owner", identity: ownParty },
+      ),
+    mandates: [
+      {
+        agent: "agent",
+        autonomous: rule ? [rule] : [],
+        withApproval: [],
+        prohibitions: [],
+        standingRules: [],
+      },
+    ],
+    trust: {
+      ...scenario.trust,
+      ownLists: { agent: trustedParty ? [{ party: trustedParty, tasks: [operation] }] : [] },
+      ...(registeredParty && {
+        root: {
+          id: "urn:trust:root",
+          name: "Root",
+          delegates: [
+            {
+              id: "urn:trust:register",
+              name: "Register",
+              answersFor: "the operation",
+              entries: [
+                {
+                  id: registrationId,
+                  party: registeredParty,
+                  authorizedFor: [operation],
+                  status: "authorized",
+                },
+              ],
+              answerTtlMs: 30_000,
+            },
+          ],
+        },
+      }),
+    },
+  };
+  const scope = {
+    action,
+    target: operation,
+    operation,
+    conversation: "urn:conversation",
+    recipient,
+    evidence: cite ? [acceptedId] : [],
+  };
+  const { evidence: _evidence, ...intent } = scope;
+  const bytes = envelope(canonicalJson({ ...intent, parameters }));
+  const actionDigest = scopeDigest ?? digestBytes(bytes);
+  const key = await testKey("comparison/gate-established-slots");
+  const intentEvidence = {
+    role: "authorisation",
+    format: "awp-action-intent/0.1",
+    value: bytes,
+  } as const;
+  const message = {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_PUBLIC,
+    id: gated.messageId,
+    conversation: scope.conversation,
+    kind: "accept" as const,
+    from: { actor: "urn:actor:agent", onBehalfOf: ownParty },
+    to: { actor: "urn:actor:peer", party: recipient },
+    inReplyTo: proposalId,
+    createdAt: "2026-11-13T09:00:00Z",
+    expiresAt: "2026-11-13T10:00:00Z",
+    body: { proposal: proposalId, termsDigest, agreement: "urn:agreement", ...body },
+    ...(content ? { contents: content } : {}),
+    evidence: [intentEvidence],
+  };
+  let wire: unknown;
+  let observed: unknown = message;
+  if (native) {
+    const support = await signClaim(key, { ...externalClaim, destination: "unrelated" });
+    const node = MessageNode.toNode({
+      ...message,
+      evidence: [{ role: "authorisation", format: "jws-compact", value: support }, intentEvidence],
+    } as AnyMessage);
+    if (native === "other subject") {
+      NamedValuesNode.from({ recipient }, "urn:outside-intent", node.dataset);
+    }
+    if (native === "payee" || native === "duplicate recipient") {
+      const credential = node.evidence?.[1]?.credential;
+      if (!credential) throw new Error("Missing projected intent");
+      const root = scopedId(credential.id, "payload");
+      const payload = new NamedValuesNode(root, node.dataset);
+      const extra = new NamedValueNode(scopedId(root, "extra"), node.dataset);
+      extra.initialise(native === "payee" ? "payee" : "recipient", payload.entries.length);
+      extra.domainValue = DataFactory.namedNode(recipient);
+      node.dataset.addQuad(
+        DataFactory.namedNode(root),
+        DataFactory.namedNode(`${SCHEMA}itemListElement`),
+        DataFactory.namedNode(extra.id),
+      );
+    }
+    const packet = await writeMessagePacket(node, {
+      suite: "jws",
+      key,
+      verificationMethod: `urn:awp:key:${key.kid}`,
+      created: message.createdAt,
+    });
+    if (native === "other subject") expect(packet.jsonld).toContain("urn:outside-intent");
+    if (native === "payee") expect(packet.jsonld).toContain('"name":"payee"');
+    if (native === "attachment")
+      expect(packet.attachments.some((item) => item.mediaType === "application/n-quads")).toBe(
+        true,
+      );
+    observed = await inspectMessagePacket(packet);
+    expect(observed).toMatchObject({ id: message.id, to: { party: recipient } });
+    wire = packet;
+  } else {
+    wire = { format: "awp-jws-compact/0.1", jws: await signCompact(key, "message+jws", message) };
+  }
+  const messageDigest = digestOf(observed);
+  const release: TraceEvent = { ...gated, seq: 8, actionDigest, actionScope: scope, messageDigest };
+  const proposal = packetWithStatement(acceptedId);
+  const arrived: TraceEvent = {
+    ...checked(4),
+    part: "transport",
+    kind: "message-in",
+    messageId: proposalId,
+    gateRun: 4,
+    packet: {
+      ...proposal,
+      id: proposalId,
+      kind: "propose",
+      layers: {
+        ...proposal.layers,
+        header: {
+          present: true,
+          summary: "",
+          digest: proposalDigest,
+          raw: { from: { onBehalfOf: sender } },
+        },
+        content: { present: true, summary: "", raw: { termsDigest } },
+      },
+    },
+  };
+  const events: TraceEvent[] = [
+    checked(1),
+    refusal,
+    laterAdmit,
+    arrived,
+    admit === null
+      ? checked(5)
+      : {
+          ...accepted(5, "admit"),
+          gateRun: 4,
+          messageId: proposalId,
+          messageDigest: proposalDigest,
+          ...admit,
+        },
+    mandate === null
+      ? checked(6)
+      : {
+          ...checked(6),
+          part: "outbound-gate",
+          gateRun: 3,
+          check: "mandate",
+          actionDigest,
+          ...mandate,
+        },
+    recipientCheck === null
+      ? checked(7)
+      : {
+          ...checked(7),
+          part: "outbound-gate",
+          gateRun: 3,
+          check: "recipient",
+          actionDigest,
+          ...(registeredParty && { rule: { id: registrationId, text: "" } }),
+          ...recipientCheck,
+        },
+    release,
+    {
+      ...sent,
+      seq: 9,
+      actionDigest,
+      packet: {
+        ...proposal,
+        layers: {
+          ...proposal.layers,
+          header: { ...proposal.layers.header, digest: messageDigest },
+        },
+      },
+    },
+  ];
+  const statement = { ...refusedFields, id: refusedId, claimType: "test.refused" };
+  return stoppedReleaseProblem(
+    {
+      events,
+      steps: revoke
+        ? new Map([[3, { id: "revoked", descriptor: { type: "revoke-mandate", items: [] } }]])
+        : undefined,
+      standaloneRefusals: new Map([
+        [refusal.seq, { ...refusedStatement, statement, claimDigest: digestOf(statement) }],
+      ]),
+      admissions: cite
+        ? admittedClaim({ ...externalClaim, destination: recipient, value: { payee: recipient } })
+        : undefined,
+      payloads: new Map<number, unknown>([
+        [release.seq, parameters],
+        [9, { message: observed, wire }],
+      ]),
+    },
+    refusal,
+    "refuse",
+    world,
+  );
+}
+
+it("masks the action of a passed scenario mandate and the recipient of the admitted proposal", async () => {
+  expect(await checkActionSlots({ refusedFields: { terms: { action: "use" } } })).toBe(false);
+  expect(await checkActionSlots({ refusedFields: { value: { payee: peerParty } } })).toBe(false);
+});
+
+it("requires the scenario register's exact party for the operation named by the recipient check", async () => {
+  expect(await checkActionSlots({ trustedParty: null, registeredParty: peerParty })).toBe(false);
+  expect(await checkActionSlots({ trustedParty: null, registeredParty: `${peerParty}4` })).toBe(
+    true,
+  );
+});
+
+it.each([
+  ["different action", { rule: { ...useRule, action: "read" } }],
+  ["different case", { rule: { ...useRule, action: "Use" } }],
+  ["absent rule", { rule: null }],
+  ["absent check", { mandate: null }],
+  ["failed check", { mandate: { ...checkedMandate, verdict: "fail" } }],
+  ["different gate run", { mandate: { ...checkedMandate, gateRun: 9 } }],
+  ["refused rule ID", { refusedFields: { terms: { action: "use", id: useRule.id } } }],
+  [
+    "refused target reference",
+    { refusedFields: { terms: { action: "use", target: useRule.target } } },
+  ],
+  ["refused action reference", { refusedFields: { terms: { action: "use", id: "use" } } }],
+  ["mandate revoked after the refusal", { revoke: true }],
+] satisfies [string, ActionSlotFixture][])("rejects an action with %s", async (_label, options) => {
+  expect(await checkActionSlots({ refusedFields: { terms: { action: "use" } }, ...options })).toBe(
+    true,
+  );
+});
+
+it.each([
+  ["parameters", { parameters: { action: "use" } }],
+  ["body", { body: { note: "use" } }],
+  [
+    "renamed member",
+    { envelope: (json: string) => canonicalJson({ ...JSON.parse(json), verb: "use" }) },
+  ],
+] satisfies [
+  string,
+  ActionSlotFixture,
+][])("rejects a second action copy in %s", async (_label, options) => {
+  expect(await checkActionSlots(options)).toBe(true);
+});
+
+it.each([
+  ["missing own-list entry", { trustedParty: null }],
+  ["shorter own-list entry", { recipient: "urn:account:1234", trustedParty: "urn:account:123" }],
+  ["longer own-list entry", { recipient: "urn:account:123", trustedParty: "urn:account:1234" }],
+  ["absent recipient check", { recipientCheck: null }],
+  ["failed recipient check", { recipientCheck: { verdict: "fail" } }],
+  ["missing admission", { admit: null }],
+  ["another agent's admission", { admit: { agent: "other" } }],
+  ["changed header digest", { admit: { messageDigest: "other" } }],
+  ["sender suffix", { sender: peerParty + "4" }],
+  ["own party as recipient", { recipient: ownParty }],
+  ["changed terms digest", { body: { termsDigest: "sha-256:other" } }],
+  ["different proposal ID", { body: { proposal: "urn:message:other" } }],
+] satisfies [
+  string,
+  ActionSlotFixture,
+][])("rejects a recipient with %s", async (_label, options) => {
+  expect(await checkActionSlots(options)).toBe(true);
+});
+
+it("requires a 34e citation for a recipient repeated in contents.payee", async () => {
+  expect(await checkActionSlots({ content: { payee: peerParty } })).toBe(true);
+  expect(await checkActionSlots({ content: { payee: peerParty }, cite: true })).toBe(false);
+});
+
+it.each([
+  ["action first", (json: string) => `{"action":"read",${json.slice(1)}`],
+  ["action last", (json: string) => `${json.slice(0, -1)},"act\\u0069on":"read"}`],
+  ["recipient first", (json: string) => `{"recipient":"urn:other",${json.slice(1)}`],
+  ["recipient last", (json: string) => `${json.slice(0, -1)},"recipient":"urn:other"}`],
+])("rejects an envelope with a duplicate member (%s)", async (_label, envelope) => {
+  expect(await checkActionSlots({ envelope })).toBe(true);
+});
+
+it("rejects an envelope whose bytes differ from the go action digest", async () => {
+  expect(await checkActionSlots({ scopeDigest: digestBytes("other bytes") })).toBe(true);
+});
+
+it("masks only the recipient PropertyValue belonging to the native intent envelope", async () => {
+  expect(await checkActionSlots({ native: "valid" })).toBe(false);
+  expect(await checkActionSlots({ native: "valid", parameters: { payee: peerParty } })).toBe(true);
+  expect(await checkActionSlots({ native: "payee" })).toBe(true);
+  expect(await checkActionSlots({ native: "duplicate recipient" })).toBe(true);
+  expect(await checkActionSlots({ native: "other subject" })).toBe(true);
+  expect(
+    await checkActionSlots({
+      native: "attachment",
+      parameters: Object.fromEntries(
+        Array.from({ length: 32 }, (_, index) => [`param${index}`, "ordinary".repeat(3)]),
+      ),
+    }),
+  ).toBe(false);
+});
 
 it("allows matching values in a verified independent store at the admitted digest", () => {
   const checkStore = (payload: typeof externalClaim) =>

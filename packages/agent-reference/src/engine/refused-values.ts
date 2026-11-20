@@ -52,43 +52,74 @@ interface SourceValue {
   readonly owner?: SourceObject;
 }
 
+type JsonPath = readonly (string | number)[];
+
 interface SourceObject {
   readonly members: RecordValue;
   readonly parent?: SourceObject;
 }
 
 /** Lex the original member values, including any a parsed object would overwrite. */
-function sourceValues(json: string): SourceValue[] {
+function sourceValues(
+  json: string,
+  stringAt?: (start: number, source: string, path: JsonPath) => void,
+): SourceValue[] {
   type Frame = {
     readonly object?: SourceObject;
     readonly owner?: SourceObject;
+    readonly path?: JsonPath;
     field?: string;
+    index: number;
   };
   const frames: Frame[] = [];
   const values: SourceValue[] = [];
   const tokens = /"(?:[^"\\]|\\[\s\S])*"(\s*:)?|[{}[\],:]|[^{}[\],:"\s]+/g;
-  for (const [source, member] of json.matchAll(tokens)) {
+  const path = (frame: Frame | undefined) =>
+    frame ? [...(frame.path ?? []), frame.object ? (frame.field ?? "") : frame.index] : [];
+  for (const token of json.matchAll(tokens)) {
+    const [source, member] = token;
     const frame = frames.at(-1);
     if (member && frame?.object) {
       frame.field = unquote(source.slice(0, -member.length));
       frame.object.members[frame.field] = undefined;
     } else if (source === "{" || source === "[") {
       const owner = frame?.object ?? frame?.owner;
+      const childPath = stringAt ? path(frame) : undefined;
       frames.push(
         source === "{"
-          ? { object: { members: Object.create(null), parent: owner } }
-          : { field: frame?.field, owner },
+          ? { object: { members: Object.create(null), parent: owner }, index: 0, path: childPath }
+          : { field: frame?.field, owner, index: 0, path: childPath },
       );
     } else if (source === "}" || source === "]") {
       frames.pop();
-    } else if (source !== "," && source !== ":") {
+    } else if (source === ",") {
+      if (stringAt && frame && !frame.object) frame.index++;
+    } else if (source !== ":") {
       const { field, object } = frame ?? {};
       values.push({ source, field, owner: object ?? frame?.owner });
-      if (object && field !== undefined && source.startsWith('"'))
-        object.members[field] = unquote(source);
+      if (source.startsWith('"')) {
+        if (object && field !== undefined) object.members[field] = unquote(source);
+        if (stringAt) stringAt(token.index, source, path(frame));
+      }
     }
   }
   return values;
+}
+
+/** Replace only the selected JSON string tokens, preserving the source for every other value. */
+export function maskJsonStrings(
+  json: string,
+  mask: (path: JsonPath, value: string) => string | null | undefined,
+): string {
+  let end = 0;
+  const parts: string[] = [];
+  sourceValues(json, (start, source, path) => {
+    const value = mask(path, unquote(source));
+    if (value === undefined) return;
+    parts.push(json.slice(end, start), JSON.stringify(value));
+    end = start + source.length;
+  });
+  return parts.length ? parts.join("") + json.slice(end) : json;
 }
 
 function unquote(source: string): string {

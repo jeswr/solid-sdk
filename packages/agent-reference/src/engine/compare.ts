@@ -1,19 +1,34 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-import { DataFactory } from "n3";
-import { digestBytes, digestOf } from "../core/canonical.js";
-import { attachmentGraphs } from "../model/attachments.js";
-import { SCHEMA } from "../model/named-values.js";
+import { DataFactory, type Store } from "n3";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { fileURLToPath } from "url";
+import { digestBytes, digestOf, isIri } from "../core/canonical.js";
+import { attachmentGraph, attachmentGraphs } from "../model/attachments.js";
+import { NamedValuesNode, SCHEMA, scopedId } from "../model/named-values.js";
+import { AWP } from "../profile/vocabulary.js";
 import type { TraceObservation, VerifiedStatement } from "../trace/recorder.js";
-import type { TraceEvent } from "../trace/types.js";
-import { cachedMessageProjection, isMessagePacket } from "../wire/message-packet.js";
+import type { TraceEvent, TraceFile } from "../trace/types.js";
+import { assertUniqueKeys } from "../wire/document.js";
+import { inspectEvidenceJws } from "../wire/evidence-jws.js";
+import { decodeAdapterJson } from "../wire/inspect.js";
+import {
+  cachedMessageProjection,
+  documentConfiguration,
+  isMessagePacket,
+} from "../wire/message-packet.js";
+import { applyIdentityNames } from "./identity-names.js";
+import { loadCase } from "./load.js";
+import { matrixProfileChanges, matrixWorld } from "./matrix.js";
 import {
   explainedValues,
+  maskJsonStrings,
   type RefusedContent,
   type RefusedStatement,
   refusedContent,
 } from "./refused-values.js";
-import type { Scenario } from "./schema.js";
+import { patch } from "./run.js";
+import { domainProfileSchema, type Scenario, scenarioSchema } from "./schema.js";
 
 export function decisionsOf(events: readonly TraceEvent[]) {
   return events
@@ -146,6 +161,7 @@ export type { RefusedStatement } from "./refused-values.js";
 
 export interface ComparisonRun {
   readonly events: readonly TraceEvent[];
+  readonly trace?: TraceFile;
   /** Keyed by event sequence because multiple script steps can share a trace step number. */
   readonly steps?: ReadonlyMap<number, ComparisonStep>;
   readonly scriptIds?: ReadonlySet<string>;
@@ -160,6 +176,41 @@ export interface ComparisonRun {
   readonly payloads?: ReadonlyMap<number, unknown>;
   readonly releaseSupport?: ReadonlyMap<number, readonly string[]>;
   readonly approvedAsks?: ReadonlySet<number>;
+}
+
+/** Use trace metadata only to select the authored scenario and its variant. */
+function authoredScenario(trace: TraceFile | undefined): Scenario | undefined {
+  if (!trace) return undefined;
+  const [id, branchId, extra] = trace.scenario.id.split("--");
+  if (!id || extra !== undefined) return undefined;
+  try {
+    const directory = fileURLToPath(new URL("../../", import.meta.url));
+    const { scenario, profile } = loadCase(directory, id);
+    const configuration = scenario.configurations.find(
+      (entry) => entry.id === trace.configuration.id,
+    );
+    if (!configuration && !["baseline", `${id}-local`].includes(trace.configuration.id))
+      return undefined;
+    const configured = configuration ? matrixWorld(scenario, configuration) : scenario;
+    const branch =
+      typeof trace.path === "object" ? configured.branches[trace.path.index - 1] : undefined;
+    if (branch?.id !== branchId || (branch?.onlyUnder && branch.onlyUnder !== configuration?.id))
+      return undefined;
+    const world = scenarioSchema.parse(branch ? patch(configured, branch.change) : configured);
+    if (configuration?.change.identity === "did") {
+      const changes = [...matrixProfileChanges(scenario, configuration), branch?.profileChange];
+      const pathProfile = domainProfileSchema.parse(
+        changes.reduce(
+          (value, change) => (change === undefined ? value : patch(value, change)),
+          profile,
+        ),
+      );
+      applyIdentityNames(pathProfile, world);
+    }
+    return world;
+  } catch {
+    return undefined;
+  }
 }
 
 interface DecisionWitness {
@@ -386,12 +437,366 @@ function matchesMessageRelease(release: TraceEvent | undefined, send: TraceEvent
   );
 }
 
+const intentFormat = "awp-action-intent/0.1";
+const actionSlots = ["action", "recipient"] as const;
+type ActionSlot = (typeof actionSlots)[number];
+type ActionSlots = Partial<Record<ActionSlot, string>>;
+
+function boundActionEnvelope(run: ComparisonRun, go: TraceEvent, send: TraceEvent) {
+  if (!go.actionScope || !go.actionDigest || go.effectRelease || !matchesMessageRelease(go, send))
+    return undefined;
+  const observed = object(run.payloads?.get(send.seq));
+  const wire = observed?.wire;
+  try {
+    const compact = object(wire);
+    const native = isMessagePacket(wire) ? cachedMessageProjection(wire) : undefined;
+    const jws = compact?.format === "awp-jws-compact/0.1" ? string(compact.jws) : undefined;
+    const message =
+      native && isMessagePacket(wire) && documentConfiguration(wire).signed
+        ? object(native.node.live)
+        : jws && inspectEvidenceJws(jws).payload;
+    if (!message || message.id !== go.messageId || digestOf(message) !== go.messageDigest)
+      return undefined;
+    if (jws && digestOf(observed?.message) !== go.messageDigest) return undefined;
+    if (!Array.isArray(message.evidence)) return undefined;
+    const indexes = message.evidence.flatMap((item, index) =>
+      object(item)?.format === intentFormat ? [index] : [],
+    );
+    const index = indexes[0];
+    if (indexes.length !== 1 || index === undefined) return undefined;
+    const entry = object(message.evidence[index]);
+    const bytes = string(entry?.value);
+    if (entry?.role !== "authorisation" || !bytes || digestBytes(bytes) !== go.actionDigest)
+      return undefined;
+    // A parsed digest alone would accept an overwritten action or recipient member.
+    assertUniqueKeys(bytes);
+    const intent = object(decodeAdapterJson(bytes));
+    if (
+      !intent ||
+      intent.operation !== go.actionScope.operation ||
+      intent.target !== go.actionScope.target
+    )
+      return undefined;
+    return { message, intent, bytes, index, native, jws };
+  } catch {
+    return undefined;
+  }
+}
+
+type BoundActionEnvelope = NonNullable<ReturnType<typeof boundActionEnvelope>>;
+
+function replyRecipientEstablished(
+  run: ComparisonRun,
+  go: TraceEvent,
+  message: Record<string, unknown>,
+  recipient: string,
+): boolean {
+  const replyTo = string(message.inReplyTo);
+  if (message.inReplyTo === undefined) return message.kind !== "accept";
+  if (!replyTo) return false;
+  const decision = run.events.findLast(
+    (event) =>
+      event.seq < go.seq &&
+      event.agent === go.agent &&
+      event.part === "inbound-gate" &&
+      event.kind === "decision" &&
+      event.messageId === replyTo,
+  );
+  if (decision?.outcome !== "admit" || decision.gateRun === undefined || !decision.messageDigest)
+    return false;
+  const packet = run.events.findLast(
+    (event) =>
+      event.seq < decision.seq &&
+      event.agent === go.agent &&
+      event.kind === "message-in" &&
+      event.gateRun === decision.gateRun &&
+      event.messageId === replyTo &&
+      event.packet?.id === replyTo,
+  )?.packet;
+  if (packet?.layers.header.digest !== decision.messageDigest) return false;
+  const from = object(object(packet?.layers.header.raw)?.from);
+  if (from?.onBehalfOf !== recipient) return false;
+  if (message.kind !== "accept") return true;
+  const body = object(message.body);
+  const content = object(packet?.layers.content.raw);
+  const termsDigest = string((object(content?.body) ?? content)?.termsDigest);
+  return (
+    packet?.kind === "propose" &&
+    body?.proposal === replyTo &&
+    !!termsDigest &&
+    body.termsDigest === termsDigest
+  );
+}
+
+function scenarioAcceptsRecipient(
+  scenario: Scenario,
+  agent: string,
+  recipient: string,
+  operation: string,
+  createdAt: unknown,
+  check: TraceEvent,
+): boolean {
+  const own = scenario.trust.ownLists[agent]?.find((entry) => entry.party === recipient);
+  if (own?.block) return false;
+  if (
+    own?.tasks.includes(operation) &&
+    (!own.expiresAt ||
+      (typeof createdAt === "string" && Date.parse(createdAt) < Date.parse(own.expiresAt)))
+  )
+    return true;
+  // A register rule is named by the recipient check. Match the authored entry and task.
+  return (
+    !!check.rule?.id &&
+    (scenario.trust.root?.delegates ?? []).some(({ entries }) =>
+      entries.some(
+        (entry) =>
+          entry.id === check.rule?.id &&
+          entry.party === recipient &&
+          entry.status === "authorized" &&
+          entry.authorizedFor.includes(operation),
+      ),
+    )
+  );
+}
+
+function gateEstablishedSlots(
+  run: ComparisonRun,
+  scenario: Scenario,
+  stop: TraceEvent,
+  go: TraceEvent,
+  { message, intent }: BoundActionEnvelope,
+  content: RefusedContent,
+): ActionSlots {
+  const agent = scenario.parties.find(
+    (party) => party.runs === "agent" && (party.traceId ?? party.id) === go.agent,
+  );
+  const principal = scenario.parties.find((party) => party.id === agent?.actsFor);
+  const scope = go.actionScope;
+  if (!agent || !principal || !scope) return {};
+  const check = (name: "mandate" | "recipient") =>
+    run.events.findLast(
+      (event) =>
+        event.seq < go.seq &&
+        sameGateRun(event, go) &&
+        event.kind === "check" &&
+        event.check === name,
+    );
+  const matchesSlot = (slot: ActionSlot) =>
+    typeof scope[slot] === "string" &&
+    intent[slot] === scope[slot] &&
+    !content.inspect(scope[slot], { referencesOnly: true });
+  const mandate = scenario.mandates.find((entry) => entry.agent === agent.id);
+  const mandateCheck = check("mandate");
+  const ruleId = mandateCheck?.rule?.id;
+  const rule =
+    ruleId &&
+    [...(mandate?.autonomous ?? []), ...(mandate?.withApproval ?? [])].find(
+      (entry) => entry.id === ruleId,
+    );
+  const slots: ActionSlots = {};
+  if (
+    mandateCheck?.verdict === "pass" &&
+    (!mandateCheck.actionDigest || mandateCheck.actionDigest === go.actionDigest) &&
+    ruleId &&
+    rule &&
+    matchesSlot("action") &&
+    rule.action === scope.action &&
+    typeof rule.target === "string" &&
+    !statementReferencesRule(content.refused.statement, [ruleId, scope.action, rule.target]) &&
+    !run.events.some(
+      (event) =>
+        event.agent === go.agent &&
+        event.seq > stop.seq &&
+        event.seq < go.seq &&
+        run.steps?.get(event.seq)?.descriptor.type === "revoke-mandate",
+    )
+  )
+    slots.action = scope.action;
+  const recipientCheck = check("recipient");
+  const recipient = scope.recipient;
+  if (
+    recipientCheck?.verdict === "pass" &&
+    (!recipientCheck.actionDigest || recipientCheck.actionDigest === go.actionDigest) &&
+    recipient &&
+    recipient !== principal.identity &&
+    matchesSlot("recipient") &&
+    object(message.to)?.party === recipient &&
+    scenarioAcceptsRecipient(
+      scenario,
+      agent.id,
+      recipient,
+      scope.operation,
+      message.createdAt,
+      recipientCheck,
+    ) &&
+    replyRecipientEstablished(run, go, message, recipient)
+  )
+    slots.recipient = recipient;
+  return slots;
+}
+
+function statementReferencesRule(statement: unknown, identifiers: readonly string[]): boolean {
+  function visit(value: unknown, reference = false): boolean {
+    if (typeof value === "string")
+      return (reference || isIri(value)) && identifiers.includes(value);
+    if (Array.isArray(value)) return value.some((item) => visit(item, reference));
+    return Object.entries(object(value) ?? {}).some(([key, child]) =>
+      visit(
+        child,
+        reference ||
+          ["id", "@id", "ref", "$ref", "reference", "references", "derivedFrom"].includes(key),
+      ),
+    );
+  }
+  return visit(statement);
+}
+
+function maskActionScope(scope: TraceEvent["actionScope"], slots?: ActionSlots) {
+  if (!scope || !slots) return scope;
+  return {
+    ...scope,
+    ...(slots.action && { action: undefined }),
+    ...(slots.recipient && { recipient: undefined }),
+  };
+}
+
+function maskIntent(bytes: string, slots: ActionSlots): string {
+  return maskJsonStrings(bytes, ([key, ...rest], value) =>
+    rest.length === 0 && (key === "action" || key === "recipient") && slots[key] === value
+      ? null
+      : undefined,
+  );
+}
+
+function maskCompactMessage(envelope: BoundActionEnvelope, slots: ActionSlots, bytes: string) {
+  if (!envelope.jws) return undefined;
+  const [header, payload, signature] = envelope.jws.split(".");
+  if (payload === undefined) return undefined;
+  const json = Buffer.from(payload, "base64url").toString("utf8");
+  const masked = maskJsonStrings(json, (path, value) => {
+    if (path.length === 2 && path[0] === "to" && path[1] === "party" && value === slots.recipient)
+      return null;
+    if (
+      path.length === 3 &&
+      path[0] === "evidence" &&
+      path[1] === envelope.index &&
+      path[2] === "value" &&
+      value === envelope.bytes
+    )
+      return bytes;
+    return undefined;
+  });
+  return `${header}.${Buffer.from(masked).toString("base64url")}.${signature}`;
+}
+
+function nativeSlotMask(
+  envelope: BoundActionEnvelope,
+  slots: ActionSlots,
+  json: string,
+  bytes: string,
+) {
+  const node = envelope.native?.node;
+  const credential = node?.evidence?.[envelope.index]?.credential;
+  if (!node || !credential || credential.originalJws !== envelope.bytes) return undefined;
+  const root = scopedId(credential.id, "payload");
+  const named = DataFactory.namedNode;
+  const defaultGraph = DataFactory.defaultGraph();
+  const link = named(`${AWP}statementPayload`);
+  if (!node.dataset.countQuads(named(credential.id), link, named(root), defaultGraph))
+    return undefined;
+  const graph = attachmentGraph(node.dataset, root);
+  let entries: NamedValuesNode["entries"];
+  try {
+    entries = new NamedValuesNode(root, node.dataset).entries;
+  } catch {
+    return undefined;
+  }
+  const names = new Map<string, string>();
+  for (const slot of actionSlots) {
+    const value = slots[slot];
+    if (value === undefined) continue;
+    const matching = entries.filter((entry) => entry.name === slot);
+    const entry = matching[0];
+    if (
+      matching.length === 1 &&
+      entry?.domainValue.value === value &&
+      (graph ?? node.dataset).countQuads(
+        null,
+        named(`${SCHEMA}itemListElement`),
+        named(entry.id),
+        null,
+      ) === 1
+    )
+      names.set(entry.id, value);
+  }
+  const doc = object(decodeAdapterJson(json));
+  const nodes = Array.isArray(doc?.["@included"]) ? doc["@included"].map(object) : [];
+  const uniqueNodeIndex = (id: string | undefined) => {
+    if (!id) return -1;
+    const index = nodes.findIndex((item) => item?.id === id);
+    return nodes.findLastIndex((item) => item?.id === id) === index ? index : -1;
+  };
+  const replacements = new Map<string, { original: string; replacement: string | null }>();
+  const set = (index: number, path: string[], original: string, replacement: string | null) => {
+    if (index >= 0)
+      replacements.set(JSON.stringify(["@included", index, ...path]), { original, replacement });
+  };
+  const audience = node.to;
+  if (audience && slots.recipient && object(doc?.to)?.id === audience.id)
+    set(uniqueNodeIndex(audience.id), ["party"], slots.recipient, null);
+  const presentation = uniqueNodeIndex(credential.id);
+  set(presentation, ["envelopeBytes"], envelope.bytes, bytes);
+  if (!graph) {
+    for (const [id, value] of names) {
+      const index = uniqueNodeIndex(id);
+      const domainValue = nodes[index]?.domainValue;
+      const reference = object(domainValue);
+      if (typeof domainValue === "string") set(index, ["domainValue"], value, null);
+      else if (reference?.id === value && Object.keys(reference).length === 1)
+        set(index, ["domainValue", "id"], value, null);
+    }
+  }
+  const maskedJson = maskJsonStrings(json, (path, value) => {
+    const slot = replacements.get(JSON.stringify(path));
+    return slot?.original === value ? slot.replacement : undefined;
+  });
+  const attached = string(object(nodes[presentation]?.envelopeBytes)?.id);
+  const envelopeDigest = digestBytes(envelope.bytes);
+  const attachedBytes =
+    attached &&
+    node.dataset.countQuads(null, null, named(attached), null) === 1 &&
+    node.dataset.countQuads(
+      null,
+      named(`${AWP}attachmentDigest`),
+      DataFactory.literal(envelopeDigest),
+      null,
+    ) === 1
+      ? envelopeDigest
+      : undefined;
+  return {
+    json: maskedJson,
+    attachment: attachedBytes,
+    masksQuad: (
+      store: Store,
+      subject: string,
+      predicate: string,
+      value: string,
+      defaultGraph: boolean,
+    ) =>
+      store === graph &&
+      defaultGraph &&
+      predicate === `${SCHEMA}value` &&
+      names.get(subject) === value,
+  };
+}
+
 function packetCopies(
   content: RefusedContent,
   event: TraceEvent,
   payload: unknown,
   cited: readonly VerifiedStatement[],
   admitted: readonly VerifiedStatement[],
+  established?: { envelope: BoundActionEnvelope; slots: ActionSlots },
 ): boolean {
   const matchValue = explainedValues(content, cited);
   const observed = object(payload);
@@ -405,6 +810,8 @@ function packetCopies(
     );
 
   const { evidence, ...fields } = message;
+  const { envelope, slots } = established ?? {};
+  const maskedBytes = envelope && slots && maskIntent(envelope.bytes, slots);
   const carried = new Set<string>();
   const subjects = new Set<string>();
   if (Array.isArray(evidence)) {
@@ -428,11 +835,35 @@ function packetCopies(
         if (node?.statement === value)
           for (const subject of node.credential?.projectionSubjects(node.format) ?? [])
             subjects.add(subject);
-      } else if (content.inspect(item)) return true;
+      } else if (
+        content.inspect(
+          entry &&
+            maskedBytes !== undefined &&
+            index === envelope?.index &&
+            value === envelope.bytes
+            ? { ...entry, value: maskedBytes }
+            : item,
+        )
+      )
+        return true;
     }
   } else if (content.inspect(evidence, { matchValue })) return true;
+  const to = object(fields.to);
+  if (slots?.recipient !== undefined && to?.party === slots.recipient)
+    fields.to = { ...to, party: undefined };
   if (content.inspect(fields, { matchValue })) return true;
-  if (!native) return content.inspect(wire, { matchValue, carried });
+  if (!native) {
+    const jws =
+      envelope &&
+      slots &&
+      maskedBytes !== undefined &&
+      maskCompactMessage(envelope, slots, maskedBytes);
+    return content.inspect(jws ? { ...object(wire), jws } : wire, { matchValue, carried });
+  }
+  const nativeMask =
+    envelope && slots && maskedBytes !== undefined
+      ? nativeSlotMask(envelope, slots, native.jsonld, maskedBytes)
+      : undefined;
   if (materialized) {
     // Scan attachment terms in their own graph scope, including nodes outside the model view.
     const type = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -446,14 +877,22 @@ function packetCopies(
         if (
           content.inspect(quad.subject.value, { matchValue, referencesOnly }) ||
           content.inspect(quad.graph.value, { matchValue, referencesOnly }) ||
-          (!structuralKey && content.inspect(quad.object.value, { matchValue, referencesOnly }))
+          (!structuralKey &&
+            !nativeMask?.masksQuad(
+              graph,
+              quad.subject.value,
+              quad.predicate.value,
+              quad.object.value,
+              quad.graph.termType === "DefaultGraph",
+            ) &&
+            content.inspect(quad.object.value, { matchValue, referencesOnly }))
         )
           return true;
       }
     }
   }
   return (
-    content.inspect(native.jsonld, {
+    content.inspect(nativeMask?.json ?? native.jsonld, {
       matchValue,
       projection: materialized
         ? { subjects, repeatedProof: materialized.repeatedProof }
@@ -464,10 +903,15 @@ function packetCopies(
       return (
         content.inspect(attachment, { matchValue }) ||
         (!(graph && materialized) &&
-          content.inspect(Buffer.from(bytes, "base64").toString("utf8"), {
-            matchValue,
-            carried,
-          }))
+          content.inspect(
+            nativeMask?.attachment === attachment.digest && maskedBytes !== undefined
+              ? maskedBytes
+              : Buffer.from(bytes, "base64").toString("utf8"),
+            {
+              matchValue,
+              carried,
+            },
+          ))
       );
     })
   );
@@ -477,6 +921,7 @@ export function stoppedReleaseProblem(
   run: ComparisonRun,
   stop: TraceEvent,
   expectedOutcome: string,
+  scenario?: Scenario,
 ): boolean {
   const later = run.events.slice(stop.seq);
   const refused = run.standaloneRefusals?.get(stop.seq);
@@ -549,6 +994,10 @@ export function stoppedReleaseProblem(
         : [];
     });
   const allowed = new Map<number, TraceEvent>();
+  const established = new Map<
+    number,
+    { envelope: BoundActionEnvelope; slots: Map<RefusedContent, ActionSlots> }
+  >();
   let preceding: TraceEvent | undefined;
   for (const event of later) {
     if (event.agent !== stop.agent) continue;
@@ -560,12 +1009,38 @@ export function stoppedReleaseProblem(
       if (event.part === "outbound-gate" && event.outcome === "go") {
         const payload = run.payloads?.get(event.seq);
         const ids = citations(event);
+        let slots: Map<RefusedContent, ActionSlots> | undefined;
+        if (event.gateRun !== undefined && event.messageId && event.actionDigest) {
+          const send = later.find(
+            (candidate) =>
+              candidate.kind === "message-out" &&
+              candidate.agent === event.agent &&
+              candidate.gateRun === event.gateRun &&
+              matchesMessageRelease(event, candidate),
+          );
+          const envelope = send && boundActionEnvelope(run, event, send);
+          if (send && envelope) {
+            scenario ??= authoredScenario(run.trace);
+            if (scenario) {
+              const world = scenario;
+              slots = new Map(
+                withheld.map((content) => [
+                  content,
+                  gateEstablishedSlots(run, world, stop, event, envelope, content),
+                ]),
+              );
+              established.set(send.seq, { envelope, slots });
+            }
+          }
+        }
         if (
           (event.effectRelease && payload === undefined) ||
           withheld.some((content) => {
             const matchValue = explainedValues(content, sources(content, ids));
             return (
-              content.inspect(event.actionScope, { matchValue }) ||
+              content.inspect(maskActionScope(event.actionScope, slots?.get(content)), {
+                matchValue,
+              }) ||
               content.inspect(ids, { matchValue }) ||
               content.inspect(payload, { matchValue })
             );
@@ -614,15 +1089,20 @@ export function stoppedReleaseProblem(
         event.messageId === undefined ||
         !release ||
         !matchesMessageRelease(release, event) ||
-        withheld.some((content) =>
-          packetCopies(
+        withheld.some((content) => {
+          const proof = established.get(event.seq);
+          const slots = proof?.slots.get(content);
+          return packetCopies(
             content,
             event,
             run.payloads?.get(event.seq),
             sources(content, citations(release)),
             [...admitted.values()].map(({ statement }) => statement).filter(eligible),
-          ),
-        )
+            proof && (slots?.action || slots?.recipient)
+              ? { envelope: proof.envelope, slots }
+              : undefined,
+          );
+        })
       )
         return true;
     }
