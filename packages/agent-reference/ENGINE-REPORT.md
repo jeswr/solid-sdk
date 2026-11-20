@@ -5367,3 +5367,84 @@ All commands used Node 24. Focused Vitest commands used `--maxWorkers=2`.
 | `pnpm exec vitest run test/oracle.test.ts --maxWorkers=2` | Passed all 164 baseline path comparisons with the hash-verified local SPARQ aggregate adapter. The first run reached 158 paths while the optional adapter was absent after restart. The repository installer verified commit `61989f5`’s archive into a temporary directory, and the rerun used `ANSWERABLE_SPARQ_AGGREGATE`. No manifest dependency, lockfile or oracle entry was edited. |
 | `pnpm run check:agent-layers` from the workspace root | Passed. |
 | Final regeneration and `sha256sum -c` for the five requested traces | Passed. All five compiled-runtime reruns reproduced the same bytes. |
+
+## Brief 34b
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+Judging uses the first unmatched non-passing decision, the exact denied question when applicable, then A1, A2, A3 and A4. The prefix guard can fail the resulting row. It compares the ordered bars in the prefix and aligns passing decisions by their decision fields and script-step ID. It records unaligned passes in `setup` and requires their steps to have been added or changed by the branch.
+
+### Measured rulings
+
+| Path | Rule | Outcome / reason / check | Status | Observed |
+| --- | --- | --- | --- | --- |
+| `contract-wording/branch-1` | 1a | `ask-principal` / `approval-required` / `limits-approval` | runs | The receiving company is asked about accepting the clause. Its denial is the first consequence. |
+| `hardship-request/branch-1` | 1a | `ask-principal` / `approval-required` / `limits-approval` | runs | The borrower's question names the diagnosis. Its denial is the first consequence. |
+| `employment-reference/branch-1` | 1 | `stop` / `method-not-accepted` / `fitness` | runs | The hiring agent stops at fitness and raises no approval question. |
+| `insurance-claim-photos/branch-1` | 1 | `ask-more` / `structured-form-required` / `fitness` | runs | The policyholder's agent asks the accepted garage for the structured estimate. |
+| `emergency-access/main` | W | `go` / `source-accepted` / `source` | runs | An inbound source check and admission share a gate run. The agent later sends. |
+| `mortgage-main/stranger` | A2 | `admit` / `source-unknown` / `source` | runs | The attached statement fails source. The message is admitted. |
+| `mortgage-main/index-shows-two-histories` | A2 | `admit` / `evidence-invalid` / `source` | runs | The attached statement fails source. The message is admitted. |
+| `mortgage-main/chain-with-a-gap` | A2 | `admit` / `lookup-failed` / `source` | runs | Source is indeterminate. The message is admitted. |
+| `mortgage-main/federation-business-only` | A2 | `admit` / `source-not-authoritative` / `source` | runs | The attached statement fails source. The message is admitted. |
+| `mortgage-main/high-score-not-registered` | A2 | `admit` / `source-unknown` / `source` | runs | The attached statement fails source. The message is admitted. |
+| `mortgage-main/certificate-does-not-cover` | A2 | `admit` / `stale-data` / `fitness` | runs | The attached statement fails fitness. The message is admitted. |
+| `mortgage-main/a2a-task-state-lies` | A3 | `admit` / `intact` / `integrity` | runs | Transport drops the task-state hint. The signed refusal is admitted. |
+| `mortgage-main/prose-as-evidence` | 1 | `ask-more` / `structured-form-required` / `fitness` | runs | Sam's agent asks for the lender's structured statement. |
+| `mortgage-main/anonymous-asks-for-more` | 1 | `refuse` / `not-authorised` / `authority` | runs | The index refuses on authority. The protocol refusal follows. |
+| `mortgage-main/approval-reused` | 1 | `ask-principal` / `approval-required` / `data-terms` | runs | The second valuer's request needs its own approval. |
+| `mortgage-main/supplier-terms-hold` | 1 | `stop` / `excessive-scope` / `disclosure` | runs | Disclosure stops the proposed release before a new approval. |
+| `right-to-work/hidden-validity-proof` | Judged alone | `admit` / `fit-for-use` / `fitness` | runs | The employer admits the attested answer. |
+
+### Implementation and tests
+
+- Sections 2–3. `branch-comparison.test.ts` covers Rule 1 precedence, a strict prefix with and without transport evidence, a missing bar, extra releases from unchanged and added steps, and exact-action denials with equal and different descriptors. `transport-bindings.test.ts` checks the signed refusal that wins over the A2A task state through `runScenario`.
+- Section 4. The outbound fitness gate asks the issuer of a task-admitted signed letter for the missing structured claim when that issuer is accepted for the claim kind. The insurance branch stops at `share`. The runtime test verifies the owner sends nothing and the insurer has no event at that step. The paired fixture with a letter from a source outside the estimate policy still stops with `evidence-missing`.
+- Section 5. Employment-reference retains the model score as the proposed support and stops before the hiring agent asks for approval. Its executable and catalogue-facing expectation both read `stop / method-not-accepted`.
+- Section 6. Rule W pairs a check with a decision from the same agent, gate and gate run. A passing inbound admission can witness a catalogue go when the same agent later releases a message or completes an effect. A1 retains the binding from its completed effect to the admitted support. The forum, agent record audit, dataset holder and single-use register supply trace IDs for their runs. Unit coverage prevents cross-run witness matching. `standing.test.ts` checks both remaining emergency paths and the two main notifications.
+- Section 7. A2 uses the same collector on both sides and consumes matches in order. Its judged check comes from the admitting run and may record a withheld statement's failed check. Tests cover a main refusal, an admitted main match, interleaved inbound runs and precedence checks after standalone admission.
+- Sections 8–9. The comparator judges the four configuration rows at their original gate decisions. Hidden validity is judged on its own because its main path has no requirement for the result-proof method. The trace records passing DER-17 and DER-18 checks and an attested answer. The scenario retains `catalogueAssurance: proved`. It was the only branch that added a required method to its main path.
+
+### Later bars
+
+| Test-only world | Result |
+| --- | --- |
+| The insurer holds the account and photograph. Its core proposes deciding from a minor-damage reading. | Outbound fitness `ask-more / structured-form-required`. No effect. |
+| The hiring core proposes rejection and cites only the original reference. | Outbound limits-approval `ask-principal / approval-required`. The request names the rejection and reference digest. The denial produces `stop / approval-denied`, with no send or effect after the ask. |
+| The employer registers a proved-only request and receives an attested result under the same nonce. | DER-16 source `fail / assurance-insufficient`, then fitness `ask-more / evidence-missing` and decision `ask-more / evidence-missing`. No answer fact is admitted. |
+
+The runtime coverage test also lifts the policyholder's earlier bar by admitting the estimate locally and withholding it from the first message. It verifies that the insurer's core stays idle from arrival through the coverage challenge and receives the cured retry.
+
+### Guard and manifest
+
+| Path | Passing setup decisions recorded by the guard |
+| --- | --- |
+| `read-after-withdrawal` | `sams-agent go #603` |
+| `anonymous-asks-for-more` | `sams-agent go #637` |
+| `stranger` | `index admit #22` |
+| `withheld-claim-asked-for` | `sams-agent admit #211` |
+| `high-score-not-registered` | `index admit #22` |
+| `approval-reused` | `other-valuer-agent go #630`, `sams-agent admit #638` |
+| `supplier-terms-hold` | `valuer-agent go #630`, `sams-agent admit #638` |
+
+The prefix guard passed every published row to which it applied.
+
+`trip-booking/branch-1` also records the hotel agent's approved setup under A5.
+
+The manifest has **283 paths, 274 runs, 4 disagreements and 5 blocked**. All 278 executable paths ran live.
+
+| Path | Status | Measured result |
+| --- | --- | --- |
+| `degree-recognition/main` | blocked | @sparq-org/zk-result rejects the issuer-scoped FILTER IN membership with "operator outside positive BGP/JOIN/FILTER". @sparq-org/zk-query has no catalogue plan for the scoped BSc-or-MSc query. |
+| `emergency-access/branch-2` | disagrees | `stop` / `source-unknown` / `mandate`. The inbound source check fails with `source-unknown` at event 35. The outbound mandate check fails with that reason at event 37 and the gate stops at event 38. Rule W rejects the cross-gate pairing. |
+| `insurance-quote/main` | blocked | @sparq-org/zk-query reports "missing catalogue plan" for the exact count-and-completeness query. The preferred absence alternative lacks an xsd prefix and has no catalogue plan even with the prefix declared. |
+| `master-data-change/branch-2` | disagrees | `refuse` / `source-not-authoritative` / `source`. Inbound source fails at event 2 and refuses at event 4. The finance agent then stores other admitted statements before outbound evidence fails at event 28. The continuation check flags those stores. |
+| `pay-an-invoice/branch-1` | disagrees | `refuse` / `source-not-authoritative` / `source`. Inbound source fails at event 2 and refuses at event 4. The business agent then sends an agreement acceptance and stores invoice evidence before outbound P4 fails at event 83. The continuation check flags the later send and stores. |
+| `recycled-content/main` | blocked | @sparq-org/zk-query reports "missing catalogue plan" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean. |
+| `recycled-content/supplier-below-threshold` | blocked | @sparq-org/zk-query reports "missing catalogue plan" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean. |
+| `supplier-onboarding/branch-2` | disagrees | `refuse` / `source-not-authoritative` / `source`. The supplier agent's inbound source check fails at event 9 and refuses at event 11. The agent then stores the separate certificate at event 18 before outbound fitness fails at event 21. The continuation check flags the later store. |
+| `trial-eligibility/main` | blocked | @sparq-org/zk-query reports "missing catalogue plan" for the exact age, diagnosis, medication exclusion and completeness query. The published scoped target changes the query and its per-node bounds. |
+
+### Oracle
+
+A parsed comparison against the saved 164-path snapshot found seven changed projections and the deletion of `emergency-access/branch-1`. The 156 other projections are equal. The other changed keys are `contract-wording/branch-1`, `employment-reference/branch-1`, `flat-share/branch-1`, `hardship-request/branch-1`, `insurance-claim-photos/branch-1`, `probing-counterparty/tenth-request` and `salary-benchmark/branch-1`. The five proof paths remain outside the pre-RDF oracle. See [Brief 37](BRIEF-37-REPORT.md) for the live build, commands and verification.

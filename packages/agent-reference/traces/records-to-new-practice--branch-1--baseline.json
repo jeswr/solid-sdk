@@ -63,7 +63,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -94,7 +94,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The patient's health allergy statement is intact and signed with The patient's pinned key."
+      "caption": "The patient's health allergy statement is intact and signed with The patient's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -132,7 +133,8 @@
         ],
         "answer": "Accepted, for health allergy claims only."
       },
-      "caption": "The patient's health allergy statement: The patient is an accepted source for this kind of claim."
+      "caption": "The patient's health allergy statement: The patient is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -150,7 +152,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The patient's health allergy statement asks for nothing, so there is no authority to check."
+      "caption": "The patient's health allergy statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -177,7 +180,8 @@
         "id": "urn:terms:records-to-new-practice:patient-note",
         "text": "Its terms allow this: use for Health record."
       },
-      "caption": "The patient's health allergy statement: its terms allow this: use for Health record."
+      "caption": "The patient's health allergy statement: its terms allow this: use for Health record.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -214,7 +218,8 @@
         "id": "urn:profile:records-to-new-practice:health.allergy",
         "text": "Accept health allergy from The patient, The clinician by reported-by-subject, recorded-by-authority, at most 365 days old."
       },
-      "caption": "The patient's health allergy statement is fit for Moving a health record to a new practice: reported-by-subject, 0 days old."
+      "caption": "The patient's health allergy statement is fit for Moving a health record to a new practice: reported-by-subject, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -224,7 +229,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The patient's health allergy statement is admitted."
+      "caption": "The patient's health allergy statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -270,7 +276,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The clinician's health allergy statement is intact and signed with The clinician's pinned key."
+      "caption": "The clinician's health allergy statement is intact and signed with The clinician's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -308,7 +315,8 @@
         ],
         "answer": "Accepted, for health allergy claims only."
       },
-      "caption": "The clinician's health allergy statement: The clinician is an accepted source for this kind of claim."
+      "caption": "The clinician's health allergy statement: The clinician is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -326,7 +334,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The clinician's health allergy statement asks for nothing, so there is no authority to check."
+      "caption": "The clinician's health allergy statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -353,7 +362,8 @@
         "id": "urn:terms:records-to-new-practice:clinical",
         "text": "Its terms allow this: use for Health record."
       },
-      "caption": "The clinician's health allergy statement: its terms allow this: use for Health record."
+      "caption": "The clinician's health allergy statement: its terms allow this: use for Health record.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -390,7 +400,8 @@
         "id": "urn:profile:records-to-new-practice:health.allergy",
         "text": "Accept health allergy from The patient, The clinician by reported-by-subject, recorded-by-authority, at most 365 days old."
       },
-      "caption": "The clinician's health allergy statement is fit for Moving a health record to a new practice: recorded-by-authority, 0 days old."
+      "caption": "The clinician's health allergy statement is fit for Moving a health record to a new practice: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -400,7 +411,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The clinician's health allergy statement is admitted."
+      "caption": "The clinician's health allergy statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -451,7 +463,8 @@
         }
       ],
       "reason": "superseded-by-better-source",
-      "caption": "The patient's health allergy statement is retained but superseded by The clinician's health allergy statement for this purpose."
+      "caption": "The patient's health allergy statement is retained but superseded by The clinician's health allergy statement for this purpose.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -474,7 +487,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The old practice holding original statements's old estimate statement is intact and signed with The old practice holding original statements's pinned key."
+      "caption": "The old practice holding original statements's old estimate statement is intact and signed with The old practice holding original statements's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -512,7 +526,8 @@
         ],
         "answer": "Accepted, for old estimate claims only."
       },
-      "caption": "The old practice holding original statements's old estimate statement: The old practice holding original statements is an accepted source for this kind of claim."
+      "caption": "The old practice holding original statements's old estimate statement: The old practice holding original statements is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -530,7 +545,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The old practice holding original statements's old estimate statement asks for nothing, so there is no authority to check."
+      "caption": "The old practice holding original statements's old estimate statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -557,7 +573,8 @@
         "id": "urn:terms:records-to-new-practice:estimate",
         "text": "Its terms allow this: use for Health record."
       },
-      "caption": "The old practice holding original statements's old estimate statement: its terms allow this: use for Health record."
+      "caption": "The old practice holding original statements's old estimate statement: its terms allow this: use for Health record.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -589,7 +606,8 @@
         "id": "urn:profile:records-to-new-practice:old.estimate",
         "text": "Accept old estimate from The old practice holding original statements by estimated, at most 365 days old."
       },
-      "caption": "The old practice holding original statements's old estimate statement is fit for Moving a health record to a new practice: estimated, 0 days old."
+      "caption": "The old practice holding original statements's old estimate statement is fit for Moving a health record to a new practice: estimated, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 21,
@@ -599,7 +617,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The old practice holding original statements's old estimate statement is admitted."
+      "caption": "The old practice holding original statements's old estimate statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 22,

@@ -74,6 +74,16 @@ describe("accountability-vendor-fault", () => {
     );
     expect(outside).toHaveLength(1);
     expect(outside[0]?.reason).toBe("not-authorised");
+    expect(outside[0]?.gateRun).toEqual(expect.any(Number));
+    expect(fault.events).toContainEqual(
+      expect.objectContaining({
+        part: "record",
+        kind: "decision",
+        outcome: "ask-principal",
+        reason: "not-authorised",
+        gateRun: outside[0]?.gateRun,
+      }),
+    );
     const operatorChecks = fault.events.filter(
       (e) => e.agent === "gate-operator-agent" && e.part === "inbound-gate" && e.kind === "check",
     );

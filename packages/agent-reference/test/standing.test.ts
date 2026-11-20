@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
@@ -9,14 +10,23 @@ const root = join(import.meta.dirname, "..");
 
 it("runs registered and unregistered emergencies, with two separately gated notification messages", async () => {
   const { profile, scenario } = loadCase(root, "emergency-access");
-  const paths = await runScenario(profile, scenario);
-  expect(paths).toHaveLength(3);
+  const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
+  expect(paths.map((path) => path.path)).toEqual(["main", "branch-2"]);
+  expect(paths[0]).toMatchObject({
+    disagrees: false,
+    actual: { outcome: "go", check: "source", reason: "source-accepted" },
+  });
   expect(paths.every((p) => p.matches)).toBe(true);
   const events = paths[0]?.trace?.events ?? [];
   expect(events.filter((e) => e.caption.includes("discharged at"))).toHaveLength(2);
   expect(events.some((e) => e.agent === "patient-agent" && e.kind === "message-in")).toBe(true);
   expect(events.some((e) => e.agent === "contact-agent" && e.kind === "message-in")).toBe(true);
-  expect(paths[2]?.trace?.events.at(-1)).toMatchObject({
+  expect(paths[1]).toMatchObject({
+    disagrees: true,
+    note: "expected source/source-unknown -> stop",
+    actual: { outcome: "stop", check: "mandate", reason: "source-unknown" },
+  });
+  expect(paths[1]?.trace?.events.at(-1)).toMatchObject({
     outcome: "stop",
     reason: "source-unknown",
   });
@@ -35,6 +45,7 @@ it("refuses whole-record scope, an expired rule, withdrawn role, wrong key, stal
     scenario.branches = [];
     scenario.script = scenario.script.slice(0, 5);
     scenario.stress = ["mandate"];
+    scenario.result = undefined;
     const role = scenario.statements.find((s) => s.id === "role");
     const mandate = scenario.mandates.find((m) => m.agent === "record-agent");
     const release = scenario.script[4];

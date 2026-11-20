@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -123,7 +123,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional company register's company exists statement is intact and signed with The fictional company register's pinned key."
+      "caption": "The fictional company register's company exists statement is intact and signed with The fictional company register's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -161,7 +162,8 @@
         ],
         "answer": "Accepted, for company exists claims only."
       },
-      "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim."
+      "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -179,7 +181,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional company register's company exists statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional company register's company exists statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -206,7 +209,8 @@
         "id": "urn:terms:company",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional company register's company exists statement: its terms allow this: ."
+      "caption": "The fictional company register's company exists statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -238,7 +242,8 @@
         "id": "urn:profile:supplier-onboarding:company.exists",
         "text": "Accept company exists from The fictional company register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional company register's company exists statement is fit for Taking on a new supplier: recorded-by-authority, 0 days old."
+      "caption": "The fictional company register's company exists statement is fit for Taking on a new supplier: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -248,7 +253,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional company register's company exists statement is admitted."
+      "caption": "The fictional company register's company exists statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -294,7 +300,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The supplier’s bank's bank account owner statement is intact and signed with The supplier’s bank's pinned key."
+      "caption": "The supplier’s bank's bank account owner statement is intact and signed with The supplier’s bank's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -328,7 +335,8 @@
         ],
         "answer": "Not accepted for bank account owner."
       },
-      "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is not accepted as a source for this kind of claim."
+      "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is not accepted as a source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -346,7 +354,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The supplier’s bank's bank account owner statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier’s bank's bank account owner statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -357,7 +366,8 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-not-authoritative",
-      "caption": "The supplier’s bank's bank account owner statement is refused and kept out of memory."
+      "caption": "The supplier’s bank's bank account owner statement is refused and kept out of memory.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -380,7 +390,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional certifier's certificate statement is intact and signed with The fictional certifier's pinned key."
+      "caption": "The fictional certifier's certificate statement is intact and signed with The fictional certifier's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 13,
@@ -418,7 +429,8 @@
         ],
         "answer": "Accepted, for certificate claims only."
       },
-      "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim."
+      "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 14,
@@ -436,7 +448,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional certifier's certificate statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional certifier's certificate statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 15,
@@ -463,7 +476,8 @@
         "id": "urn:terms:certificate",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional certifier's certificate statement: its terms allow this: ."
+      "caption": "The fictional certifier's certificate statement: its terms allow this: .",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -495,7 +509,8 @@
         "id": "urn:profile:supplier-onboarding:certificate",
         "text": "Accept certificate from The fictional certifier by attested, at most 30 days old."
       },
-      "caption": "The fictional certifier's certificate statement is fit for Taking on a new supplier: attested, 0 days old."
+      "caption": "The fictional certifier's certificate statement is fit for Taking on a new supplier: attested, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -505,7 +520,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional certifier's certificate statement is admitted."
+      "caption": "The fictional certifier's certificate statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -542,6 +558,16 @@
       "seq": 20,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:d92e9d59c2336ac54389351140b514cd35d52ba0ee9c15379f32eb459f5fd862",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onboard-supplier",
+        "operation": "urn:op:onboard-supplier",
+        "conversation": "urn:awp:engine-supplier-onboarding-branch-2:supplier-agent:0001",
+        "recipient": "urn:fictional:buyer",
+        "purpose": "urn:purpose:supplier-onboarding",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -559,12 +585,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The supplier's mandate covers this action."
+      "caption": "The supplier's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:d92e9d59c2336ac54389351140b514cd35d52ba0ee9c15379f32eb459f5fd862",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onboard-supplier",
+        "operation": "urn:op:onboard-supplier",
+        "conversation": "urn:awp:engine-supplier-onboarding-branch-2:supplier-agent:0001",
+        "recipient": "urn:fictional:buyer",
+        "purpose": "urn:purpose:supplier-onboarding",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -577,18 +614,30 @@
         }
       ],
       "reason": "source-not-authoritative",
-      "caption": "Required bank account owner was refused: source-not-authoritative."
+      "caption": "Required bank account owner was refused: source-not-authoritative.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:d92e9d59c2336ac54389351140b514cd35d52ba0ee9c15379f32eb459f5fd862",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onboard-supplier",
+        "operation": "urn:op:onboard-supplier",
+        "conversation": "urn:awp:engine-supplier-onboarding-branch-2:supplier-agent:0001",
+        "recipient": "urn:fictional:buyer",
+        "purpose": "urn:purpose:supplier-onboarding",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "source-not-authoritative",
-      "caption": "A refused source cannot authorize the action."
+      "caption": "A refused source cannot authorize the action.",
+      "gateRun": 1
     }
   ]
 }

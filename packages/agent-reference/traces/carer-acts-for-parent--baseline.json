@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -95,6 +95,16 @@
       "seq": 2,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -112,12 +122,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "A parent's mandate covers this action."
+      "caption": "A parent's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -146,12 +167,23 @@
         "answer": "Accepted, for An adult child acts for a parent only."
       },
       "reason": "recipient-established",
-      "caption": "A care provider: Accepted, for An adult child acts for a parent only."
+      "caption": "A care provider: Accepted, for An adult child acts for a parent only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -164,12 +196,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -182,12 +225,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -200,12 +254,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within A parent's limits."
+      "caption": "Inside what the agent may do on its own, and within A parent's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -218,12 +283,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -245,24 +321,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The representative’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The representative’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 9,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The receiving agent."
+      "messageId": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002",
+      "messageDigest": "sha-256:8574f2ff942de6bd25308d4c061b5dfecb686b8f232052516e440db0a4670330",
+      "caption": "The invoke message goes to The receiving agent.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:db360be8803060a17ba991772a1da87d0f9089c0ff365fcb5206cdaadc67b1c9",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:carer-acts-for-parent",
+        "operation": "urn:op:carer-acts-for-parent",
+        "conversation": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001",
+        "recipient": "urn:fictional:carer-acts-for-parent:receiver",
+        "purpose": "urn:purpose:carer-acts-for-parent",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:OwYWQXpLnJGP1jE7weStqa7FxgaG4xMmSO3U3qLdYD4\"},\"to\":{\"id\":\"urn:awp:n:DwDx5AII5KJRgOIhQGOMB6OXtv0iVlFyC4ZjsSEcg4A\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:mi6My1G1mgAloZSfslNSOZisIA4bd0swKqYqm8cdgK8\"},\"evidence\":{\"id\":\"urn:awp:n:5Z-H4pwse9MGhdSC5ZW9TaVNaS6ycBxHJjzuwY1bnTc\"},\"@included\":[{\"id\":\"urn:awp:n:OwYWQXpLnJGP1jE7weStqa7FxgaG4xMmSO3U3qLdYD4\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:carer-acts-for-parent:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:carer-acts-for-parent:subject\"},{\"id\":\"urn:awp:n:DwDx5AII5KJRgOIhQGOMB6OXtv0iVlFyC4ZjsSEcg4A\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:carer-acts-for-parent:receiver-agent:actor\",\"party\":\"urn:fictional:carer-acts-for-parent:receiver\"},{\"id\":\"urn:awp:n:mi6My1G1mgAloZSfslNSOZisIA4bd0swKqYqm8cdgK8\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:Tvyjj4lPbcFTqC4a56cRn3QgwQ63Fv-jwRVKn5VBCtk\"},\"input\":{\"id\":\"urn:awp:n:r7ALWXj_DdThY7qwttaL2IQQ2SzaXX66kVQrC1CKp-E\"},\"operation\":{\"id\":\"urn:op:carer-acts-for-parent\"},\"purpose\":\"urn:purpose:carer-acts-for-parent\"},{\"id\":\"urn:awp:n:5Z-H4pwse9MGhdSC5ZW9TaVNaS6ycBxHJjzuwY1bnTc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:MjUP6IkB1dhluyUTgzj_S60zQ--yxuzdmUr75cBQQoY\"},\"format\":\"mandate-chain+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:carer-acts-for-parent\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:r7ALWXj_DdThY7qwttaL2IQQ2SzaXX66kVQrC1CKp-E\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:lRce9nAEz44qcA6LA_7ZMW3K2fFc1THBGE5codYW9_o\"},{\"id\":\"urn:awp:n:M2UsTMSGpKXu5EAmwFCWrzsvTpUalfJHsgfNQ8V7vEo\"}]},{\"id\":\"urn:awp:n:Tvyjj4lPbcFTqC4a56cRn3QgwQ63Fv-jwRVKn5VBCtk\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:MjUP6IkB1dhluyUTgzj_S60zQ--yxuzdmUr75cBQQoY\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:i-ZE70b8A5sJzls3eeUrxOThtusfuENpz_KoFI2ZRi0\"},{\"id\":\"urn:awp:n:AHT3PRSENJkXaBE_1NUVmfNKRjpEaz1udx1BbLO1VqI\"}],\"envelopeBytes\":\"[[\\\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsib3JnYW5pc2UtY2FyZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDpjYXJlci1hY3RzLWZvci1wYXJlbnQiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpjYXJlci1hY3RzLWZvci1wYXJlbnQiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXItc3RhdHVzIiwiaWQiOiJwb3dlciJ9LCJtYXlEZWxlZ2F0ZSI6eyJkZXB0aCI6Mn0sInR5cGUiOiJNYW5kYXRlTGluayIsInN1YmplY3RLZXkiOiI0NTM2eDQ3NU90RXVxTUNIdDAxQnlTWEc2LXo3WVY5UG9uU2FrVHpWamVvIn0._mFmR98SYf5Gs9hsuTycEUNnDWKXyVnRHIwfuj3BCNBN6Y4HEaOOYyfe0ND31W1yaxJxcSzOkDqtzkzrl-p4Bw\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50Om93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsInBhcmVudCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiYWN0aW9ucyI6WyJvcmdhbmlzZS1jYXJlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpob2xkZXItc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.yAsHTAKy__Q_zi1xHwfFsfH2P_p30OkT7QBuP_dYzAz8Im-RY8eMfvkt5626QXlPUIicvneZ4iuYdGNHGSFTAg\\\"]]\",\"statementPayload\":{\"id\":\"urn:awp:n:vaXJCbnSvyDELdN1pxkL7xw-2kCoFRFjC0gAf-j89Og\"}},{\"id\":\"urn:awp:n:lRce9nAEz44qcA6LA_7ZMW3K2fFc1THBGE5codYW9_o\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:carer-acts-for-parent:subject\"},\"name\":\"subject\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:M2UsTMSGpKXu5EAmwFCWrzsvTpUalfJHsgfNQ8V7vEo\",\"type\":\"PropertyValue\",\"domainValue\":\"organise-care\",\"name\":\"request\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:i-ZE70b8A5sJzls3eeUrxOThtusfuENpz_KoFI2ZRi0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:QZAey3WAoyEjMaB9t0b2f_V_O8O48-x85eSXH6YZeOc\",\"issuer\":\"urn:fictional:carer-acts-for-parent:register\",\"proofGraph\":\"urn:awp:n:bDsCoIArgrHRUzO_QISrmV6iFPsJOP3KesjGkGyrUsY\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:AHT3PRSENJkXaBE_1NUVmfNKRjpEaz1udx1BbLO1VqI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:44PUYuNImWY8SthLf-0uyvqBMk0nkTCKAXr8ft6c6iQ\",\"issuer\":\"urn:fictional:carer-acts-for-parent:holder\",\"proofGraph\":\"urn:awp:n:vCO9YUCVpUrgN_IQbi_tYYzSFUqVmoUzBhf4eoIaHuk\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:vaXJCbnSvyDELdN1pxkL7xw-2kCoFRFjC0gAf-j89Og\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:WnYs0QEo8CGuWYD9dVbVafsRhRjTxuet_YnlionfHPk\"}]},{\"id\":\"urn:awp:n:WnYs0QEo8CGuWYD9dVbVafsRhRjTxuet_YnlionfHPk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:onOCW8gGutmw1LqXd2Aq8XCROrOnZ9w_zow9xBwengU\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:QZAey3WAoyEjMaB9t0b2f_V_O8O48-x85eSXH6YZeOc\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:4k5r59xPIt36ie1iT8l4aEZwhn08WJhKqesf6Cbmkw0\"}},{\"id\":\"urn:awp:n:44PUYuNImWY8SthLf-0uyvqBMk0nkTCKAXr8ft6c6iQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:e7oawadmxF5DnRvu6OZoRbBwJ2dLUkRp9eA27ulrzrE\"}},{\"id\":\"urn:awp:n:onOCW8gGutmw1LqXd2Aq8XCROrOnZ9w_zow9xBwengU\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:hUY7mtOSCcgBMhfotgdLjqnf0exBHkEeyutI1XMoYY4\"},{\"id\":\"urn:awp:n:llk36Qm7GXTgA_YjfxdJ3L04ITb_iPTEjnZE9mvFcRM\"}]},{\"id\":\"urn:awp:n:hUY7mtOSCcgBMhfotgdLjqnf0exBHkEeyutI1XMoYY4\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsib3JnYW5pc2UtY2FyZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDpjYXJlci1hY3RzLWZvci1wYXJlbnQiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpjYXJlci1hY3RzLWZvci1wYXJlbnQiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXItc3RhdHVzIiwiaWQiOiJwb3dlciJ9LCJtYXlEZWxlZ2F0ZSI6eyJkZXB0aCI6Mn0sInR5cGUiOiJNYW5kYXRlTGluayIsInN1YmplY3RLZXkiOiI0NTM2eDQ3NU90RXVxTUNIdDAxQnlTWEc2LXo3WVY5UG9uU2FrVHpWamVvIn0._mFmR98SYf5Gs9hsuTycEUNnDWKXyVnRHIwfuj3BCNBN6Y4HEaOOYyfe0ND31W1yaxJxcSzOkDqtzkzrl-p4Bw\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:llk36Qm7GXTgA_YjfxdJ3L04ITb_iPTEjnZE9mvFcRM\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50Om93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsInBhcmVudCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiYWN0aW9ucyI6WyJvcmdhbmlzZS1jYXJlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpob2xkZXItc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.yAsHTAKy__Q_zi1xHwfFsfH2P_p30OkT7QBuP_dYzAz8Im-RY8eMfvkt5626QXlPUIicvneZ4iuYdGNHGSFTAg\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:4k5r59xPIt36ie1iT8l4aEZwhn08WJhKqesf6Cbmkw0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:4e36cea16076a471c5bdaebc276d6b8dc4b4574737cd2036d817b37249a9bde0\",\"byteLength\":\"18111\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:e7oawadmxF5DnRvu6OZoRbBwJ2dLUkRp9eA27ulrzrE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:2ac7db2bfd91077ca36e09a75742839bdc613bd8d58c202a8ea716eb53090823\",\"byteLength\":\"17170\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:bDsCoIArgrHRUzO_QISrmV6iFPsJOP3KesjGkGyrUsY\",\"@graph\":[{\"id\":\"urn:awp:n:ll45fQNY9OUPqCP5CU01patyUHamC5OsHvJfmcz2uX8\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsib3JnYW5pc2UtY2FyZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDpjYXJlci1hY3RzLWZvci1wYXJlbnQiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpjYXJlci1hY3RzLWZvci1wYXJlbnQiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXItc3RhdHVzIiwiaWQiOiJwb3dlciJ9LCJtYXlEZWxlZ2F0ZSI6eyJkZXB0aCI6Mn0sInR5cGUiOiJNYW5kYXRlTGluayIsInN1YmplY3RLZXkiOiI0NTM2eDQ3NU90RXVxTUNIdDAxQnlTWEc2LXo3WVY5UG9uU2FrVHpWamVvIn0._mFmR98SYf5Gs9hsuTycEUNnDWKXyVnRHIwfuj3BCNBN6Y4HEaOOYyfe0ND31W1yaxJxcSzOkDqtzkzrl-p4Bw\"}]},{\"id\":\"urn:awp:n:vCO9YUCVpUrgN_IQbi_tYYzSFUqVmoUzBhf4eoIaHuk\",\"@graph\":[{\"id\":\"urn:awp:n:TqhUVr4V-FthZyW5Yyz6TaIAZRch899WEgGCZa9P-RU\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50Om93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsInBhcmVudCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiYWN0aW9ucyI6WyJvcmdhbmlzZS1jYXJlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpob2xkZXItc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.yAsHTAKy__Q_zi1xHwfFsfH2P_p30OkT7QBuP_dYzAz8Im-RY8eMfvkt5626QXlPUIicvneZ4iuYdGNHGSFTAg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..GQtIdLdxYikhCy2c2jgfweHOAJbjsORDmjKGf3cYjwEHLcgLGAMDRxDXQemEBo_0c_uvf84mFJefgD5QK4HsAw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -407,7 +508,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The representative’s agent sends an invoke message to The receiving agent."
+      "caption": "The representative’s agent sends an invoke message to The receiving agent.",
+      "gateRun": 1
     },
     {
       "seq": 11,
@@ -415,6 +517,7 @@
       "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-carer-acts-for-parent-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:OwYWQXpLnJGP1jE7weStqa7FxgaG4xMmSO3U3qLdYD4\"},\"to\":{\"id\":\"urn:awp:n:DwDx5AII5KJRgOIhQGOMB6OXtv0iVlFyC4ZjsSEcg4A\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:mi6My1G1mgAloZSfslNSOZisIA4bd0swKqYqm8cdgK8\"},\"evidence\":{\"id\":\"urn:awp:n:5Z-H4pwse9MGhdSC5ZW9TaVNaS6ycBxHJjzuwY1bnTc\"},\"@included\":[{\"id\":\"urn:awp:n:OwYWQXpLnJGP1jE7weStqa7FxgaG4xMmSO3U3qLdYD4\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:carer-acts-for-parent:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:carer-acts-for-parent:subject\"},{\"id\":\"urn:awp:n:DwDx5AII5KJRgOIhQGOMB6OXtv0iVlFyC4ZjsSEcg4A\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:carer-acts-for-parent:receiver-agent:actor\",\"party\":\"urn:fictional:carer-acts-for-parent:receiver\"},{\"id\":\"urn:awp:n:mi6My1G1mgAloZSfslNSOZisIA4bd0swKqYqm8cdgK8\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:Tvyjj4lPbcFTqC4a56cRn3QgwQ63Fv-jwRVKn5VBCtk\"},\"input\":{\"id\":\"urn:awp:n:r7ALWXj_DdThY7qwttaL2IQQ2SzaXX66kVQrC1CKp-E\"},\"operation\":{\"id\":\"urn:op:carer-acts-for-parent\"},\"purpose\":\"urn:purpose:carer-acts-for-parent\"},{\"id\":\"urn:awp:n:5Z-H4pwse9MGhdSC5ZW9TaVNaS6ycBxHJjzuwY1bnTc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:MjUP6IkB1dhluyUTgzj_S60zQ--yxuzdmUr75cBQQoY\"},\"format\":\"mandate-chain+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:carer-acts-for-parent\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:r7ALWXj_DdThY7qwttaL2IQQ2SzaXX66kVQrC1CKp-E\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:lRce9nAEz44qcA6LA_7ZMW3K2fFc1THBGE5codYW9_o\"},{\"id\":\"urn:awp:n:M2UsTMSGpKXu5EAmwFCWrzsvTpUalfJHsgfNQ8V7vEo\"}]},{\"id\":\"urn:awp:n:Tvyjj4lPbcFTqC4a56cRn3QgwQ63Fv-jwRVKn5VBCtk\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:MjUP6IkB1dhluyUTgzj_S60zQ--yxuzdmUr75cBQQoY\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:i-ZE70b8A5sJzls3eeUrxOThtusfuENpz_KoFI2ZRi0\"},{\"id\":\"urn:awp:n:AHT3PRSENJkXaBE_1NUVmfNKRjpEaz1udx1BbLO1VqI\"}],\"envelopeBytes\":\"[[\\\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsib3JnYW5pc2UtY2FyZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDpjYXJlci1hY3RzLWZvci1wYXJlbnQiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpjYXJlci1hY3RzLWZvci1wYXJlbnQiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXItc3RhdHVzIiwiaWQiOiJwb3dlciJ9LCJtYXlEZWxlZ2F0ZSI6eyJkZXB0aCI6Mn0sInR5cGUiOiJNYW5kYXRlTGluayIsInN1YmplY3RLZXkiOiI0NTM2eDQ3NU90RXVxTUNIdDAxQnlTWEc2LXo3WVY5UG9uU2FrVHpWamVvIn0._mFmR98SYf5Gs9hsuTycEUNnDWKXyVnRHIwfuj3BCNBN6Y4HEaOOYyfe0ND31W1yaxJxcSzOkDqtzkzrl-p4Bw\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50Om93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsInBhcmVudCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiYWN0aW9ucyI6WyJvcmdhbmlzZS1jYXJlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpob2xkZXItc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.yAsHTAKy__Q_zi1xHwfFsfH2P_p30OkT7QBuP_dYzAz8Im-RY8eMfvkt5626QXlPUIicvneZ4iuYdGNHGSFTAg\\\"]]\",\"statementPayload\":{\"id\":\"urn:awp:n:vaXJCbnSvyDELdN1pxkL7xw-2kCoFRFjC0gAf-j89Og\"}},{\"id\":\"urn:awp:n:lRce9nAEz44qcA6LA_7ZMW3K2fFc1THBGE5codYW9_o\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:carer-acts-for-parent:subject\"},\"name\":\"subject\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:M2UsTMSGpKXu5EAmwFCWrzsvTpUalfJHsgfNQ8V7vEo\",\"type\":\"PropertyValue\",\"domainValue\":\"organise-care\",\"name\":\"request\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:i-ZE70b8A5sJzls3eeUrxOThtusfuENpz_KoFI2ZRi0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:QZAey3WAoyEjMaB9t0b2f_V_O8O48-x85eSXH6YZeOc\",\"issuer\":\"urn:fictional:carer-acts-for-parent:register\",\"proofGraph\":\"urn:awp:n:bDsCoIArgrHRUzO_QISrmV6iFPsJOP3KesjGkGyrUsY\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:AHT3PRSENJkXaBE_1NUVmfNKRjpEaz1udx1BbLO1VqI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:44PUYuNImWY8SthLf-0uyvqBMk0nkTCKAXr8ft6c6iQ\",\"issuer\":\"urn:fictional:carer-acts-for-parent:holder\",\"proofGraph\":\"urn:awp:n:vCO9YUCVpUrgN_IQbi_tYYzSFUqVmoUzBhf4eoIaHuk\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:vaXJCbnSvyDELdN1pxkL7xw-2kCoFRFjC0gAf-j89Og\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:WnYs0QEo8CGuWYD9dVbVafsRhRjTxuet_YnlionfHPk\"}]},{\"id\":\"urn:awp:n:WnYs0QEo8CGuWYD9dVbVafsRhRjTxuet_YnlionfHPk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:onOCW8gGutmw1LqXd2Aq8XCROrOnZ9w_zow9xBwengU\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:QZAey3WAoyEjMaB9t0b2f_V_O8O48-x85eSXH6YZeOc\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:4k5r59xPIt36ie1iT8l4aEZwhn08WJhKqesf6Cbmkw0\"}},{\"id\":\"urn:awp:n:44PUYuNImWY8SthLf-0uyvqBMk0nkTCKAXr8ft6c6iQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:e7oawadmxF5DnRvu6OZoRbBwJ2dLUkRp9eA27ulrzrE\"}},{\"id\":\"urn:awp:n:onOCW8gGutmw1LqXd2Aq8XCROrOnZ9w_zow9xBwengU\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:hUY7mtOSCcgBMhfotgdLjqnf0exBHkEeyutI1XMoYY4\"},{\"id\":\"urn:awp:n:llk36Qm7GXTgA_YjfxdJ3L04ITb_iPTEjnZE9mvFcRM\"}]},{\"id\":\"urn:awp:n:hUY7mtOSCcgBMhfotgdLjqnf0exBHkEeyutI1XMoYY4\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsib3JnYW5pc2UtY2FyZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDpjYXJlci1hY3RzLWZvci1wYXJlbnQiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpjYXJlci1hY3RzLWZvci1wYXJlbnQiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXItc3RhdHVzIiwiaWQiOiJwb3dlciJ9LCJtYXlEZWxlZ2F0ZSI6eyJkZXB0aCI6Mn0sInR5cGUiOiJNYW5kYXRlTGluayIsInN1YmplY3RLZXkiOiI0NTM2eDQ3NU90RXVxTUNIdDAxQnlTWEc2LXo3WVY5UG9uU2FrVHpWamVvIn0._mFmR98SYf5Gs9hsuTycEUNnDWKXyVnRHIwfuj3BCNBN6Y4HEaOOYyfe0ND31W1yaxJxcSzOkDqtzkzrl-p4Bw\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:llk36Qm7GXTgA_YjfxdJ3L04ITb_iPTEjnZE9mvFcRM\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50Om93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsInBhcmVudCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiYWN0aW9ucyI6WyJvcmdhbmlzZS1jYXJlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpob2xkZXItc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.yAsHTAKy__Q_zi1xHwfFsfH2P_p30OkT7QBuP_dYzAz8Im-RY8eMfvkt5626QXlPUIicvneZ4iuYdGNHGSFTAg\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:4k5r59xPIt36ie1iT8l4aEZwhn08WJhKqesf6Cbmkw0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:4e36cea16076a471c5bdaebc276d6b8dc4b4574737cd2036d817b37249a9bde0\",\"byteLength\":\"18111\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:e7oawadmxF5DnRvu6OZoRbBwJ2dLUkRp9eA27ulrzrE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:2ac7db2bfd91077ca36e09a75742839bdc613bd8d58c202a8ea716eb53090823\",\"byteLength\":\"17170\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:bDsCoIArgrHRUzO_QISrmV6iFPsJOP3KesjGkGyrUsY\",\"@graph\":[{\"id\":\"urn:awp:n:ll45fQNY9OUPqCP5CU01patyUHamC5OsHvJfmcz2uX8\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsib3JnYW5pc2UtY2FyZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDpjYXJlci1hY3RzLWZvci1wYXJlbnQiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpjYXJlci1hY3RzLWZvci1wYXJlbnQiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6cmVnaXN0ZXItc3RhdHVzIiwiaWQiOiJwb3dlciJ9LCJtYXlEZWxlZ2F0ZSI6eyJkZXB0aCI6Mn0sInR5cGUiOiJNYW5kYXRlTGluayIsInN1YmplY3RLZXkiOiI0NTM2eDQ3NU90RXVxTUNIdDAxQnlTWEc2LXo3WVY5UG9uU2FrVHpWamVvIn0._mFmR98SYf5Gs9hsuTycEUNnDWKXyVnRHIwfuj3BCNBN6Y4HEaOOYyfe0ND31W1yaxJxcSzOkDqtzkzrl-p4Bw\"}]},{\"id\":\"urn:awp:n:vCO9YUCVpUrgN_IQbi_tYYzSFUqVmoUzBhf4eoIaHuk\",\"@graph\":[{\"id\":\"urn:awp:n:TqhUVr4V-FthZyW5Yyz6TaIAZRch899WEgGCZa9P-RU\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6aG9sZGVyIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50Om93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDpjYXJlci1hY3RzLWZvci1wYXJlbnQ6c3ViamVjdCIsInBhcmVudCI6InVybjpmaWN0aW9uYWw6Y2FyZXItYWN0cy1mb3ItcGFyZW50OnBvd2VyIiwiYWN0aW9ucyI6WyJvcmdhbmlzZS1jYXJlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOmNhcmVyLWFjdHMtZm9yLXBhcmVudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmNhcmVyLWFjdHMtZm9yLXBhcmVudDpob2xkZXItc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.yAsHTAKy__Q_zi1xHwfFsfH2P_p30OkT7QBuP_dYzAz8Im-RY8eMfvkt5626QXlPUIicvneZ4iuYdGNHGSFTAg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..GQtIdLdxYikhCy2c2jgfweHOAJbjsORDmjKGf3cYjwEHLcgLGAMDRxDXQemEBo_0c_uvf84mFJefgD5QK4HsAw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -573,7 +676,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The representative’s agent reaches the inbound gate."
+      "caption": "An invoke message from The representative’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 12,
@@ -600,7 +704,8 @@
         "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The representative’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The representative’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 13,
@@ -623,7 +728,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 1
     },
     {
       "seq": 14,
@@ -645,7 +751,8 @@
         "id": "urn:authority:verified-chain",
         "text": "A representation statement signed with A parent's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "A parent signed a statement that The representative’s agent acts for them in this operation."
+      "caption": "A parent signed a statement that The representative’s agent acts for them in this operation.",
+      "gateRun": 1
     },
     {
       "seq": 15,
@@ -668,7 +775,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 1
     },
     {
       "seq": 16,
@@ -686,7 +794,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 1
     },
     {
       "seq": 17,
@@ -696,7 +805,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002",
+      "messageDigest": "sha-256:8574f2ff942de6bd25308d4c061b5dfecb686b8f232052516e440db0a4670330",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 1
     }
   ]
 }

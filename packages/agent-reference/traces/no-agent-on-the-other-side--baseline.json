@@ -55,7 +55,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -93,6 +93,16 @@
       "seq": 3,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -110,12 +120,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The customer's mandate covers this action."
+      "caption": "The customer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -144,12 +165,23 @@
         "answer": "Accepted, for Send an approved plain-text email only."
       },
       "reason": "recipient-established",
-      "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only."
+      "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -162,12 +194,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -180,12 +223,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -202,18 +256,30 @@
         "id": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
         "text": "Requires 1 approval(s) from the principal."
       },
-      "caption": "The required people must decide this exact action."
+      "caption": "The required people must decide this exact action.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "approval-required",
-      "caption": "The action is held for the named decision makers."
+      "caption": "The action is held for the named decision makers.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -234,6 +300,8 @@
       "agent": "reader-agent",
       "part": "principal",
       "kind": "principal-reply",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "approvalDecision": "approve",
       "chat": {
         "who": "principal",
         "text": "Send these exact words."
@@ -256,6 +324,16 @@
       "seq": 12,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -273,12 +351,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The customer's mandate covers this action."
+      "caption": "The customer's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -307,12 +396,23 @@
         "answer": "Accepted, for Send an approved plain-text email only."
       },
       "reason": "recipient-established",
-      "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only."
+      "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
+      "gateRun": 2
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -325,12 +425,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -343,12 +454,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 16,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -361,12 +483,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The customer's limits."
+      "caption": "Inside what the agent may do on its own, and within The customer's limits.",
+      "gateRun": 2
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -388,17 +521,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:email",
+        "operation": "urn:op:email",
+        "conversation": "urn:scenario:no-agent-on-the-other-side:draft-enquiry",
+        "recipient": "mailto:shop@fictional.example",
+        "purpose": "urn:purpose:business-enquiry",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: share Send an approved plain-text email with A small business with an email address."
+      "effectRelease": true,
+      "caption": "The action goes: share Send an approved plain-text email with A small business with an email address.",
+      "gateRun": 2
     },
     {
       "seq": 19,
@@ -409,7 +555,8 @@
       "check": "integrity",
       "verdict": "pass",
       "reason": "intact",
-      "caption": "Unsigned email bytes are digested; no signature or person identity is established."
+      "caption": "Unsigned email bytes are digested; no signature or person identity is established.",
+      "gateRun": 1
     },
     {
       "seq": 20,
@@ -420,7 +567,8 @@
       "check": "source",
       "verdict": "pass",
       "reason": "source-accepted",
-      "caption": "Only the pinned email address is recognized; no factual claims are admitted."
+      "caption": "Only the pinned email address is recognized; no factual claims are admitted.",
+      "gateRun": 1
     },
     {
       "seq": 21,
@@ -438,7 +586,8 @@
       "kind": "decision",
       "outcome": "admit",
       "reason": "fit-for-use",
-      "caption": "Admit labelled unstructured content only."
+      "caption": "Admit labelled unstructured content only.",
+      "gateRun": 1
     },
     {
       "seq": 23,

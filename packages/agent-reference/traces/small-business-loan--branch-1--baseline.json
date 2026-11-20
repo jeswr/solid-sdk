@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -122,7 +122,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The accounting platform's business accounts statement is intact and signed with The accounting platform's pinned key."
+      "caption": "The accounting platform's business accounts statement is intact and signed with The accounting platform's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -160,7 +161,8 @@
         ],
         "answer": "Accepted, for business accounts claims only."
       },
-      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim."
+      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -178,7 +180,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The accounting platform's business accounts statement asks for nothing, so there is no authority to check."
+      "caption": "The accounting platform's business accounts statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -205,7 +208,8 @@
         "id": "urn:terms:small-business-loan:accounts",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -237,7 +241,8 @@
         "id": "urn:profile:small-business-loan:business.accounts",
         "text": "Accept business accounts from The accounting platform by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The accounting platform's business accounts statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The accounting platform's business accounts statement is fit for A loan for a small company: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -247,7 +252,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The accounting platform's business accounts statement is admitted."
+      "caption": "The accounting platform's business accounts statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -293,7 +299,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional tax authority's business tax filing statement is intact and signed with The fictional tax authority's pinned key."
+      "caption": "The fictional tax authority's business tax filing statement is intact and signed with The fictional tax authority's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -331,7 +338,8 @@
         ],
         "answer": "Accepted, for business tax filing claims only."
       },
-      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim."
+      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -349,7 +357,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional tax authority's business tax filing statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional tax authority's business tax filing statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -376,7 +385,8 @@
         "id": "urn:terms:small-business-loan:tax-filing",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -408,7 +418,8 @@
         "id": "urn:profile:small-business-loan:business.tax-filing",
         "text": "Accept business tax filing from The fictional tax authority by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional tax authority's business tax filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The fictional tax authority's business tax filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -418,7 +429,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional tax authority's business tax filing statement is admitted."
+      "caption": "The fictional tax authority's business tax filing statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -464,7 +476,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The company register's organization role statement is intact and signed with The company register's pinned key."
+      "caption": "The company register's organization role statement is intact and signed with The company register's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -502,7 +515,8 @@
         ],
         "answer": "Accepted, for organization role claims only."
       },
-      "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim."
+      "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -520,7 +534,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The company register's organization role statement asks for nothing, so there is no authority to check."
+      "caption": "The company register's organization role statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -547,7 +562,8 @@
         "id": "urn:terms:small-business-loan:director-role",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The company register's organization role statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The company register's organization role statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -579,7 +595,8 @@
         "id": "urn:profile:small-business-loan:organization.role",
         "text": "Accept organization role from The company register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The company register's organization role statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The company register's organization role statement is fit for A loan for a small company: recorded-by-authority, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -589,7 +606,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The company register's organization role statement is admitted."
+      "caption": "The company register's organization role statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 21,
@@ -626,6 +644,16 @@
       "seq": 23,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -647,12 +675,23 @@
         "text": "The company's mandate lets the agent use A loan for a small company, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The company's mandate covers this action."
+      "caption": "The company's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -681,12 +720,23 @@
         "answer": "Accepted, for A loan for a small company only."
       },
       "reason": "recipient-established",
-      "caption": "The lender: Accepted, for A loan for a small company only."
+      "caption": "The lender: Accepted, for A loan for a small company only.",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -699,12 +749,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -717,12 +778,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -739,18 +811,30 @@
         "id": "urn:rule:director-borrowing",
         "text": "Requires 1 approval(s) from borrowing-director."
       },
-      "caption": "The required people must decide this exact action."
+      "caption": "The required people must decide this exact action.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "approval-required",
-      "caption": "The action is held for the named decision makers."
+      "caption": "The action is held for the named decision makers.",
+      "gateRun": 1
     },
     {
       "seq": 29,
@@ -777,6 +861,16 @@
       "seq": 31,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -798,12 +892,23 @@
         "text": "The company's mandate lets the agent use A loan for a small company, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The company's mandate covers this action."
+      "caption": "The company's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -832,12 +937,23 @@
         "answer": "Accepted, for A loan for a small company only."
       },
       "reason": "recipient-established",
-      "caption": "The lender: Accepted, for A loan for a small company only."
+      "caption": "The lender: Accepted, for A loan for a small company only.",
+      "gateRun": 2
     },
     {
       "seq": 33,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -850,12 +966,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 34,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -868,12 +995,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 35,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -886,12 +1024,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The company's limits."
+      "caption": "Inside what the agent may do on its own, and within The company's limits.",
+      "gateRun": 2
     },
     {
       "seq": 36,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -913,12 +1062,23 @@
         "text": "The company's mandate lets the agent use A loan for a small company, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The company's mandate covers this action."
+      "caption": "The company's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 37,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -947,12 +1107,23 @@
         "answer": "Accepted, for A loan for a small company only."
       },
       "reason": "recipient-established",
-      "caption": "The lender: Accepted, for A loan for a small company only."
+      "caption": "The lender: Accepted, for A loan for a small company only.",
+      "gateRun": 2
     },
     {
       "seq": 38,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -965,12 +1136,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 39,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -983,12 +1165,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 40,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1001,12 +1194,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The company's limits."
+      "caption": "Inside what the agent may do on its own, and within The company's limits.",
+      "gateRun": 2
     },
     {
       "seq": 41,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1019,12 +1223,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 42,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1041,12 +1256,23 @@
         "text": "The issuer's terms: use for Small business loan; share for Small business loan. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 2
     },
     {
       "seq": 43,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1059,12 +1285,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 44,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1081,12 +1318,23 @@
         "text": "The issuer's terms: use for Small business loan; share for Small business loan. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 2
     },
     {
       "seq": 45,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1099,12 +1347,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 2
     },
     {
       "seq": 46,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1126,24 +1385,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The company’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The company’s agent's pinned key, and written to the record.",
+      "gateRun": 2
     },
     {
       "seq": 47,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The lender’s agent."
+      "messageId": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
+      "messageDigest": "sha-256:0909f0a7e7b8b55b35df575c3eb817659afcb00f2fe6d62be4ebd05478d86c5a",
+      "caption": "The invoke message goes to The lender’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 48,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3013a11d9761786f9c6485998b53f91a480bc4577a4482e66f14f03add023834",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:TEKEJBzgf8EDf81tlu9C1r_R0Y4cYPjHDHVtT_9QmVc\"},\"to\":{\"id\":\"urn:awp:n:nrixp6CyxLDmhVq5uz6A-6UjxGKYMz2dCTiyohQg8T0\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:-d1_M9y2RLrGsssuXoYWa6Ib4Blv0_ncei67HLRcxNo\"},\"evidence\":[{\"id\":\"urn:awp:n:u7kNQa4nZ2_8OcymR34VKFHwWEScgdvEjlJj0Br2eoE\"},{\"id\":\"urn:awp:n:uZvw3BCTaJoMbW9P8dapw8EDKUJVt9NfTkIqos2azXw\"},{\"id\":\"urn:awp:n:3zX_A9hEFP0RyHsNM5Udwt00GRbfzpeUeAtawSBsrDo\"}],\"@included\":[{\"id\":\"urn:awp:n:TEKEJBzgf8EDf81tlu9C1r_R0Y4cYPjHDHVtT_9QmVc\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:small-business-loan:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:small-business-loan:owner\"},{\"id\":\"urn:awp:n:nrixp6CyxLDmhVq5uz6A-6UjxGKYMz2dCTiyohQg8T0\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:small-business-loan:receiver-agent:actor\",\"party\":\"urn:fictional:small-business-loan:receiver\"},{\"id\":\"urn:awp:n:-d1_M9y2RLrGsssuXoYWa6Ib4Blv0_ncei67HLRcxNo\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:iIO4KW1D1BcJAruASSqVfc2UuKPyVhGlCkRnoDA0j88\"},\"input\":{\"id\":\"urn:awp:n:bzk4fMuXuiEUnlHi4w1J2EEdGHCCkgCkJ155Uj-eJyo\"},\"operation\":{\"id\":\"urn:op:small-business-loan\"},\"purpose\":\"urn:purpose:small-business-loan\"},{\"id\":\"urn:awp:n:u7kNQa4nZ2_8OcymR34VKFHwWEScgdvEjlJj0Br2eoE\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:Avn_xzV6VhxOD4mhTC5IHFD6ivrN9_jy0MOn8Gr1vTE\"},\"format\":\"organization-mandate+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:uZvw3BCTaJoMbW9P8dapw8EDKUJVt9NfTkIqos2azXw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:jEbdIsxoBYGqduHRMUuy00pbpgBQ3a67koA-MUt-OLw\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:3zX_A9hEFP0RyHsNM5Udwt00GRbfzpeUeAtawSBsrDo\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:LHZcBJLq-DFxEqoQ5iF1wxD3_Zl200VmSoajacQ3M7g\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:op:small-business-loan\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:bzk4fMuXuiEUnlHi4w1J2EEdGHCCkgCkJ155Uj-eJyo\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:KEsR7njhq6pkgsAsFm8oL04yH-edl6yKEQ7qzoYcOuk\"},{\"id\":\"urn:awp:n:oA8i51twTczwNryeYiwXt55OXzSvCuS5eoZKKJ48xNc\"}]},{\"id\":\"urn:awp:n:iIO4KW1D1BcJAruASSqVfc2UuKPyVhGlCkRnoDA0j88\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:Avn_xzV6VhxOD4mhTC5IHFD6ivrN9_jy0MOn8Gr1vTE\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:V6SdXAbjzyDV5zJImfUDdqd7FwCXNd_8E8_dcQlXq1Q\",\"issuer\":\"urn:fictional:small-business-loan:owner\",\"proofGraph\":\"urn:awp:n:2XqIayar7cdZd4PS6JO52gFjFv028fg5jIuAQEbMDkA\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:jEbdIsxoBYGqduHRMUuy00pbpgBQ3a67koA-MUt-OLw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:jJr1nEuEmAN_JHpg7MCMfwCMfEctOa8Z91_6YCyVnSI\",\"issuer\":\"urn:fictional:small-business-loan:accounting\",\"proofGraph\":\"urn:awp:n:r3jjtoSwhuj8OJ8fDQBe7ugLHb_0MNd9MDSe26oNlKg\"},{\"id\":\"urn:awp:n:LHZcBJLq-DFxEqoQ5iF1wxD3_Zl200VmSoajacQ3M7g\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Zf7m8qNFvv8CoxuQfJRIR2YQyNjL57MfiIwu1qhY-mQ\",\"issuer\":\"urn:fictional:small-business-loan:tax\",\"proofGraph\":\"urn:awp:n:UeHWFGJ0heqXIIqGifwe2TvEndqawLvXjOUpT5tYhVI\"},{\"id\":\"urn:awp:n:KEsR7njhq6pkgsAsFm8oL04yH-edl6yKEQ7qzoYcOuk\",\"type\":\"PropertyValue\",\"domainValue\":{\"type\":\"http://www.w3.org/2001/XMLSchema#integer\",\"@value\":\"25000\"},\"name\":\"amount\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:amount\"},{\"id\":\"urn:awp:n:oA8i51twTczwNryeYiwXt55OXzSvCuS5eoZKKJ48xNc\",\"type\":\"PropertyValue\",\"domainValue\":\"GBP\",\"name\":\"currency\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:currency\"},{\"id\":\"urn:awp:n:V6SdXAbjzyDV5zJImfUDdqd7FwCXNd_8E8_dcQlXq1Q\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:k5_Oxj7GfF2j_wXjXk2kiDl0dBOfUujYzVLXdT-T-ZY\"}},{\"id\":\"urn:awp:n:k5_Oxj7GfF2j_wXjXk2kiDl0dBOfUujYzVLXdT-T-ZY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d226edac79a9234956bfde2258159cc23fd2c983b240f26a788f7922cb2840d8\",\"byteLength\":\"12069\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:jJr1nEuEmAN_JHpg7MCMfwCMfEctOa8Z91_6YCyVnSI\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:aHrKCs0Sgjw_e2hASdFD33a_O3gBcV3DhIogypqhL20\"}},{\"id\":\"urn:awp:n:aHrKCs0Sgjw_e2hASdFD33a_O3gBcV3DhIogypqhL20\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:fd2ad249b4d46ee92e42af13770f845d10100061bfc703f1553eb8b0f7466453\",\"byteLength\":\"24421\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Zf7m8qNFvv8CoxuQfJRIR2YQyNjL57MfiIwu1qhY-mQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:01G0OIKuwz-mCCZvpl2Hz8D9cVl_GoHGbKn98rUavi8\"}},{\"id\":\"urn:awp:n:01G0OIKuwz-mCCZvpl2Hz8D9cVl_GoHGbKn98rUavi8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:f2ed5fc6ee73944cca9b4a222f0ce790d7d42078fbcc9fa7acb93583c401f12c\",\"byteLength\":\"24424\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:2XqIayar7cdZd4PS6JO52gFjFv028fg5jIuAQEbMDkA\",\"@graph\":[{\"id\":\"urn:awp:n:aOvZTK1StPZs98cj9cveSs3SwzRUpeParbJ3xt9z93E\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atb3JnYW5pemF0aW9uLW1hbmRhdGUrandzIn0.eyJ0eXBlIjoiT3JnYW5pemF0aW9uTWFuZGF0ZSIsImlkIjoidXJuOmNyZWRlbnRpYWw6c21hbGwtYnVzaW5lc3MtbG9hbjpvd25lci1hZ2VudCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c21hbGwtYnVzaW5lc3MtbG9hbjpvd25lciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyLWFnZW50OmFjdG9yIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJyb2xlcyI6WyJub24tYm9ycm93aW5nLWRpcmVjdG9yIl0sImFjdGlvbnMiOlsibG9hbi1hcHBsaWNhdGlvbiJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6c21hbGwtYnVzaW5lc3MtbG9hbjpvd25lcjpzdGF0dXMiLCJpZCI6InNpZ25hdG9yeSJ9fQ.Q-srJ7ZL6B0sBRQnpHBCFIQg0Qi11jyTfuNbghOJuQzIfPiauJXpSnoGHe8vo1eslRq4UwQqvq6rmDjaLTpbCA\"}]},{\"id\":\"urn:awp:n:r3jjtoSwhuj8OJ8fDQBe7ugLHb_0MNd9MDSe26oNlKg\",\"@graph\":[{\"id\":\"urn:awp:n:XGq73DjgOu7OnfGPNOxL7eECAnGxwkblP6t6KacbAm0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImdUeWlkTHdDM3dBSTRpdDJUTkZUck9FX0ZRZ1RkaWE3R1VvOFZZR2V1OWsiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ2YWx1ZSI6MTgwMDAwLCJjdXJyZW5jeSI6IkdCUCIsImlkIjoidXJuOnNjZW5hcmlvOnNtYWxsLWJ1c2luZXNzLWxvYW46YWNjb3VudHMiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46YWNjb3VudGluZyIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJjbGFpbVR5cGUiOiJidXNpbmVzcy5hY2NvdW50cyIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6c21hbGwtYnVzaW5lc3MtbG9hbjphY2NvdW50cyIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzpzbWFsbC1idXNpbmVzcy1sb2FuOmFjY291bnRzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzpzbWFsbC1idXNpbmVzcy1sb2FuOmFjY291bnRzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIn1dfV19fX0.vbRsU0PCGQOiQxAYUwlgkjWqWqQ4GOl09Bk8H5vf8hnFtHie7gkMwQMS2esDpsxSGqkNTErDgUK3bUv8NIxmBA\"}]},{\"id\":\"urn:awp:n:UeHWFGJ0heqXIIqGifwe2TvEndqawLvXjOUpT5tYhVI\",\"@graph\":[{\"id\":\"urn:awp:n:Pmdgw5ShzwT65_IHHszXF2ct4hFXshunltP_FO8wSJ0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjZOa0xQSzJZMUpQbWNEWEdFZzhTZnpQN2tJSWtTb21qeGNRLUE5c01QQTQiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ2YWx1ZSI6MTYwMDAwLCJjdXJyZW5jeSI6IkdCUCIsImlkIjoidXJuOnNjZW5hcmlvOnNtYWxsLWJ1c2luZXNzLWxvYW46dGF4LWZpbGluZyIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c21hbGwtYnVzaW5lc3MtbG9hbjp0YXgiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyIiwiY2xhaW1UeXBlIjoiYnVzaW5lc3MudGF4LWZpbGluZyIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6c21hbGwtYnVzaW5lc3MtbG9hbjp0YXgtZmlsaW5nIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOnNtYWxsLWJ1c2luZXNzLWxvYW46dGF4LWZpbGluZyIsImNvbnN0cmFpbnRzIjpbeyJsZWZ0T3BlcmFuZCI6InB1cnBvc2UiLCJvcGVyYXRvciI6ImVxIiwicmlnaHRPcGVyYW5kIjoidXJuOnB1cnBvc2U6c21hbGwtYnVzaW5lc3MtbG9hbiJ9XX0seyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86c21hbGwtYnVzaW5lc3MtbG9hbjp0YXgtZmlsaW5nIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIn1dfV19fX0.J5MFKPlZ5ckj_p9kpu7eDbST9-8VxwmP8hV35ySvLCVtZ2qJi4alC8XLMCPB1wt5wMIM0_Vj602xt8G6kMKwAw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46VEVLRUpCemdmOEVEZjgxdGx1OUMxcl9SMFk0Y1lQakhESFZ0VF85UW1WYyIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46bnJpeHA2Q3l4TERtaFZxNXV6NkEtNlVqeEdLWU16MmRDVGl5b2hRZzhUMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOnJlY2VpdmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjppSU80S1cxRDFCY0pBcnVBU1NxVmZjMlV1S1B5VmhHbENrUm5vREEwajg4In0sImlkIjoidXJuOmF3cDpuOi1kMV9NOXkyUkxyR3Nzc3VYb1lXYTZJYjRCbHYwX25jZWk2N0hMUmN4Tm8iLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpiems0Zk11WHVpRVVubEhpNHcxSjJFRWRHSENDa2dDa0oxNTVVai1lSnlvIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpzbWFsbC1idXNpbmVzcy1sb2FuIn0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpBdm5feHpWNlZoeE9ENG1oVEM1SUhGRDZpdnJOOV9qeTBNT244R3IxdlRFIn0sImZvcm1hdCI6Im9yZ2FuaXphdGlvbi1tYW5kYXRlK2p3cyIsImlkIjoidXJuOmF3cDpuOnU3a05RYTRuWjJfOE9jeW1SMzRWS0ZId1dFU2NnZHZFamxKajBCcjJlb0UiLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46akViZElzeG9CWUdxZHVIUk1VdXkwMHBicGdCUTNhNjdrb0EtTVV0LU9MdyJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOnVadnczQkNUYUpvTWJXOVA4ZGFwdzhFREtVSlZ0OU5mVGtJcW9zMmF6WHciLCJwb3NpdGlvbiI6IjEiLCJyb2xlIjoiY3JlZGVudGlhbCIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpMSFpjQkpMcS1ERnhFcW9RNWlGMXd4RDNfWmwyMDBWbVNvYWphY1EzTTdnIn0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46M3pYX0E5aEVGUDBSeUhzTk01VWR3dDAwR1JiZnpwZVVlQXRhd1NCc3JEbyIsInBvc2l0aW9uIjoiMiIsInJvbGUiOiJjcmVkZW50aWFsIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6c21hbGwtYnVzaW5lc3MtbG9hbiIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpiems0Zk11WHVpRVVubEhpNHcxSjJFRWRHSENDa2dDa0oxNTVVai1lSnlvIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpLRXNSN25qaHE2cGtnc0FzRm04b0wwNHlILWVkbDZ5S0VRN3F6b1ljT3VrIn0seyJpZCI6InVybjphd3A6bjpvQThpNTF0d1RjendOcnllWWl3WHQ1NU9YelN2Q3VTNWVvWktLSjQ4eE5jIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46aUlPNEtXMUQxQmNKQXJ1QVNTcVZmYzJVdUtQeVZoR2xDa1Jub0RBMGo4OCIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOlY2U2RYQWJqenlEVjV6SkltZlVEZHFkN0Z3Q1hOZF84RThfZGNRbFhxMVEiLCJpZCI6InVybjphd3A6bjpBdm5feHpWNlZoeE9ENG1oVEM1SUhGRDZpdnJOOV9qeTBNT244R3IxdlRFIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjoyWHFJYXlhcjdjZFpkNFBTNkpPNTJnRmpGdjAyOGZnNWpJdUFRRWJNRGtBIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46akpyMW5FdUVtQU5fSkhwZzdNQ01md0NNZkVjdE9hOFo5MV82WUN5Vm5TSSIsImlkIjoidXJuOmF3cDpuOmpFYmRJc3hvQllHcWR1SFJNVXV5MDBwYnBnQlEzYTY3a29BLU1VdC1PTHciLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46YWNjb3VudGluZyIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cjNqanRvU3dodWo4T0o4ZkRRQmU3dWdMSGJfME1OZDlNRFNlMjZvTmxLZyIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46WmY3bThxTkZ2djhDb3h1UWZKUklSMllReU5qTDU3TWZpSXd1MXFoWS1tUSIsImlkIjoidXJuOmF3cDpuOkxIWmNCSkxxLURGeEVxb1E1aUYxd3hEM19abDIwMFZtU29hamFjUTNNN2ciLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46dGF4IiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpVZUhXRkdKMGhlcVhJSXFHaWZ3ZTJUdkVuZHFhd0x2WGpPVXBUNXRZaFZJIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIn0seyJkb21haW5WYWx1ZSI6eyJAdmFsdWUiOiIyNTAwMCIsInR5cGUiOiJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYSNpbnRlZ2VyIn0sImlkIjoidXJuOmF3cDpuOktFc1I3bmpocTZwa2dzQXNGbThvTDA0eUgtZWRsNnlLRVE3cXpvWWNPdWsiLCJuYW1lIjoiYW1vdW50IiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOmFtb3VudCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6IkdCUCIsImlkIjoidXJuOmF3cDpuOm9BOGk1MXR3VGN6d05yeWVZaXdYdDU1T1h6U3ZDdVM1ZW9aS0tKNDh4TmMiLCJuYW1lIjoiY3VycmVuY3kiLCJwb3NpdGlvbiI6IjEiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6Y3VycmVuY3kiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46VjZTZFhBYmp6eURWNXpKSW1mVURkcWQ3RndDWE5kXzhFOF9kY1FsWHExUSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46azVfT3hqN0dmRjJqX3dYalhrMmtpRGwwZEJPZlV1all6VkxYZFQtVC1aWSJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmQyMjZlZGFjNzlhOTIzNDk1NmJmZGUyMjU4MTU5Y2MyM2ZkMmM5ODNiMjQwZjI2YTc4OGY3OTIyY2IyODQwZDgiLCJieXRlTGVuZ3RoIjoiMTIwNjkiLCJpZCI6InVybjphd3A6bjprNV9PeGo3R2ZGMmpfd1hqWGsya2lEbDBkQk9mVXVqWXpWTFhkVC1ULVpZIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiaWQiOiJ1cm46YXdwOm46akpyMW5FdUVtQU5fSkhwZzdNQ01md0NNZkVjdE9hOFo5MV82WUN5Vm5TSSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46YUhyS0NzMFNnandfZTJoQVNkRkQzM2FfTzNnQmNWM0RoSW9neXBxaEwyMCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmZkMmFkMjQ5YjRkNDZlZTkyZTQyYWYxMzc3MGY4NDVkMTAxMDAwNjFiZmM3MDNmMTU1M2ViOGIwZjc0NjY0NTMiLCJieXRlTGVuZ3RoIjoiMjQ0MjEiLCJpZCI6InVybjphd3A6bjphSHJLQ3MwU2dqd19lMmhBU2RGRDMzYV9PM2dCY1YzRGhJb2d5cHFoTDIwIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiaWQiOiJ1cm46YXdwOm46WmY3bThxTkZ2djhDb3h1UWZKUklSMllReU5qTDU3TWZpSXd1MXFoWS1tUSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46MDFHME9JS3V3ei1tQ0NadnBsMkh6OEQ5Y1ZsX0dvSEdiS245OHJVYXZpOCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmYyZWQ1ZmM2ZWU3Mzk0NGNjYTliNGEyMjJmMGNlNzkwZDdkNDIwNzhmYmNjOWZhN2FjYjkzNTgzYzQwMWYxMmMiLCJieXRlTGVuZ3RoIjoiMjQ0MjQiLCJpZCI6InVybjphd3A6bjowMUcwT0lLdXd6LW1DQ1p2cGwySHo4RDljVmxfR29IR2JLbjk4clVhdmk4IiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjphT3ZaVEsxU3RQWnM5OGNqOWN2ZVNzM1N3elJVcGVQYXJiSjN4dDl6OTNFIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklrdzJla05EVWpJelQwZGZabU5EVUV0RFYzVmxSVXgwTjFkU1QxaFVPWFJ6YzNKQ2FFdzBPV3M0YlhNaUxDSjBlWEFpT2lKaGQzQXRiM0puWVc1cGVtRjBhVzl1TFcxaGJtUmhkR1VyYW5kekluMC5leUowZVhCbElqb2lUM0puWVc1cGVtRjBhVzl1VFdGdVpHRjBaU0lzSW1sa0lqb2lkWEp1T21OeVpXUmxiblJwWVd3NmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcHZkMjVsY2kxaFoyVnVkQ0lzSW1semMzVmxjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZjMjFoYkd3dFluVnphVzVsYzNNdGJHOWhianB2ZDI1bGNpSXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwemJXRnNiQzFpZFhOcGJtVnpjeTFzYjJGdU9tOTNibVZ5TFdGblpXNTBPbUZqZEc5eUlpd2ljM1ZpYW1WamRFdGxlU0k2SWpnemMzRlNTR1l6T0ZONk1tWkNPRU5pVm5NM01YUnVibVppUTI1ckxUaHpNMkZpWTJWNVFWWTFVbGtpTENKbGJuUnBkSGtpT2lKMWNtNDZabWxqZEdsdmJtRnNPbk50WVd4c0xXSjFjMmx1WlhOekxXeHZZVzQ2YjNkdVpYSWlMQ0p5YjJ4bGN5STZXeUp1YjI0dFltOXljbTkzYVc1bkxXUnBjbVZqZEc5eUlsMHNJbUZqZEdsdmJuTWlPbHNpYkc5aGJpMWhjSEJzYVdOaGRHbHZiaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExUQXhWREF3T2pBd09qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU5pMHhNaTB3TVZRd01Eb3dNRG93TUM0d01EQmFJaXdpYzNSaGRIVnpJanA3SW5KbFppSTZJblZ5YmpwbWFXTjBhVzl1WVd3NmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcHZkMjVsY2pwemRHRjBkWE1pTENKcFpDSTZJbk5wWjI1aGRHOXllU0o5ZlEuUS1zcko3Wkw2QjBzQlJRbnBIQkNGSVFnMFFpMTFqeVRmdU5iZ2hPSnVReklmUGlhdUpYcFNub0dIZTh2bzFlc2xScTRVd1FxdnE2cm1EamFMVHBiQ0EiLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjoyWHFJYXlhcjdjZFpkNFBTNkpPNTJnRmpGdjAyOGZnNWpJdUFRRWJNRGtBIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOlhHcTczRGpnT3U3T25mR1BOT3hMN2VFQ0FuR3h3a2JsUDZ0NkthY2JBbTAiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW1kVWVXbGtUSGRETTNkQlNUUnBkREpVVGtaVWNrOUZYMFpSWjFSa2FXRTNSMVZ2T0ZaWlIyVjFPV3NpTENKMGVYQWlPaUpoZDNBdGMzUmhkR1Z0Wlc1MEsycDNjeUo5LmV5SjJZV3gxWlNJNk1UZ3dNREF3TENKamRYSnlaVzVqZVNJNklrZENVQ0lzSW1sa0lqb2lkWEp1T25OalpXNWhjbWx2T25OdFlXeHNMV0oxYzJsdVpYTnpMV3h2WVc0NllXTmpiM1Z1ZEhNaUxDSnBjM04xWlhJaU9pSjFjbTQ2Wm1samRHbHZibUZzT25OdFlXeHNMV0oxYzJsdVpYTnpMV3h2WVc0NllXTmpiM1Z1ZEdsdVp5SXNJbk4xWW1wbFkzUWlPaUoxY200NlptbGpkR2x2Ym1Gc09uTnRZV3hzTFdKMWMybHVaWE56TFd4dllXNDZiM2R1WlhJaUxDSmpiR0ZwYlZSNWNHVWlPaUppZFhOcGJtVnpjeTVoWTJOdmRXNTBjeUlzSW0xbGRHaHZaQ0k2SW5KbFkyOXlaR1ZrTFdKNUxXRjFkR2h2Y21sMGVTSXNJbUZ6VDJZaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaUxDSjBaWEp0Y3lJNmV5SndiMnhwWTNraU9uc2lhV1FpT2lKMWNtNDZkR1Z5YlhNNmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcGhZMk52ZFc1MGN5SXNJbkJsY20xcGMzTnBiMjV6SWpwYmV5SjBlWEJsSWpvaWNHVnliV2x6YzJsdmJpSXNJbUZqZEdsdmJpSTZJblZ6WlNJc0luUmhjbWRsZENJNkluVnlianB6WTJWdVlYSnBienB6YldGc2JDMWlkWE5wYm1WemN5MXNiMkZ1T21GalkyOTFiblJ6SWl3aVkyOXVjM1J5WVdsdWRITWlPbHQ3SW14bFpuUlBjR1Z5WVc1a0lqb2ljSFZ5Y0c5elpTSXNJbTl3WlhKaGRHOXlJam9pWlhFaUxDSnlhV2RvZEU5d1pYSmhibVFpT2lKMWNtNDZjSFZ5Y0c5elpUcHpiV0ZzYkMxaWRYTnBibVZ6Y3kxc2IyRnVJbjFkZlN4N0luUjVjR1VpT2lKd1pYSnRhWE56YVc5dUlpd2lZV04wYVc5dUlqb2laR2x6ZEhKcFluVjBaU0lzSW5SaGNtZGxkQ0k2SW5WeWJqcHpZMlZ1WVhKcGJ6cHpiV0ZzYkMxaWRYTnBibVZ6Y3kxc2IyRnVPbUZqWTI5MWJuUnpJaXdpWTI5dWMzUnlZV2x1ZEhNaU9sdDdJbXhsWm5SUGNHVnlZVzVrSWpvaWNIVnljRzl6WlNJc0ltOXdaWEpoZEc5eUlqb2laWEVpTENKeWFXZG9kRTl3WlhKaGJtUWlPaUoxY200NmNIVnljRzl6WlRwemJXRnNiQzFpZFhOcGJtVnpjeTFzYjJGdUluMWRmVjE5ZlgwLnZiUnNVMFBDR1FPaVF4QVlVd2xna2pXcVdxUTRHT2wwOUJrOEg1dmY4aG5GdEhpZTdna013UU1TMmVzRHBzeFNHcWtOVEVyRGdVSzNiVXY4Tkl4bUJBIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46cjNqanRvU3dodWo4T0o4ZkRRQmU3dWdMSGJfME1OZDlNRFNlMjZvTmxLZyJ9LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpQbWRndzVTaHp3VDY1X0lISHN6WEYyY3Q0aEZYc2h1bmx0UF9GTzh3U0owIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklqWk9hMHhRU3pKWk1VcFFiV05FV0VkRlp6aFRabnBRTjJ0SlNXdFRiMjFxZUdOUkxVRTVjMDFRUVRRaUxDSjBlWEFpT2lKaGQzQXRjM1JoZEdWdFpXNTBLMnAzY3lKOS5leUoyWVd4MVpTSTZNVFl3TURBd0xDSmpkWEp5Wlc1amVTSTZJa2RDVUNJc0ltbGtJam9pZFhKdU9uTmpaVzVoY21sdk9uTnRZV3hzTFdKMWMybHVaWE56TFd4dllXNDZkR0Y0TFdacGJHbHVaeUlzSW1semMzVmxjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZjMjFoYkd3dFluVnphVzVsYzNNdGJHOWhianAwWVhnaUxDSnpkV0pxWldOMElqb2lkWEp1T21acFkzUnBiMjVoYkRwemJXRnNiQzFpZFhOcGJtVnpjeTFzYjJGdU9tOTNibVZ5SWl3aVkyeGhhVzFVZVhCbElqb2lZblZ6YVc1bGMzTXVkR0Y0TFdacGJHbHVaeUlzSW0xbGRHaHZaQ0k2SW5KbFkyOXlaR1ZrTFdKNUxXRjFkR2h2Y21sMGVTSXNJbUZ6VDJZaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaUxDSjBaWEp0Y3lJNmV5SndiMnhwWTNraU9uc2lhV1FpT2lKMWNtNDZkR1Z5YlhNNmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcDBZWGd0Wm1sc2FXNW5JaXdpY0dWeWJXbHpjMmx2Ym5NaU9sdDdJblI1Y0dVaU9pSndaWEp0YVhOemFXOXVJaXdpWVdOMGFXOXVJam9pZFhObElpd2lkR0Z5WjJWMElqb2lkWEp1T25OalpXNWhjbWx2T25OdFlXeHNMV0oxYzJsdVpYTnpMV3h2WVc0NmRHRjRMV1pwYkdsdVp5SXNJbU52Ym5OMGNtRnBiblJ6SWpwYmV5SnNaV1owVDNCbGNtRnVaQ0k2SW5CMWNuQnZjMlVpTENKdmNHVnlZWFJ2Y2lJNkltVnhJaXdpY21sbmFIUlBjR1Z5WVc1a0lqb2lkWEp1T25CMWNuQnZjMlU2YzIxaGJHd3RZblZ6YVc1bGMzTXRiRzloYmlKOVhYMHNleUowZVhCbElqb2ljR1Z5YldsemMybHZiaUlzSW1GamRHbHZiaUk2SW1ScGMzUnlhV0oxZEdVaUxDSjBZWEpuWlhRaU9pSjFjbTQ2YzJObGJtRnlhVzg2YzIxaGJHd3RZblZ6YVc1bGMzTXRiRzloYmpwMFlYZ3RabWxzYVc1bklpd2lZMjl1YzNSeVlXbHVkSE1pT2x0N0lteGxablJQY0dWeVlXNWtJam9pY0hWeWNHOXpaU0lzSW05d1pYSmhkRzl5SWpvaVpYRWlMQ0p5YVdkb2RFOXdaWEpoYm1RaU9pSjFjbTQ2Y0hWeWNHOXpaVHB6YldGc2JDMWlkWE5wYm1WemN5MXNiMkZ1SW4xZGZWMTlmWDAuSjVNRktQbFo1Y2tqX3A5a3B1N2VEYlNUOS04Vnh3bVA4aFYzNXlTdkxDVnRaMnFKaTRhbEM4WExNQ1BCMXd0NXdNSU0wX1ZqNjAyeHQ4RzZrTUt3QXciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpVZUhXRkdKMGhlcVhJSXFHaWZ3ZTJUdkVuZHFhd0x2WGpPVXBUNXRZaFZJIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOi1kMV9NOXkyUkxyR3Nzc3VYb1lXYTZJYjRCbHYwX25jZWk2N0hMUmN4Tm8ifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9vcmdhbml6YXRpb25zLWxvY2FsLXJlc29sdmVyLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLXNtYWxsLWJ1c2luZXNzLWxvYW4tYnJhbmNoLTE6b3duZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjpbeyJpZCI6InVybjphd3A6bjp1N2tOUWE0bloyXzhPY3ltUjM0VktGSHdXRVNjZ2R2RWpsSmowQnIyZW9FIn0seyJpZCI6InVybjphd3A6bjp1WnZ3M0JDVGFKb01iVzlQOGRhcHc4RURLVUpWdDlOZlRrSXFvczJhelh3In0seyJpZCI6InVybjphd3A6bjozelhfQTloRUZQMFJ5SHNOTTVVZHd0MDBHUmJmenBlVWVBdGF3U0JzckRvIn1dLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlRFS0VKQnpnZjhFRGY4MXRsdTlDMXJfUjBZNGNZUGpIREhWdFRfOVFtVmMifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zbWFsbC1idXNpbmVzcy1sb2FuLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46bnJpeHA2Q3l4TERtaFZxNXV6NkEtNlVqeEdLWU16MmRDVGl5b2hRZzhUMCJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.MIIeEaXMe9K2UKpsc6hDvZ1tKBtSfr8ONV6xPQUdCU7BqpXxvUxRxIt_PRZwlkJmo8EYf_uGjF3SWYi3UfdNAQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1381,7 +1665,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The company’s agent sends an invoke message to The lender’s agent."
+      "caption": "The company’s agent sends an invoke message to The lender’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 49,
@@ -1389,6 +1674,7 @@
       "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:TEKEJBzgf8EDf81tlu9C1r_R0Y4cYPjHDHVtT_9QmVc\"},\"to\":{\"id\":\"urn:awp:n:nrixp6CyxLDmhVq5uz6A-6UjxGKYMz2dCTiyohQg8T0\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:-d1_M9y2RLrGsssuXoYWa6Ib4Blv0_ncei67HLRcxNo\"},\"evidence\":[{\"id\":\"urn:awp:n:u7kNQa4nZ2_8OcymR34VKFHwWEScgdvEjlJj0Br2eoE\"},{\"id\":\"urn:awp:n:uZvw3BCTaJoMbW9P8dapw8EDKUJVt9NfTkIqos2azXw\"},{\"id\":\"urn:awp:n:3zX_A9hEFP0RyHsNM5Udwt00GRbfzpeUeAtawSBsrDo\"}],\"@included\":[{\"id\":\"urn:awp:n:TEKEJBzgf8EDf81tlu9C1r_R0Y4cYPjHDHVtT_9QmVc\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:small-business-loan:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:small-business-loan:owner\"},{\"id\":\"urn:awp:n:nrixp6CyxLDmhVq5uz6A-6UjxGKYMz2dCTiyohQg8T0\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:small-business-loan:receiver-agent:actor\",\"party\":\"urn:fictional:small-business-loan:receiver\"},{\"id\":\"urn:awp:n:-d1_M9y2RLrGsssuXoYWa6Ib4Blv0_ncei67HLRcxNo\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:iIO4KW1D1BcJAruASSqVfc2UuKPyVhGlCkRnoDA0j88\"},\"input\":{\"id\":\"urn:awp:n:bzk4fMuXuiEUnlHi4w1J2EEdGHCCkgCkJ155Uj-eJyo\"},\"operation\":{\"id\":\"urn:op:small-business-loan\"},\"purpose\":\"urn:purpose:small-business-loan\"},{\"id\":\"urn:awp:n:u7kNQa4nZ2_8OcymR34VKFHwWEScgdvEjlJj0Br2eoE\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:Avn_xzV6VhxOD4mhTC5IHFD6ivrN9_jy0MOn8Gr1vTE\"},\"format\":\"organization-mandate+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:uZvw3BCTaJoMbW9P8dapw8EDKUJVt9NfTkIqos2azXw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:jEbdIsxoBYGqduHRMUuy00pbpgBQ3a67koA-MUt-OLw\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:3zX_A9hEFP0RyHsNM5Udwt00GRbfzpeUeAtawSBsrDo\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:LHZcBJLq-DFxEqoQ5iF1wxD3_Zl200VmSoajacQ3M7g\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:op:small-business-loan\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:bzk4fMuXuiEUnlHi4w1J2EEdGHCCkgCkJ155Uj-eJyo\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:KEsR7njhq6pkgsAsFm8oL04yH-edl6yKEQ7qzoYcOuk\"},{\"id\":\"urn:awp:n:oA8i51twTczwNryeYiwXt55OXzSvCuS5eoZKKJ48xNc\"}]},{\"id\":\"urn:awp:n:iIO4KW1D1BcJAruASSqVfc2UuKPyVhGlCkRnoDA0j88\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:Avn_xzV6VhxOD4mhTC5IHFD6ivrN9_jy0MOn8Gr1vTE\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:V6SdXAbjzyDV5zJImfUDdqd7FwCXNd_8E8_dcQlXq1Q\",\"issuer\":\"urn:fictional:small-business-loan:owner\",\"proofGraph\":\"urn:awp:n:2XqIayar7cdZd4PS6JO52gFjFv028fg5jIuAQEbMDkA\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:jEbdIsxoBYGqduHRMUuy00pbpgBQ3a67koA-MUt-OLw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:jJr1nEuEmAN_JHpg7MCMfwCMfEctOa8Z91_6YCyVnSI\",\"issuer\":\"urn:fictional:small-business-loan:accounting\",\"proofGraph\":\"urn:awp:n:r3jjtoSwhuj8OJ8fDQBe7ugLHb_0MNd9MDSe26oNlKg\"},{\"id\":\"urn:awp:n:LHZcBJLq-DFxEqoQ5iF1wxD3_Zl200VmSoajacQ3M7g\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Zf7m8qNFvv8CoxuQfJRIR2YQyNjL57MfiIwu1qhY-mQ\",\"issuer\":\"urn:fictional:small-business-loan:tax\",\"proofGraph\":\"urn:awp:n:UeHWFGJ0heqXIIqGifwe2TvEndqawLvXjOUpT5tYhVI\"},{\"id\":\"urn:awp:n:KEsR7njhq6pkgsAsFm8oL04yH-edl6yKEQ7qzoYcOuk\",\"type\":\"PropertyValue\",\"domainValue\":{\"type\":\"http://www.w3.org/2001/XMLSchema#integer\",\"@value\":\"25000\"},\"name\":\"amount\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:amount\"},{\"id\":\"urn:awp:n:oA8i51twTczwNryeYiwXt55OXzSvCuS5eoZKKJ48xNc\",\"type\":\"PropertyValue\",\"domainValue\":\"GBP\",\"name\":\"currency\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:currency\"},{\"id\":\"urn:awp:n:V6SdXAbjzyDV5zJImfUDdqd7FwCXNd_8E8_dcQlXq1Q\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:k5_Oxj7GfF2j_wXjXk2kiDl0dBOfUujYzVLXdT-T-ZY\"}},{\"id\":\"urn:awp:n:k5_Oxj7GfF2j_wXjXk2kiDl0dBOfUujYzVLXdT-T-ZY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d226edac79a9234956bfde2258159cc23fd2c983b240f26a788f7922cb2840d8\",\"byteLength\":\"12069\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:jJr1nEuEmAN_JHpg7MCMfwCMfEctOa8Z91_6YCyVnSI\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:aHrKCs0Sgjw_e2hASdFD33a_O3gBcV3DhIogypqhL20\"}},{\"id\":\"urn:awp:n:aHrKCs0Sgjw_e2hASdFD33a_O3gBcV3DhIogypqhL20\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:fd2ad249b4d46ee92e42af13770f845d10100061bfc703f1553eb8b0f7466453\",\"byteLength\":\"24421\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Zf7m8qNFvv8CoxuQfJRIR2YQyNjL57MfiIwu1qhY-mQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:01G0OIKuwz-mCCZvpl2Hz8D9cVl_GoHGbKn98rUavi8\"}},{\"id\":\"urn:awp:n:01G0OIKuwz-mCCZvpl2Hz8D9cVl_GoHGbKn98rUavi8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:f2ed5fc6ee73944cca9b4a222f0ce790d7d42078fbcc9fa7acb93583c401f12c\",\"byteLength\":\"24424\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:2XqIayar7cdZd4PS6JO52gFjFv028fg5jIuAQEbMDkA\",\"@graph\":[{\"id\":\"urn:awp:n:aOvZTK1StPZs98cj9cveSs3SwzRUpeParbJ3xt9z93E\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atb3JnYW5pemF0aW9uLW1hbmRhdGUrandzIn0.eyJ0eXBlIjoiT3JnYW5pemF0aW9uTWFuZGF0ZSIsImlkIjoidXJuOmNyZWRlbnRpYWw6c21hbGwtYnVzaW5lc3MtbG9hbjpvd25lci1hZ2VudCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c21hbGwtYnVzaW5lc3MtbG9hbjpvd25lciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyLWFnZW50OmFjdG9yIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJyb2xlcyI6WyJub24tYm9ycm93aW5nLWRpcmVjdG9yIl0sImFjdGlvbnMiOlsibG9hbi1hcHBsaWNhdGlvbiJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6c21hbGwtYnVzaW5lc3MtbG9hbjpvd25lcjpzdGF0dXMiLCJpZCI6InNpZ25hdG9yeSJ9fQ.Q-srJ7ZL6B0sBRQnpHBCFIQg0Qi11jyTfuNbghOJuQzIfPiauJXpSnoGHe8vo1eslRq4UwQqvq6rmDjaLTpbCA\"}]},{\"id\":\"urn:awp:n:r3jjtoSwhuj8OJ8fDQBe7ugLHb_0MNd9MDSe26oNlKg\",\"@graph\":[{\"id\":\"urn:awp:n:XGq73DjgOu7OnfGPNOxL7eECAnGxwkblP6t6KacbAm0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImdUeWlkTHdDM3dBSTRpdDJUTkZUck9FX0ZRZ1RkaWE3R1VvOFZZR2V1OWsiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ2YWx1ZSI6MTgwMDAwLCJjdXJyZW5jeSI6IkdCUCIsImlkIjoidXJuOnNjZW5hcmlvOnNtYWxsLWJ1c2luZXNzLWxvYW46YWNjb3VudHMiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46YWNjb3VudGluZyIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJjbGFpbVR5cGUiOiJidXNpbmVzcy5hY2NvdW50cyIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6c21hbGwtYnVzaW5lc3MtbG9hbjphY2NvdW50cyIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzpzbWFsbC1idXNpbmVzcy1sb2FuOmFjY291bnRzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzpzbWFsbC1idXNpbmVzcy1sb2FuOmFjY291bnRzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIn1dfV19fX0.vbRsU0PCGQOiQxAYUwlgkjWqWqQ4GOl09Bk8H5vf8hnFtHie7gkMwQMS2esDpsxSGqkNTErDgUK3bUv8NIxmBA\"}]},{\"id\":\"urn:awp:n:UeHWFGJ0heqXIIqGifwe2TvEndqawLvXjOUpT5tYhVI\",\"@graph\":[{\"id\":\"urn:awp:n:Pmdgw5ShzwT65_IHHszXF2ct4hFXshunltP_FO8wSJ0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjZOa0xQSzJZMUpQbWNEWEdFZzhTZnpQN2tJSWtTb21qeGNRLUE5c01QQTQiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ2YWx1ZSI6MTYwMDAwLCJjdXJyZW5jeSI6IkdCUCIsImlkIjoidXJuOnNjZW5hcmlvOnNtYWxsLWJ1c2luZXNzLWxvYW46dGF4LWZpbGluZyIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c21hbGwtYnVzaW5lc3MtbG9hbjp0YXgiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyIiwiY2xhaW1UeXBlIjoiYnVzaW5lc3MudGF4LWZpbGluZyIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6c21hbGwtYnVzaW5lc3MtbG9hbjp0YXgtZmlsaW5nIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOnNtYWxsLWJ1c2luZXNzLWxvYW46dGF4LWZpbGluZyIsImNvbnN0cmFpbnRzIjpbeyJsZWZ0T3BlcmFuZCI6InB1cnBvc2UiLCJvcGVyYXRvciI6ImVxIiwicmlnaHRPcGVyYW5kIjoidXJuOnB1cnBvc2U6c21hbGwtYnVzaW5lc3MtbG9hbiJ9XX0seyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86c21hbGwtYnVzaW5lc3MtbG9hbjp0YXgtZmlsaW5nIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIn1dfV19fX0.J5MFKPlZ5ckj_p9kpu7eDbST9-8VxwmP8hV35ySvLCVtZ2qJi4alC8XLMCPB1wt5wMIM0_Vj602xt8G6kMKwAw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46VEVLRUpCemdmOEVEZjgxdGx1OUMxcl9SMFk0Y1lQakhESFZ0VF85UW1WYyIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46bnJpeHA2Q3l4TERtaFZxNXV6NkEtNlVqeEdLWU16MmRDVGl5b2hRZzhUMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOnJlY2VpdmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjppSU80S1cxRDFCY0pBcnVBU1NxVmZjMlV1S1B5VmhHbENrUm5vREEwajg4In0sImlkIjoidXJuOmF3cDpuOi1kMV9NOXkyUkxyR3Nzc3VYb1lXYTZJYjRCbHYwX25jZWk2N0hMUmN4Tm8iLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpiems0Zk11WHVpRVVubEhpNHcxSjJFRWRHSENDa2dDa0oxNTVVai1lSnlvIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpzbWFsbC1idXNpbmVzcy1sb2FuIn0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpzbWFsbC1idXNpbmVzcy1sb2FuIiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpBdm5feHpWNlZoeE9ENG1oVEM1SUhGRDZpdnJOOV9qeTBNT244R3IxdlRFIn0sImZvcm1hdCI6Im9yZ2FuaXphdGlvbi1tYW5kYXRlK2p3cyIsImlkIjoidXJuOmF3cDpuOnU3a05RYTRuWjJfOE9jeW1SMzRWS0ZId1dFU2NnZHZFamxKajBCcjJlb0UiLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46akViZElzeG9CWUdxZHVIUk1VdXkwMHBicGdCUTNhNjdrb0EtTVV0LU9MdyJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOnVadnczQkNUYUpvTWJXOVA4ZGFwdzhFREtVSlZ0OU5mVGtJcW9zMmF6WHciLCJwb3NpdGlvbiI6IjEiLCJyb2xlIjoiY3JlZGVudGlhbCIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpMSFpjQkpMcS1ERnhFcW9RNWlGMXd4RDNfWmwyMDBWbVNvYWphY1EzTTdnIn0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46M3pYX0E5aEVGUDBSeUhzTk01VWR3dDAwR1JiZnpwZVVlQXRhd1NCc3JEbyIsInBvc2l0aW9uIjoiMiIsInJvbGUiOiJjcmVkZW50aWFsIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6c21hbGwtYnVzaW5lc3MtbG9hbiIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpiems0Zk11WHVpRVVubEhpNHcxSjJFRWRHSENDa2dDa0oxNTVVai1lSnlvIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpLRXNSN25qaHE2cGtnc0FzRm04b0wwNHlILWVkbDZ5S0VRN3F6b1ljT3VrIn0seyJpZCI6InVybjphd3A6bjpvQThpNTF0d1RjendOcnllWWl3WHQ1NU9YelN2Q3VTNWVvWktLSjQ4eE5jIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46aUlPNEtXMUQxQmNKQXJ1QVNTcVZmYzJVdUtQeVZoR2xDa1Jub0RBMGo4OCIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOlY2U2RYQWJqenlEVjV6SkltZlVEZHFkN0Z3Q1hOZF84RThfZGNRbFhxMVEiLCJpZCI6InVybjphd3A6bjpBdm5feHpWNlZoeE9ENG1oVEM1SUhGRDZpdnJOOV9qeTBNT244R3IxdlRFIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOm93bmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjoyWHFJYXlhcjdjZFpkNFBTNkpPNTJnRmpGdjAyOGZnNWpJdUFRRWJNRGtBIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46akpyMW5FdUVtQU5fSkhwZzdNQ01md0NNZkVjdE9hOFo5MV82WUN5Vm5TSSIsImlkIjoidXJuOmF3cDpuOmpFYmRJc3hvQllHcWR1SFJNVXV5MDBwYnBnQlEzYTY3a29BLU1VdC1PTHciLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46YWNjb3VudGluZyIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cjNqanRvU3dodWo4T0o4ZkRRQmU3dWdMSGJfME1OZDlNRFNlMjZvTmxLZyIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46WmY3bThxTkZ2djhDb3h1UWZKUklSMllReU5qTDU3TWZpSXd1MXFoWS1tUSIsImlkIjoidXJuOmF3cDpuOkxIWmNCSkxxLURGeEVxb1E1aUYxd3hEM19abDIwMFZtU29hamFjUTNNN2ciLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46dGF4IiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpVZUhXRkdKMGhlcVhJSXFHaWZ3ZTJUdkVuZHFhd0x2WGpPVXBUNXRZaFZJIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIn0seyJkb21haW5WYWx1ZSI6eyJAdmFsdWUiOiIyNTAwMCIsInR5cGUiOiJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYSNpbnRlZ2VyIn0sImlkIjoidXJuOmF3cDpuOktFc1I3bmpocTZwa2dzQXNGbThvTDA0eUgtZWRsNnlLRVE3cXpvWWNPdWsiLCJuYW1lIjoiYW1vdW50IiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOmFtb3VudCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6IkdCUCIsImlkIjoidXJuOmF3cDpuOm9BOGk1MXR3VGN6d05yeWVZaXdYdDU1T1h6U3ZDdVM1ZW9aS0tKNDh4TmMiLCJuYW1lIjoiY3VycmVuY3kiLCJwb3NpdGlvbiI6IjEiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6Y3VycmVuY3kiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46VjZTZFhBYmp6eURWNXpKSW1mVURkcWQ3RndDWE5kXzhFOF9kY1FsWHExUSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46azVfT3hqN0dmRjJqX3dYalhrMmtpRGwwZEJPZlV1all6VkxYZFQtVC1aWSJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmQyMjZlZGFjNzlhOTIzNDk1NmJmZGUyMjU4MTU5Y2MyM2ZkMmM5ODNiMjQwZjI2YTc4OGY3OTIyY2IyODQwZDgiLCJieXRlTGVuZ3RoIjoiMTIwNjkiLCJpZCI6InVybjphd3A6bjprNV9PeGo3R2ZGMmpfd1hqWGsya2lEbDBkQk9mVXVqWXpWTFhkVC1ULVpZIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiaWQiOiJ1cm46YXdwOm46akpyMW5FdUVtQU5fSkhwZzdNQ01md0NNZkVjdE9hOFo5MV82WUN5Vm5TSSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46YUhyS0NzMFNnandfZTJoQVNkRkQzM2FfTzNnQmNWM0RoSW9neXBxaEwyMCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmZkMmFkMjQ5YjRkNDZlZTkyZTQyYWYxMzc3MGY4NDVkMTAxMDAwNjFiZmM3MDNmMTU1M2ViOGIwZjc0NjY0NTMiLCJieXRlTGVuZ3RoIjoiMjQ0MjEiLCJpZCI6InVybjphd3A6bjphSHJLQ3MwU2dqd19lMmhBU2RGRDMzYV9PM2dCY1YzRGhJb2d5cHFoTDIwIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiaWQiOiJ1cm46YXdwOm46WmY3bThxTkZ2djhDb3h1UWZKUklSMllReU5qTDU3TWZpSXd1MXFoWS1tUSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46MDFHME9JS3V3ei1tQ0NadnBsMkh6OEQ5Y1ZsX0dvSEdiS245OHJVYXZpOCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmYyZWQ1ZmM2ZWU3Mzk0NGNjYTliNGEyMjJmMGNlNzkwZDdkNDIwNzhmYmNjOWZhN2FjYjkzNTgzYzQwMWYxMmMiLCJieXRlTGVuZ3RoIjoiMjQ0MjQiLCJpZCI6InVybjphd3A6bjowMUcwT0lLdXd6LW1DQ1p2cGwySHo4RDljVmxfR29IR2JLbjk4clVhdmk4IiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjphT3ZaVEsxU3RQWnM5OGNqOWN2ZVNzM1N3elJVcGVQYXJiSjN4dDl6OTNFIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklrdzJla05EVWpJelQwZGZabU5EVUV0RFYzVmxSVXgwTjFkU1QxaFVPWFJ6YzNKQ2FFdzBPV3M0YlhNaUxDSjBlWEFpT2lKaGQzQXRiM0puWVc1cGVtRjBhVzl1TFcxaGJtUmhkR1VyYW5kekluMC5leUowZVhCbElqb2lUM0puWVc1cGVtRjBhVzl1VFdGdVpHRjBaU0lzSW1sa0lqb2lkWEp1T21OeVpXUmxiblJwWVd3NmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcHZkMjVsY2kxaFoyVnVkQ0lzSW1semMzVmxjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZjMjFoYkd3dFluVnphVzVsYzNNdGJHOWhianB2ZDI1bGNpSXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwemJXRnNiQzFpZFhOcGJtVnpjeTFzYjJGdU9tOTNibVZ5TFdGblpXNTBPbUZqZEc5eUlpd2ljM1ZpYW1WamRFdGxlU0k2SWpnemMzRlNTR1l6T0ZONk1tWkNPRU5pVm5NM01YUnVibVppUTI1ckxUaHpNMkZpWTJWNVFWWTFVbGtpTENKbGJuUnBkSGtpT2lKMWNtNDZabWxqZEdsdmJtRnNPbk50WVd4c0xXSjFjMmx1WlhOekxXeHZZVzQ2YjNkdVpYSWlMQ0p5YjJ4bGN5STZXeUp1YjI0dFltOXljbTkzYVc1bkxXUnBjbVZqZEc5eUlsMHNJbUZqZEdsdmJuTWlPbHNpYkc5aGJpMWhjSEJzYVdOaGRHbHZiaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExUQXhWREF3T2pBd09qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU5pMHhNaTB3TVZRd01Eb3dNRG93TUM0d01EQmFJaXdpYzNSaGRIVnpJanA3SW5KbFppSTZJblZ5YmpwbWFXTjBhVzl1WVd3NmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcHZkMjVsY2pwemRHRjBkWE1pTENKcFpDSTZJbk5wWjI1aGRHOXllU0o5ZlEuUS1zcko3Wkw2QjBzQlJRbnBIQkNGSVFnMFFpMTFqeVRmdU5iZ2hPSnVReklmUGlhdUpYcFNub0dIZTh2bzFlc2xScTRVd1FxdnE2cm1EamFMVHBiQ0EiLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjoyWHFJYXlhcjdjZFpkNFBTNkpPNTJnRmpGdjAyOGZnNWpJdUFRRWJNRGtBIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOlhHcTczRGpnT3U3T25mR1BOT3hMN2VFQ0FuR3h3a2JsUDZ0NkthY2JBbTAiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW1kVWVXbGtUSGRETTNkQlNUUnBkREpVVGtaVWNrOUZYMFpSWjFSa2FXRTNSMVZ2T0ZaWlIyVjFPV3NpTENKMGVYQWlPaUpoZDNBdGMzUmhkR1Z0Wlc1MEsycDNjeUo5LmV5SjJZV3gxWlNJNk1UZ3dNREF3TENKamRYSnlaVzVqZVNJNklrZENVQ0lzSW1sa0lqb2lkWEp1T25OalpXNWhjbWx2T25OdFlXeHNMV0oxYzJsdVpYTnpMV3h2WVc0NllXTmpiM1Z1ZEhNaUxDSnBjM04xWlhJaU9pSjFjbTQ2Wm1samRHbHZibUZzT25OdFlXeHNMV0oxYzJsdVpYTnpMV3h2WVc0NllXTmpiM1Z1ZEdsdVp5SXNJbk4xWW1wbFkzUWlPaUoxY200NlptbGpkR2x2Ym1Gc09uTnRZV3hzTFdKMWMybHVaWE56TFd4dllXNDZiM2R1WlhJaUxDSmpiR0ZwYlZSNWNHVWlPaUppZFhOcGJtVnpjeTVoWTJOdmRXNTBjeUlzSW0xbGRHaHZaQ0k2SW5KbFkyOXlaR1ZrTFdKNUxXRjFkR2h2Y21sMGVTSXNJbUZ6VDJZaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaUxDSjBaWEp0Y3lJNmV5SndiMnhwWTNraU9uc2lhV1FpT2lKMWNtNDZkR1Z5YlhNNmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcGhZMk52ZFc1MGN5SXNJbkJsY20xcGMzTnBiMjV6SWpwYmV5SjBlWEJsSWpvaWNHVnliV2x6YzJsdmJpSXNJbUZqZEdsdmJpSTZJblZ6WlNJc0luUmhjbWRsZENJNkluVnlianB6WTJWdVlYSnBienB6YldGc2JDMWlkWE5wYm1WemN5MXNiMkZ1T21GalkyOTFiblJ6SWl3aVkyOXVjM1J5WVdsdWRITWlPbHQ3SW14bFpuUlBjR1Z5WVc1a0lqb2ljSFZ5Y0c5elpTSXNJbTl3WlhKaGRHOXlJam9pWlhFaUxDSnlhV2RvZEU5d1pYSmhibVFpT2lKMWNtNDZjSFZ5Y0c5elpUcHpiV0ZzYkMxaWRYTnBibVZ6Y3kxc2IyRnVJbjFkZlN4N0luUjVjR1VpT2lKd1pYSnRhWE56YVc5dUlpd2lZV04wYVc5dUlqb2laR2x6ZEhKcFluVjBaU0lzSW5SaGNtZGxkQ0k2SW5WeWJqcHpZMlZ1WVhKcGJ6cHpiV0ZzYkMxaWRYTnBibVZ6Y3kxc2IyRnVPbUZqWTI5MWJuUnpJaXdpWTI5dWMzUnlZV2x1ZEhNaU9sdDdJbXhsWm5SUGNHVnlZVzVrSWpvaWNIVnljRzl6WlNJc0ltOXdaWEpoZEc5eUlqb2laWEVpTENKeWFXZG9kRTl3WlhKaGJtUWlPaUoxY200NmNIVnljRzl6WlRwemJXRnNiQzFpZFhOcGJtVnpjeTFzYjJGdUluMWRmVjE5ZlgwLnZiUnNVMFBDR1FPaVF4QVlVd2xna2pXcVdxUTRHT2wwOUJrOEg1dmY4aG5GdEhpZTdna013UU1TMmVzRHBzeFNHcWtOVEVyRGdVSzNiVXY4Tkl4bUJBIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46cjNqanRvU3dodWo4T0o4ZkRRQmU3dWdMSGJfME1OZDlNRFNlMjZvTmxLZyJ9LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpQbWRndzVTaHp3VDY1X0lISHN6WEYyY3Q0aEZYc2h1bmx0UF9GTzh3U0owIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklqWk9hMHhRU3pKWk1VcFFiV05FV0VkRlp6aFRabnBRTjJ0SlNXdFRiMjFxZUdOUkxVRTVjMDFRUVRRaUxDSjBlWEFpT2lKaGQzQXRjM1JoZEdWdFpXNTBLMnAzY3lKOS5leUoyWVd4MVpTSTZNVFl3TURBd0xDSmpkWEp5Wlc1amVTSTZJa2RDVUNJc0ltbGtJam9pZFhKdU9uTmpaVzVoY21sdk9uTnRZV3hzTFdKMWMybHVaWE56TFd4dllXNDZkR0Y0TFdacGJHbHVaeUlzSW1semMzVmxjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZjMjFoYkd3dFluVnphVzVsYzNNdGJHOWhianAwWVhnaUxDSnpkV0pxWldOMElqb2lkWEp1T21acFkzUnBiMjVoYkRwemJXRnNiQzFpZFhOcGJtVnpjeTFzYjJGdU9tOTNibVZ5SWl3aVkyeGhhVzFVZVhCbElqb2lZblZ6YVc1bGMzTXVkR0Y0TFdacGJHbHVaeUlzSW0xbGRHaHZaQ0k2SW5KbFkyOXlaR1ZrTFdKNUxXRjFkR2h2Y21sMGVTSXNJbUZ6VDJZaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaUxDSjBaWEp0Y3lJNmV5SndiMnhwWTNraU9uc2lhV1FpT2lKMWNtNDZkR1Z5YlhNNmMyMWhiR3d0WW5WemFXNWxjM010Ykc5aGJqcDBZWGd0Wm1sc2FXNW5JaXdpY0dWeWJXbHpjMmx2Ym5NaU9sdDdJblI1Y0dVaU9pSndaWEp0YVhOemFXOXVJaXdpWVdOMGFXOXVJam9pZFhObElpd2lkR0Z5WjJWMElqb2lkWEp1T25OalpXNWhjbWx2T25OdFlXeHNMV0oxYzJsdVpYTnpMV3h2WVc0NmRHRjRMV1pwYkdsdVp5SXNJbU52Ym5OMGNtRnBiblJ6SWpwYmV5SnNaV1owVDNCbGNtRnVaQ0k2SW5CMWNuQnZjMlVpTENKdmNHVnlZWFJ2Y2lJNkltVnhJaXdpY21sbmFIUlBjR1Z5WVc1a0lqb2lkWEp1T25CMWNuQnZjMlU2YzIxaGJHd3RZblZ6YVc1bGMzTXRiRzloYmlKOVhYMHNleUowZVhCbElqb2ljR1Z5YldsemMybHZiaUlzSW1GamRHbHZiaUk2SW1ScGMzUnlhV0oxZEdVaUxDSjBZWEpuWlhRaU9pSjFjbTQ2YzJObGJtRnlhVzg2YzIxaGJHd3RZblZ6YVc1bGMzTXRiRzloYmpwMFlYZ3RabWxzYVc1bklpd2lZMjl1YzNSeVlXbHVkSE1pT2x0N0lteGxablJQY0dWeVlXNWtJam9pY0hWeWNHOXpaU0lzSW05d1pYSmhkRzl5SWpvaVpYRWlMQ0p5YVdkb2RFOXdaWEpoYm1RaU9pSjFjbTQ2Y0hWeWNHOXpaVHB6YldGc2JDMWlkWE5wYm1WemN5MXNiMkZ1SW4xZGZWMTlmWDAuSjVNRktQbFo1Y2tqX3A5a3B1N2VEYlNUOS04Vnh3bVA4aFYzNXlTdkxDVnRaMnFKaTRhbEM4WExNQ1BCMXd0NXdNSU0wX1ZqNjAyeHQ4RzZrTUt3QXciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpVZUhXRkdKMGhlcVhJSXFHaWZ3ZTJUdkVuZHFhd0x2WGpPVXBUNXRZaFZJIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOi1kMV9NOXkyUkxyR3Nzc3VYb1lXYTZJYjRCbHYwX25jZWk2N0hMUmN4Tm8ifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9vcmdhbml6YXRpb25zLWxvY2FsLXJlc29sdmVyLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLXNtYWxsLWJ1c2luZXNzLWxvYW4tYnJhbmNoLTE6b3duZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjpbeyJpZCI6InVybjphd3A6bjp1N2tOUWE0bloyXzhPY3ltUjM0VktGSHdXRVNjZ2R2RWpsSmowQnIyZW9FIn0seyJpZCI6InVybjphd3A6bjp1WnZ3M0JDVGFKb01iVzlQOGRhcHc4RURLVUpWdDlOZlRrSXFvczJhelh3In0seyJpZCI6InVybjphd3A6bjozelhfQTloRUZQMFJ5SHNOTTVVZHd0MDBHUmJmenBlVWVBdGF3U0JzckRvIn1dLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlRFS0VKQnpnZjhFRGY4MXRsdTlDMXJfUjBZNGNZUGpIREhWdFRfOVFtVmMifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zbWFsbC1idXNpbmVzcy1sb2FuLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46bnJpeHA2Q3l4TERtaFZxNXV6NkEtNlVqeEdLWU16MmRDVGl5b2hRZzhUMCJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.MIIeEaXMe9K2UKpsc6hDvZ1tKBtSfr8ONV6xPQUdCU7BqpXxvUxRxIt_PRZwlkJmo8EYf_uGjF3SWYi3UfdNAQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1636,7 +1922,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The company’s agent reaches the inbound gate."
+      "caption": "An invoke message from The company’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 50,
@@ -1663,7 +1950,8 @@
         "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The company’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The company’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 51,
@@ -1701,7 +1989,8 @@
         ],
         "answer": "Accepted, for business accounts claims only."
       },
-      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim."
+      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 52,
@@ -1739,7 +2028,8 @@
         ],
         "answer": "Accepted, for business tax filing claims only."
       },
-      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim."
+      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 53,
@@ -1757,7 +2047,8 @@
         }
       ],
       "reason": "representation-out-of-scope",
-      "caption": "A current mandate credential covering this operation and its required role is needed."
+      "caption": "A current mandate credential covering this operation and its required role is needed.",
+      "gateRun": 1
     },
     {
       "seq": 54,
@@ -1769,6 +2060,7 @@
       "outcome": "ask-more",
       "reason": "representation-out-of-scope",
       "caption": "A current mandate credential must cover A loan for a small company; accepted roles: business-signatory.",
+      "gateRun": 1,
       "refs": [
         {
           "layer": "meaning",
@@ -1781,6 +2073,16 @@
       "seq": 55,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1798,12 +2100,23 @@
         }
       ],
       "reason": "no-action",
-      "caption": "This protocol message proposes no additional action."
+      "caption": "This protocol message proposes no additional action.",
+      "gateRun": 1
     },
     {
       "seq": 56,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1832,12 +2145,23 @@
         "answer": "Accepted, for A loan for a small company only."
       },
       "reason": "recipient-established",
-      "caption": "The company: Accepted, for A loan for a small company only."
+      "caption": "The company: Accepted, for A loan for a small company only.",
+      "gateRun": 1
     },
     {
       "seq": 57,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1850,12 +2174,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "No restricted item entered this task's context."
+      "caption": "No restricted item entered this task's context.",
+      "gateRun": 1
     },
     {
       "seq": 58,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1868,12 +2203,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The context rule permits this text."
+      "caption": "The context rule permits this text.",
+      "gateRun": 1
     },
     {
       "seq": 59,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1886,12 +2232,23 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The message release check is complete."
+      "caption": "The message release check is complete.",
+      "gateRun": 1
     },
     {
       "seq": 60,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1913,24 +2270,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 61,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The challenge message goes to The company’s agent."
+      "messageId": "urn:awp:engine-small-business-loan-branch-1:receiver-agent:0003",
+      "messageDigest": "sha-256:5aef0abf38a8022871e7300a2e07f1443b492099bfdc63490c074fadbdb54fcc",
+      "caption": "The challenge message goes to The company’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 62,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:f5a454d120041bc22fe1ef1cc8d418fb785fb408d4559f8ec93606ca294f5f13",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:owner",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-small-business-loan-branch-1:receiver-agent:0003",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-small-business-loan-branch-1:receiver-agent:0003\",\"type\":[\"Message\",\"Challenge\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"challenge\",\"conversation\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:9gP_LVFXJJvJpyb_zr03IaJoCqkQDiH4ULtJGu3hlPg\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:small-business-loan:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:small-business-loan:receiver\"},\"to\":{\"id\":\"urn:awp:n:yFTvBN-GQvqxzUo22gBBLD-kXc3GzkXZJqx7X9q7scU\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:small-business-loan:owner-agent:actor\",\"party\":\"urn:fictional:small-business-loan:owner\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0002\",\"body\":{\"id\":\"urn:awp:n:JjtfShxKyQArh-CQJw2dyyb3sFxKt6BTxvpfqkxUV_I\",\"type\":\"ChallengeBody\",\"detail\":\"A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory.\",\"needs\":{\"id\":\"urn:awp:engine-small-business-loan-branch-1:receiver-agent:0001\",\"type\":\"ChallengeNeeds\",\"expiresAt\":\"2026-11-13T09:05:00.000Z\",\"claim\":\"A current mandate credential must cover urn:op:small-business-loan; accepted roles: business-signatory.\",\"nonce\":\"urn:awp:engine-small-business-loan-branch-1:receiver-agent:0002\"},\"reason\":\"representation-out-of-scope\",\"ref\":\"urn:awp:engine-small-business-loan-branch-1:owner-agent:0002\"},\"authorship\":{\"id\":\"urn:awp:n:sMXcap5WUHTcrBW0TWDNjLsDD8QXR29_uYyME5x9r1o\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:small-business-loan:receiver\"},\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOnNNWGNhcDVXVUhUY3JCVzBUV0ROakxzREQ4UVhSMjlfdVl5TUU1eDlyMW8iLCJtZXRob2QiOiJtb2RlbC1vdXRwdXQiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOnJlY2VpdmVyIiwidHlwZSI6Ik1lc3NhZ2VBdXRob3JzaGlwIn0sImJvZHkiOnsiZGV0YWlsIjoiQSBjdXJyZW50IG1hbmRhdGUgY3JlZGVudGlhbCBtdXN0IGNvdmVyIHVybjpvcDpzbWFsbC1idXNpbmVzcy1sb2FuOyBhY2NlcHRlZCByb2xlczogYnVzaW5lc3Mtc2lnbmF0b3J5LiIsImlkIjoidXJuOmF3cDpuOkpqdGZTaHhLeVFBcmgtQ1FKdzJkeXliM3NGeEt0NkJUeHZwZnFreFVWX0kiLCJuZWVkcyI6eyJjbGFpbSI6IkEgY3VycmVudCBtYW5kYXRlIGNyZWRlbnRpYWwgbXVzdCBjb3ZlciB1cm46b3A6c21hbGwtYnVzaW5lc3MtbG9hbjsgYWNjZXB0ZWQgcm9sZXM6IGJ1c2luZXNzLXNpZ25hdG9yeS4iLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDA5OjA1OjAwLjAwMFoiLCJpZCI6InVybjphd3A6ZW5naW5lLXNtYWxsLWJ1c2luZXNzLWxvYW4tYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMSIsIm5vbmNlIjoidXJuOmF3cDplbmdpbmUtc21hbGwtYnVzaW5lc3MtbG9hbi1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAyIiwidHlwZSI6IkNoYWxsZW5nZU5lZWRzIn0sInJlYXNvbiI6InJlcHJlc2VudGF0aW9uLW91dC1vZi1zY29wZSIsInJlZiI6InVybjphd3A6ZW5naW5lLXNtYWxsLWJ1c2luZXNzLWxvYW4tYnJhbmNoLTE6b3duZXItYWdlbnQ6MDAwMiIsInR5cGUiOiJDaGFsbGVuZ2VCb2R5In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvb3JnYW5pemF0aW9ucy1sb2NhbC1yZXNvbHZlci8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1zbWFsbC1idXNpbmVzcy1sb2FuLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzbWFsbC1idXNpbmVzcy1sb2FuOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46OWdQX0xWRlhKSnZKcHliX3pyMDNJYUpvQ3FrUURpSDRVTHRKR3UzaGxQZyIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zbWFsbC1idXNpbmVzcy1sb2FuLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDMiLCJpblJlcGx5VG8iOiJ1cm46YXdwOmVuZ2luZS1zbWFsbC1idXNpbmVzcy1sb2FuLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJraW5kIjoiY2hhbGxlbmdlIiwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjp5RlR2Qk4tR1F2cXh6VW8yMmdCQkxELWtYYzNHemtYWkpxeDdYOXE3c2NVIiwicGFydHkiOiJ1cm46ZmljdGlvbmFsOnNtYWxsLWJ1c2luZXNzLWxvYW46b3duZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSwidHlwZSI6WyJNZXNzYWdlIiwiQ2hhbGxlbmdlIl19.xVeuMv6C7ZeDPebBfHyoANJmeGqRC9MwcaJmc3xIEUaJqV0owyhyPLMabRd6Xrz1mZVA6qSnVNCQVs1Vp_uwAg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2035,7 +2417,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The lender’s agent sends a challenge message to The company’s agent."
+      "caption": "The lender’s agent sends a challenge message to The company’s agent.",
+      "gateRun": 1
     }
   ]
 }

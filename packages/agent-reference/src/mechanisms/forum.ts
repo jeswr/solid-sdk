@@ -149,6 +149,7 @@ interface Verified {
 }
 export class LocalForum {
   readonly identity: string;
+  private gateRun = 0;
   constructor(
     private readonly options: {
       identity: string;
@@ -173,12 +174,14 @@ export class LocalForum {
     this.options.ledger.append(r, this.options.now());
   }
   private check(
+    gateRun: number,
     check: "integrity" | "source" | "authority" | "terms" | "fitness",
     reason?: ReasonCode,
   ) {
     this.options.sink({
       part: "inbound-gate",
       kind: "check",
+      gateRun,
       check,
       verdict: reason ? "fail" : "pass",
       reason:
@@ -236,6 +239,7 @@ export class LocalForum {
         };
   }
   private async decision(
+    gateRun: number,
     c: Case,
     reason: ReasonCode,
     fault: string,
@@ -266,6 +270,7 @@ export class LocalForum {
     this.options.sink({
       part: "inbound-gate",
       kind: "decision",
+      gateRun,
       outcome:
         reason === "record-unavailable" || reason === "evidence-invalid" ? "refuse" : "admit",
       reason,
@@ -284,7 +289,7 @@ export class LocalForum {
     interval?: { conversation: string; from: { seq: number; hash: string } },
   ) {
     const receipt = await this.readWitnessedPoint(anchor, peer);
-    return !!receipt &&
+    return receipt &&
       receipt.subject === segment.actor &&
       receipt.subjectParty === segment.party &&
       digestOf(receipt.interval ?? null) === digestOf(interval ?? null)
@@ -532,6 +537,7 @@ export class LocalForum {
     };
   }
   async submit(jws: string) {
+    const gateRun = ++this.gateRun;
     const check = await verifyStatement(jws, {
       trust: this.options.trust,
       typ: "awp-forum-claim+jws",
@@ -544,13 +550,13 @@ export class LocalForum {
     this.record(check.verification as unknown as { type: string; [key: string]: unknown });
     const claim = check.payload;
     if (!claim || check.signer?.subject !== claim.actor || check.signer.party !== claim.party) {
-      this.check("integrity", "bad-signature");
+      this.check(gateRun, "integrity", "bad-signature");
       return { ok: false, reason: "bad-signature" };
     }
-    this.check("integrity");
-    this.check("source");
-    this.check("authority");
-    this.check("terms");
+    this.check(gateRun, "integrity");
+    this.check(gateRun, "source");
+    this.check(gateRun, "authority");
+    this.check(gateRun, "terms");
     const c: Case = {
       id: claim.id,
       claim,
@@ -568,8 +574,8 @@ export class LocalForum {
       claim.respondent,
     );
     if (!segment.ok) {
-      this.check("fitness", segment.reason);
-      await this.decision(c, segment.reason, claim.party, segment.point);
+      this.check(gateRun, "fitness", segment.reason);
+      await this.decision(gateRun, c, segment.reason, claim.party, segment.point);
       return { ok: false, reason: segment.reason };
     }
     const responseTerminal =
@@ -579,13 +585,13 @@ export class LocalForum {
       responseTerminal.interval?.conversation !== claim.conversation ||
       responseTerminal.seq <= responseTerminal.interval.from.seq
     ) {
-      this.check("fitness", "record-unavailable");
-      await this.decision(c, "record-unavailable", claim.party, {
+      this.check(gateRun, "fitness", "record-unavailable");
+      await this.decision(gateRun, c, "record-unavailable", claim.party, {
         problem: "response-terminal-missing",
       });
       return { ok: false, reason: "record-unavailable" };
     }
-    this.check("fitness");
+    this.check(gateRun, "fitness");
     c.request = await signStatement(this.options.key, "awp-record-request+jws", {
       type: "RecordRequest",
       issuer: this.identity,
@@ -617,6 +623,7 @@ export class LocalForum {
     return { ok: true, case: c.id, request: c.request };
   }
   async answer(jws: string) {
+    const gateRun = ++this.gateRun;
     const check = await verifyStatement(jws, {
       trust: this.options.trust,
       typ: "awp-forum-answer+jws",
@@ -636,20 +643,20 @@ export class LocalForum {
       answer.party !== c.claim.respondent ||
       answer.request !== c.request
     ) {
-      this.check("integrity", "evidence-invalid");
+      this.check(gateRun, "integrity", "evidence-invalid");
       return { ok: false, reason: "evidence-invalid" };
     }
     if (c.decision) return { ok: false, reason: "expired" };
     if (Date.parse(this.options.now()) > Date.parse(c.deadline)) {
-      await this.decision(c, "record-unavailable", c.claim.respondent, {
+      await this.decision(gateRun, c, "record-unavailable", c.claim.respondent, {
         problem: "response-deadline-missed",
       });
       return { ok: false, reason: "record-unavailable" };
     }
-    this.check("integrity");
-    this.check("source");
-    this.check("authority");
-    this.check("terms");
+    this.check(gateRun, "integrity");
+    this.check(gateRun, "source");
+    this.check(gateRun, "authority");
+    this.check(gateRun, "terms");
     const a = await this.segment(
       c.claim.segment,
       c.claim.party,
@@ -666,13 +673,20 @@ export class LocalForum {
     if (!a.ok || !b.ok) {
       const failed = !a.ok ? a : !b.ok ? b : undefined;
       if (!failed) throw Error("unreachable");
-      this.check("fitness", failed.reason);
-      await this.decision(c, failed.reason, !a.ok ? c.claim.party : answer.party, failed.point);
+      this.check(gateRun, "fitness", failed.reason);
+      await this.decision(
+        gateRun,
+        c,
+        failed.reason,
+        !a.ok ? c.claim.party : answer.party,
+        failed.point,
+      );
       return { ok: false, reason: failed.reason };
     }
     if (c.claim.allegation !== "fee-not-in-terms" && (a.value.redacted || b.value.redacted)) {
-      this.check("fitness", "record-unavailable");
+      this.check(gateRun, "fitness", "record-unavailable");
       await this.decision(
+        gateRun,
         c,
         "record-unavailable",
         "unsettled",
@@ -681,7 +695,7 @@ export class LocalForum {
       );
       return { ok: false, reason: "record-unavailable" };
     }
-    this.check("fitness");
+    this.check(gateRun, "fitness");
     for (const [own, other] of [
       [a.value, b.value],
       [b.value, a.value],
@@ -693,6 +707,7 @@ export class LocalForum {
         );
         if (!received || digestOf(received) !== digestOf(message)) {
           await this.decision(
+            gateRun,
             c,
             "record-unavailable",
             "unsettled",
@@ -716,10 +731,16 @@ export class LocalForum {
           offer.kind !== "propose" ||
           digestOf(offer.body.terms) !== message.body.termsDigest
         ) {
-          await this.decision(c, "terms-digest-mismatch", message.from.onBehalfOf ?? "unsettled", {
-            problem: "acceptance-terms-differ",
-            message: message.id,
-          });
+          await this.decision(
+            gateRun,
+            c,
+            "terms-digest-mismatch",
+            message.from.onBehalfOf ?? "unsettled",
+            {
+              problem: "acceptance-terms-differ",
+              message: message.id,
+            },
+          );
           return { ok: true };
         }
       }
@@ -744,12 +765,18 @@ export class LocalForum {
           typeof offer.body.terms.fee === "number" &&
           offer.body.terms.fee !== charged.body.input.fee
         ) {
-          await this.decision(c, "not-authorised", charged.from.onBehalfOf ?? "unsettled", {
-            problem: "fee-not-agreed",
-            message: charged.id,
-            agreedFee: offer.body.terms.fee,
-            billedFee: charged.body.input.fee,
-          });
+          await this.decision(
+            gateRun,
+            c,
+            "not-authorised",
+            charged.from.onBehalfOf ?? "unsettled",
+            {
+              problem: "fee-not-agreed",
+              message: charged.id,
+              agreedFee: offer.body.terms.fee,
+              billedFee: charged.body.input.fee,
+            },
+          );
           return { ok: true };
         }
       }
@@ -792,7 +819,7 @@ export class LocalForum {
         this.options.observers.includes(o.issuer) &&
         acceptance
       ) {
-        await this.decision(c, "prohibited", o.receiver, {
+        await this.decision(gateRun, c, "prohibited", o.receiver, {
           problem: "observed-outside-gate",
           observation: digestOf(o),
           acceptance: acceptance.id,
@@ -894,7 +921,7 @@ export class LocalForum {
         typeof agreed === "number" &&
         agreed !== f.fee
       ) {
-        await this.decision(c, "not-authorised", c.claim.respondent, {
+        await this.decision(gateRun, c, "not-authorised", c.claim.respondent, {
           problem: "fee-not-in-terms",
           agreement: c.claim.agreement.digest,
           ...(typeof agreed === "number" ? { agreedFee: agreed } : {}),
@@ -905,6 +932,7 @@ export class LocalForum {
       }
     }
     await this.decision(
+      gateRun,
       c,
       "evidence-missing",
       "unsettled",
@@ -916,7 +944,7 @@ export class LocalForum {
   async audit() {
     for (const c of Object.values(this.cases()))
       if (!c.decision && Date.parse(this.options.now()) > Date.parse(c.deadline))
-        await this.decision(c, "record-unavailable", c.claim.respondent, {
+        await this.decision(++this.gateRun, c, "record-unavailable", c.claim.respondent, {
           problem: "party-did-not-answer",
         });
     return Object.values(this.cases()).map((c) => ({ case: c.id, answered: !!c.decision }));

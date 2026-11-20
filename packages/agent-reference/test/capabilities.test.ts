@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
@@ -12,16 +13,23 @@ import { paymentBinding } from "../src/gates/payment.js";
 const root = join(import.meta.dirname, "..");
 const run = async (id: string) => {
   const { profile, scenario } = loadCase(root, id);
-  return runScenario(profile, scenario);
+  return runScenario(profile, scenario, { reportExpectationFailures: true });
 };
 it("executes every new catalogue path with canonical reasons and declared stand-ins", async () => {
   for (const id of ["master-data-change", "pay-an-invoice", "false-but-signed", "flat-share"]) {
     const { profile, scenario } = loadCase(root, id);
-    const results = await runScenario(profile, scenario);
+    const results = await runScenario(profile, scenario, {
+      reportExpectationFailures: true,
+    });
     expect(results).toHaveLength(scenario.branches.length + 1);
     for (const result of results) {
       expect(result.blocked).toBeUndefined();
       expect(result.matches).toBe(true);
+      const stoppedAfterSourceRefusal =
+        (id === "pay-an-invoice" && result.path === "branch-1") ||
+        (id === "master-data-change" && result.path === "branch-2");
+      expect(result.disagrees).toBe(stoppedAfterSourceRefusal);
+      if (stoppedAfterSourceRefusal) expect(result.note).toBe("an effect followed a stop");
       expect(result.trace?.standIns).toEqual(profile.standIns);
       for (const e of result.trace?.events ?? [])
         if (e.reason) expect(CORE_REASON_CODES).toContain(e.reason);
@@ -38,6 +46,11 @@ it("requires two controllers and records a rejected self-approval without perfor
   expect(results[1]?.trace?.events.at(-1)).toMatchObject({
     outcome: "stop",
     reason: "not-authorised",
+  });
+  expect(results[2]).toMatchObject({
+    disagrees: true,
+    note: "an effect followed a stop",
+    actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
   });
 });
 it("corroboration rejects disagreement, a shared controller, missing control provenance and stale corroborators", async () => {
@@ -83,7 +96,10 @@ it("with no corroboration requirement the false claim passes and the record name
 it("an unknown sender is held outside core memory, and refusal cannot admit it", async () => {
   const { profile, scenario } = loadCase(root, "flat-share");
   const held = (await runScenario(profile, scenario))[1]?.trace?.events ?? [];
-  expect(held.at(-2)).toMatchObject({ outcome: "ask-principal", reason: "source-unknown" });
+  expect(held.find((event) => event.outcome === "ask-principal")).toMatchObject({
+    reason: "source-unknown",
+  });
+  expect(held.at(-1)).toMatchObject({ outcome: "refuse", reason: "source-unknown" });
   expect(
     held.filter(
       (e) => e.agent === "blair-agent" && ["store", "recall", "propose"].includes(e.kind),

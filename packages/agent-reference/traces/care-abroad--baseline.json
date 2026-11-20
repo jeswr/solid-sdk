@@ -61,7 +61,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -104,7 +104,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "A home practice's medicine code statement is intact and signed with A home practice's pinned key."
+      "caption": "A home practice's medicine code statement is intact and signed with A home practice's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -142,7 +143,8 @@
         ],
         "answer": "Accepted, for medicine code claims only."
       },
-      "caption": "A home practice's medicine code statement: A home practice is an accepted source for this kind of claim."
+      "caption": "A home practice's medicine code statement: A home practice is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -160,7 +162,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "A home practice's medicine code statement asks for nothing, so there is no authority to check."
+      "caption": "A home practice's medicine code statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -187,7 +190,8 @@
         "id": "urn:fictional:care-abroad:medicine-terms",
         "text": "Its terms allow this: use for Care abroad; share for Care abroad."
       },
-      "caption": "A home practice's medicine code statement: its terms allow this: use for Care abroad; share for Care abroad."
+      "caption": "A home practice's medicine code statement: its terms allow this: use for Care abroad; share for Care abroad.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -219,7 +223,8 @@
         "id": "urn:profile:care-abroad:medicine.code",
         "text": "Accept medicine code from A home practice by recorded-by-authority, derived, at most 30 days old."
       },
-      "caption": "A home practice's medicine code statement is fit for Health data across a border: recorded-by-authority, 0 days old."
+      "caption": "A home practice's medicine code statement is fit for Health data across a border: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -237,7 +242,8 @@
         }
       ],
       "reason": "fit-for-use",
-      "caption": "The signed mapping derives B7; original source and quality are retained."
+      "caption": "The signed mapping derives B7; original source and quality are retained.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -247,7 +253,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "A home practice's medicine code statement is admitted."
+      "caption": "A home practice's medicine code statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 8,

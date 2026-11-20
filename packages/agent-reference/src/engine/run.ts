@@ -143,6 +143,7 @@ import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
 import {
   type ComparisonRun,
+  type ComparisonStep,
   compareBranch,
   comparisonOutcome,
   continuedReleaseProblem,
@@ -398,6 +399,7 @@ export async function runScenario(
     configuration?: string;
     commit?: string;
     compare?: boolean;
+    reportExpectationFailures?: boolean;
     registry?: VerifierRegistry;
     testOnly?: boolean;
     beforeSolidStep?: (fixture: SolidStepFixture) => void | Promise<void>;
@@ -572,7 +574,21 @@ export async function runScenario(
       throw new Error(
         "The engine refuses a test-double verification attempt, including one caught as a verifier failure; no artifact may be written.",
       );
-    const orderedBranch = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
+    const proofVariant =
+      path.kind === "branch" &&
+      world.requiredMethods.some((method) => !configured.requiredMethods.includes(method));
+    const guarded = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
+    const mainSteps =
+      guarded && path.change.script !== undefined
+        ? new Map(configured.script.map((step) => [step.id, step]))
+        : undefined;
+    const changedSteps = guarded
+      ? new Set(
+          world.script
+            .filter((step) => mainSteps && !isDeepStrictEqual(mainSteps.get(step.id), step))
+            .map((step) => step.id),
+        )
+      : undefined;
     const expected =
       path.catalogueExpected ??
       (path.kind === "branch" && path.expect
@@ -580,87 +596,92 @@ export async function runScenario(
         : undefined);
     const comparison =
       path.kind === "branch"
-        ? compareBranch(mainRun, run, {
+        ? compareBranch(proofVariant ? undefined : mainRun, run, {
             judgedAgent,
             witness: path.expect,
             expectedOutcome: expected?.outcome,
-            ordered: orderedBranch,
+            changedSteps,
           })
         : undefined;
-    if (path.expect && !world.requiredMethods.length) {
-      const witness = path.expect;
-      const decision = witnessedDecision(run, witness, judgedAgent);
-      if (!decision)
-        throw new Error(
-          `${scenario.id}/${path.id}: expected ${witness.check}/${witness.reason} -> ${witness.outcome}`,
-        );
+    const witness = path.expect;
+    const statement = comparison?.judged?.kind === "check" ? comparison.judged : undefined;
+    // A2 judges an explicit check on withheld evidence inside an admitted gate run.
+    const witnessed =
+      witness &&
+      (statement &&
+      comparisonOutcome(statement.outcome) === comparisonOutcome(witness.outcome) &&
+      statement.check === witness.check &&
+      statement.reason === witness.reason
+        ? statement
+        : witnessedDecision(run, witness, judgedAgent));
+    let expectationProblem: string | undefined;
+    if (witness && !witnessed) {
+      expectationProblem = `expected ${witness.check}/${witness.reason} -> ${witness.outcome}`;
+    }
+    // Proof and joint paths retain their protocol-specific checks on subsequent releases.
+    if (witness && witnessed && !world.requiredMethods.length) {
+      const later = trace.events.slice(witnessed.seq);
       if (
-        path.expect.outcome === "stop" &&
-        path.expect.continues &&
-        continuedReleaseProblem(decision, trace.events.slice(decision.seq))
-      )
-        throw new Error(
-          `${scenario.id}/${path.id}: a release after the stop lacks a narrower authorised proposal`,
-        );
-      if (
-        (path.expect.outcome === "stop" && !path.expect.continues) ||
-        path.expect.outcome === "refuse"
+        witness.outcome === "stop" &&
+        witness.continues &&
+        continuedReleaseProblem(witnessed, later)
       ) {
-        if (
-          trace.events
-            .slice(decision.seq)
-            .some(
-              (e) =>
-                e.agent === decision.agent &&
-                (e.effectRelease ||
-                  e.kind === "store" ||
-                  (e.kind === "message-out" &&
-                    !(
-                      path.expect?.outcome === "refuse" &&
-                      ["refuse", "challenge", "unsupported", "indeterminate"].includes(
-                        e.packet?.kind ?? "",
-                      )
-                    ))),
-            )
+        expectationProblem = "a release after the stop lacks a narrower authorised proposal";
+      } else if (
+        ((witness.outcome === "stop" && !witness.continues) || witness.outcome === "refuse") &&
+        later.some(
+          (event) =>
+            event.agent === witnessed.agent &&
+            (event.effectRelease ||
+              event.kind === "store" ||
+              (event.kind === "message-out" &&
+                !(
+                  witness.outcome === "refuse" &&
+                  ["refuse", "challenge", "unsupported", "indeterminate"].includes(
+                    event.packet?.kind ?? "",
+                  )
+                ))),
         )
-          throw new Error(`${scenario.id}/${path.id}: an effect followed a stop`);
+      ) {
+        expectationProblem = "an effect followed a stop";
       }
     }
+    if (expectationProblem && !options.reportExpectationFailures)
+      throw new Error(`${scenario.id}/${path.id}: ${expectationProblem}`);
     const diff = difference(path.outline, outlineOf(trace));
     if (diff && options.compare !== false && !alternative)
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
-    const decisions = decisionsOf(trace.events, orderedBranch);
+    const decisions = decisionsOf(trace.events);
     const firstDifference =
       path.kind === "main"
         ? decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""))
         : comparison?.judged;
-    const missingDecision = comparison?.missingDecision;
-    const noDivergence = !!mainRun && comparison?.diverges === false;
-    const judged = missingDecision
-      ? undefined
-      : (firstDifference ?? decisions.findLast((e) => !judgedAgent || e.agent === judgedAgent));
-    const judgedReason =
-      judged?.reason ??
-      (world.requiredMethods.length && judged
-        ? trace.events
-            .slice(0, judged.seq - 1)
-            .findLast((e) => e.agent === judged.agent && e.kind === "check" && e.reason)?.reason
-        : undefined);
-    const check =
-      orderedBranch || judged?.kind === "check"
-        ? judged?.check
-        : judged &&
-          trace.events
-            .slice(0, judged.seq - 1)
-            .findLast(
-              (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judgedReason,
-            )?.check;
+    const guardFailure = comparison?.failure;
+    const noDivergence = !proofVariant && !!mainRun && comparison?.diverges === false;
+    const judged =
+      guardFailure ??
+      firstDifference ??
+      decisions.findLast((e) => !judgedAgent || e.agent === judgedAgent);
+    const proofCheck =
+      world.requiredMethods.length && judged?.reason === undefined && judged?.gateRun !== undefined
+        ? trace.events.findLast(
+            (e) =>
+              e.seq < judged.seq &&
+              e.kind === "check" &&
+              e.agent === judged.agent &&
+              e.part === judged.part &&
+              e.gateRun === judged.gateRun &&
+              e.reason,
+          )
+        : undefined;
+    const judgedReason = judged?.reason ?? proofCheck?.reason;
+    const check = judged?.check ?? proofCheck?.check;
     const actual =
-      !missingDecision && !firstDifference && path.expect && !world.requiredMethods.length
-        ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
-        : judged?.outcome && ((orderedBranch && firstDifference) || judgedReason)
+      !guardFailure && !firstDifference && witness && witnessed
+        ? { outcome: witness.outcome, reason: witness.reason, check: witness.check }
+        : judged?.outcome && (guardFailure || judgedReason)
           ? {
               outcome: judged.outcome,
               ...(judgedReason ? { reason: judgedReason } : {}),
@@ -668,10 +689,17 @@ export async function runScenario(
             }
           : undefined;
     const setup = comparison?.setup.map(manifestDecision);
+    const denial = comparison?.denial;
     const consequences = firstDifference
-      ? decisions
-          .filter((e) => e.seq > firstDifference.seq && (!judgedAgent || e.agent === judgedAgent))
-          .map(manifestDecision)
+      ? [
+          ...(denial ? [denial] : []),
+          ...decisions.filter(
+            (e) =>
+              e.seq > firstDifference.seq &&
+              e.seq !== denial?.seq &&
+              (!judgedAgent || e.agent === judgedAgent),
+          ),
+        ].map(manifestDecision)
       : [];
     results.push({
       path: path.id,
@@ -683,11 +711,17 @@ export async function runScenario(
       actual,
       expected,
       consequences,
-      ...(judgedAgent ? { setup } : {}),
-      ...(missingDecision ? { note: "branch ended before the next main-path decision" } : {}),
-      ...(noDivergence ? { note: "branch does not diverge from the main path" } : {}),
+      ...(setup?.length ? { setup } : {}),
+      ...(guardFailure
+        ? { note: "changed before the judged decision" }
+        : noDivergence
+          ? { note: "branch does not diverge from the main path" }
+          : expectationProblem
+            ? { note: expectationProblem }
+            : {}),
       disagrees:
-        !!missingDecision ||
+        !!guardFailure ||
+        !!expectationProblem ||
         noDivergence ||
         (!!expected &&
           (comparisonOutcome(actual?.outcome) !== comparisonOutcome(expected.outcome) ||
@@ -2935,7 +2969,7 @@ async function runPath(
   const enqueue = (from: string, result: StepResult) => {
     for (const out of result.outbound) queue.push({ from, out });
   };
-  const steps = new Map<number, ReturnType<typeof describeStep>>();
+  const steps = new Map<number, ComparisonStep>();
   const effectReleases = new Set<number>();
   const effectSupport = new Map<number, readonly string[]>();
   const approvedAsks = new Set<number>();
@@ -4329,7 +4363,10 @@ async function runPath(
         ? describeStep({ ...step, reply: undefined }, statementId)
         : descriptor;
     for (const event of events)
-      steps.set(event.seq, event.part === "inbound-gate" ? inboundDescriptor : descriptor);
+      steps.set(event.seq, {
+        id: step.id,
+        descriptor: event.part === "inbound-gate" ? inboundDescriptor : descriptor,
+      });
     const outboundDecisions = events.filter(
       (event) =>
         event.agent === traceAgent && event.part === "outbound-gate" && event.kind === "decision",

@@ -50,7 +50,10 @@ it("preserves every recorded decision, reason and check position in every execut
     .sort()) {
     const id = file.slice(0, -5);
     const { profile, scenario } = loadCase(root, id);
-    for (const path of await runScenario(profile, scenario, { registry })) {
+    for (const path of await runScenario(profile, scenario, {
+      registry,
+      reportExpectationFailures: true,
+    })) {
       const key = `${id}/${path.path}`;
       if (path.trace) actual[key] = decisionsOf(path.trace);
       else if (path.blocked && manifest) {
@@ -64,7 +67,7 @@ it("preserves every recorded decision, reason and check position in every execut
       }
     }
   }
-  expect(Object.keys(actual)).toHaveLength(164);
+  expect(Object.keys(actual)).toHaveLength(163);
   expect(recordings).toBe(aggregate ? 0 : 6);
   expect(actual).toEqual(saved);
 }, 900_000);

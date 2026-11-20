@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -81,7 +81,7 @@
     },
     {
       "what": "sparq-zk-result/5",
-      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). No holder, absence or completeness binding or unlinkability guarantee. Unsupported rules stay blocked; no real scenario proof is claimed."
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
     }
   ],
   "events": [
@@ -106,7 +106,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional immigration office's work entitled statement is intact and signed with The fictional immigration office's pinned key."
+      "caption": "The fictional immigration office's work entitled statement is intact and signed with The fictional immigration office's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -144,7 +145,8 @@
         ],
         "answer": "Accepted, for work entitled claims only."
       },
-      "caption": "The fictional immigration office's work entitled statement: The fictional immigration office is an accepted source for this kind of claim."
+      "caption": "The fictional immigration office's work entitled statement: The fictional immigration office is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -162,7 +164,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional immigration office's work entitled statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional immigration office's work entitled statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -189,7 +192,8 @@
         "id": "urn:terms:entitlement",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional immigration office's work entitled statement: its terms allow this: ."
+      "caption": "The fictional immigration office's work entitled statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -221,7 +225,8 @@
         "id": "urn:profile:right-to-work:work.entitled",
         "text": "Accept work entitled from The fictional immigration office by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional immigration office's work entitled statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
+      "caption": "The fictional immigration office's work entitled statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -231,7 +236,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional immigration office's work entitled statement is admitted."
+      "caption": "The fictional immigration office's work entitled statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -277,7 +283,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional university's degree statement is intact and signed with The fictional university's pinned key."
+      "caption": "The fictional university's degree statement is intact and signed with The fictional university's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -315,7 +322,8 @@
         ],
         "answer": "Accepted, for degree claims only."
       },
-      "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim."
+      "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -333,7 +341,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional university's degree statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional university's degree statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -360,7 +369,8 @@
         "id": "urn:terms:degree",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional university's degree statement: its terms allow this: ."
+      "caption": "The fictional university's degree statement: its terms allow this: .",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -392,7 +402,8 @@
         "id": "urn:profile:right-to-work:degree",
         "text": "Accept degree from The fictional university by recorded-by-authority, at most 3650 days old."
       },
-      "caption": "The fictional university's degree statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
+      "caption": "The fictional university's degree statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -402,7 +413,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional university's degree statement is admitted."
+      "caption": "The fictional university's degree statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -439,6 +451,16 @@
       "seq": 16,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -456,12 +478,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The candidate's mandate covers this action."
+      "caption": "The candidate's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -495,12 +528,23 @@
         "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
-      "caption": "The employer: Accepted, for the unlabelled resource only."
+      "caption": "The employer: Accepted, for the unlabelled resource only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -513,12 +557,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -531,12 +586,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -549,12 +615,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The candidate's limits."
+      "caption": "Inside what the agent may do on its own, and within The candidate's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -567,12 +644,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -589,12 +677,23 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional immigration office's work entitled statement: its terms allow this: ."
+      "caption": "The fictional immigration office's work entitled statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 23,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -607,12 +706,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -629,12 +739,23 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional university's degree statement: its terms allow this: ."
+      "caption": "The fictional university's degree statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -647,12 +768,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -674,24 +806,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The candidate’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The candidate’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The employer’s agent."
+      "messageId": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
+      "messageDigest": "sha-256:8d624dd44ede5444b7b82bfbe9645106493412ed1db531d61aef0236525aad89",
+      "caption": "The invoke message goes to The employer’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 2,
       "agent": "candidate-agent",
+      "actionDigest": "sha-256:978ed6c261e0a2addfe7234deeeea07fea7f2401d0fce4aaf8cf9f19df44d46c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:right-to-work",
+        "operation": "urn:op:right-to-work",
+        "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
+        "recipient": "urn:fictional:employer",
+        "purpose": "urn:purpose:right-to-work",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-right-to-work-main:candidate-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-right-to-work-main:candidate-agent:0001\",\"from\":{\"id\":\"urn:awp:n:PcAS8UkvgTeAaCy7uUxK-PObzG2qqK5vPpBjdgZFTr4\"},\"to\":{\"id\":\"urn:awp:n:0sZdI10jj1DZpJlmXO_UfKsJOinAiUjMeosxeIx8x4M\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:L85n1UkZzodgYFWEKru0wwxgA5ADmmY8o5kdSC_HOaI\"},\"evidence\":[{\"id\":\"urn:awp:n:IsLsA3e-f6xsx4GB1K5sH-Gj3wvC7mZ2uQk9kVk4LyU\"},{\"id\":\"urn:awp:n:aEFbPmpZg8YdIWqRzlhZY7ZBPIldEBh_EpUMin3E4xw\"},{\"id\":\"urn:awp:n:xGxxOSPIuTzTTn88ojNRD7RwOZl9I8t2B6dDJEwTg5A\"}],\"@included\":[{\"id\":\"urn:awp:n:PcAS8UkvgTeAaCy7uUxK-PObzG2qqK5vPpBjdgZFTr4\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:candidate-agent:agent\",\"onBehalfOf\":\"urn:fictional:candidate\"},{\"id\":\"urn:awp:n:0sZdI10jj1DZpJlmXO_UfKsJOinAiUjMeosxeIx8x4M\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:employer-agent:agent\",\"party\":\"urn:fictional:employer\"},{\"id\":\"urn:awp:n:L85n1UkZzodgYFWEKru0wwxgA5ADmmY8o5kdSC_HOaI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:8Beq7zGsLBHVRd5ZxoyUAM3bQVN40SMbLilG9PKTX6s\"},\"input\":{\"id\":\"urn:awp:n:4PBBa-VMSamKNOaV0bbH88Zi42PMk74jPX68JD1wyvc\"},\"operation\":{\"id\":\"urn:op:right-to-work\"},\"purpose\":\"urn:purpose:right-to-work\"},{\"id\":\"urn:awp:n:IsLsA3e-f6xsx4GB1K5sH-Gj3wvC7mZ2uQk9kVk4LyU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:bL1JywMCaM4ysu_FdIQejFAt4TC3VArC5ygh2Ls34pw\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:aEFbPmpZg8YdIWqRzlhZY7ZBPIldEBh_EpUMin3E4xw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:77pnbRXvvuxpLSYTdnOfGjx1TbRJ1dlXOBxO4abdc-Q\"},\"format\":\"selective-disclosure+jws\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:xGxxOSPIuTzTTn88ojNRD7RwOZl9I8t2B6dDJEwTg5A\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:OWVV7r28Q12xY6hzw1fyeGt8zdpvQc4iKjn59CfkAgk\"},\"format\":\"selective-disclosure+jws\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:op:right-to-work\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:4PBBa-VMSamKNOaV0bbH88Zi42PMk74jPX68JD1wyvc\",\"type\":\"NamedValueCollection\"},{\"id\":\"urn:awp:n:8Beq7zGsLBHVRd5ZxoyUAM3bQVN40SMbLilG9PKTX6s\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:bL1JywMCaM4ysu_FdIQejFAt4TC3VArC5ygh2Ls34pw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:YPihUL3A95lnMyY3eqGIJQ2AIZGlhtwCZkBN_1ow8Fg\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:candidate\",\"proofGraph\":\"urn:awp:n:nwRQUMYH8t61BnPuyKV-OPguEX_xYiPNSGHFQOcCJdg\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:77pnbRXvvuxpLSYTdnOfGjx1TbRJ1dlXOBxO4abdc-Q\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":{\"id\":\"urn:awp:n:cjpPYQhYetT1sUadh5zykA8Id_HMoLogwaC35w4DKQw\"},\"envelopeBytes\":\"{\\\"credential\\\":\\\"eyJhbGciOiJFZERTQSIsImtpZCI6InYzRjZVOVJvTDd6SkJhYzZ0LU1HckpGOXNGd1pwa1JXaU9zeVZ2Ni1yWUUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOndvcmstY3JlZGVudGlhbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW1taWdyYXRpb24tb2ZmaWNlIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjoyZGRmZWQ3N2ZlYTgyZjJiM2RhNDhmMmQ2ZDIyYzg5ODA5MDVlN2E3OTQyN2ZmMTY4ZjU4ZTUwMmQ1ZDU5Y2M1Iiwic2hhLTI1Njo1MTEzNDQyMTExYzgwNzc2ZDk4NTQyZWI5ZTNhZTdkNzgwODk3ZWI2N2RjNzViMDhmYmM2YzJmNTEyYWFjNWY4Iiwic2hhLTI1Njo4Yzg4YWMzNTg5Mjc5Nzk4YzYwY2M3NTE1MzMzMmYyY2Y1ZGVkM2UyZmY2YWY5ZTkxNGVjMzNjNDNkN2UwZjljIl19.SmIXsJ9Xb9pol7k62vlPtTi9xuf2gZ9nT1SLFlQ1nNeEJ6eftNiCtG5NCpecX9HDGFZqGOiJIPf9EF7bRN9-BQ\\\",\\\"disclosure\\\":{\\\"salt\\\":\\\"sha-256:c17debf3aae8c354319e9e63abfffa5ae1451a9c53c18a65c8b8e70739365fcb\\\",\\\"claim\\\":{\\\"id\\\":\\\"urn:scenario:right-to-work:entitlement\\\",\\\"claimType\\\":\\\"work.entitled\\\",\\\"value\\\":true,\\\"terms\\\":{\\\"policy\\\":{\\\"id\\\":\\\"urn:terms:entitlement\\\",\\\"permissions\\\":[{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"use\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:entitlement\\\"},{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"distribute\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:entitlement\\\"}]}}}}}\",\"statementPayload\":{\"id\":\"urn:awp:n:kio3P3rZfDWQDRD3R2FeDFCJta8qlW9FwqjejocquU8\"}},{\"id\":\"urn:awp:n:OWVV7r28Q12xY6hzw1fyeGt8zdpvQc4iKjn59CfkAgk\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":{\"id\":\"urn:awp:n:9hlEME7OC10ZqnB2Soq7JJAwB57vek7-j-UbQwfBK4Y\"},\"envelopeBytes\":\"{\\\"credential\\\":\\\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9JMXFXSE4tMGRuX0pMYTBPd2lxNmhGRndZUy04VWZoVEtmOUVTRDR3QkUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOmRlZ3JlZS1jcmVkZW50aWFsIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp1bml2ZXJzaXR5Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjphMTY2YTk1Mzc2MDQwYzQyNDdiZjQ0YmEzOWM0M2RhOGJjYjNmNWQ2NjA4MTkxYjMzN2UxZTY1MWRjZTNjY2VlIl19.sRFAAu2S1xaayPJe40ZDi5Yv2-LgSWuOwdR54govfR7IAa2VqtmcNyEN3IM103NoQ4EzVsd_2jYj464NdE28Cg\\\",\\\"disclosure\\\":{\\\"salt\\\":\\\"sha-256:0e1eb3ec1cf824475b8d9389bd855ad27124bdc58c43961f8142ac071a071345\\\",\\\"claim\\\":{\\\"id\\\":\\\"urn:scenario:right-to-work:degree\\\",\\\"claimType\\\":\\\"degree\\\",\\\"value\\\":\\\"BSc\\\",\\\"terms\\\":{\\\"policy\\\":{\\\"id\\\":\\\"urn:terms:degree\\\",\\\"permissions\\\":[{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"use\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:degree\\\"},{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"distribute\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:degree\\\"}]}}}}}\",\"statementPayload\":{\"id\":\"urn:awp:n:oGDuxL8Gr5uRuMbHoMAFePVb3RA4tP2cJ0OMsgtb51s\"}},{\"id\":\"urn:awp:n:YPihUL3A95lnMyY3eqGIJQ2AIZGlhtwCZkBN_1ow8Fg\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:iqYc9r8QJfKgGLzu00oMAuj5vNKhjtVaZ-I6TwLS9l0\"}},{\"id\":\"urn:awp:n:iqYc9r8QJfKgGLzu00oMAuj5vNKhjtVaZ-I6TwLS9l0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:1261d6ea5e245812a6c0a0a0a7a5bfdbfefe41477a9b2784d97d2e6fe00741c1\",\"byteLength\":\"10212\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cjpPYQhYetT1sUadh5zykA8Id_HMoLogwaC35w4DKQw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:AxfnU0VGG2Rnh3NhZxYccz_Fjqhz65XixxR5MLJVJM0\",\"issuer\":\"urn:fictional:immigration-office\",\"proofGraph\":\"urn:awp:n:l_4A9PnBk1s0oUwbNeR3jhczZZ2slEut4AdojxXaPXs\"},{\"id\":\"urn:awp:n:kio3P3rZfDWQDRD3R2FeDFCJta8qlW9FwqjejocquU8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e3be28f9130a5157af81ee2f325cc0178c11305be802ba4d3361e976f6ba8cfa\",\"byteLength\":\"16630\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:AxfnU0VGG2Rnh3NhZxYccz_Fjqhz65XixxR5MLJVJM0\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:IWGM3xHSpqwttn3Y_Wj4JFKkpATneIPgy_0vjKmJOVw\"}},{\"id\":\"urn:awp:n:IWGM3xHSpqwttn3Y_Wj4JFKkpATneIPgy_0vjKmJOVw\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Q2zEdvWXAFAk5TCnD1lU20-yt7PgS-lBfrEtweBfjK4\"},{\"id\":\"urn:awp:n:lIH-MAPfexo9H-ItisxsVXM9deh3MuB0SFoc7werWlg\"},{\"id\":\"urn:awp:n:o5z9pSKd7E1_BFt82uLOW2szSgI6a5eQanaVtqBgA1A\"},{\"id\":\"urn:awp:n:44jeKB1fqZ4D7zjWB7a8zqk1WIOIFSd-lEri9F4wFlQ\"},{\"id\":\"urn:awp:n:leL6KFME2364sWrCA-dwrC3abLJH-ywPlwgB1_CniJE\"},{\"id\":\"urn:awp:n:3aX-L6wPYotUSFwY0LPbwn1-cI8jpi0hekrW3am0IhU\"},{\"id\":\"urn:awp:n:AaDE8e7TcR1o_pNneAe2lfZz913pTvPSkmqWYfhMWPQ\"}]},{\"id\":\"urn:awp:n:Q2zEdvWXAFAk5TCnD1lU20-yt7PgS-lBfrEtweBfjK4\",\"type\":\"PropertyValue\",\"domainValue\":\"SelectiveCredential\",\"name\":\"type\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:type\"},{\"id\":\"urn:awp:n:lIH-MAPfexo9H-ItisxsVXM9deh3MuB0SFoc7werWlg\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:selective:right-to-work:work-credential\"},\"name\":\"id\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:id\"},{\"id\":\"urn:awp:n:o5z9pSKd7E1_BFt82uLOW2szSgI6a5eQanaVtqBgA1A\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:immigration-office\"},\"name\":\"issuer\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:issuer\"},{\"id\":\"urn:awp:n:44jeKB1fqZ4D7zjWB7a8zqk1WIOIFSd-lEri9F4wFlQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:candidate\"},\"name\":\"subject\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:leL6KFME2364sWrCA-dwrC3abLJH-ywPlwgB1_CniJE\",\"type\":\"PropertyValue\",\"domainValue\":\"recorded-by-authority\",\"name\":\"method\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:method\"},{\"id\":\"urn:awp:n:3aX-L6wPYotUSFwY0LPbwn1-cI8jpi0hekrW3am0IhU\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-11-13T09:00:00.000Z\",\"name\":\"asOf\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:asOf\"},{\"id\":\"urn:awp:n:AaDE8e7TcR1o_pNneAe2lfZz913pTvPSkmqWYfhMWPQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:UdsSJYbsFfgxlucIpKhgPeJeGoSE45A9WGn8KDm5cRE\"},\"name\":\"digests\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:digests\"},{\"id\":\"urn:awp:n:UdsSJYbsFfgxlucIpKhgPeJeGoSE45A9WGn8KDm5cRE\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:tFUHfrE24PhEi8Uc1g4oRM3H6F2N2E6px9sk-CGK6_k\"},{\"id\":\"urn:awp:n:lSBP79cOIWCzrh0FzLZ1lldleozRArFZs22KzN2FLbc\"},{\"id\":\"urn:awp:n:EnO824PQ5KjWBtJAN0-Gdk7i_KxqF4yWQf5iIplNhGI\"}]},{\"id\":\"urn:awp:n:tFUHfrE24PhEi8Uc1g4oRM3H6F2N2E6px9sk-CGK6_k\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:2ddfed77fea82f2b3da48f2d6d22c8980905e7a79427ff168f58e502d5d59cc5\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:lSBP79cOIWCzrh0FzLZ1lldleozRArFZs22KzN2FLbc\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:5113442111c80776d98542eb9e3ae7d780897eb67dc75b08fbc6c2f512aac5f8\"},\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:EnO824PQ5KjWBtJAN0-Gdk7i_KxqF4yWQf5iIplNhGI\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:8c88ac3589279798c60cc75153332f2cf5ded3e2ff6af9e914ec33c43d7e0f9c\"},\"name\":\"2\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:2\"},{\"id\":\"urn:awp:n:9hlEME7OC10ZqnB2Soq7JJAwB57vek7-j-UbQwfBK4Y\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:wi0SQOzeK17fd3Mo6lPY-rS7RyhyF1O5LOfx40xpyTY\",\"issuer\":\"urn:fictional:university\",\"proofGraph\":\"urn:awp:n:lXR7fxKc_0OZzbYuFWPLfFBrVyC1s1vxKTkPOpuwZyQ\"},{\"id\":\"urn:awp:n:oGDuxL8Gr5uRuMbHoMAFePVb3RA4tP2cJ0OMsgtb51s\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:cdd28aecd645f22d44e9646a1a467b3c7392b35a463b6d1321d5c6965d2fc9dc\",\"byteLength\":\"16350\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:wi0SQOzeK17fd3Mo6lPY-rS7RyhyF1O5LOfx40xpyTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:K3BR7dGeA-Z6LAZo6_tD0fShwiLMGcvSdaV4QxlQPj4\"}},{\"id\":\"urn:awp:n:K3BR7dGeA-Z6LAZo6_tD0fShwiLMGcvSdaV4QxlQPj4\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:ll0vtcTx6QLD50sgBPd8B2iwT-m18Az6qc89VaygFZ4\"},{\"id\":\"urn:awp:n:KgPgIo3wwGK6FOuSs2knsCGNADPAvNNbOXlX6PGrOjQ\"},{\"id\":\"urn:awp:n:-SibeoAlg2Y6uuA6fvZHMYA3Alj07_-_o608Jyjlm2M\"},{\"id\":\"urn:awp:n:Smd5gvpX6Zn2grdwcRIDviylnBGguB9SZwVm2DZq8RI\"},{\"id\":\"urn:awp:n:aNzh-YtkqMqF4fjQX4gUkwtGm0NFlL7Hf6MvO-48zrA\"},{\"id\":\"urn:awp:n:i2_w7jwrSprTMDN0HDVQBGpXBQouSXRgbgQRNWjSkII\"},{\"id\":\"urn:awp:n:dY9uVa7eHj4cXHK2a927J4lq7t55Bcm1fIfZlcNoIhU\"}]},{\"id\":\"urn:awp:n:ll0vtcTx6QLD50sgBPd8B2iwT-m18Az6qc89VaygFZ4\",\"type\":\"PropertyValue\",\"domainValue\":\"SelectiveCredential\",\"name\":\"type\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:type\"},{\"id\":\"urn:awp:n:KgPgIo3wwGK6FOuSs2knsCGNADPAvNNbOXlX6PGrOjQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:selective:right-to-work:degree-credential\"},\"name\":\"id\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:id\"},{\"id\":\"urn:awp:n:-SibeoAlg2Y6uuA6fvZHMYA3Alj07_-_o608Jyjlm2M\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:university\"},\"name\":\"issuer\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:issuer\"},{\"id\":\"urn:awp:n:Smd5gvpX6Zn2grdwcRIDviylnBGguB9SZwVm2DZq8RI\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:candidate\"},\"name\":\"subject\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:aNzh-YtkqMqF4fjQX4gUkwtGm0NFlL7Hf6MvO-48zrA\",\"type\":\"PropertyValue\",\"domainValue\":\"recorded-by-authority\",\"name\":\"method\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:method\"},{\"id\":\"urn:awp:n:i2_w7jwrSprTMDN0HDVQBGpXBQouSXRgbgQRNWjSkII\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-11-13T09:00:00.000Z\",\"name\":\"asOf\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:asOf\"},{\"id\":\"urn:awp:n:dY9uVa7eHj4cXHK2a927J4lq7t55Bcm1fIfZlcNoIhU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:QDtGxJZHNxYPP6ldxWUe16N-ZDVUZ1d9Mcv-1d3qTFw\"},\"name\":\"digests\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:digests\"},{\"id\":\"urn:awp:n:QDtGxJZHNxYPP6ldxWUe16N-ZDVUZ1d9Mcv-1d3qTFw\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:sHZjxZ_tWc1Rmum6Johh-D5WAOBVu3hq85PnC6qc5pM\"}]},{\"id\":\"urn:awp:n:sHZjxZ_tWc1Rmum6Johh-D5WAOBVu3hq85PnC6qc5pM\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:a166a95376040c4247bf44ba39c43da8bcb3f5d6608191b337e1e651dce3ccee\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:nwRQUMYH8t61BnPuyKV-OPguEX_xYiPNSGHFQOcCJdg\",\"@graph\":[{\"id\":\"urn:awp:n:m0Nm5m7zyqzvN5UDWRJ6pDLBp3YOeBYKZ1UhIEIAwso\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikd1Y3dBRUR1RHdZMG1nT1FPVFc3NndFVjRzOVpQR2JSZDYwT2pwakpTTXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NzY2N2UxMTRhMTU1MzI2OWIyZjAyNzZkNTlhMDg5OWU6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpjYW5kaWRhdGUiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlLWFnZW50OmFnZW50IiwiYWN0b3JLaWQiOiI3YW9FNTFqd2ZBLWsyS3VyWVduQXo5cndkN0FWY050UU1SSWRjRzgtYWZRIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6cmlnaHQtdG8td29yayIsInVybjpvcDplbXBsb3ltZW50LWV2aWRlbmNlLXJlcXVlc3QiLCJ1cm46b3A6cmlnaHQtdG8td29yazpwcm9vZi1yZXF1ZXN0IiwidXJuOm9wOnJpZ2h0LXRvLXdvcms6cHJvb2YtYW5zd2VyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.1ULgSEsMJvZAetm2hw41YrVPpfDY9Klc4xZ6gUzQQzN2Q6PcGODMW2xBV2dhhRgtx9jUB2_mbqaI6OIW2FOjDw\"}]},{\"id\":\"urn:awp:n:l_4A9PnBk1s0oUwbNeR3jhczZZ2slEut4AdojxXaPXs\",\"@graph\":[{\"id\":\"urn:awp:n:i-BL8-fI4CCB0OGl2dEHlpXaqSVURxXAbd9wgPvwBsc\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InYzRjZVOVJvTDd6SkJhYzZ0LU1HckpGOXNGd1pwa1JXaU9zeVZ2Ni1yWUUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOndvcmstY3JlZGVudGlhbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW1taWdyYXRpb24tb2ZmaWNlIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjoyZGRmZWQ3N2ZlYTgyZjJiM2RhNDhmMmQ2ZDIyYzg5ODA5MDVlN2E3OTQyN2ZmMTY4ZjU4ZTUwMmQ1ZDU5Y2M1Iiwic2hhLTI1Njo1MTEzNDQyMTExYzgwNzc2ZDk4NTQyZWI5ZTNhZTdkNzgwODk3ZWI2N2RjNzViMDhmYmM2YzJmNTEyYWFjNWY4Iiwic2hhLTI1Njo4Yzg4YWMzNTg5Mjc5Nzk4YzYwY2M3NTE1MzMzMmYyY2Y1ZGVkM2UyZmY2YWY5ZTkxNGVjMzNjNDNkN2UwZjljIl19.SmIXsJ9Xb9pol7k62vlPtTi9xuf2gZ9nT1SLFlQ1nNeEJ6eftNiCtG5NCpecX9HDGFZqGOiJIPf9EF7bRN9-BQ\"}]},{\"id\":\"urn:awp:n:lXR7fxKc_0OZzbYuFWPLfFBrVyC1s1vxKTkPOpuwZyQ\",\"@graph\":[{\"id\":\"urn:awp:n:NslJcCOGtgMY5_7wiokhTU6rsvfO62stgZA_BU0ao9U\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9JMXFXSE4tMGRuX0pMYTBPd2lxNmhGRndZUy04VWZoVEtmOUVTRDR3QkUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOmRlZ3JlZS1jcmVkZW50aWFsIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp1bml2ZXJzaXR5Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjphMTY2YTk1Mzc2MDQwYzQyNDdiZjQ0YmEzOWM0M2RhOGJjYjNmNWQ2NjA4MTkxYjMzN2UxZTY1MWRjZTNjY2VlIl19.sRFAAu2S1xaayPJe40ZDi5Yv2-LgSWuOwdR54govfR7IAa2VqtmcNyEN3IM103NoQ4EzVsd_2jYj464NdE28Cg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijdhb0U1MWp3ZkEtazJLdXJZV25Bejlyd2Q3QVZjTnRRTVJJZGNHOC1hZlEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..WnuPVzCFbugDm3fm1Jjqp0vLxQ8mzj0UY5Y-JAsFfZgO8a0iEEdoNrPqFeC59FIaUAUaYcFCmi3aWCpi8GHhBg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -894,7 +1051,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The candidate’s agent sends an invoke message to The employer’s agent."
+      "caption": "The candidate’s agent sends an invoke message to The employer’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 29,
@@ -902,6 +1060,7 @@
       "agent": "employer-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-right-to-work-main:candidate-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-right-to-work-main:candidate-agent:0001\",\"from\":{\"id\":\"urn:awp:n:PcAS8UkvgTeAaCy7uUxK-PObzG2qqK5vPpBjdgZFTr4\"},\"to\":{\"id\":\"urn:awp:n:0sZdI10jj1DZpJlmXO_UfKsJOinAiUjMeosxeIx8x4M\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:L85n1UkZzodgYFWEKru0wwxgA5ADmmY8o5kdSC_HOaI\"},\"evidence\":[{\"id\":\"urn:awp:n:IsLsA3e-f6xsx4GB1K5sH-Gj3wvC7mZ2uQk9kVk4LyU\"},{\"id\":\"urn:awp:n:aEFbPmpZg8YdIWqRzlhZY7ZBPIldEBh_EpUMin3E4xw\"},{\"id\":\"urn:awp:n:xGxxOSPIuTzTTn88ojNRD7RwOZl9I8t2B6dDJEwTg5A\"}],\"@included\":[{\"id\":\"urn:awp:n:PcAS8UkvgTeAaCy7uUxK-PObzG2qqK5vPpBjdgZFTr4\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:candidate-agent:agent\",\"onBehalfOf\":\"urn:fictional:candidate\"},{\"id\":\"urn:awp:n:0sZdI10jj1DZpJlmXO_UfKsJOinAiUjMeosxeIx8x4M\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:employer-agent:agent\",\"party\":\"urn:fictional:employer\"},{\"id\":\"urn:awp:n:L85n1UkZzodgYFWEKru0wwxgA5ADmmY8o5kdSC_HOaI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:8Beq7zGsLBHVRd5ZxoyUAM3bQVN40SMbLilG9PKTX6s\"},\"input\":{\"id\":\"urn:awp:n:4PBBa-VMSamKNOaV0bbH88Zi42PMk74jPX68JD1wyvc\"},\"operation\":{\"id\":\"urn:op:right-to-work\"},\"purpose\":\"urn:purpose:right-to-work\"},{\"id\":\"urn:awp:n:IsLsA3e-f6xsx4GB1K5sH-Gj3wvC7mZ2uQk9kVk4LyU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:bL1JywMCaM4ysu_FdIQejFAt4TC3VArC5ygh2Ls34pw\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:aEFbPmpZg8YdIWqRzlhZY7ZBPIldEBh_EpUMin3E4xw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:77pnbRXvvuxpLSYTdnOfGjx1TbRJ1dlXOBxO4abdc-Q\"},\"format\":\"selective-disclosure+jws\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:xGxxOSPIuTzTTn88ojNRD7RwOZl9I8t2B6dDJEwTg5A\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:OWVV7r28Q12xY6hzw1fyeGt8zdpvQc4iKjn59CfkAgk\"},\"format\":\"selective-disclosure+jws\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:op:right-to-work\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:4PBBa-VMSamKNOaV0bbH88Zi42PMk74jPX68JD1wyvc\",\"type\":\"NamedValueCollection\"},{\"id\":\"urn:awp:n:8Beq7zGsLBHVRd5ZxoyUAM3bQVN40SMbLilG9PKTX6s\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:bL1JywMCaM4ysu_FdIQejFAt4TC3VArC5ygh2Ls34pw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:YPihUL3A95lnMyY3eqGIJQ2AIZGlhtwCZkBN_1ow8Fg\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:candidate\",\"proofGraph\":\"urn:awp:n:nwRQUMYH8t61BnPuyKV-OPguEX_xYiPNSGHFQOcCJdg\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:77pnbRXvvuxpLSYTdnOfGjx1TbRJ1dlXOBxO4abdc-Q\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":{\"id\":\"urn:awp:n:cjpPYQhYetT1sUadh5zykA8Id_HMoLogwaC35w4DKQw\"},\"envelopeBytes\":\"{\\\"credential\\\":\\\"eyJhbGciOiJFZERTQSIsImtpZCI6InYzRjZVOVJvTDd6SkJhYzZ0LU1HckpGOXNGd1pwa1JXaU9zeVZ2Ni1yWUUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOndvcmstY3JlZGVudGlhbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW1taWdyYXRpb24tb2ZmaWNlIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjoyZGRmZWQ3N2ZlYTgyZjJiM2RhNDhmMmQ2ZDIyYzg5ODA5MDVlN2E3OTQyN2ZmMTY4ZjU4ZTUwMmQ1ZDU5Y2M1Iiwic2hhLTI1Njo1MTEzNDQyMTExYzgwNzc2ZDk4NTQyZWI5ZTNhZTdkNzgwODk3ZWI2N2RjNzViMDhmYmM2YzJmNTEyYWFjNWY4Iiwic2hhLTI1Njo4Yzg4YWMzNTg5Mjc5Nzk4YzYwY2M3NTE1MzMzMmYyY2Y1ZGVkM2UyZmY2YWY5ZTkxNGVjMzNjNDNkN2UwZjljIl19.SmIXsJ9Xb9pol7k62vlPtTi9xuf2gZ9nT1SLFlQ1nNeEJ6eftNiCtG5NCpecX9HDGFZqGOiJIPf9EF7bRN9-BQ\\\",\\\"disclosure\\\":{\\\"salt\\\":\\\"sha-256:c17debf3aae8c354319e9e63abfffa5ae1451a9c53c18a65c8b8e70739365fcb\\\",\\\"claim\\\":{\\\"id\\\":\\\"urn:scenario:right-to-work:entitlement\\\",\\\"claimType\\\":\\\"work.entitled\\\",\\\"value\\\":true,\\\"terms\\\":{\\\"policy\\\":{\\\"id\\\":\\\"urn:terms:entitlement\\\",\\\"permissions\\\":[{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"use\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:entitlement\\\"},{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"distribute\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:entitlement\\\"}]}}}}}\",\"statementPayload\":{\"id\":\"urn:awp:n:kio3P3rZfDWQDRD3R2FeDFCJta8qlW9FwqjejocquU8\"}},{\"id\":\"urn:awp:n:OWVV7r28Q12xY6hzw1fyeGt8zdpvQc4iKjn59CfkAgk\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":{\"id\":\"urn:awp:n:9hlEME7OC10ZqnB2Soq7JJAwB57vek7-j-UbQwfBK4Y\"},\"envelopeBytes\":\"{\\\"credential\\\":\\\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9JMXFXSE4tMGRuX0pMYTBPd2lxNmhGRndZUy04VWZoVEtmOUVTRDR3QkUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOmRlZ3JlZS1jcmVkZW50aWFsIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp1bml2ZXJzaXR5Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjphMTY2YTk1Mzc2MDQwYzQyNDdiZjQ0YmEzOWM0M2RhOGJjYjNmNWQ2NjA4MTkxYjMzN2UxZTY1MWRjZTNjY2VlIl19.sRFAAu2S1xaayPJe40ZDi5Yv2-LgSWuOwdR54govfR7IAa2VqtmcNyEN3IM103NoQ4EzVsd_2jYj464NdE28Cg\\\",\\\"disclosure\\\":{\\\"salt\\\":\\\"sha-256:0e1eb3ec1cf824475b8d9389bd855ad27124bdc58c43961f8142ac071a071345\\\",\\\"claim\\\":{\\\"id\\\":\\\"urn:scenario:right-to-work:degree\\\",\\\"claimType\\\":\\\"degree\\\",\\\"value\\\":\\\"BSc\\\",\\\"terms\\\":{\\\"policy\\\":{\\\"id\\\":\\\"urn:terms:degree\\\",\\\"permissions\\\":[{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"use\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:degree\\\"},{\\\"type\\\":\\\"permission\\\",\\\"action\\\":\\\"distribute\\\",\\\"target\\\":\\\"urn:scenario:right-to-work:degree\\\"}]}}}}}\",\"statementPayload\":{\"id\":\"urn:awp:n:oGDuxL8Gr5uRuMbHoMAFePVb3RA4tP2cJ0OMsgtb51s\"}},{\"id\":\"urn:awp:n:YPihUL3A95lnMyY3eqGIJQ2AIZGlhtwCZkBN_1ow8Fg\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:iqYc9r8QJfKgGLzu00oMAuj5vNKhjtVaZ-I6TwLS9l0\"}},{\"id\":\"urn:awp:n:iqYc9r8QJfKgGLzu00oMAuj5vNKhjtVaZ-I6TwLS9l0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:1261d6ea5e245812a6c0a0a0a7a5bfdbfefe41477a9b2784d97d2e6fe00741c1\",\"byteLength\":\"10212\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cjpPYQhYetT1sUadh5zykA8Id_HMoLogwaC35w4DKQw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:AxfnU0VGG2Rnh3NhZxYccz_Fjqhz65XixxR5MLJVJM0\",\"issuer\":\"urn:fictional:immigration-office\",\"proofGraph\":\"urn:awp:n:l_4A9PnBk1s0oUwbNeR3jhczZZ2slEut4AdojxXaPXs\"},{\"id\":\"urn:awp:n:kio3P3rZfDWQDRD3R2FeDFCJta8qlW9FwqjejocquU8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e3be28f9130a5157af81ee2f325cc0178c11305be802ba4d3361e976f6ba8cfa\",\"byteLength\":\"16630\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:AxfnU0VGG2Rnh3NhZxYccz_Fjqhz65XixxR5MLJVJM0\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:IWGM3xHSpqwttn3Y_Wj4JFKkpATneIPgy_0vjKmJOVw\"}},{\"id\":\"urn:awp:n:IWGM3xHSpqwttn3Y_Wj4JFKkpATneIPgy_0vjKmJOVw\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Q2zEdvWXAFAk5TCnD1lU20-yt7PgS-lBfrEtweBfjK4\"},{\"id\":\"urn:awp:n:lIH-MAPfexo9H-ItisxsVXM9deh3MuB0SFoc7werWlg\"},{\"id\":\"urn:awp:n:o5z9pSKd7E1_BFt82uLOW2szSgI6a5eQanaVtqBgA1A\"},{\"id\":\"urn:awp:n:44jeKB1fqZ4D7zjWB7a8zqk1WIOIFSd-lEri9F4wFlQ\"},{\"id\":\"urn:awp:n:leL6KFME2364sWrCA-dwrC3abLJH-ywPlwgB1_CniJE\"},{\"id\":\"urn:awp:n:3aX-L6wPYotUSFwY0LPbwn1-cI8jpi0hekrW3am0IhU\"},{\"id\":\"urn:awp:n:AaDE8e7TcR1o_pNneAe2lfZz913pTvPSkmqWYfhMWPQ\"}]},{\"id\":\"urn:awp:n:Q2zEdvWXAFAk5TCnD1lU20-yt7PgS-lBfrEtweBfjK4\",\"type\":\"PropertyValue\",\"domainValue\":\"SelectiveCredential\",\"name\":\"type\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:type\"},{\"id\":\"urn:awp:n:lIH-MAPfexo9H-ItisxsVXM9deh3MuB0SFoc7werWlg\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:selective:right-to-work:work-credential\"},\"name\":\"id\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:id\"},{\"id\":\"urn:awp:n:o5z9pSKd7E1_BFt82uLOW2szSgI6a5eQanaVtqBgA1A\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:immigration-office\"},\"name\":\"issuer\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:issuer\"},{\"id\":\"urn:awp:n:44jeKB1fqZ4D7zjWB7a8zqk1WIOIFSd-lEri9F4wFlQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:candidate\"},\"name\":\"subject\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:leL6KFME2364sWrCA-dwrC3abLJH-ywPlwgB1_CniJE\",\"type\":\"PropertyValue\",\"domainValue\":\"recorded-by-authority\",\"name\":\"method\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:method\"},{\"id\":\"urn:awp:n:3aX-L6wPYotUSFwY0LPbwn1-cI8jpi0hekrW3am0IhU\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-11-13T09:00:00.000Z\",\"name\":\"asOf\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:asOf\"},{\"id\":\"urn:awp:n:AaDE8e7TcR1o_pNneAe2lfZz913pTvPSkmqWYfhMWPQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:UdsSJYbsFfgxlucIpKhgPeJeGoSE45A9WGn8KDm5cRE\"},\"name\":\"digests\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:digests\"},{\"id\":\"urn:awp:n:UdsSJYbsFfgxlucIpKhgPeJeGoSE45A9WGn8KDm5cRE\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:tFUHfrE24PhEi8Uc1g4oRM3H6F2N2E6px9sk-CGK6_k\"},{\"id\":\"urn:awp:n:lSBP79cOIWCzrh0FzLZ1lldleozRArFZs22KzN2FLbc\"},{\"id\":\"urn:awp:n:EnO824PQ5KjWBtJAN0-Gdk7i_KxqF4yWQf5iIplNhGI\"}]},{\"id\":\"urn:awp:n:tFUHfrE24PhEi8Uc1g4oRM3H6F2N2E6px9sk-CGK6_k\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:2ddfed77fea82f2b3da48f2d6d22c8980905e7a79427ff168f58e502d5d59cc5\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:lSBP79cOIWCzrh0FzLZ1lldleozRArFZs22KzN2FLbc\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:5113442111c80776d98542eb9e3ae7d780897eb67dc75b08fbc6c2f512aac5f8\"},\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:EnO824PQ5KjWBtJAN0-Gdk7i_KxqF4yWQf5iIplNhGI\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:8c88ac3589279798c60cc75153332f2cf5ded3e2ff6af9e914ec33c43d7e0f9c\"},\"name\":\"2\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:2\"},{\"id\":\"urn:awp:n:9hlEME7OC10ZqnB2Soq7JJAwB57vek7-j-UbQwfBK4Y\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:wi0SQOzeK17fd3Mo6lPY-rS7RyhyF1O5LOfx40xpyTY\",\"issuer\":\"urn:fictional:university\",\"proofGraph\":\"urn:awp:n:lXR7fxKc_0OZzbYuFWPLfFBrVyC1s1vxKTkPOpuwZyQ\"},{\"id\":\"urn:awp:n:oGDuxL8Gr5uRuMbHoMAFePVb3RA4tP2cJ0OMsgtb51s\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:cdd28aecd645f22d44e9646a1a467b3c7392b35a463b6d1321d5c6965d2fc9dc\",\"byteLength\":\"16350\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:wi0SQOzeK17fd3Mo6lPY-rS7RyhyF1O5LOfx40xpyTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:K3BR7dGeA-Z6LAZo6_tD0fShwiLMGcvSdaV4QxlQPj4\"}},{\"id\":\"urn:awp:n:K3BR7dGeA-Z6LAZo6_tD0fShwiLMGcvSdaV4QxlQPj4\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:ll0vtcTx6QLD50sgBPd8B2iwT-m18Az6qc89VaygFZ4\"},{\"id\":\"urn:awp:n:KgPgIo3wwGK6FOuSs2knsCGNADPAvNNbOXlX6PGrOjQ\"},{\"id\":\"urn:awp:n:-SibeoAlg2Y6uuA6fvZHMYA3Alj07_-_o608Jyjlm2M\"},{\"id\":\"urn:awp:n:Smd5gvpX6Zn2grdwcRIDviylnBGguB9SZwVm2DZq8RI\"},{\"id\":\"urn:awp:n:aNzh-YtkqMqF4fjQX4gUkwtGm0NFlL7Hf6MvO-48zrA\"},{\"id\":\"urn:awp:n:i2_w7jwrSprTMDN0HDVQBGpXBQouSXRgbgQRNWjSkII\"},{\"id\":\"urn:awp:n:dY9uVa7eHj4cXHK2a927J4lq7t55Bcm1fIfZlcNoIhU\"}]},{\"id\":\"urn:awp:n:ll0vtcTx6QLD50sgBPd8B2iwT-m18Az6qc89VaygFZ4\",\"type\":\"PropertyValue\",\"domainValue\":\"SelectiveCredential\",\"name\":\"type\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:type\"},{\"id\":\"urn:awp:n:KgPgIo3wwGK6FOuSs2knsCGNADPAvNNbOXlX6PGrOjQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:selective:right-to-work:degree-credential\"},\"name\":\"id\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:id\"},{\"id\":\"urn:awp:n:-SibeoAlg2Y6uuA6fvZHMYA3Alj07_-_o608Jyjlm2M\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:university\"},\"name\":\"issuer\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:issuer\"},{\"id\":\"urn:awp:n:Smd5gvpX6Zn2grdwcRIDviylnBGguB9SZwVm2DZq8RI\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:candidate\"},\"name\":\"subject\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:aNzh-YtkqMqF4fjQX4gUkwtGm0NFlL7Hf6MvO-48zrA\",\"type\":\"PropertyValue\",\"domainValue\":\"recorded-by-authority\",\"name\":\"method\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:method\"},{\"id\":\"urn:awp:n:i2_w7jwrSprTMDN0HDVQBGpXBQouSXRgbgQRNWjSkII\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-11-13T09:00:00.000Z\",\"name\":\"asOf\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:asOf\"},{\"id\":\"urn:awp:n:dY9uVa7eHj4cXHK2a927J4lq7t55Bcm1fIfZlcNoIhU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:QDtGxJZHNxYPP6ldxWUe16N-ZDVUZ1d9Mcv-1d3qTFw\"},\"name\":\"digests\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:digests\"},{\"id\":\"urn:awp:n:QDtGxJZHNxYPP6ldxWUe16N-ZDVUZ1d9Mcv-1d3qTFw\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:sHZjxZ_tWc1Rmum6Johh-D5WAOBVu3hq85PnC6qc5pM\"}]},{\"id\":\"urn:awp:n:sHZjxZ_tWc1Rmum6Johh-D5WAOBVu3hq85PnC6qc5pM\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:a166a95376040c4247bf44ba39c43da8bcb3f5d6608191b337e1e651dce3ccee\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:nwRQUMYH8t61BnPuyKV-OPguEX_xYiPNSGHFQOcCJdg\",\"@graph\":[{\"id\":\"urn:awp:n:m0Nm5m7zyqzvN5UDWRJ6pDLBp3YOeBYKZ1UhIEIAwso\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikd1Y3dBRUR1RHdZMG1nT1FPVFc3NndFVjRzOVpQR2JSZDYwT2pwakpTTXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NzY2N2UxMTRhMTU1MzI2OWIyZjAyNzZkNTlhMDg5OWU6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpjYW5kaWRhdGUiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlLWFnZW50OmFnZW50IiwiYWN0b3JLaWQiOiI3YW9FNTFqd2ZBLWsyS3VyWVduQXo5cndkN0FWY050UU1SSWRjRzgtYWZRIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6cmlnaHQtdG8td29yayIsInVybjpvcDplbXBsb3ltZW50LWV2aWRlbmNlLXJlcXVlc3QiLCJ1cm46b3A6cmlnaHQtdG8td29yazpwcm9vZi1yZXF1ZXN0IiwidXJuOm9wOnJpZ2h0LXRvLXdvcms6cHJvb2YtYW5zd2VyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.1ULgSEsMJvZAetm2hw41YrVPpfDY9Klc4xZ6gUzQQzN2Q6PcGODMW2xBV2dhhRgtx9jUB2_mbqaI6OIW2FOjDw\"}]},{\"id\":\"urn:awp:n:l_4A9PnBk1s0oUwbNeR3jhczZZ2slEut4AdojxXaPXs\",\"@graph\":[{\"id\":\"urn:awp:n:i-BL8-fI4CCB0OGl2dEHlpXaqSVURxXAbd9wgPvwBsc\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InYzRjZVOVJvTDd6SkJhYzZ0LU1HckpGOXNGd1pwa1JXaU9zeVZ2Ni1yWUUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOndvcmstY3JlZGVudGlhbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW1taWdyYXRpb24tb2ZmaWNlIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjoyZGRmZWQ3N2ZlYTgyZjJiM2RhNDhmMmQ2ZDIyYzg5ODA5MDVlN2E3OTQyN2ZmMTY4ZjU4ZTUwMmQ1ZDU5Y2M1Iiwic2hhLTI1Njo1MTEzNDQyMTExYzgwNzc2ZDk4NTQyZWI5ZTNhZTdkNzgwODk3ZWI2N2RjNzViMDhmYmM2YzJmNTEyYWFjNWY4Iiwic2hhLTI1Njo4Yzg4YWMzNTg5Mjc5Nzk4YzYwY2M3NTE1MzMzMmYyY2Y1ZGVkM2UyZmY2YWY5ZTkxNGVjMzNjNDNkN2UwZjljIl19.SmIXsJ9Xb9pol7k62vlPtTi9xuf2gZ9nT1SLFlQ1nNeEJ6eftNiCtG5NCpecX9HDGFZqGOiJIPf9EF7bRN9-BQ\"}]},{\"id\":\"urn:awp:n:lXR7fxKc_0OZzbYuFWPLfFBrVyC1s1vxKTkPOpuwZyQ\",\"@graph\":[{\"id\":\"urn:awp:n:NslJcCOGtgMY5_7wiokhTU6rsvfO62stgZA_BU0ao9U\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9JMXFXSE4tMGRuX0pMYTBPd2lxNmhGRndZUy04VWZoVEtmOUVTRDR3QkUiLCJ0eXAiOiJhd3Atc2VsZWN0aXZlLWNyZWRlbnRpYWwrandzIn0.eyJ0eXBlIjoiU2VsZWN0aXZlQ3JlZGVudGlhbCIsImlkIjoidXJuOnNlbGVjdGl2ZTpyaWdodC10by13b3JrOmRlZ3JlZS1jcmVkZW50aWFsIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp1bml2ZXJzaXR5Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6Y2FuZGlkYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImRpZ2VzdHMiOlsic2hhLTI1NjphMTY2YTk1Mzc2MDQwYzQyNDdiZjQ0YmEzOWM0M2RhOGJjYjNmNWQ2NjA4MTkxYjMzN2UxZTY1MWRjZTNjY2VlIl19.sRFAAu2S1xaayPJe40ZDi5Yv2-LgSWuOwdR54govfR7IAa2VqtmcNyEN3IM103NoQ4EzVsd_2jYj464NdE28Cg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijdhb0U1MWp3ZkEtazJLdXJZV25Bejlyd2Q3QVZjTnRRTVJJZGNHOC1hZlEiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..WnuPVzCFbugDm3fm1Jjqp0vLxQ8mzj0UY5Y-JAsFfZgO8a0iEEdoNrPqFeC59FIaUAUaYcFCmi3aWCpi8GHhBg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1114,7 +1273,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The candidate’s agent reaches the inbound gate."
+      "caption": "An invoke message from The candidate’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 30,
@@ -1141,7 +1301,8 @@
         "id": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The candidate’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The candidate’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 31,
@@ -1179,7 +1340,8 @@
         ],
         "answer": "Accepted, for work entitled claims only."
       },
-      "caption": "The fictional immigration office's work entitled statement: The fictional immigration office is an accepted source for this kind of claim."
+      "caption": "The fictional immigration office's work entitled statement: The fictional immigration office is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 32,
@@ -1217,7 +1379,8 @@
         ],
         "answer": "Accepted, for degree claims only."
       },
-      "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim."
+      "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 33,
@@ -1239,7 +1402,8 @@
         "id": "urn:awp:representation:7667e114a1553269b2f0276d59a0899e:1794560400000",
         "text": "A representation statement signed with The candidate's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The candidate signed a statement that The candidate’s agent acts for them in this operation."
+      "caption": "The candidate signed a statement that The candidate’s agent acts for them in this operation.",
+      "gateRun": 1
     },
     {
       "seq": 34,
@@ -1266,7 +1430,8 @@
         "id": "urn:terms:entitlement",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional immigration office's work entitled statement: its terms allow this: ."
+      "caption": "The fictional immigration office's work entitled statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 35,
@@ -1293,7 +1458,8 @@
         "id": "urn:terms:degree",
         "text": "Its terms allow this: ."
       },
-      "caption": "The fictional university's degree statement: its terms allow this: ."
+      "caption": "The fictional university's degree statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 36,
@@ -1325,7 +1491,8 @@
         "id": "urn:profile:right-to-work:work.entitled",
         "text": "Accept work entitled from The fictional immigration office by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional immigration office's work entitled statement is fit for the unlabelled resource: recorded-by-authority, 0 days old."
+      "caption": "The fictional immigration office's work entitled statement is fit for the unlabelled resource: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 37,
@@ -1357,7 +1524,8 @@
         "id": "urn:profile:right-to-work:degree",
         "text": "Accept degree from The fictional university by recorded-by-authority, at most 3650 days old."
       },
-      "caption": "The fictional university's degree statement is fit for the unlabelled resource: recorded-by-authority, 0 days old."
+      "caption": "The fictional university's degree statement is fit for the unlabelled resource: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 38,
@@ -1367,7 +1535,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
+      "messageDigest": "sha-256:8d624dd44ede5444b7b82bfbe9645106493412ed1db531d61aef0236525aad89",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 1
     },
     {
       "seq": 39,

@@ -104,7 +104,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -138,6 +138,16 @@
       "seq": 2,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -155,12 +165,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -189,12 +210,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -207,12 +239,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -225,12 +268,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -243,12 +297,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -270,17 +335,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c7d9225f3daa446a37b259ffcca16707aa4f93e7162e086008bac4fbd8c81df3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:reserve-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -359,6 +437,16 @@
       "seq": 16,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -376,12 +464,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The buyer's mandate covers this action."
+      "caption": "The buyer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -410,12 +509,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -428,12 +538,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -446,12 +567,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -464,12 +596,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The buyer's limits."
+      "caption": "Inside what the agent may do on its own, and within The buyer's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -491,17 +634,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:d028a3bcfb77931e7850ff6abaf3c25fbb0b72811c70c57cf111f7045926ea9d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 1
     },
     {
       "seq": 23,
@@ -580,6 +736,16 @@
       "seq": 30,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -597,12 +763,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The seller's mandate covers this action."
+      "caption": "The seller's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -631,12 +808,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -649,12 +837,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -667,12 +866,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 34,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -685,12 +895,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The seller's limits."
+      "caption": "Inside what the agent may do on its own, and within The seller's limits.",
+      "gateRun": 1
     },
     {
       "seq": 35,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -712,17 +933,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 36,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bf9a6b9d91b5b7421075d1ad9e50b4983b21d07d26e6c64926da0eec1ad27251",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 1
     },
     {
       "seq": 37,
@@ -801,6 +1035,16 @@
       "seq": 44,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -818,12 +1062,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 45,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -852,12 +1107,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 46,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -870,12 +1136,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 47,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -888,12 +1165,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 48,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -906,12 +1194,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits.",
+      "gateRun": 2
     },
     {
       "seq": 49,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -933,17 +1232,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 50,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:4dbdf9931c5111bb764dc6520458233d1e4412a313c4c3577e20bcb17ec16599",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:accept-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 2
     },
     {
       "seq": 51,
@@ -1022,6 +1334,16 @@
       "seq": 58,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1039,12 +1361,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 59,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1073,12 +1406,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 3
     },
     {
       "seq": 60,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1091,12 +1435,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 61,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1109,12 +1464,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 62,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1127,12 +1493,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits.",
+      "gateRun": 3
     },
     {
       "seq": 63,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1154,17 +1531,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 3
     },
     {
       "seq": 64,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c14faac8bc7dcf17718dd2e807697ca48bdf59ee785f8576d8a5559c35354a43",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:complete-plan",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 3
     },
     {
       "seq": 65,
@@ -1309,6 +1699,16 @@
       "seq": 78,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1326,12 +1726,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The buyer's mandate covers this action."
+      "caption": "The buyer's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 79,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1360,12 +1771,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 80,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1378,12 +1800,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 81,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1396,12 +1829,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 82,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1414,12 +1858,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The buyer's limits."
+      "caption": "Inside what the agent may do on its own, and within The buyer's limits.",
+      "gateRun": 2
     },
     {
       "seq": 83,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1441,17 +1896,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 84,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ff7ffc44347afc01279f995622924f20b9b9670bdb9941b061cf05d9dd3f0932",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-owner",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 2
     },
     {
       "seq": 85,
@@ -1530,6 +1998,16 @@
       "seq": 92,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1547,12 +2025,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The seller's mandate covers this action."
+      "caption": "The seller's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 93,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1581,12 +2070,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 94,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1599,12 +2099,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 95,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1617,12 +2128,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 96,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1635,12 +2157,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The seller's limits."
+      "caption": "Inside what the agent may do on its own, and within The seller's limits.",
+      "gateRun": 2
     },
     {
       "seq": 97,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1662,17 +2195,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 98,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b5a21433f904d11a6dd78c6d8ee80f3dfe0f37404a4a586b4e8c427fe0c8d42",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-receiver",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 2
     },
     {
       "seq": 99,
@@ -1751,6 +2297,16 @@
       "seq": 106,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1768,12 +2324,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The conveyancer and conditional escrow register's mandate covers this action."
+      "caption": "The conveyancer and conditional escrow register's mandate covers this action.",
+      "gateRun": 4
     },
     {
       "seq": 107,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1802,12 +2369,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only."
+      "caption": "The conveyancer and conditional escrow register: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 4
     },
     {
       "seq": 108,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1820,12 +2398,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 109,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1838,12 +2427,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 110,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1856,12 +2456,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits."
+      "caption": "Inside what the agent may do on its own, and within The conveyancer and conditional escrow register's limits.",
+      "gateRun": 4
     },
     {
       "seq": 111,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1883,17 +2494,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 4
     },
     {
       "seq": 112,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8df1521131511ae079acab2101b58c8f4c6e3c2235faa912f24b991613de0b7e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:home-purchase:issue-to-coordinator",
+        "recipient": "urn:fictional:home-purchase:coordinator",
+        "purpose": "urn:purpose:home-purchase",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The conveyancer and conditional escrow register.",
+      "gateRun": 4
     },
     {
       "seq": 113,

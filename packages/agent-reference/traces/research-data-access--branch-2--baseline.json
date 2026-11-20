@@ -65,7 +65,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -91,6 +91,16 @@
       "seq": 2,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -108,12 +118,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "A researcher's mandate covers this action."
+      "caption": "A researcher's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -142,12 +163,23 @@
         "answer": "Accepted, for Answer an approved research question only."
       },
       "reason": "recipient-established",
-      "caption": "A data holder: Accepted, for Answer an approved research question only."
+      "caption": "A data holder: Accepted, for Answer an approved research question only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -160,12 +192,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -178,12 +221,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -196,12 +250,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within A researcher's limits."
+      "caption": "Inside what the agent may do on its own, and within A researcher's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -223,17 +288,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:6773c7c5c63110929b642c0225a682b0026adb7ec8723dee2ed6e060a8c41f0d",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:approved-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Answer an approved research question with A data holder."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Answer an approved research question with A data holder.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -309,7 +387,8 @@
       "check": "data-terms",
       "verdict": "pass",
       "reason": "terms-allow",
-      "caption": "The holder checks the approved answer before release."
+      "caption": "The holder checks the approved answer before release.",
+      "gateRun": 1
     },
     {
       "seq": 16,
@@ -320,7 +399,8 @@
       "check": "limits-approval",
       "verdict": "pass",
       "reason": "within-limits",
-      "caption": "The holder checks the approved answer before release."
+      "caption": "The holder checks the approved answer before release.",
+      "gateRun": 1
     },
     {
       "seq": 17,
@@ -331,7 +411,8 @@
       "check": "disclosure",
       "verdict": "pass",
       "reason": "minimal-disclosure",
-      "caption": "The holder checks the approved answer before release."
+      "caption": "The holder checks the approved answer before release.",
+      "gateRun": 1
     },
     {
       "seq": 18,
@@ -342,7 +423,8 @@
       "check": "evidence",
       "verdict": "pass",
       "reason": "evidence-complete",
-      "caption": "The holder checks the approved answer before release."
+      "caption": "The holder checks the approved answer before release.",
+      "gateRun": 1
     },
     {
       "seq": 19,
@@ -352,7 +434,8 @@
       "kind": "decision",
       "outcome": "go",
       "reason": "evidence-complete",
-      "caption": "The holder releases only the signed derived answer after saving its counter."
+      "caption": "The holder releases only the signed derived answer after saving its counter.",
+      "gateRun": 1
     },
     {
       "seq": 20,
@@ -366,6 +449,16 @@
       "seq": 21,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -383,12 +476,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "A researcher's mandate covers this action."
+      "caption": "A researcher's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -417,12 +521,23 @@
         "answer": "Accepted, for Answer an approved research question only."
       },
       "reason": "recipient-established",
-      "caption": "A data holder: Accepted, for Answer an approved research question only."
+      "caption": "A data holder: Accepted, for Answer an approved research question only.",
+      "gateRun": 2
     },
     {
       "seq": 23,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -435,12 +550,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -453,12 +579,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 25,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -471,12 +608,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within A researcher's limits."
+      "caption": "Inside what the agent may do on its own, and within A researcher's limits.",
+      "gateRun": 2
     },
     {
       "seq": 26,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -498,17 +646,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "reader-agent",
+      "actionDigest": "sha-256:8d02877f5cb8af70b271eacfc8b5aad56adc9e53ef3170fcd43d08bb14f15a8a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:dataset-query",
+        "operation": "urn:op:dataset-query",
+        "conversation": "urn:scenario:research-data-access:second-related-question",
+        "recipient": "urn:fictional:research-data-access:party-2",
+        "purpose": "urn:purpose:approved-research",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Answer an approved research question with A data holder."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Answer an approved research question with A data holder.",
+      "gateRun": 2
     },
     {
       "seq": 28,
@@ -584,7 +745,8 @@
       "check": "data-terms",
       "verdict": "pass",
       "reason": "terms-allow",
-      "caption": "The holder checks the approved answer before release."
+      "caption": "The holder checks the approved answer before release.",
+      "gateRun": 2
     },
     {
       "seq": 35,
@@ -595,7 +757,8 @@
       "check": "limits-approval",
       "verdict": "fail",
       "reason": "limit-exceeded",
-      "caption": "The holder withholds the answer: limit-exceeded."
+      "caption": "The holder withholds the answer: limit-exceeded.",
+      "gateRun": 2
     },
     {
       "seq": 36,
@@ -605,7 +768,8 @@
       "kind": "decision",
       "outcome": "stop",
       "reason": "limit-exceeded",
-      "caption": "The holder stops: limit-exceeded."
+      "caption": "The holder stops: limit-exceeded.",
+      "gateRun": 2
     }
   ]
 }

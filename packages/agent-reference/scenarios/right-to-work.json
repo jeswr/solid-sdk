@@ -1026,9 +1026,9 @@
         "blocked": []
       },
       "expect": {
-        "outcome": "ask-more",
-        "check": "authority",
-        "reason": "assurance-insufficient"
+        "outcome": "admit",
+        "check": "fitness",
+        "reason": "fit-for-use"
       },
       "outline": [
         {

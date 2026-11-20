@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -126,7 +126,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The payment provider's payee account statement is intact and signed with The payment provider's pinned key."
+      "caption": "The payment provider's payee account statement is intact and signed with The payment provider's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -164,7 +165,8 @@
         ],
         "answer": "Accepted, for payee-account claims only."
       },
-      "caption": "The payment provider's payee account statement: The payment provider is an accepted source for this kind of claim."
+      "caption": "The payment provider's payee account statement: The payment provider is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -182,7 +184,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The payment provider's payee account statement asks for nothing, so there is no authority to check."
+      "caption": "The payment provider's payee account statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -209,7 +212,8 @@
         "id": "urn:terms:payee-account",
         "text": "Its terms allow this: ."
       },
-      "caption": "The payment provider's payee account statement: its terms allow this: ."
+      "caption": "The payment provider's payee account statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -241,7 +245,8 @@
         "id": "urn:profile:shopping-agent:payee-account",
         "text": "Accept payee-account from The payment provider by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The payment provider's payee account statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
+      "caption": "The payment provider's payee account statement is fit for Buying something within a budget: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -251,7 +256,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The payment provider's payee account statement is admitted."
+      "caption": "The payment provider's payee account statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -297,7 +303,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The chosen merchant's invoice statement is intact and signed with The chosen merchant's pinned key."
+      "caption": "The chosen merchant's invoice statement is intact and signed with The chosen merchant's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -335,7 +342,8 @@
         ],
         "answer": "Accepted, for invoice claims only."
       },
-      "caption": "The chosen merchant's invoice statement: The chosen merchant is an accepted source for this kind of claim."
+      "caption": "The chosen merchant's invoice statement: The chosen merchant is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -353,7 +361,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The chosen merchant's invoice statement asks for nothing, so there is no authority to check."
+      "caption": "The chosen merchant's invoice statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -380,7 +389,8 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The chosen merchant's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The chosen merchant's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -412,7 +422,8 @@
         "id": "urn:profile:shopping-agent:invoice",
         "text": "Accept invoice from The chosen merchant by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The chosen merchant's invoice statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
+      "caption": "The chosen merchant's invoice statement is fit for Buying something within a budget: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -422,7 +433,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The chosen merchant's invoice statement is admitted."
+      "caption": "The chosen merchant's invoice statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -464,7 +476,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The other merchant's other offer statement is intact and signed with The other merchant's pinned key."
+      "caption": "The other merchant's other offer statement is intact and signed with The other merchant's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -502,7 +515,8 @@
         ],
         "answer": "Accepted, for other-offer claims only."
       },
-      "caption": "The other merchant's other offer statement: The other merchant is an accepted source for this kind of claim."
+      "caption": "The other merchant's other offer statement: The other merchant is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -520,7 +534,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The other merchant's other offer statement asks for nothing, so there is no authority to check."
+      "caption": "The other merchant's other offer statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -547,7 +562,8 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The other merchant's other offer statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The other merchant's other offer statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -579,7 +595,8 @@
         "id": "urn:profile:shopping-agent:other-offer",
         "text": "Accept other-offer from The other merchant by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The other merchant's other offer statement is fit for Buying something within a budget: recorded-by-authority, 0 days old."
+      "caption": "The other merchant's other offer statement is fit for Buying something within a budget: recorded-by-authority, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -589,7 +606,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The other merchant's other offer statement is admitted."
+      "caption": "The other merchant's other offer statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 21,
@@ -622,6 +640,16 @@
       "seq": 23,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -643,12 +671,23 @@
         "text": "The chosen merchant's mandate lets the agent use Agree the service, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The chosen merchant's mandate covers this action."
+      "caption": "The chosen merchant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -677,12 +716,23 @@
         "answer": "Accepted, for Agree the service only."
       },
       "reason": "recipient-established",
-      "caption": "The shopper: Accepted, for Agree the service only."
+      "caption": "The shopper: Accepted, for Agree the service only.",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -695,12 +745,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -713,12 +774,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -731,12 +803,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The chosen merchant's limits."
+      "caption": "Inside what the agent may do on its own, and within The chosen merchant's limits.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -750,6 +833,7 @@
       ],
       "reason": "no-personal-data",
       "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -800,6 +884,16 @@
       "seq": 29,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -822,6 +916,7 @@
       },
       "reason": "evidence-complete",
       "caption": "Signed (JWS Ed DSA) with The chosen merchant’s agent's pinned key, and written to the record.",
+      "gateRun": 1,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -872,11 +967,24 @@
       "seq": 30,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002",
+      "messageDigest": "sha-256:2fded44425171c368b7e63e8ca00a537731ef894a69380bede35097174db43bc",
       "caption": "The propose message goes to The shopper’s agent.",
+      "gateRun": 1,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -927,8 +1035,19 @@
       "seq": 31,
       "step": 2,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:c4082d651a710e2153cc23ed2b8f95e22a326c4b1de64348310475103609d35e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002\",\"type\":[\"Message\",\"Propose\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"propose\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:nzlGxoLqEgwunjZg1l6JBQTh1UbpvNg41QyxznMFzeA\"},\"to\":{\"id\":\"urn:awp:n:nR5WDZbQdJJgDRn3VXgZkp3IFi6wLoGbkLnrpnl7HTA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:mXGBOnzcJYOjyN2_XHHSp1ewWgnKlF1h6rTl9YmTAHI\"},\"evidence\":{\"id\":\"urn:awp:n:uwOUFLw9tLOX6RecnrMYLHB3mn15y9rbcuLESeu2vLs\"},\"@included\":[{\"id\":\"urn:awp:n:nzlGxoLqEgwunjZg1l6JBQTh1UbpvNg41QyxznMFzeA\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"onBehalfOf\":\"urn:fictional:supplier\"},{\"id\":\"urn:awp:n:nR5WDZbQdJJgDRn3VXgZkp3IFi6wLoGbkLnrpnl7HTA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"party\":\"urn:fictional:business\"},{\"id\":\"urn:awp:n:mXGBOnzcJYOjyN2_XHHSp1ewWgnKlF1h6rTl9YmTAHI\",\"type\":\"ProposeBody\",\"operation\":{\"id\":\"urn:op:paid-service\"},\"round\":\"1\",\"terms\":{\"id\":\"urn:awp:n:aG88p7VeoRh1K6Z-xXAedSwKrr9adBDVwO_L0pIkdx8\"},\"termsDigest\":\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\"},{\"id\":\"urn:awp:n:uwOUFLw9tLOX6RecnrMYLHB3mn15y9rbcuLESeu2vLs\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:X_OKnCXzmi4WyWObXN7k8KtrQnmNIyyopq-YjMil3-k\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:paid-service\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:aG88p7VeoRh1K6Z-xXAedSwKrr9adBDVwO_L0pIkdx8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:95b59298ca0657cc0b2116a1a72a54b81d4486133b74611ef5ea3b67a29ed423\",\"byteLength\":\"29645\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:X_OKnCXzmi4WyWObXN7k8KtrQnmNIyyopq-YjMil3-k\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:mfHlo40Dt1hLirCVLe4kmSKLG6L_1q_cdqvgccxWRhE\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:supplier\",\"proofGraph\":\"urn:awp:n:k8Pv8wdbfIG2y9JrENTZ-4kViW9gynKlPH-RfyYm2NU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:mfHlo40Dt1hLirCVLe4kmSKLG6L_1q_cdqvgccxWRhE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:SuWuwoJN42Xe0oefws7cRxBMFWTdcrw8YwqkgJnI2yM\"}},{\"id\":\"urn:awp:n:SuWuwoJN42Xe0oefws7cRxBMFWTdcrw8YwqkgJnI2yM\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d888b2f00a71d140a74342dfb573270795b0657968a10179d7baba53ce51db5c\",\"byteLength\":\"10167\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:k8Pv8wdbfIG2y9JrENTZ-4kViW9gynKlPH-RfyYm2NU\",\"@graph\":[{\"id\":\"urn:awp:n:57EWY_WWW81UUvOBX_OVAO16BnKWB17htch6441pNNE\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4R3lVc1FiR2FralVxMlNPcVV0UnVyZTVBeTRpb0hLZGpvWXJmSkhIaVUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NTJhYmZkMzhlZWVkYzA1NjBkMWU2OTk1ZTU1NjE5NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoicU4tOVpZSWduRE5YZkZvYU0wbGRVdVh2cVFUMzBGblFzdVA0ZzhkSzExOCIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOnBheW1lbnQiLCJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInVybjpvcDpwYXltZW50LXByb3ZpZGVyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.WOGK7LuBi-3Fjus93quoUwDjtDjpdx1WUBeMfVljxTuFQ6a3kSHvoxgmPeDuNM088Y6fzbFGtuqjxD2Ac8RiCw\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InFOLTlaWUlnbkROWGZGb2FNMGxkVXVYdnFRVDMwRm5Rc3VQNGc4ZEsxMTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOm56bEd4b0xxRWd3dW5qWmcxbDZKQlFUaDFVYnB2Tmc0MVF5eHpuTUZ6ZUEiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46blI1V0RaYlFkSkpnRFJuM1ZYZ1prcDNJRmk2d0xvR2JrTG5ycG5sN0hUQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiaWQiOiJ1cm46YXdwOm46bVhHQk9uemNKWU9qeU4yX1hISFNwMWV3V2duS2xGMWg2clRsOVltVEFISSIsIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpwYWlkLXNlcnZpY2UifSwicm91bmQiOiIxIiwidGVybXMiOnsiaWQiOiJ1cm46YXdwOm46YUc4OHA3VmVvUmgxSzZaLXhYQWVkU3dLcnI5YWRCRFZ3T19MMHBJa2R4OCJ9LCJ0ZXJtc0RpZ2VzdCI6InNoYS0yNTY6ZTM3ODNhNjI3YTg2YjgzYTA0MjEzNmI5YTNmMTRkOTljMjQyNDczNWE1NTQyMDdiMTU3ZDcyZWM0MThlMmI3YSIsInR5cGUiOiJQcm9wb3NlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOlhfT0tuQ1h6bWk0V3lXT2JYTjdrOEt0clFubU5JeXlvcHEtWWpNaWwzLWsifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp1d09VRkx3OXRMT1g2UmVjbnJNWUxIQjNtbjE1eTlyYmN1TEVTZXUydkxzIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2Ojk1YjU5Mjk4Y2EwNjU3Y2MwYjIxMTZhMWE3MmE1NGI4MWQ0NDg2MTMzYjc0NjExZWY1ZWEzYjY3YTI5ZWQ0MjMiLCJieXRlTGVuZ3RoIjoiMjk2NDUiLCJpZCI6InVybjphd3A6bjphRzg4cDdWZW9SaDFLNloteFhBZWRTd0tycjlhZEJEVndPX0wwcElrZHg4IiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46bWZIbG80MER0MWhMaXJDVkxlNGttU0tMRzZMXzFxX2NkcXZnY2N4V1JoRSIsImlkIjoidXJuOmF3cDpuOlhfT0tuQ1h6bWk0V3lXT2JYTjdrOEt0clFubU5JeXlvcHEtWWpNaWwzLWsiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c3VwcGxpZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOms4UHY4d2RiZklHMnk5SnJFTlRaLTRrVmlXOWd5bktsUEgtUmZ5WW0yTlUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJpZCI6InVybjphd3A6bjptZkhsbzQwRHQxaExpckNWTGU0a21TS0xHNkxfMXFfY2RxdmdjY3hXUmhFIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpTdVd1d29KTjQyWGUwb2Vmd3M3Y1J4Qk1GV1RkY3J3OFl3cWtnSm5JMnlNIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6ZDg4OGIyZjAwYTcxZDE0MGE3NDM0MmRmYjU3MzI3MDc5NWIwNjU3OTY4YTEwMTc5ZDdiYWJhNTNjZTUxZGI1YyIsImJ5dGVMZW5ndGgiOiIxMDE2NyIsImlkIjoidXJuOmF3cDpuOlN1V3V3b0pONDJYZTBvZWZ3czdjUnhCTUZXVGRjcnc4WXdxa2dKbkkyeU0iLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOjU3RVdZX1dXVzgxVVV2T0JYX09WQU8xNkJuS1dCMTdodGNoNjQ0MXBOTkUiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWtNNFIzbFZjMUZpUjJGcmFsVnhNbE5QY1ZWMFVuVnlaVFZCZVRScGIwaExaR3B2V1hKbVNraElhVlVpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZOVEpoWW1aa016aGxaV1ZrWXpBMU5qQmtNV1UyT1RrMVpUVTFOakU1TlRRNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHpkWEJ3YkdsbGNpSXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwemRYQndiR2xsY2kxaFoyVnVkRHBoWTNSdmNpSXNJbUZqZEc5eVMybGtJam9pY1U0dE9WcFpTV2R1UkU1WVprWnZZVTB3YkdSVmRWaDJjVkZVTXpCR2JsRnpkVkEwWnpoa1N6RXhPQ0lzSW05d1pYSmhkR2x2Ym5NaU9sc2lkWEp1T205d09uQmhlVzFsYm5RaUxDSjFjbTQ2YjNBNmNHRnBaQzF6WlhKMmFXTmxJaXdpZFhKdU9tOXdPbkJoZVcxbGJuUXRjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcHdZWGx0Wlc1MExYQnliM1pwWkdWeUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkuV09HSzdMdUJpLTNGanVzOTNxdW9Vd0RqdERqcGR4MVdVQmVNZlZsanhUdUZRNmEza1NIdm94Z21QZUR1Tk0wODhZNmZ6YkZHdHVxanhEMkFjOFJpQ3ciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjprOFB2OHdkYmZJRzJ5OUpyRU5UWi00a1ZpVzlneW5LbFBILVJmeVltMk5VIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOm1YR0JPbnpjSllPanlOMl9YSEhTcDFld1dnbktsRjFoNnJUbDlZbVRBSEkifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9wYXltZW50LWxvY2FsLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6eyJpZCI6InVybjphd3A6bjp1d09VRkx3OXRMT1g2UmVjbnJNWUxIQjNtbjE1eTlyYmN1TEVTZXUydkxzIn0sImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiaWQiOiJ1cm46YXdwOm46bnpsR3hvTHFFZ3d1bmpaZzFsNkpCUVRoMVVicHZOZzQxUXl4em5NRnplQSJ9LCJpZCI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDIiLCJraW5kIjoicHJvcG9zZSIsInByZXNlbnRGaWVsZHMiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOm5SNVdEWmJRZEpKZ0RSbjNWWGdaa3AzSUZpNndMb0dia0xucnBubDdIVEEifSwidHlwZSI6WyJNZXNzYWdlIiwiUHJvcG9zZSJdfQ.q1KBzm5RkpGRyW2YW3wQ4UQDdLD7g0UkDOFbKrn5ybdGBb4fo5rRrAojh811tHLnR8EGYUjGFEkONNZgxWu0DQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1140,6 +1259,7 @@
         }
       ],
       "caption": "The chosen merchant’s agent sends a propose message to The shopper’s agent.",
+      "gateRun": 1,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1192,6 +1312,7 @@
       "agent": "business-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002\",\"type\":[\"Message\",\"Propose\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"propose\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:nzlGxoLqEgwunjZg1l6JBQTh1UbpvNg41QyxznMFzeA\"},\"to\":{\"id\":\"urn:awp:n:nR5WDZbQdJJgDRn3VXgZkp3IFi6wLoGbkLnrpnl7HTA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:mXGBOnzcJYOjyN2_XHHSp1ewWgnKlF1h6rTl9YmTAHI\"},\"evidence\":{\"id\":\"urn:awp:n:uwOUFLw9tLOX6RecnrMYLHB3mn15y9rbcuLESeu2vLs\"},\"@included\":[{\"id\":\"urn:awp:n:nzlGxoLqEgwunjZg1l6JBQTh1UbpvNg41QyxznMFzeA\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"onBehalfOf\":\"urn:fictional:supplier\"},{\"id\":\"urn:awp:n:nR5WDZbQdJJgDRn3VXgZkp3IFi6wLoGbkLnrpnl7HTA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"party\":\"urn:fictional:business\"},{\"id\":\"urn:awp:n:mXGBOnzcJYOjyN2_XHHSp1ewWgnKlF1h6rTl9YmTAHI\",\"type\":\"ProposeBody\",\"operation\":{\"id\":\"urn:op:paid-service\"},\"round\":\"1\",\"terms\":{\"id\":\"urn:awp:n:aG88p7VeoRh1K6Z-xXAedSwKrr9adBDVwO_L0pIkdx8\"},\"termsDigest\":\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\"},{\"id\":\"urn:awp:n:uwOUFLw9tLOX6RecnrMYLHB3mn15y9rbcuLESeu2vLs\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:X_OKnCXzmi4WyWObXN7k8KtrQnmNIyyopq-YjMil3-k\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:paid-service\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:aG88p7VeoRh1K6Z-xXAedSwKrr9adBDVwO_L0pIkdx8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:95b59298ca0657cc0b2116a1a72a54b81d4486133b74611ef5ea3b67a29ed423\",\"byteLength\":\"29645\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:X_OKnCXzmi4WyWObXN7k8KtrQnmNIyyopq-YjMil3-k\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:mfHlo40Dt1hLirCVLe4kmSKLG6L_1q_cdqvgccxWRhE\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:supplier\",\"proofGraph\":\"urn:awp:n:k8Pv8wdbfIG2y9JrENTZ-4kViW9gynKlPH-RfyYm2NU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:mfHlo40Dt1hLirCVLe4kmSKLG6L_1q_cdqvgccxWRhE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:SuWuwoJN42Xe0oefws7cRxBMFWTdcrw8YwqkgJnI2yM\"}},{\"id\":\"urn:awp:n:SuWuwoJN42Xe0oefws7cRxBMFWTdcrw8YwqkgJnI2yM\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d888b2f00a71d140a74342dfb573270795b0657968a10179d7baba53ce51db5c\",\"byteLength\":\"10167\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:k8Pv8wdbfIG2y9JrENTZ-4kViW9gynKlPH-RfyYm2NU\",\"@graph\":[{\"id\":\"urn:awp:n:57EWY_WWW81UUvOBX_OVAO16BnKWB17htch6441pNNE\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4R3lVc1FiR2FralVxMlNPcVV0UnVyZTVBeTRpb0hLZGpvWXJmSkhIaVUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NTJhYmZkMzhlZWVkYzA1NjBkMWU2OTk1ZTU1NjE5NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoicU4tOVpZSWduRE5YZkZvYU0wbGRVdVh2cVFUMzBGblFzdVA0ZzhkSzExOCIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOnBheW1lbnQiLCJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInVybjpvcDpwYXltZW50LXByb3ZpZGVyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.WOGK7LuBi-3Fjus93quoUwDjtDjpdx1WUBeMfVljxTuFQ6a3kSHvoxgmPeDuNM088Y6fzbFGtuqjxD2Ac8RiCw\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InFOLTlaWUlnbkROWGZGb2FNMGxkVXVYdnFRVDMwRm5Rc3VQNGc4ZEsxMTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOm56bEd4b0xxRWd3dW5qWmcxbDZKQlFUaDFVYnB2Tmc0MVF5eHpuTUZ6ZUEiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46blI1V0RaYlFkSkpnRFJuM1ZYZ1prcDNJRmk2d0xvR2JrTG5ycG5sN0hUQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiaWQiOiJ1cm46YXdwOm46bVhHQk9uemNKWU9qeU4yX1hISFNwMWV3V2duS2xGMWg2clRsOVltVEFISSIsIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpwYWlkLXNlcnZpY2UifSwicm91bmQiOiIxIiwidGVybXMiOnsiaWQiOiJ1cm46YXdwOm46YUc4OHA3VmVvUmgxSzZaLXhYQWVkU3dLcnI5YWRCRFZ3T19MMHBJa2R4OCJ9LCJ0ZXJtc0RpZ2VzdCI6InNoYS0yNTY6ZTM3ODNhNjI3YTg2YjgzYTA0MjEzNmI5YTNmMTRkOTljMjQyNDczNWE1NTQyMDdiMTU3ZDcyZWM0MThlMmI3YSIsInR5cGUiOiJQcm9wb3NlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOlhfT0tuQ1h6bWk0V3lXT2JYTjdrOEt0clFubU5JeXlvcHEtWWpNaWwzLWsifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp1d09VRkx3OXRMT1g2UmVjbnJNWUxIQjNtbjE1eTlyYmN1TEVTZXUydkxzIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2Ojk1YjU5Mjk4Y2EwNjU3Y2MwYjIxMTZhMWE3MmE1NGI4MWQ0NDg2MTMzYjc0NjExZWY1ZWEzYjY3YTI5ZWQ0MjMiLCJieXRlTGVuZ3RoIjoiMjk2NDUiLCJpZCI6InVybjphd3A6bjphRzg4cDdWZW9SaDFLNloteFhBZWRTd0tycjlhZEJEVndPX0wwcElrZHg4IiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46bWZIbG80MER0MWhMaXJDVkxlNGttU0tMRzZMXzFxX2NkcXZnY2N4V1JoRSIsImlkIjoidXJuOmF3cDpuOlhfT0tuQ1h6bWk0V3lXT2JYTjdrOEt0clFubU5JeXlvcHEtWWpNaWwzLWsiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c3VwcGxpZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOms4UHY4d2RiZklHMnk5SnJFTlRaLTRrVmlXOWd5bktsUEgtUmZ5WW0yTlUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJpZCI6InVybjphd3A6bjptZkhsbzQwRHQxaExpckNWTGU0a21TS0xHNkxfMXFfY2RxdmdjY3hXUmhFIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpTdVd1d29KTjQyWGUwb2Vmd3M3Y1J4Qk1GV1RkY3J3OFl3cWtnSm5JMnlNIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6ZDg4OGIyZjAwYTcxZDE0MGE3NDM0MmRmYjU3MzI3MDc5NWIwNjU3OTY4YTEwMTc5ZDdiYWJhNTNjZTUxZGI1YyIsImJ5dGVMZW5ndGgiOiIxMDE2NyIsImlkIjoidXJuOmF3cDpuOlN1V3V3b0pONDJYZTBvZWZ3czdjUnhCTUZXVGRjcnc4WXdxa2dKbkkyeU0iLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOjU3RVdZX1dXVzgxVVV2T0JYX09WQU8xNkJuS1dCMTdodGNoNjQ0MXBOTkUiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWtNNFIzbFZjMUZpUjJGcmFsVnhNbE5QY1ZWMFVuVnlaVFZCZVRScGIwaExaR3B2V1hKbVNraElhVlVpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZOVEpoWW1aa016aGxaV1ZrWXpBMU5qQmtNV1UyT1RrMVpUVTFOakU1TlRRNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHpkWEJ3YkdsbGNpSXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwemRYQndiR2xsY2kxaFoyVnVkRHBoWTNSdmNpSXNJbUZqZEc5eVMybGtJam9pY1U0dE9WcFpTV2R1UkU1WVprWnZZVTB3YkdSVmRWaDJjVkZVTXpCR2JsRnpkVkEwWnpoa1N6RXhPQ0lzSW05d1pYSmhkR2x2Ym5NaU9sc2lkWEp1T205d09uQmhlVzFsYm5RaUxDSjFjbTQ2YjNBNmNHRnBaQzF6WlhKMmFXTmxJaXdpZFhKdU9tOXdPbkJoZVcxbGJuUXRjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcHdZWGx0Wlc1MExYQnliM1pwWkdWeUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkuV09HSzdMdUJpLTNGanVzOTNxdW9Vd0RqdERqcGR4MVdVQmVNZlZsanhUdUZRNmEza1NIdm94Z21QZUR1Tk0wODhZNmZ6YkZHdHVxanhEMkFjOFJpQ3ciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjprOFB2OHdkYmZJRzJ5OUpyRU5UWi00a1ZpVzlneW5LbFBILVJmeVltMk5VIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOm1YR0JPbnpjSllPanlOMl9YSEhTcDFld1dnbktsRjFoNnJUbDlZbVRBSEkifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9wYXltZW50LWxvY2FsLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6eyJpZCI6InVybjphd3A6bjp1d09VRkx3OXRMT1g2UmVjbnJNWUxIQjNtbjE1eTlyYmN1TEVTZXUydkxzIn0sImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiaWQiOiJ1cm46YXdwOm46bnpsR3hvTHFFZ3d1bmpaZzFsNkpCUVRoMVVicHZOZzQxUXl4em5NRnplQSJ9LCJpZCI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDIiLCJraW5kIjoicHJvcG9zZSIsInByZXNlbnRGaWVsZHMiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOm5SNVdEWmJRZEpKZ0RSbjNWWGdaa3AzSUZpNndMb0dia0xucnBubDdIVEEifSwidHlwZSI6WyJNZXNzYWdlIiwiUHJvcG9zZSJdfQ.q1KBzm5RkpGRyW2YW3wQ4UQDdLD7g0UkDOFbKrn5ybdGBb4fo5rRrAojh811tHLnR8EGYUjGFEkONNZgxWu0DQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1517,6 +1638,7 @@
         }
       ],
       "caption": "A propose message from The chosen merchant’s agent reaches the inbound gate.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1589,6 +1711,7 @@
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
       "caption": "The message is intact, signed with The chosen merchant’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1657,6 +1780,7 @@
       ],
       "reason": "no-claims",
       "caption": "The message carries no statements from third parties.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1724,6 +1848,7 @@
         "text": "A representation statement signed with The chosen merchant's pinned key must name this agent, this operation and a current validity period."
       },
       "caption": "The chosen merchant signed a statement that The chosen merchant’s agent acts for them in this operation.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1792,6 +1917,7 @@
       ],
       "reason": "no-data",
       "caption": "The message carries no data that needs terms.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1855,6 +1981,7 @@
       ],
       "reason": "no-claims",
       "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1909,7 +2036,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002",
+      "messageDigest": "sha-256:2fded44425171c368b7e63e8ca00a537731ef894a69380bede35097174db43bc",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 4,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -1968,6 +2098,16 @@
       "seq": 40,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1989,12 +2129,23 @@
         "text": "The shopper's mandate lets the agent use Agree the service, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The shopper's mandate covers this action."
+      "caption": "The shopper's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 41,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -2023,12 +2174,23 @@
         "answer": "Accepted, for Agree the service only."
       },
       "reason": "recipient-established",
-      "caption": "The chosen merchant: Accepted, for Agree the service only."
+      "caption": "The chosen merchant: Accepted, for Agree the service only.",
+      "gateRun": 1
     },
     {
       "seq": 42,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2041,12 +2203,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 43,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2059,12 +2232,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 44,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -2077,12 +2261,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The shopper's limits."
+      "caption": "Inside what the agent may do on its own, and within The shopper's limits.",
+      "gateRun": 1
     },
     {
       "seq": 45,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2104,24 +2299,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The shopper’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The shopper’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 46,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The accept message goes to The chosen merchant’s agent."
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:business-agent:0001",
+      "messageDigest": "sha-256:cd707622f95092ceca0246f1144f876fe8ed16537b651b187df4c0b41fe85480",
+      "caption": "The accept message goes to The chosen merchant’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 47,
       "step": 3,
       "agent": "business-agent",
+      "actionDigest": "sha-256:f814b9c6832e0f703bc3bd28ef387ea2b58d98425fa53e3112e202504775196e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:supplier",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:business-agent:0001",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:business-agent:0001\",\"type\":[\"Message\",\"Accept\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"accept\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:ViH9RZ00ZCJDVPaW1rzrmEJM81uAXWxee7UOTQPc3uc\"},\"to\":{\"id\":\"urn:awp:n:5qBpWI_8rMa2stqJfCqOpbn4XnEFdFZv468ly5TpD0E\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002\",\"body\":{\"id\":\"urn:awp:n:L80oX7RlhpI6FFriJ1gzk0DFxV2i80vsy6jqZU6ntJ0\"},\"evidence\":[{\"id\":\"urn:awp:n:MxL8kIE3gFqvyoXc6ZYcO9_jEBNe4D9_0JgkPcq1jPk\"},{\"id\":\"urn:awp:n:RZE8T01FdSzlyBTDsndwfIq3x_eOgyHWrbBw935uiRs\"},{\"id\":\"urn:awp:n:ea8A4X_NKItsrvS_e1ZUJ0UAMeSENJIZ3QPTEdZnvYw\"}],\"@included\":[{\"id\":\"urn:awp:n:ViH9RZ00ZCJDVPaW1rzrmEJM81uAXWxee7UOTQPc3uc\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"onBehalfOf\":\"urn:fictional:business\"},{\"id\":\"urn:awp:n:5qBpWI_8rMa2stqJfCqOpbn4XnEFdFZv468ly5TpD0E\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"party\":\"urn:fictional:supplier\"},{\"id\":\"urn:awp:n:L80oX7RlhpI6FFriJ1gzk0DFxV2i80vsy6jqZU6ntJ0\",\"type\":\"AcceptBody\",\"agreement\":\"urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d\",\"proposal\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002\",\"termsDigest\":\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\"},{\"id\":\"urn:awp:n:MxL8kIE3gFqvyoXc6ZYcO9_jEBNe4D9_0JgkPcq1jPk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:nrmZV5IefCIeC5F4IgI25Gr7kFYCCw26fV8JaqxO00w\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:RZE8T01FdSzlyBTDsndwfIq3x_eOgyHWrbBw935uiRs\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:IeLd81EmnEjhfP_d_jPTt7SeRLXIQxzIkmLXk7dD-uc\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"authorisation\"},{\"id\":\"urn:awp:n:ea8A4X_NKItsrvS_e1ZUJ0UAMeSENJIZ3QPTEdZnvYw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:WvAq0EG8bRbgQu5X-E08slbb1HRr2uzgyGcSbWsusAk\"},\"format\":\"awp-action-intent/0.1\",\"position\":\"2\",\"role\":\"authorisation\"},{\"id\":\"urn:awp:n:nrmZV5IefCIeC5F4IgI25Gr7kFYCCw26fV8JaqxO00w\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:IpLYUkVKlAnLXFJ4fmxhTb5odtixQNorxN4ruaaJsiU\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:business\",\"proofGraph\":\"urn:awp:n:jKgfTFxYxqapOTJ-NDLFInJgzVKT5bI8ELwG2ngYMGE\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:IeLd81EmnEjhfP_d_jPTt7SeRLXIQxzIkmLXk7dD-uc\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:xdNGzvPytktmbUtffEEzUH4GurQ7DOjiJmxpULYAZVw\",\"issuer\":\"urn:fictional:business\",\"proofGraph\":\"urn:awp:n:mtXtbRyIMtc69DWQYPY7gdXHgxV-hOW05amIzW9_m0o\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:WvAq0EG8bRbgQu5X-E08slbb1HRr2uzgyGcSbWsusAk\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:nrmZV5IefCIeC5F4IgI25Gr7kFYCCw26fV8JaqxO00w\"},{\"id\":\"urn:awp:n:IeLd81EmnEjhfP_d_jPTt7SeRLXIQxzIkmLXk7dD-uc\"}],\"envelopeBytes\":\"{\\\"action\\\":\\\"use\\\",\\\"conversation\\\":\\\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\\\",\\\"operation\\\":\\\"urn:op:paid-service\\\",\\\"parameters\\\":{\\\"termsDigest\\\":\\\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\\\"},\\\"purpose\\\":\\\"urn:purpose:shopping-agent\\\",\\\"recipient\\\":\\\"urn:fictional:supplier\\\",\\\"target\\\":\\\"urn:op:paid-service\\\"}\",\"statementPayload\":{\"id\":\"urn:awp:n:JzUsQJBevY-2RvOG6_-cZSGgLVA9Ux6-4T25A31qKPU\"}},{\"id\":\"urn:awp:n:IpLYUkVKlAnLXFJ4fmxhTb5odtixQNorxN4ruaaJsiU\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Tf6runpFGZ6ZNj0_hmLJWaYmw8Q7hg88R0FflkzakSM\"}},{\"id\":\"urn:awp:n:Tf6runpFGZ6ZNj0_hmLJWaYmw8Q7hg88R0FflkzakSM\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:a757a2020b469e5ed72bba11471cb4ea91b7b5a540cb8be186c400f2b48e5c2f\",\"byteLength\":\"10167\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:xdNGzvPytktmbUtffEEzUH4GurQ7DOjiJmxpULYAZVw\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:2UZQk794TpW1QMF--6dHfpqE47Jc1lB-2liQubWrxqg\"}},{\"id\":\"urn:awp:n:2UZQk794TpW1QMF--6dHfpqE47Jc1lB-2liQubWrxqg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:f1e978371941050faf35053b25dd902802e579f0671178eb950ce445c83e4e8d\",\"byteLength\":\"39101\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:JzUsQJBevY-2RvOG6_-cZSGgLVA9Ux6-4T25A31qKPU\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:JI7vnnj7pKj--rG2vjFj4Tld-EI5rb4DVBcd9t3lM2Q\"},{\"id\":\"urn:awp:n:N5_zhfoDbsI_4XHoxfsLGVOKyKdZppttPyylg-Wo1ns\"},{\"id\":\"urn:awp:n:t110Y_Oqbb5PmXCakFLtl4YRYrXOFyGlwRtab695BuU\"},{\"id\":\"urn:awp:n:on_OwyENAZS8l0VlwFg6PP3VjrLWpaluu1LaAfRP54I\"},{\"id\":\"urn:awp:n:MKTTUYu5FDvHYNZwDB9qYAU_RlpdCJJYv2LQZlzWbaQ\"},{\"id\":\"urn:awp:n:wiHxcdtZ24r8m0FSRHkdRpZikZhLl1F7VRvNEh1tpiQ\"},{\"id\":\"urn:awp:n:GjNrj7mOfhAjY1OL_fw_qDGHhB2hiBZbe43UWVCyyIk\"}]},{\"id\":\"urn:awp:n:JI7vnnj7pKj--rG2vjFj4Tld-EI5rb4DVBcd9t3lM2Q\",\"type\":\"PropertyValue\",\"domainValue\":\"use\",\"name\":\"action\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:action\"},{\"id\":\"urn:awp:n:N5_zhfoDbsI_4XHoxfsLGVOKyKdZppttPyylg-Wo1ns\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\"},\"name\":\"conversation\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:conversation\"},{\"id\":\"urn:awp:n:t110Y_Oqbb5PmXCakFLtl4YRYrXOFyGlwRtab695BuU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:op:paid-service\"},\"name\":\"operation\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:operation\"},{\"id\":\"urn:awp:n:on_OwyENAZS8l0VlwFg6PP3VjrLWpaluu1LaAfRP54I\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:fslYr-2ta_CEXVS3rLSA4GQ6ESBI8n5qxkeRhSb7_CQ\"},\"name\":\"parameters\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:parameters\"},{\"id\":\"urn:awp:n:MKTTUYu5FDvHYNZwDB9qYAU_RlpdCJJYv2LQZlzWbaQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:purpose:shopping-agent\"},\"name\":\"purpose\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:purpose\"},{\"id\":\"urn:awp:n:wiHxcdtZ24r8m0FSRHkdRpZikZhLl1F7VRvNEh1tpiQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:supplier\"},\"name\":\"recipient\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:recipient\"},{\"id\":\"urn:awp:n:GjNrj7mOfhAjY1OL_fw_qDGHhB2hiBZbe43UWVCyyIk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:op:paid-service\"},\"name\":\"target\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:target\"},{\"id\":\"urn:awp:n:fslYr-2ta_CEXVS3rLSA4GQ6ESBI8n5qxkeRhSb7_CQ\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:j7diBLrUq0XEXVN3JtjOFRqJiH5e15PPCQQnvemEc-k\"}]},{\"id\":\"urn:awp:n:j7diBLrUq0XEXVN3JtjOFRqJiH5e15PPCQQnvemEc-k\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\"},\"name\":\"termsDigest\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:termsDigest\"},{\"id\":\"urn:awp:n:jKgfTFxYxqapOTJ-NDLFInJgzVKT5bI8ELwG2ngYMGE\",\"@graph\":[{\"id\":\"urn:awp:n:B38b7Y1RtNPE-h8938qg3GOADUsD57pexepEIM8scr0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImtqRVZnU1NUSXF2Z0R1VTduQmx4ei1aNzVTQUw1dUgzR3VSOVRYa3VnZ00iLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246OWZkOTg0YWFmMTkwY2U2ODYwMjFmYzNmYjA4YmFmMzc6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcy1hZ2VudDphZ2VudCIsImFjdG9yS2lkIjoiMVhjX3BtMEVqeGRpXzY4SW85TzZuczZFSzBYVDdSUW1tN3N3NjVmSUxVOCIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOnBheW1lbnQiLCJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInVybjpvcDpwYXltZW50LXByb3ZpZGVyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.RvZHFFQWMOMwOWHGCursWiqDyTqlH8oc5uErq2EDVndnoFy6fqCyBfXuAxfMJnyWMFK7-B8FFsEpgr06VypNAg\"}]},{\"id\":\"urn:awp:n:mtXtbRyIMtc69DWQYPY7gdXHgxV-hOW05amIzW9_m0o\",\"@graph\":[{\"id\":\"urn:awp:n:mMDfMiOGsqs6CA57KVMLbwZJe2pVS8TO41_ykE3Dt80\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImtqRVZnU1NUSXF2Z0R1VTduQmx4ei1aNzVTQUw1dUgzR3VSOVRYa3VnZ00iLCJ0eXAiOiJhd3AtbWFuZGF0ZStqd3MifQ.eyJ0eXBlIjoiT3duZXJNYW5kYXRlIiwiaWQiOiJ1cm46YXdwOm1hbmRhdGU6MTA3NDFhYTBkNjMyNzc4ZGUwN2U2MjgzM2ZmOTU1ZDY6c2hvcHBpbmctYWdlbnQiLCJ2ZXJzaW9uIjoxLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YnVzaW5lc3MtYWdlbnQ6YWdlbnQiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiYXV0b25vbW91cyI6eyJpZCI6InVybjphd3A6cG9saWN5OjY1NzA0ZmViZTg5MTZkNjAzZDAzNTQ2OThkOWI5NDliOnNob3BwaW5nLWFnZW50L2F1dG9ub21vdXMiLCJ0eXBlIjoiU2V0IiwiYXNzaWduZXIiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzIiwiYXNzaWduZWUiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiY29uZmxpY3QiOiJwcm9oaWJpdCIsInBlcm1pc3Npb25zIjpbeyJpZCI6InVybjpydWxlOm1vbnRobHktcGF5bWVudHMiLCJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InBheSIsInRhcmdldCI6InVybjpvcDpwYXltZW50IiwibGltaXQiOnsicGVyQWN0aW9uIjo1MDAsInBlclBlcmlvZCI6MjAwMCwicGVyaW9kIjoiY2FsZW5kYXItbW9udGgiLCJjdXJyZW5jeSI6IkdCUCJ9fSx7ImlkIjoidXJuOnJ1bGU6dXNlOnBhaWQtc2VydmljZSIsInR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOm9wOnBhaWQtc2VydmljZSJ9LHsiaWQiOiJ1cm46cnVsZTp1c2U6cGF5bWVudC1yZXF1ZXN0IiwidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46b3A6cGF5bWVudC1yZXF1ZXN0In1dLCJwcm9oaWJpdGlvbnMiOltdfSwid2l0aEFwcHJvdmFsIjp7ImlkIjoidXJuOmF3cDpwb2xpY3k6ODg0YmYxYThmNDE4N2I4MmJkZGRiNTIzNWQyMjlhMDA6c2hvcHBpbmctYWdlbnQvd2l0aC1hcHByb3ZhbCIsInR5cGUiOiJTZXQiLCJhc3NpZ25lciI6InVybjpmaWN0aW9uYWw6YnVzaW5lc3MiLCJhc3NpZ25lZSI6InVybjpmaWN0aW9uYWw6YnVzaW5lc3MtYWdlbnQ6YWdlbnQiLCJjb25mbGljdCI6InByb2hpYml0IiwicGVybWlzc2lvbnMiOlt7ImlkIjoidXJuOnJ1bGU6YXBwcm92ZWQtcGF5bWVudCIsInR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoicGF5IiwidGFyZ2V0IjoidXJuOm9wOnBheW1lbnQifV0sInByb2hpYml0aW9ucyI6W119LCJub3RlIjoiU3ludGhldGljIHNob3BwaW5nLWFnZW50IG1hbmRhdGUgKHBpbG90IHN1YnNldCkuIn0.mDtnYBCXrFbPLHMcnx6xH7OOcjKqqTwZyP3w1fUSeUAnKU0AOGKxOwr5LmpXpPSohp2_EM8saz_jc8dJmi5GDg\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjFYY19wbTBFanhkaV82OElvOU82bnM2RUswWFQ3UlFtbTdzdzY1ZklMVTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcy1hZ2VudDphZ2VudCIsImlkIjoidXJuOmF3cDpuOlZpSDlSWjAwWkNKRFZQYVcxcnpybUVKTTgxdUFYV3hlZTdVT1RRUGMzdWMiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46NXFCcFdJXzhyTWEyc3RxSmZDcU9wYm40WG5FRmRGWnY0NjhseTVUcEQwRSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYWdyZWVtZW50IjoidXJuOmF3cDphZ3JlZW1lbnQ6MGQ3MGMwMGMxYWMzMzJkNGU3ZGFlZWFlYzVmYTY0NmQiLCJpZCI6InVybjphd3A6bjpMODBvWDdSbGhwSTZGRnJpSjFnemswREZ4VjJpODB2c3k2anFaVTZudEowIiwicHJvcG9zYWwiOiJ1cm46YXdwOmVuZ2luZS1zaG9wcGluZy1hZ2VudC1icmFuY2gtMTpzdXBwbGllci1hZ2VudDowMDAyIiwidGVybXNEaWdlc3QiOiJzaGEtMjU2OmUzNzgzYTYyN2E4NmI4M2EwNDIxMzZiOWEzZjE0ZDk5YzI0MjQ3MzVhNTU0MjA3YjE1N2Q3MmVjNDE4ZTJiN2EiLCJ0eXBlIjoiQWNjZXB0Qm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm5ybVpWNUllZkNJZUM1RjRJZ0kyNUdyN2tGWUNDdzI2ZlY4SmFxeE8wMHcifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpNeEw4a0lFM2dGcXZ5b1hjNlpZY085X2pFQk5lNEQ5XzBKZ2tQY3ExalBrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkllTGQ4MUVtbkVqaGZQX2RfalBUdDdTZVJMWElReHpJa21MWGs3ZEQtdWMifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpSWkU4VDAxRmRTemx5QlREc25kd2ZJcTN4X2VPZ3lIV3JiQnc5MzV1aVJzIiwicG9zaXRpb24iOiIxIiwicm9sZSI6ImF1dGhvcmlzYXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46V3ZBcTBFRzhiUmJnUXU1WC1FMDhzbGJiMUhScjJ1emd5R2NTYldzdXNBayJ9LCJmb3JtYXQiOiJhd3AtYWN0aW9uLWludGVudC8wLjEiLCJpZCI6InVybjphd3A6bjplYThBNFhfTktJdHNydlNfZTFaVUowVUFNZVNFTkpJWjNRUFRFZFpudll3IiwicG9zaXRpb24iOiIyIiwicm9sZSI6ImF1dGhvcmlzYXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJjcmVkZW50aWFsU3ViamVjdCI6InVybjphd3A6bjpJcExZVWtWS2xBbkxYRko0Zm14aFRiNW9kdGl4UU5vcnhONHJ1YWFKc2lVIiwiaWQiOiJ1cm46YXdwOm46bnJtWlY1SWVmQ0llQzVGNElnSTI1R3I3a0ZZQ0N3MjZmVjhKYXF4TzAwdyIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46aktnZlRGeFl4cWFwT1RKLU5ETEZJbkpnelZLVDViSThFTHdHMm5nWU1HRSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOnhkTkd6dlB5dGt0bWJVdGZmRUV6VUg0R3VyUTdET2ppSm14cFVMWUFaVnciLCJpZCI6InVybjphd3A6bjpJZUxkODFFbW5FamhmUF9kX2pQVHQ3U2VSTFhJUXh6SWttTFhrN2RELXVjIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46bXRYdGJSeUlNdGM2OURXUVlQWTdnZFhIZ3hWLWhPVzA1YW1Jelc5X20wbyIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6W3siaWQiOiJ1cm46YXdwOm46bnJtWlY1SWVmQ0llQzVGNElnSTI1R3I3a0ZZQ0N3MjZmVjhKYXF4TzAwdyJ9LHsiaWQiOiJ1cm46YXdwOm46SWVMZDgxRW1uRWpoZlBfZF9qUFR0N1NlUkxYSVF4eklrbUxYazdkRC11YyJ9XSwiZW52ZWxvcGVCeXRlcyI6IntcImFjdGlvblwiOlwidXNlXCIsXCJjb252ZXJzYXRpb25cIjpcInVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDFcIixcIm9wZXJhdGlvblwiOlwidXJuOm9wOnBhaWQtc2VydmljZVwiLFwicGFyYW1ldGVyc1wiOntcInRlcm1zRGlnZXN0XCI6XCJzaGEtMjU2OmUzNzgzYTYyN2E4NmI4M2EwNDIxMzZiOWEzZjE0ZDk5YzI0MjQ3MzVhNTU0MjA3YjE1N2Q3MmVjNDE4ZTJiN2FcIn0sXCJwdXJwb3NlXCI6XCJ1cm46cHVycG9zZTpzaG9wcGluZy1hZ2VudFwiLFwicmVjaXBpZW50XCI6XCJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyXCIsXCJ0YXJnZXRcIjpcInVybjpvcDpwYWlkLXNlcnZpY2VcIn0iLCJpZCI6InVybjphd3A6bjpXdkFxMEVHOGJSYmdRdTVYLUUwOHNsYmIxSFJyMnV6Z3lHY1NiV3N1c0FrIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpKelVzUUpCZXZZLTJSdk9HNl8tY1pTR2dMVkE5VXg2LTRUMjVBMzFxS1BVIn0sInR5cGUiOiJWZXJpZmlhYmxlUHJlc2VudGF0aW9uIn0seyJpZCI6InVybjphd3A6bjpJcExZVWtWS2xBbkxYRko0Zm14aFRiNW9kdGl4UU5vcnhONHJ1YWFKc2lVIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpUZjZydW5wRkdaNlpOajBfaG1MSldhWW13OFE3aGc4OFIwRmZsa3pha1NNIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YTc1N2EyMDIwYjQ2OWU1ZWQ3MmJiYTExNDcxY2I0ZWE5MWI3YjVhNTQwY2I4YmUxODZjNDAwZjJiNDhlNWMyZiIsImJ5dGVMZW5ndGgiOiIxMDE2NyIsImlkIjoidXJuOmF3cDpuOlRmNnJ1bnBGR1o2Wk5qMF9obUxKV2FZbXc4UTdoZzg4UjBGZmxremFrU00iLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJpZCI6InVybjphd3A6bjp4ZE5HenZQeXRrdG1iVXRmZkVFelVINEd1clE3RE9qaUpteHBVTFlBWlZ3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjoyVVpRazc5NFRwVzFRTUYtLTZkSGZwcUU0N0pjMWxCLTJsaVF1YldyeHFnIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6ZjFlOTc4MzcxOTQxMDUwZmFmMzUwNTNiMjVkZDkwMjgwMmU1NzlmMDY3MTE3OGViOTUwY2U0NDVjODNlNGU4ZCIsImJ5dGVMZW5ndGgiOiIzOTEwMSIsImlkIjoidXJuOmF3cDpuOjJVWlFrNzk0VHBXMVFNRi0tNmRIZnBxRTQ3SmMxbEItMmxpUXViV3J4cWciLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJpZCI6InVybjphd3A6bjpKelVzUUpCZXZZLTJSdk9HNl8tY1pTR2dMVkE5VXg2LTRUMjVBMzFxS1BVIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpKSTd2bm5qN3BLai0tckcydmpGajRUbGQtRUk1cmI0RFZCY2Q5dDNsTTJRIn0seyJpZCI6InVybjphd3A6bjpONV96aGZvRGJzSV80WEhveGZzTEdWT0t5S2RacHB0dFB5eWxnLVdvMW5zIn0seyJpZCI6InVybjphd3A6bjp0MTEwWV9PcWJiNVBtWENha0ZMdGw0WVJZclhPRnlHbHdSdGFiNjk1QnVVIn0seyJpZCI6InVybjphd3A6bjpvbl9Pd3lFTkFaUzhsMFZsd0ZnNlBQM1ZqckxXcGFsdXUxTGFBZlJQNTRJIn0seyJpZCI6InVybjphd3A6bjpNS1RUVVl1NUZEdkhZTlp3REI5cVlBVV9SbHBkQ0pKWXYyTFFabHpXYmFRIn0seyJpZCI6InVybjphd3A6bjp3aUh4Y2R0WjI0cjhtMEZTUkhrZFJwWmlrWmhMbDFGN1ZSdk5FaDF0cGlRIn0seyJpZCI6InVybjphd3A6bjpHak5yajdtT2ZoQWpZMU9MX2Z3X3FER0hoQjJoaUJaYmU0M1VXVkN5eUlrIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImRvbWFpblZhbHVlIjoidXNlIiwiaWQiOiJ1cm46YXdwOm46Skk3dm5uajdwS2otLXJHMnZqRmo0VGxkLUVJNXJiNERWQmNkOXQzbE0yUSIsIm5hbWUiOiJhY3Rpb24iLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6YWN0aW9uIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSJ9LCJpZCI6InVybjphd3A6bjpONV96aGZvRGJzSV80WEhveGZzTEdWT0t5S2RacHB0dFB5eWxnLVdvMW5zIiwibmFtZSI6ImNvbnZlcnNhdGlvbiIsInBvc2l0aW9uIjoiMSIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpjb252ZXJzYXRpb24iLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46b3A6cGFpZC1zZXJ2aWNlIn0sImlkIjoidXJuOmF3cDpuOnQxMTBZX09xYmI1UG1YQ2FrRkx0bDRZUllyWE9GeUdsd1J0YWI2OTVCdVUiLCJuYW1lIjoib3BlcmF0aW9uIiwicG9zaXRpb24iOiIyIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOm9wZXJhdGlvbiIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjphd3A6bjpmc2xZci0ydGFfQ0VYVlMzckxTQTRHUTZFU0JJOG41cXhrZVJoU2I3X0NRIn0sImlkIjoidXJuOmF3cDpuOm9uX093eUVOQVpTOGwwVmx3Rmc2UFAzVmpyTFdwYWx1dTFMYUFmUlA1NEkiLCJuYW1lIjoicGFyYW1ldGVycyIsInBvc2l0aW9uIjoiMyIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpwYXJhbWV0ZXJzIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOnB1cnBvc2U6c2hvcHBpbmctYWdlbnQifSwiaWQiOiJ1cm46YXdwOm46TUtUVFVZdTVGRHZIWU5ad0RCOXFZQVVfUmxwZENKSll2MkxRWmx6V2JhUSIsIm5hbWUiOiJwdXJwb3NlIiwicG9zaXRpb24iOiI0IiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnB1cnBvc2UiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIn0sImlkIjoidXJuOmF3cDpuOndpSHhjZHRaMjRyOG0wRlNSSGtkUnBaaWtaaExsMUY3VlJ2TkVoMXRwaVEiLCJuYW1lIjoicmVjaXBpZW50IiwicG9zaXRpb24iOiI1IiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnJlY2lwaWVudCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjpvcDpwYWlkLXNlcnZpY2UifSwiaWQiOiJ1cm46YXdwOm46R2pOcmo3bU9maEFqWTFPTF9md19xREdIaEIyaGlCWmJlNDNVV1ZDeXlJayIsIm5hbWUiOiJ0YXJnZXQiLCJwb3NpdGlvbiI6IjYiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6dGFyZ2V0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOmZzbFlyLTJ0YV9DRVhWUzNyTFNBNEdRNkVTQkk4bjVxeGtlUmhTYjdfQ1EiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOmo3ZGlCTHJVcTBYRVhWTjNKdGpPRlJxSmlINWUxNVBQQ1FRbnZlbUVjLWsifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJzaGEtMjU2OmUzNzgzYTYyN2E4NmI4M2EwNDIxMzZiOWEzZjE0ZDk5YzI0MjQ3MzVhNTU0MjA3YjE1N2Q3MmVjNDE4ZTJiN2EifSwiaWQiOiJ1cm46YXdwOm46ajdkaUJMclVxMFhFWFZOM0p0ak9GUnFKaUg1ZTE1UFBDUVFudmVtRWMtayIsIm5hbWUiOiJ0ZXJtc0RpZ2VzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDp0ZXJtc0RpZ2VzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOkIzOGI3WTFSdE5QRS1oODkzOHFnM0dPQURVc0Q1N3BleGVwRUlNOHNjcjAiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW10cVJWWm5VMU5VU1hGMlowUjFWVGR1UW14NGVpMWFOelZUUVV3MWRVZ3pSM1ZTT1ZSWWEzVm5aMDBpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZPV1prT1RnMFlXRm1NVGt3WTJVMk9EWXdNakZtWXpObVlqQTRZbUZtTXpjNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGlkWE5wYm1WemN5SXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaWRYTnBibVZ6Y3kxaFoyVnVkRHBoWjJWdWRDSXNJbUZqZEc5eVMybGtJam9pTVZoalgzQnRNRVZxZUdScFh6WTRTVzg1VHpadWN6WkZTekJZVkRkU1VXMXROM04zTmpWbVNVeFZPQ0lzSW05d1pYSmhkR2x2Ym5NaU9sc2lkWEp1T205d09uQmhlVzFsYm5RaUxDSjFjbTQ2YjNBNmNHRnBaQzF6WlhKMmFXTmxJaXdpZFhKdU9tOXdPbkJoZVcxbGJuUXRjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcHdZWGx0Wlc1MExYQnliM1pwWkdWeUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkuUnZaSEZGUVdNT013T1dIR0N1cnNXaXFEeVRxbEg4b2M1dUVycTJFRFZuZG5vRnk2ZnFDeUJmWHVBeGZNSm55V01GSzctQjhGRnNFcGdyMDZWeXBOQWciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpqS2dmVEZ4WXhxYXBPVEotTkRMRkluSmd6VktUNWJJOEVMd0cybmdZTUdFIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOm1NRGZNaU9Hc3FzNkNBNTdLVk1MYndaSmUycFZTOFRPNDFfeWtFM0R0ODAiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW10cVJWWm5VMU5VU1hGMlowUjFWVGR1UW14NGVpMWFOelZUUVV3MWRVZ3pSM1ZTT1ZSWWEzVm5aMDBpTENKMGVYQWlPaUpoZDNBdGJXRnVaR0YwWlN0cWQzTWlmUS5leUowZVhCbElqb2lUM2R1WlhKTllXNWtZWFJsSWl3aWFXUWlPaUoxY200NllYZHdPbTFoYm1SaGRHVTZNVEEzTkRGaFlUQmtOak15TnpjNFpHVXdOMlUyTWpnek0yWm1PVFUxWkRZNmMyaHZjSEJwYm1jdFlXZGxiblFpTENKMlpYSnphVzl1SWpveExDSnBjM04xWlhJaU9pSjFjbTQ2Wm1samRHbHZibUZzT21KMWMybHVaWE56SWl3aWMzVmlhbVZqZENJNkluVnlianBtYVdOMGFXOXVZV3c2WW5WemFXNWxjM010WVdkbGJuUTZZV2RsYm5RaUxDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aVlYVjBiMjV2Ylc5MWN5STZleUpwWkNJNkluVnlianBoZDNBNmNHOXNhV041T2pZMU56QTBabVZpWlRnNU1UWmtOakF6WkRBek5UUTJPVGhrT1dJNU5EbGlPbk5vYjNCd2FXNW5MV0ZuWlc1MEwyRjFkRzl1YjIxdmRYTWlMQ0owZVhCbElqb2lVMlYwSWl3aVlYTnphV2R1WlhJaU9pSjFjbTQ2Wm1samRHbHZibUZzT21KMWMybHVaWE56SWl3aVlYTnphV2R1WldVaU9pSjFjbTQ2Wm1samRHbHZibUZzT21KMWMybHVaWE56TFdGblpXNTBPbUZuWlc1MElpd2lZMjl1Wm14cFkzUWlPaUp3Y205b2FXSnBkQ0lzSW5CbGNtMXBjM05wYjI1eklqcGJleUpwWkNJNkluVnlianB5ZFd4bE9tMXZiblJvYkhrdGNHRjViV1Z1ZEhNaUxDSjBlWEJsSWpvaWNHVnliV2x6YzJsdmJpSXNJbUZqZEdsdmJpSTZJbkJoZVNJc0luUmhjbWRsZENJNkluVnlianB2Y0Rwd1lYbHRaVzUwSWl3aWJHbHRhWFFpT25zaWNHVnlRV04wYVc5dUlqbzFNREFzSW5CbGNsQmxjbWx2WkNJNk1qQXdNQ3dpY0dWeWFXOWtJam9pWTJGc1pXNWtZWEl0Ylc5dWRHZ2lMQ0pqZFhKeVpXNWplU0k2SWtkQ1VDSjlmU3g3SW1sa0lqb2lkWEp1T25KMWJHVTZkWE5sT25CaGFXUXRjMlZ5ZG1salpTSXNJblI1Y0dVaU9pSndaWEp0YVhOemFXOXVJaXdpWVdOMGFXOXVJam9pZFhObElpd2lkR0Z5WjJWMElqb2lkWEp1T205d09uQmhhV1F0YzJWeWRtbGpaU0o5TEhzaWFXUWlPaUoxY200NmNuVnNaVHAxYzJVNmNHRjViV1Z1ZEMxeVpYRjFaWE4wSWl3aWRIbHdaU0k2SW5CbGNtMXBjM05wYjI0aUxDSmhZM1JwYjI0aU9pSjFjMlVpTENKMFlYSm5aWFFpT2lKMWNtNDZiM0E2Y0dGNWJXVnVkQzF5WlhGMVpYTjBJbjFkTENKd2NtOW9hV0pwZEdsdmJuTWlPbHRkZlN3aWQybDBhRUZ3Y0hKdmRtRnNJanA3SW1sa0lqb2lkWEp1T21GM2NEcHdiMnhwWTNrNk9EZzBZbVl4WVRobU5ERTROMkk0TW1Ka1pHUmlOVEl6TldReU1qbGhNREE2YzJodmNIQnBibWN0WVdkbGJuUXZkMmwwYUMxaGNIQnliM1poYkNJc0luUjVjR1VpT2lKVFpYUWlMQ0poYzNOcFoyNWxjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZZblZ6YVc1bGMzTWlMQ0poYzNOcFoyNWxaU0k2SW5WeWJqcG1hV04wYVc5dVlXdzZZblZ6YVc1bGMzTXRZV2RsYm5RNllXZGxiblFpTENKamIyNW1iR2xqZENJNkluQnliMmhwWW1sMElpd2ljR1Z5YldsemMybHZibk1pT2x0N0ltbGtJam9pZFhKdU9uSjFiR1U2WVhCd2NtOTJaV1F0Y0dGNWJXVnVkQ0lzSW5SNWNHVWlPaUp3WlhKdGFYTnphVzl1SWl3aVlXTjBhVzl1SWpvaWNHRjVJaXdpZEdGeVoyVjBJam9pZFhKdU9tOXdPbkJoZVcxbGJuUWlmVjBzSW5CeWIyaHBZbWwwYVc5dWN5STZXMTE5TENKdWIzUmxJam9pVTNsdWRHaGxkR2xqSUhOb2IzQndhVzVuTFdGblpXNTBJRzFoYm1SaGRHVWdLSEJwYkc5MElITjFZbk5sZENrdUluMC5tRHRuWUJDWHJGYlBMSE1jbng2eEg3T09jaktxcVR3WnlQM3cxZlVTZVVBbktVMEFPR0t4T3dyNUxtcFhwUFNvaHAyX0VNOHNhel9qYzhkSm1pNUdEZyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOm10WHRiUnlJTXRjNjlEV1FZUFk3Z2RYSGd4Vi1oT1cwNWFtSXpXOV9tMG8ifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46TDgwb1g3UmxocEk2RkZyaUoxZ3prMERGeFYyaTgwdnN5NmpxWlU2bnRKMCJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BheW1lbnQtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjpbeyJpZCI6InVybjphd3A6bjpNeEw4a0lFM2dGcXZ5b1hjNlpZY085X2pFQk5lNEQ5XzBKZ2tQY3ExalBrIn0seyJpZCI6InVybjphd3A6bjpSWkU4VDAxRmRTemx5QlREc25kd2ZJcTN4X2VPZ3lIV3JiQnc5MzV1aVJzIn0seyJpZCI6InVybjphd3A6bjplYThBNFhfTktJdHNydlNfZTFaVUowVUFNZVNFTkpJWjNRUFRFZFpudll3In1dLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlZpSDlSWjAwWkNKRFZQYVcxcnpybUVKTTgxdUFYV3hlZTdVT1RRUGMzdWMifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zaG9wcGluZy1hZ2VudC1icmFuY2gtMTpidXNpbmVzcy1hZ2VudDowMDAxIiwiaW5SZXBseVRvIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJhY2NlcHQiLCJwcmVzZW50RmllbGRzIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjo1cUJwV0lfOHJNYTJzdHFKZkNxT3BibjRYbkVGZEZadjQ2OGx5NVRwRDBFIn0sInR5cGUiOlsiTWVzc2FnZSIsIkFjY2VwdCJdfQ.RAwZ2-ycttgOamI5grifG1bweooBiI-mU6HMgKuCmlLxkMOBGF2PlXRdm6XJHZyizG-lW_2QhbRbaUVeEDxxAQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2244,7 +2464,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The shopper’s agent sends an accept message to The chosen merchant’s agent."
+      "caption": "The shopper’s agent sends an accept message to The chosen merchant’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 48,
@@ -2252,6 +2473,7 @@
       "agent": "supplier-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:business-agent:0001",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:business-agent:0001\",\"type\":[\"Message\",\"Accept\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"accept\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:ViH9RZ00ZCJDVPaW1rzrmEJM81uAXWxee7UOTQPc3uc\"},\"to\":{\"id\":\"urn:awp:n:5qBpWI_8rMa2stqJfCqOpbn4XnEFdFZv468ly5TpD0E\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002\",\"body\":{\"id\":\"urn:awp:n:L80oX7RlhpI6FFriJ1gzk0DFxV2i80vsy6jqZU6ntJ0\"},\"evidence\":[{\"id\":\"urn:awp:n:MxL8kIE3gFqvyoXc6ZYcO9_jEBNe4D9_0JgkPcq1jPk\"},{\"id\":\"urn:awp:n:RZE8T01FdSzlyBTDsndwfIq3x_eOgyHWrbBw935uiRs\"},{\"id\":\"urn:awp:n:ea8A4X_NKItsrvS_e1ZUJ0UAMeSENJIZ3QPTEdZnvYw\"}],\"@included\":[{\"id\":\"urn:awp:n:ViH9RZ00ZCJDVPaW1rzrmEJM81uAXWxee7UOTQPc3uc\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"onBehalfOf\":\"urn:fictional:business\"},{\"id\":\"urn:awp:n:5qBpWI_8rMa2stqJfCqOpbn4XnEFdFZv468ly5TpD0E\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"party\":\"urn:fictional:supplier\"},{\"id\":\"urn:awp:n:L80oX7RlhpI6FFriJ1gzk0DFxV2i80vsy6jqZU6ntJ0\",\"type\":\"AcceptBody\",\"agreement\":\"urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d\",\"proposal\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0002\",\"termsDigest\":\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\"},{\"id\":\"urn:awp:n:MxL8kIE3gFqvyoXc6ZYcO9_jEBNe4D9_0JgkPcq1jPk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:nrmZV5IefCIeC5F4IgI25Gr7kFYCCw26fV8JaqxO00w\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:RZE8T01FdSzlyBTDsndwfIq3x_eOgyHWrbBw935uiRs\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:IeLd81EmnEjhfP_d_jPTt7SeRLXIQxzIkmLXk7dD-uc\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"authorisation\"},{\"id\":\"urn:awp:n:ea8A4X_NKItsrvS_e1ZUJ0UAMeSENJIZ3QPTEdZnvYw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:WvAq0EG8bRbgQu5X-E08slbb1HRr2uzgyGcSbWsusAk\"},\"format\":\"awp-action-intent/0.1\",\"position\":\"2\",\"role\":\"authorisation\"},{\"id\":\"urn:awp:n:nrmZV5IefCIeC5F4IgI25Gr7kFYCCw26fV8JaqxO00w\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:IpLYUkVKlAnLXFJ4fmxhTb5odtixQNorxN4ruaaJsiU\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:business\",\"proofGraph\":\"urn:awp:n:jKgfTFxYxqapOTJ-NDLFInJgzVKT5bI8ELwG2ngYMGE\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:IeLd81EmnEjhfP_d_jPTt7SeRLXIQxzIkmLXk7dD-uc\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:xdNGzvPytktmbUtffEEzUH4GurQ7DOjiJmxpULYAZVw\",\"issuer\":\"urn:fictional:business\",\"proofGraph\":\"urn:awp:n:mtXtbRyIMtc69DWQYPY7gdXHgxV-hOW05amIzW9_m0o\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:WvAq0EG8bRbgQu5X-E08slbb1HRr2uzgyGcSbWsusAk\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:nrmZV5IefCIeC5F4IgI25Gr7kFYCCw26fV8JaqxO00w\"},{\"id\":\"urn:awp:n:IeLd81EmnEjhfP_d_jPTt7SeRLXIQxzIkmLXk7dD-uc\"}],\"envelopeBytes\":\"{\\\"action\\\":\\\"use\\\",\\\"conversation\\\":\\\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\\\",\\\"operation\\\":\\\"urn:op:paid-service\\\",\\\"parameters\\\":{\\\"termsDigest\\\":\\\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\\\"},\\\"purpose\\\":\\\"urn:purpose:shopping-agent\\\",\\\"recipient\\\":\\\"urn:fictional:supplier\\\",\\\"target\\\":\\\"urn:op:paid-service\\\"}\",\"statementPayload\":{\"id\":\"urn:awp:n:JzUsQJBevY-2RvOG6_-cZSGgLVA9Ux6-4T25A31qKPU\"}},{\"id\":\"urn:awp:n:IpLYUkVKlAnLXFJ4fmxhTb5odtixQNorxN4ruaaJsiU\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Tf6runpFGZ6ZNj0_hmLJWaYmw8Q7hg88R0FflkzakSM\"}},{\"id\":\"urn:awp:n:Tf6runpFGZ6ZNj0_hmLJWaYmw8Q7hg88R0FflkzakSM\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:a757a2020b469e5ed72bba11471cb4ea91b7b5a540cb8be186c400f2b48e5c2f\",\"byteLength\":\"10167\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:xdNGzvPytktmbUtffEEzUH4GurQ7DOjiJmxpULYAZVw\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:2UZQk794TpW1QMF--6dHfpqE47Jc1lB-2liQubWrxqg\"}},{\"id\":\"urn:awp:n:2UZQk794TpW1QMF--6dHfpqE47Jc1lB-2liQubWrxqg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:f1e978371941050faf35053b25dd902802e579f0671178eb950ce445c83e4e8d\",\"byteLength\":\"39101\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:JzUsQJBevY-2RvOG6_-cZSGgLVA9Ux6-4T25A31qKPU\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:JI7vnnj7pKj--rG2vjFj4Tld-EI5rb4DVBcd9t3lM2Q\"},{\"id\":\"urn:awp:n:N5_zhfoDbsI_4XHoxfsLGVOKyKdZppttPyylg-Wo1ns\"},{\"id\":\"urn:awp:n:t110Y_Oqbb5PmXCakFLtl4YRYrXOFyGlwRtab695BuU\"},{\"id\":\"urn:awp:n:on_OwyENAZS8l0VlwFg6PP3VjrLWpaluu1LaAfRP54I\"},{\"id\":\"urn:awp:n:MKTTUYu5FDvHYNZwDB9qYAU_RlpdCJJYv2LQZlzWbaQ\"},{\"id\":\"urn:awp:n:wiHxcdtZ24r8m0FSRHkdRpZikZhLl1F7VRvNEh1tpiQ\"},{\"id\":\"urn:awp:n:GjNrj7mOfhAjY1OL_fw_qDGHhB2hiBZbe43UWVCyyIk\"}]},{\"id\":\"urn:awp:n:JI7vnnj7pKj--rG2vjFj4Tld-EI5rb4DVBcd9t3lM2Q\",\"type\":\"PropertyValue\",\"domainValue\":\"use\",\"name\":\"action\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:action\"},{\"id\":\"urn:awp:n:N5_zhfoDbsI_4XHoxfsLGVOKyKdZppttPyylg-Wo1ns\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\"},\"name\":\"conversation\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:conversation\"},{\"id\":\"urn:awp:n:t110Y_Oqbb5PmXCakFLtl4YRYrXOFyGlwRtab695BuU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:op:paid-service\"},\"name\":\"operation\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:operation\"},{\"id\":\"urn:awp:n:on_OwyENAZS8l0VlwFg6PP3VjrLWpaluu1LaAfRP54I\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:fslYr-2ta_CEXVS3rLSA4GQ6ESBI8n5qxkeRhSb7_CQ\"},\"name\":\"parameters\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:parameters\"},{\"id\":\"urn:awp:n:MKTTUYu5FDvHYNZwDB9qYAU_RlpdCJJYv2LQZlzWbaQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:purpose:shopping-agent\"},\"name\":\"purpose\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:purpose\"},{\"id\":\"urn:awp:n:wiHxcdtZ24r8m0FSRHkdRpZikZhLl1F7VRvNEh1tpiQ\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:supplier\"},\"name\":\"recipient\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:recipient\"},{\"id\":\"urn:awp:n:GjNrj7mOfhAjY1OL_fw_qDGHhB2hiBZbe43UWVCyyIk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:op:paid-service\"},\"name\":\"target\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:target\"},{\"id\":\"urn:awp:n:fslYr-2ta_CEXVS3rLSA4GQ6ESBI8n5qxkeRhSb7_CQ\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:j7diBLrUq0XEXVN3JtjOFRqJiH5e15PPCQQnvemEc-k\"}]},{\"id\":\"urn:awp:n:j7diBLrUq0XEXVN3JtjOFRqJiH5e15PPCQQnvemEc-k\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"sha-256:e3783a627a86b83a042136b9a3f14d99c2424735a554207b157d72ec418e2b7a\"},\"name\":\"termsDigest\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:termsDigest\"},{\"id\":\"urn:awp:n:jKgfTFxYxqapOTJ-NDLFInJgzVKT5bI8ELwG2ngYMGE\",\"@graph\":[{\"id\":\"urn:awp:n:B38b7Y1RtNPE-h8938qg3GOADUsD57pexepEIM8scr0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImtqRVZnU1NUSXF2Z0R1VTduQmx4ei1aNzVTQUw1dUgzR3VSOVRYa3VnZ00iLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246OWZkOTg0YWFmMTkwY2U2ODYwMjFmYzNmYjA4YmFmMzc6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcy1hZ2VudDphZ2VudCIsImFjdG9yS2lkIjoiMVhjX3BtMEVqeGRpXzY4SW85TzZuczZFSzBYVDdSUW1tN3N3NjVmSUxVOCIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOnBheW1lbnQiLCJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInVybjpvcDpwYXltZW50LXByb3ZpZGVyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.RvZHFFQWMOMwOWHGCursWiqDyTqlH8oc5uErq2EDVndnoFy6fqCyBfXuAxfMJnyWMFK7-B8FFsEpgr06VypNAg\"}]},{\"id\":\"urn:awp:n:mtXtbRyIMtc69DWQYPY7gdXHgxV-hOW05amIzW9_m0o\",\"@graph\":[{\"id\":\"urn:awp:n:mMDfMiOGsqs6CA57KVMLbwZJe2pVS8TO41_ykE3Dt80\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImtqRVZnU1NUSXF2Z0R1VTduQmx4ei1aNzVTQUw1dUgzR3VSOVRYa3VnZ00iLCJ0eXAiOiJhd3AtbWFuZGF0ZStqd3MifQ.eyJ0eXBlIjoiT3duZXJNYW5kYXRlIiwiaWQiOiJ1cm46YXdwOm1hbmRhdGU6MTA3NDFhYTBkNjMyNzc4ZGUwN2U2MjgzM2ZmOTU1ZDY6c2hvcHBpbmctYWdlbnQiLCJ2ZXJzaW9uIjoxLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzIiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YnVzaW5lc3MtYWdlbnQ6YWdlbnQiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiYXV0b25vbW91cyI6eyJpZCI6InVybjphd3A6cG9saWN5OjY1NzA0ZmViZTg5MTZkNjAzZDAzNTQ2OThkOWI5NDliOnNob3BwaW5nLWFnZW50L2F1dG9ub21vdXMiLCJ0eXBlIjoiU2V0IiwiYXNzaWduZXIiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzIiwiYXNzaWduZWUiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiY29uZmxpY3QiOiJwcm9oaWJpdCIsInBlcm1pc3Npb25zIjpbeyJpZCI6InVybjpydWxlOm1vbnRobHktcGF5bWVudHMiLCJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InBheSIsInRhcmdldCI6InVybjpvcDpwYXltZW50IiwibGltaXQiOnsicGVyQWN0aW9uIjo1MDAsInBlclBlcmlvZCI6MjAwMCwicGVyaW9kIjoiY2FsZW5kYXItbW9udGgiLCJjdXJyZW5jeSI6IkdCUCJ9fSx7ImlkIjoidXJuOnJ1bGU6dXNlOnBhaWQtc2VydmljZSIsInR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOm9wOnBhaWQtc2VydmljZSJ9LHsiaWQiOiJ1cm46cnVsZTp1c2U6cGF5bWVudC1yZXF1ZXN0IiwidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46b3A6cGF5bWVudC1yZXF1ZXN0In1dLCJwcm9oaWJpdGlvbnMiOltdfSwid2l0aEFwcHJvdmFsIjp7ImlkIjoidXJuOmF3cDpwb2xpY3k6ODg0YmYxYThmNDE4N2I4MmJkZGRiNTIzNWQyMjlhMDA6c2hvcHBpbmctYWdlbnQvd2l0aC1hcHByb3ZhbCIsInR5cGUiOiJTZXQiLCJhc3NpZ25lciI6InVybjpmaWN0aW9uYWw6YnVzaW5lc3MiLCJhc3NpZ25lZSI6InVybjpmaWN0aW9uYWw6YnVzaW5lc3MtYWdlbnQ6YWdlbnQiLCJjb25mbGljdCI6InByb2hpYml0IiwicGVybWlzc2lvbnMiOlt7ImlkIjoidXJuOnJ1bGU6YXBwcm92ZWQtcGF5bWVudCIsInR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoicGF5IiwidGFyZ2V0IjoidXJuOm9wOnBheW1lbnQifV0sInByb2hpYml0aW9ucyI6W119LCJub3RlIjoiU3ludGhldGljIHNob3BwaW5nLWFnZW50IG1hbmRhdGUgKHBpbG90IHN1YnNldCkuIn0.mDtnYBCXrFbPLHMcnx6xH7OOcjKqqTwZyP3w1fUSeUAnKU0AOGKxOwr5LmpXpPSohp2_EM8saz_jc8dJmi5GDg\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjFYY19wbTBFanhkaV82OElvOU82bnM2RUswWFQ3UlFtbTdzdzY1ZklMVTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcy1hZ2VudDphZ2VudCIsImlkIjoidXJuOmF3cDpuOlZpSDlSWjAwWkNKRFZQYVcxcnpybUVKTTgxdUFYV3hlZTdVT1RRUGMzdWMiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46NXFCcFdJXzhyTWEyc3RxSmZDcU9wYm40WG5FRmRGWnY0NjhseTVUcEQwRSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYWdyZWVtZW50IjoidXJuOmF3cDphZ3JlZW1lbnQ6MGQ3MGMwMGMxYWMzMzJkNGU3ZGFlZWFlYzVmYTY0NmQiLCJpZCI6InVybjphd3A6bjpMODBvWDdSbGhwSTZGRnJpSjFnemswREZ4VjJpODB2c3k2anFaVTZudEowIiwicHJvcG9zYWwiOiJ1cm46YXdwOmVuZ2luZS1zaG9wcGluZy1hZ2VudC1icmFuY2gtMTpzdXBwbGllci1hZ2VudDowMDAyIiwidGVybXNEaWdlc3QiOiJzaGEtMjU2OmUzNzgzYTYyN2E4NmI4M2EwNDIxMzZiOWEzZjE0ZDk5YzI0MjQ3MzVhNTU0MjA3YjE1N2Q3MmVjNDE4ZTJiN2EiLCJ0eXBlIjoiQWNjZXB0Qm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm5ybVpWNUllZkNJZUM1RjRJZ0kyNUdyN2tGWUNDdzI2ZlY4SmFxeE8wMHcifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpNeEw4a0lFM2dGcXZ5b1hjNlpZY085X2pFQk5lNEQ5XzBKZ2tQY3ExalBrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkllTGQ4MUVtbkVqaGZQX2RfalBUdDdTZVJMWElReHpJa21MWGs3ZEQtdWMifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpSWkU4VDAxRmRTemx5QlREc25kd2ZJcTN4X2VPZ3lIV3JiQnc5MzV1aVJzIiwicG9zaXRpb24iOiIxIiwicm9sZSI6ImF1dGhvcmlzYXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46V3ZBcTBFRzhiUmJnUXU1WC1FMDhzbGJiMUhScjJ1emd5R2NTYldzdXNBayJ9LCJmb3JtYXQiOiJhd3AtYWN0aW9uLWludGVudC8wLjEiLCJpZCI6InVybjphd3A6bjplYThBNFhfTktJdHNydlNfZTFaVUowVUFNZVNFTkpJWjNRUFRFZFpudll3IiwicG9zaXRpb24iOiIyIiwicm9sZSI6ImF1dGhvcmlzYXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJjcmVkZW50aWFsU3ViamVjdCI6InVybjphd3A6bjpJcExZVWtWS2xBbkxYRko0Zm14aFRiNW9kdGl4UU5vcnhONHJ1YWFKc2lVIiwiaWQiOiJ1cm46YXdwOm46bnJtWlY1SWVmQ0llQzVGNElnSTI1R3I3a0ZZQ0N3MjZmVjhKYXF4TzAwdyIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46aktnZlRGeFl4cWFwT1RKLU5ETEZJbkpnelZLVDViSThFTHdHMm5nWU1HRSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOnhkTkd6dlB5dGt0bWJVdGZmRUV6VUg0R3VyUTdET2ppSm14cFVMWUFaVnciLCJpZCI6InVybjphd3A6bjpJZUxkODFFbW5FamhmUF9kX2pQVHQ3U2VSTFhJUXh6SWttTFhrN2RELXVjIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46bXRYdGJSeUlNdGM2OURXUVlQWTdnZFhIZ3hWLWhPVzA1YW1Jelc5X20wbyIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6W3siaWQiOiJ1cm46YXdwOm46bnJtWlY1SWVmQ0llQzVGNElnSTI1R3I3a0ZZQ0N3MjZmVjhKYXF4TzAwdyJ9LHsiaWQiOiJ1cm46YXdwOm46SWVMZDgxRW1uRWpoZlBfZF9qUFR0N1NlUkxYSVF4eklrbUxYazdkRC11YyJ9XSwiZW52ZWxvcGVCeXRlcyI6IntcImFjdGlvblwiOlwidXNlXCIsXCJjb252ZXJzYXRpb25cIjpcInVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDFcIixcIm9wZXJhdGlvblwiOlwidXJuOm9wOnBhaWQtc2VydmljZVwiLFwicGFyYW1ldGVyc1wiOntcInRlcm1zRGlnZXN0XCI6XCJzaGEtMjU2OmUzNzgzYTYyN2E4NmI4M2EwNDIxMzZiOWEzZjE0ZDk5YzI0MjQ3MzVhNTU0MjA3YjE1N2Q3MmVjNDE4ZTJiN2FcIn0sXCJwdXJwb3NlXCI6XCJ1cm46cHVycG9zZTpzaG9wcGluZy1hZ2VudFwiLFwicmVjaXBpZW50XCI6XCJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyXCIsXCJ0YXJnZXRcIjpcInVybjpvcDpwYWlkLXNlcnZpY2VcIn0iLCJpZCI6InVybjphd3A6bjpXdkFxMEVHOGJSYmdRdTVYLUUwOHNsYmIxSFJyMnV6Z3lHY1NiV3N1c0FrIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpKelVzUUpCZXZZLTJSdk9HNl8tY1pTR2dMVkE5VXg2LTRUMjVBMzFxS1BVIn0sInR5cGUiOiJWZXJpZmlhYmxlUHJlc2VudGF0aW9uIn0seyJpZCI6InVybjphd3A6bjpJcExZVWtWS2xBbkxYRko0Zm14aFRiNW9kdGl4UU5vcnhONHJ1YWFKc2lVIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpUZjZydW5wRkdaNlpOajBfaG1MSldhWW13OFE3aGc4OFIwRmZsa3pha1NNIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YTc1N2EyMDIwYjQ2OWU1ZWQ3MmJiYTExNDcxY2I0ZWE5MWI3YjVhNTQwY2I4YmUxODZjNDAwZjJiNDhlNWMyZiIsImJ5dGVMZW5ndGgiOiIxMDE2NyIsImlkIjoidXJuOmF3cDpuOlRmNnJ1bnBGR1o2Wk5qMF9obUxKV2FZbXc4UTdoZzg4UjBGZmxremFrU00iLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJpZCI6InVybjphd3A6bjp4ZE5HenZQeXRrdG1iVXRmZkVFelVINEd1clE3RE9qaUpteHBVTFlBWlZ3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjoyVVpRazc5NFRwVzFRTUYtLTZkSGZwcUU0N0pjMWxCLTJsaVF1YldyeHFnIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6ZjFlOTc4MzcxOTQxMDUwZmFmMzUwNTNiMjVkZDkwMjgwMmU1NzlmMDY3MTE3OGViOTUwY2U0NDVjODNlNGU4ZCIsImJ5dGVMZW5ndGgiOiIzOTEwMSIsImlkIjoidXJuOmF3cDpuOjJVWlFrNzk0VHBXMVFNRi0tNmRIZnBxRTQ3SmMxbEItMmxpUXViV3J4cWciLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJpZCI6InVybjphd3A6bjpKelVzUUpCZXZZLTJSdk9HNl8tY1pTR2dMVkE5VXg2LTRUMjVBMzFxS1BVIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpKSTd2bm5qN3BLai0tckcydmpGajRUbGQtRUk1cmI0RFZCY2Q5dDNsTTJRIn0seyJpZCI6InVybjphd3A6bjpONV96aGZvRGJzSV80WEhveGZzTEdWT0t5S2RacHB0dFB5eWxnLVdvMW5zIn0seyJpZCI6InVybjphd3A6bjp0MTEwWV9PcWJiNVBtWENha0ZMdGw0WVJZclhPRnlHbHdSdGFiNjk1QnVVIn0seyJpZCI6InVybjphd3A6bjpvbl9Pd3lFTkFaUzhsMFZsd0ZnNlBQM1ZqckxXcGFsdXUxTGFBZlJQNTRJIn0seyJpZCI6InVybjphd3A6bjpNS1RUVVl1NUZEdkhZTlp3REI5cVlBVV9SbHBkQ0pKWXYyTFFabHpXYmFRIn0seyJpZCI6InVybjphd3A6bjp3aUh4Y2R0WjI0cjhtMEZTUkhrZFJwWmlrWmhMbDFGN1ZSdk5FaDF0cGlRIn0seyJpZCI6InVybjphd3A6bjpHak5yajdtT2ZoQWpZMU9MX2Z3X3FER0hoQjJoaUJaYmU0M1VXVkN5eUlrIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImRvbWFpblZhbHVlIjoidXNlIiwiaWQiOiJ1cm46YXdwOm46Skk3dm5uajdwS2otLXJHMnZqRmo0VGxkLUVJNXJiNERWQmNkOXQzbE0yUSIsIm5hbWUiOiJhY3Rpb24iLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6YWN0aW9uIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSJ9LCJpZCI6InVybjphd3A6bjpONV96aGZvRGJzSV80WEhveGZzTEdWT0t5S2RacHB0dFB5eWxnLVdvMW5zIiwibmFtZSI6ImNvbnZlcnNhdGlvbiIsInBvc2l0aW9uIjoiMSIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpjb252ZXJzYXRpb24iLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46b3A6cGFpZC1zZXJ2aWNlIn0sImlkIjoidXJuOmF3cDpuOnQxMTBZX09xYmI1UG1YQ2FrRkx0bDRZUllyWE9GeUdsd1J0YWI2OTVCdVUiLCJuYW1lIjoib3BlcmF0aW9uIiwicG9zaXRpb24iOiIyIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOm9wZXJhdGlvbiIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjphd3A6bjpmc2xZci0ydGFfQ0VYVlMzckxTQTRHUTZFU0JJOG41cXhrZVJoU2I3X0NRIn0sImlkIjoidXJuOmF3cDpuOm9uX093eUVOQVpTOGwwVmx3Rmc2UFAzVmpyTFdwYWx1dTFMYUFmUlA1NEkiLCJuYW1lIjoicGFyYW1ldGVycyIsInBvc2l0aW9uIjoiMyIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpwYXJhbWV0ZXJzIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOnB1cnBvc2U6c2hvcHBpbmctYWdlbnQifSwiaWQiOiJ1cm46YXdwOm46TUtUVFVZdTVGRHZIWU5ad0RCOXFZQVVfUmxwZENKSll2MkxRWmx6V2JhUSIsIm5hbWUiOiJwdXJwb3NlIiwicG9zaXRpb24iOiI0IiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnB1cnBvc2UiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIn0sImlkIjoidXJuOmF3cDpuOndpSHhjZHRaMjRyOG0wRlNSSGtkUnBaaWtaaExsMUY3VlJ2TkVoMXRwaVEiLCJuYW1lIjoicmVjaXBpZW50IiwicG9zaXRpb24iOiI1IiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnJlY2lwaWVudCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjpvcDpwYWlkLXNlcnZpY2UifSwiaWQiOiJ1cm46YXdwOm46R2pOcmo3bU9maEFqWTFPTF9md19xREdIaEIyaGlCWmJlNDNVV1ZDeXlJayIsIm5hbWUiOiJ0YXJnZXQiLCJwb3NpdGlvbiI6IjYiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6dGFyZ2V0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOmZzbFlyLTJ0YV9DRVhWUzNyTFNBNEdRNkVTQkk4bjVxeGtlUmhTYjdfQ1EiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOmo3ZGlCTHJVcTBYRVhWTjNKdGpPRlJxSmlINWUxNVBQQ1FRbnZlbUVjLWsifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJzaGEtMjU2OmUzNzgzYTYyN2E4NmI4M2EwNDIxMzZiOWEzZjE0ZDk5YzI0MjQ3MzVhNTU0MjA3YjE1N2Q3MmVjNDE4ZTJiN2EifSwiaWQiOiJ1cm46YXdwOm46ajdkaUJMclVxMFhFWFZOM0p0ak9GUnFKaUg1ZTE1UFBDUVFudmVtRWMtayIsIm5hbWUiOiJ0ZXJtc0RpZ2VzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDp0ZXJtc0RpZ2VzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOkIzOGI3WTFSdE5QRS1oODkzOHFnM0dPQURVc0Q1N3BleGVwRUlNOHNjcjAiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW10cVJWWm5VMU5VU1hGMlowUjFWVGR1UW14NGVpMWFOelZUUVV3MWRVZ3pSM1ZTT1ZSWWEzVm5aMDBpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZPV1prT1RnMFlXRm1NVGt3WTJVMk9EWXdNakZtWXpObVlqQTRZbUZtTXpjNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGlkWE5wYm1WemN5SXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaWRYTnBibVZ6Y3kxaFoyVnVkRHBoWjJWdWRDSXNJbUZqZEc5eVMybGtJam9pTVZoalgzQnRNRVZxZUdScFh6WTRTVzg1VHpadWN6WkZTekJZVkRkU1VXMXROM04zTmpWbVNVeFZPQ0lzSW05d1pYSmhkR2x2Ym5NaU9sc2lkWEp1T205d09uQmhlVzFsYm5RaUxDSjFjbTQ2YjNBNmNHRnBaQzF6WlhKMmFXTmxJaXdpZFhKdU9tOXdPbkJoZVcxbGJuUXRjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcHdZWGx0Wlc1MExYQnliM1pwWkdWeUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkuUnZaSEZGUVdNT013T1dIR0N1cnNXaXFEeVRxbEg4b2M1dUVycTJFRFZuZG5vRnk2ZnFDeUJmWHVBeGZNSm55V01GSzctQjhGRnNFcGdyMDZWeXBOQWciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpqS2dmVEZ4WXhxYXBPVEotTkRMRkluSmd6VktUNWJJOEVMd0cybmdZTUdFIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOm1NRGZNaU9Hc3FzNkNBNTdLVk1MYndaSmUycFZTOFRPNDFfeWtFM0R0ODAiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SW10cVJWWm5VMU5VU1hGMlowUjFWVGR1UW14NGVpMWFOelZUUVV3MWRVZ3pSM1ZTT1ZSWWEzVm5aMDBpTENKMGVYQWlPaUpoZDNBdGJXRnVaR0YwWlN0cWQzTWlmUS5leUowZVhCbElqb2lUM2R1WlhKTllXNWtZWFJsSWl3aWFXUWlPaUoxY200NllYZHdPbTFoYm1SaGRHVTZNVEEzTkRGaFlUQmtOak15TnpjNFpHVXdOMlUyTWpnek0yWm1PVFUxWkRZNmMyaHZjSEJwYm1jdFlXZGxiblFpTENKMlpYSnphVzl1SWpveExDSnBjM04xWlhJaU9pSjFjbTQ2Wm1samRHbHZibUZzT21KMWMybHVaWE56SWl3aWMzVmlhbVZqZENJNkluVnlianBtYVdOMGFXOXVZV3c2WW5WemFXNWxjM010WVdkbGJuUTZZV2RsYm5RaUxDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aVlYVjBiMjV2Ylc5MWN5STZleUpwWkNJNkluVnlianBoZDNBNmNHOXNhV041T2pZMU56QTBabVZpWlRnNU1UWmtOakF6WkRBek5UUTJPVGhrT1dJNU5EbGlPbk5vYjNCd2FXNW5MV0ZuWlc1MEwyRjFkRzl1YjIxdmRYTWlMQ0owZVhCbElqb2lVMlYwSWl3aVlYTnphV2R1WlhJaU9pSjFjbTQ2Wm1samRHbHZibUZzT21KMWMybHVaWE56SWl3aVlYTnphV2R1WldVaU9pSjFjbTQ2Wm1samRHbHZibUZzT21KMWMybHVaWE56TFdGblpXNTBPbUZuWlc1MElpd2lZMjl1Wm14cFkzUWlPaUp3Y205b2FXSnBkQ0lzSW5CbGNtMXBjM05wYjI1eklqcGJleUpwWkNJNkluVnlianB5ZFd4bE9tMXZiblJvYkhrdGNHRjViV1Z1ZEhNaUxDSjBlWEJsSWpvaWNHVnliV2x6YzJsdmJpSXNJbUZqZEdsdmJpSTZJbkJoZVNJc0luUmhjbWRsZENJNkluVnlianB2Y0Rwd1lYbHRaVzUwSWl3aWJHbHRhWFFpT25zaWNHVnlRV04wYVc5dUlqbzFNREFzSW5CbGNsQmxjbWx2WkNJNk1qQXdNQ3dpY0dWeWFXOWtJam9pWTJGc1pXNWtZWEl0Ylc5dWRHZ2lMQ0pqZFhKeVpXNWplU0k2SWtkQ1VDSjlmU3g3SW1sa0lqb2lkWEp1T25KMWJHVTZkWE5sT25CaGFXUXRjMlZ5ZG1salpTSXNJblI1Y0dVaU9pSndaWEp0YVhOemFXOXVJaXdpWVdOMGFXOXVJam9pZFhObElpd2lkR0Z5WjJWMElqb2lkWEp1T205d09uQmhhV1F0YzJWeWRtbGpaU0o5TEhzaWFXUWlPaUoxY200NmNuVnNaVHAxYzJVNmNHRjViV1Z1ZEMxeVpYRjFaWE4wSWl3aWRIbHdaU0k2SW5CbGNtMXBjM05wYjI0aUxDSmhZM1JwYjI0aU9pSjFjMlVpTENKMFlYSm5aWFFpT2lKMWNtNDZiM0E2Y0dGNWJXVnVkQzF5WlhGMVpYTjBJbjFkTENKd2NtOW9hV0pwZEdsdmJuTWlPbHRkZlN3aWQybDBhRUZ3Y0hKdmRtRnNJanA3SW1sa0lqb2lkWEp1T21GM2NEcHdiMnhwWTNrNk9EZzBZbVl4WVRobU5ERTROMkk0TW1Ka1pHUmlOVEl6TldReU1qbGhNREE2YzJodmNIQnBibWN0WVdkbGJuUXZkMmwwYUMxaGNIQnliM1poYkNJc0luUjVjR1VpT2lKVFpYUWlMQ0poYzNOcFoyNWxjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZZblZ6YVc1bGMzTWlMQ0poYzNOcFoyNWxaU0k2SW5WeWJqcG1hV04wYVc5dVlXdzZZblZ6YVc1bGMzTXRZV2RsYm5RNllXZGxiblFpTENKamIyNW1iR2xqZENJNkluQnliMmhwWW1sMElpd2ljR1Z5YldsemMybHZibk1pT2x0N0ltbGtJam9pZFhKdU9uSjFiR1U2WVhCd2NtOTJaV1F0Y0dGNWJXVnVkQ0lzSW5SNWNHVWlPaUp3WlhKdGFYTnphVzl1SWl3aVlXTjBhVzl1SWpvaWNHRjVJaXdpZEdGeVoyVjBJam9pZFhKdU9tOXdPbkJoZVcxbGJuUWlmVjBzSW5CeWIyaHBZbWwwYVc5dWN5STZXMTE5TENKdWIzUmxJam9pVTNsdWRHaGxkR2xqSUhOb2IzQndhVzVuTFdGblpXNTBJRzFoYm1SaGRHVWdLSEJwYkc5MElITjFZbk5sZENrdUluMC5tRHRuWUJDWHJGYlBMSE1jbng2eEg3T09jaktxcVR3WnlQM3cxZlVTZVVBbktVMEFPR0t4T3dyNUxtcFhwUFNvaHAyX0VNOHNhel9qYzhkSm1pNUdEZyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOm10WHRiUnlJTXRjNjlEV1FZUFk3Z2RYSGd4Vi1oT1cwNWFtSXpXOV9tMG8ifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46TDgwb1g3UmxocEk2RkZyaUoxZ3prMERGeFYyaTgwdnN5NmpxWlU2bnRKMCJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BheW1lbnQtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjpbeyJpZCI6InVybjphd3A6bjpNeEw4a0lFM2dGcXZ5b1hjNlpZY085X2pFQk5lNEQ5XzBKZ2tQY3ExalBrIn0seyJpZCI6InVybjphd3A6bjpSWkU4VDAxRmRTemx5QlREc25kd2ZJcTN4X2VPZ3lIV3JiQnc5MzV1aVJzIn0seyJpZCI6InVybjphd3A6bjplYThBNFhfTktJdHNydlNfZTFaVUowVUFNZVNFTkpJWjNRUFRFZFpudll3In1dLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlZpSDlSWjAwWkNKRFZQYVcxcnpybUVKTTgxdUFYV3hlZTdVT1RRUGMzdWMifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zaG9wcGluZy1hZ2VudC1icmFuY2gtMTpidXNpbmVzcy1hZ2VudDowMDAxIiwiaW5SZXBseVRvIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJhY2NlcHQiLCJwcmVzZW50RmllbGRzIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjo1cUJwV0lfOHJNYTJzdHFKZkNxT3BibjRYbkVGZEZadjQ2OGx5NVRwRDBFIn0sInR5cGUiOlsiTWVzc2FnZSIsIkFjY2VwdCJdfQ.RAwZ2-ycttgOamI5grifG1bweooBiI-mU6HMgKuCmlLxkMOBGF2PlXRdm6XJHZyizG-lW_2QhbRbaUVeEDxxAQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2388,7 +2610,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An accept message from The shopper’s agent reaches the inbound gate."
+      "caption": "An accept message from The shopper’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 49,
@@ -2415,7 +2638,8 @@
         "id": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The shopper’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The shopper’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 50,
@@ -2438,7 +2662,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 1
     },
     {
       "seq": 51,
@@ -2460,7 +2685,8 @@
         "id": "urn:awp:representation:9fd984aaf190ce686021fc3fb08baf37:1794560400000",
         "text": "A representation statement signed with The shopper's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The shopper signed a statement that The shopper’s agent acts for them in this operation."
+      "caption": "The shopper signed a statement that The shopper’s agent acts for them in this operation.",
+      "gateRun": 1
     },
     {
       "seq": 52,
@@ -2483,7 +2709,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 1
     },
     {
       "seq": 53,
@@ -2501,7 +2728,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 1
     },
     {
       "seq": 54,
@@ -2511,12 +2739,25 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:business-agent:0001",
+      "messageDigest": "sha-256:cd707622f95092ceca0246f1144f876fe8ed16537b651b187df4c0b41fe85480",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 1
     },
     {
       "seq": 55,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -2534,12 +2775,23 @@
         }
       ],
       "reason": "no-action",
-      "caption": "This protocol message proposes no additional action."
+      "caption": "This protocol message proposes no additional action.",
+      "gateRun": 2
     },
     {
       "seq": 56,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -2568,12 +2820,23 @@
         "answer": "Accepted, for Agree the service only."
       },
       "reason": "recipient-established",
-      "caption": "The shopper: Accepted, for Agree the service only."
+      "caption": "The shopper: Accepted, for Agree the service only.",
+      "gateRun": 2
     },
     {
       "seq": 57,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2586,12 +2849,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate finds no personal data in this protocol message."
+      "caption": "The gate finds no personal data in this protocol message.",
+      "gateRun": 2
     },
     {
       "seq": 58,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2604,12 +2878,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate finds no data terms to apply."
+      "caption": "The gate finds no data terms to apply.",
+      "gateRun": 2
     },
     {
       "seq": 59,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -2622,12 +2907,23 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The message release check is complete."
+      "caption": "The message release check is complete.",
+      "gateRun": 2
     },
     {
       "seq": 60,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2649,24 +2945,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The chosen merchant’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The chosen merchant’s agent's pinned key, and written to the record.",
+      "gateRun": 2
     },
     {
       "seq": 61,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The receipt message goes to The shopper’s agent."
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0003",
+      "messageDigest": "sha-256:2bb59c261e70d82273301749672408c32dc0d668a20306f39f6ab1fb36f05d2d",
+      "caption": "The receipt message goes to The shopper’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 62,
       "step": 4,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:a818a85d1cb97133dd8b4f6928167b87117840ea9fbd8619f4447169f55d2e60",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:paid-service",
+        "operation": "urn:op:paid-service",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0003",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0003\",\"type\":[\"Message\",\"Receipt\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"receipt\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:lLdEjvT22iee1updTyu7H2m64Fd4AbUiH9eCWsyYDlM\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"onBehalfOf\":\"urn:fictional:supplier\"},\"to\":{\"id\":\"urn:awp:n:n8g9prVItlf-bUfV6sVYxY4-fKgD-_mv2AZ6_uzvE2E\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"party\":\"urn:fictional:business\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:zg6n24-ZOxNueT7Kdz-H8Vn2z9WTHuJeE0peygWdJfA\",\"type\":\"ReceiptBody\",\"activity\":\"urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d\",\"final\":{\"type\":\"http://www.w3.org/2001/XMLSchema#boolean\",\"@value\":\"false\"},\"outcome\":\"completed\",\"ref\":\"urn:awp:engine-shopping-agent-branch-1:business-agent:0001\"},\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InFOLTlaWUlnbkROWGZGb2FNMGxkVXVYdnFRVDMwRm5Rc3VQNGc4ZEsxMTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJib2R5Ijp7ImFjdGl2aXR5IjoidXJuOmF3cDphZ3JlZW1lbnQ6MGQ3MGMwMGMxYWMzMzJkNGU3ZGFlZWFlYzVmYTY0NmQiLCJmaW5hbCI6eyJAdmFsdWUiOiJmYWxzZSIsInR5cGUiOiJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYSNib29sZWFuIn0sImlkIjoidXJuOmF3cDpuOnpnNm4yNC1aT3hOdWVUN0tkei1IOFZuMno5V1RIdUplRTBwZXlnV2RKZkEiLCJvdXRjb21lIjoiY29tcGxldGVkIiwicmVmIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6YnVzaW5lc3MtYWdlbnQ6MDAwMSIsInR5cGUiOiJSZWNlaXB0Qm9keSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BheW1lbnQtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46bExkRWp2VDIyaWVlMXVwZFR5dTdIMm02NEZkNEFiVWlIOWVDV3N5WURsTSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0sImlkIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMyIsImtpbmQiOiJyZWNlaXB0IiwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46bjhnOXByVkl0bGYtYlVmVjZzVll4WTQtZktnRC1fbXYyQVo2X3V6dkUyRSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJSZWNlaXB0Il19.9py80P5yb-8VHS4AE_YB_iK2-spNwaBFOMreANRhLjBCF2rHXPHNROLtzjASY_qTNzYWqGj-f7KyQm2VUhykDg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2754,7 +3075,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The chosen merchant’s agent sends a receipt message to The shopper’s agent."
+      "caption": "The chosen merchant’s agent sends a receipt message to The shopper’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 63,
@@ -2762,6 +3084,7 @@
       "agent": "business-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0003",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0003\",\"type\":[\"Message\",\"Receipt\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"receipt\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:lLdEjvT22iee1updTyu7H2m64Fd4AbUiH9eCWsyYDlM\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"onBehalfOf\":\"urn:fictional:supplier\"},\"to\":{\"id\":\"urn:awp:n:n8g9prVItlf-bUfV6sVYxY4-fKgD-_mv2AZ6_uzvE2E\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"party\":\"urn:fictional:business\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:zg6n24-ZOxNueT7Kdz-H8Vn2z9WTHuJeE0peygWdJfA\",\"type\":\"ReceiptBody\",\"activity\":\"urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d\",\"final\":{\"type\":\"http://www.w3.org/2001/XMLSchema#boolean\",\"@value\":\"false\"},\"outcome\":\"completed\",\"ref\":\"urn:awp:engine-shopping-agent-branch-1:business-agent:0001\"},\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InFOLTlaWUlnbkROWGZGb2FNMGxkVXVYdnFRVDMwRm5Rc3VQNGc4ZEsxMTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJib2R5Ijp7ImFjdGl2aXR5IjoidXJuOmF3cDphZ3JlZW1lbnQ6MGQ3MGMwMGMxYWMzMzJkNGU3ZGFlZWFlYzVmYTY0NmQiLCJmaW5hbCI6eyJAdmFsdWUiOiJmYWxzZSIsInR5cGUiOiJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYSNib29sZWFuIn0sImlkIjoidXJuOmF3cDpuOnpnNm4yNC1aT3hOdWVUN0tkei1IOFZuMno5V1RIdUplRTBwZXlnV2RKZkEiLCJvdXRjb21lIjoiY29tcGxldGVkIiwicmVmIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6YnVzaW5lc3MtYWdlbnQ6MDAwMSIsInR5cGUiOiJSZWNlaXB0Qm9keSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BheW1lbnQtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46bExkRWp2VDIyaWVlMXVwZFR5dTdIMm02NEZkNEFiVWlIOWVDV3N5WURsTSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0sImlkIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMyIsImtpbmQiOiJyZWNlaXB0IiwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46bjhnOXByVkl0bGYtYlVmVjZzVll4WTQtZktnRC1fbXYyQVo2X3V6dkUyRSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJSZWNlaXB0Il19.9py80P5yb-8VHS4AE_YB_iK2-spNwaBFOMreANRhLjBCF2rHXPHNROLtzjASY_qTNzYWqGj-f7KyQm2VUhykDg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2859,7 +3182,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "A receipt message from The chosen merchant’s agent reaches the inbound gate."
+      "caption": "A receipt message from The chosen merchant’s agent reaches the inbound gate.",
+      "gateRun": 5
     },
     {
       "seq": 64,
@@ -2886,7 +3210,8 @@
         "id": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The chosen merchant’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The chosen merchant’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 5
     },
     {
       "seq": 65,
@@ -2909,7 +3234,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 5
     },
     {
       "seq": 66,
@@ -2931,7 +3257,8 @@
         "id": "urn:awp:representation:52abfd38eeedc0560d1e6995e5561954:1794560400000",
         "text": "The representation accepted earlier in this conversation, still valid."
       },
-      "caption": "Settled when this conversation opened: The chosen merchant's signed representation statement still covers it."
+      "caption": "Settled when this conversation opened: The chosen merchant's signed representation statement still covers it.",
+      "gateRun": 5
     },
     {
       "seq": 67,
@@ -2958,7 +3285,8 @@
         "id": "urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d",
         "text": "Signed offer and acceptance of the exact terms (by digest)."
       },
-      "caption": "This comes under the agreement both sides signed; its terms bind what is sent."
+      "caption": "This comes under the agreement both sides signed; its terms bind what is sent.",
+      "gateRun": 5
     },
     {
       "seq": 68,
@@ -2976,7 +3304,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 5
     },
     {
       "seq": 69,
@@ -2986,7 +3315,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0003",
+      "messageDigest": "sha-256:2bb59c261e70d82273301749672408c32dc0d668a20306f39f6ab1fb36f05d2d",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 5
     },
     {
       "seq": 70,
@@ -3031,6 +3363,16 @@
       "seq": 72,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -3052,12 +3394,23 @@
         "text": "The chosen merchant's mandate lets the agent use Request payment, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The chosen merchant's mandate covers this action."
+      "caption": "The chosen merchant's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 73,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -3086,12 +3439,23 @@
         "answer": "Accepted, for Request payment only."
       },
       "reason": "recipient-established",
-      "caption": "The shopper: Accepted, for Request payment only."
+      "caption": "The shopper: Accepted, for Request payment only.",
+      "gateRun": 3
     },
     {
       "seq": 74,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -3104,12 +3468,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 75,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -3122,12 +3497,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 76,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -3140,12 +3526,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The chosen merchant's limits."
+      "caption": "Inside what the agent may do on its own, and within The chosen merchant's limits.",
+      "gateRun": 3
     },
     {
       "seq": 77,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -3159,6 +3556,7 @@
       ],
       "reason": "no-personal-data",
       "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 3,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3187,6 +3585,16 @@
       "seq": 78,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -3209,6 +3617,7 @@
       },
       "reason": "evidence-complete",
       "caption": "Signed (JWS Ed DSA) with The chosen merchant’s agent's pinned key, and written to the record.",
+      "gateRun": 3,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3237,11 +3646,24 @@
       "seq": 79,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0005",
+      "messageDigest": "sha-256:de425f9e835cedc4453ffc30ed4eac68b9ae3a92cb08466d6cb51393566f45fa",
       "caption": "The invoke message goes to The shopper’s agent.",
+      "gateRun": 3,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3270,8 +3692,19 @@
       "seq": 80,
       "step": 8,
       "agent": "supplier-agent",
+      "actionDigest": "sha-256:acce372c049e47dcdac081c6abaf7029d2b63db08730134af48560296f63321e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:payment-request",
+        "operation": "urn:op:payment-request",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001",
+        "recipient": "urn:fictional:business",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0005",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0005\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:kWBvVXCxhwWDvzO8hXJeg9-wBLGib3ozX73yDyEFYOg\"},\"to\":{\"id\":\"urn:awp:n:SmSfSoOmN2dKtqKis2YI79ru4gIgjXYddkRmgT0iXzw\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:AvKS_Xeu4fkpbwC-MUbtqsG1y9hnowmdGxjVdDY3nqg\"},\"evidence\":[{\"id\":\"urn:awp:n:x6idnpnuYRSU7Hpqh9yi0-FGlv65RqZuiaaLUm3xgYA\"},{\"id\":\"urn:awp:n:zZg0HOJ6t4_a--HHzXZZuXbWxrKkeTZN_sue0eVo9zI\"}],\"@included\":[{\"id\":\"urn:awp:n:kWBvVXCxhwWDvzO8hXJeg9-wBLGib3ozX73yDyEFYOg\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"onBehalfOf\":\"urn:fictional:supplier\"},{\"id\":\"urn:awp:n:SmSfSoOmN2dKtqKis2YI79ru4gIgjXYddkRmgT0iXzw\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"party\":\"urn:fictional:business\"},{\"id\":\"urn:awp:n:AvKS_Xeu4fkpbwC-MUbtqsG1y9hnowmdGxjVdDY3nqg\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:M8XqtDm4JcgV6LY3zFBhiEFNDZOsfrS1JqNhDIdja_s\"},\"input\":{\"id\":\"urn:awp:n:gmCzQ1SfUQA60cLFTYKLFNZyvTpf_VLw0I6oBrsOilU\"},\"operation\":{\"id\":\"urn:op:payment-request\"},\"purpose\":\"urn:purpose:shopping-agent\"},{\"id\":\"urn:awp:n:x6idnpnuYRSU7Hpqh9yi0-FGlv65RqZuiaaLUm3xgYA\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:FvqWlzPyZ8EN7JtZ_UNZb5TU77lmx-ViQrGAK_63xek\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:zZg0HOJ6t4_a--HHzXZZuXbWxrKkeTZN_sue0eVo9zI\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:WUqDCjAXZp4MOB5-R5OiYJJPDbDJsa1ekeQd4-8_WIo\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:op:payment-request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:gmCzQ1SfUQA60cLFTYKLFNZyvTpf_VLw0I6oBrsOilU\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:VLtrDZZXCMc8W3SwiQnLbKO3JLdvtjWRWa-Rup0lsxo\"}]},{\"id\":\"urn:awp:n:M8XqtDm4JcgV6LY3zFBhiEFNDZOsfrS1JqNhDIdja_s\",\"type\":\"RequestBasis\",\"agreement\":\"urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d\",\"basisKind\":\"agreement\"},{\"id\":\"urn:awp:n:FvqWlzPyZ8EN7JtZ_UNZb5TU77lmx-ViQrGAK_63xek\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Itix5JBz44cH-0lgg8W0clht4f8yQ--S6KOrIuWnOZk\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:supplier\",\"proofGraph\":\"urn:awp:n:glUf8kBY4x9uuE3UZfj8dKfj0nB8Bd7rTqhB4QrbrNw\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:WUqDCjAXZp4MOB5-R5OiYJJPDbDJsa1ekeQd4-8_WIo\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Q_i25DH4eRoILJ1nLk2XC6lg6ry3IPTm_LQnSE9drcI\",\"issuer\":\"urn:fictional:supplier\",\"proofGraph\":\"urn:awp:n:slBGINk4uyirlYWkO5JnjfFKrSlTxiRLoHP6uzz4YDE\"},{\"id\":\"urn:awp:n:VLtrDZZXCMc8W3SwiQnLbKO3JLdvtjWRWa-Rup0lsxo\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0004\"},\"name\":\"invoice\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:invoice\"},{\"id\":\"urn:awp:n:Itix5JBz44cH-0lgg8W0clht4f8yQ--S6KOrIuWnOZk\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:w3pTNHcGz4NCZYrwOqcEm_sLLO1X1BpUs3aoZiq3mcY\"}},{\"id\":\"urn:awp:n:w3pTNHcGz4NCZYrwOqcEm_sLLO1X1BpUs3aoZiq3mcY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e9bd43d1395de369620883717a3ef91619f8f5343cbb08d3cef6ad3ab0aa2f76\",\"byteLength\":\"10167\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Q_i25DH4eRoILJ1nLk2XC6lg6ry3IPTm_LQnSE9drcI\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:AjYc764yuDBzXmEyIhDSEeoNyTvZtFoJ-NpqGzLeQQE\"}},{\"id\":\"urn:awp:n:AjYc764yuDBzXmEyIhDSEeoNyTvZtFoJ-NpqGzLeQQE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e3428cb51fa13610afe4cba52a1657462f48c8921b93fde77f1650969f33a5cd\",\"byteLength\":\"13378\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:glUf8kBY4x9uuE3UZfj8dKfj0nB8Bd7rTqhB4QrbrNw\",\"@graph\":[{\"id\":\"urn:awp:n:RpRdS65W_CpYQoS3Jwzm6K5STaAxks2CfJpjIb2f9Gs\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4R3lVc1FiR2FralVxMlNPcVV0UnVyZTVBeTRpb0hLZGpvWXJmSkhIaVUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NTJhYmZkMzhlZWVkYzA1NjBkMWU2OTk1ZTU1NjE5NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoicU4tOVpZSWduRE5YZkZvYU0wbGRVdVh2cVFUMzBGblFzdVA0ZzhkSzExOCIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOnBheW1lbnQiLCJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInVybjpvcDpwYXltZW50LXByb3ZpZGVyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.WOGK7LuBi-3Fjus93quoUwDjtDjpdx1WUBeMfVljxTuFQ6a3kSHvoxgmPeDuNM088Y6fzbFGtuqjxD2Ac8RiCw\"}]},{\"id\":\"urn:awp:n:slBGINk4uyirlYWkO5JnjfFKrSlTxiRLoHP6uzz4YDE\",\"@graph\":[{\"id\":\"urn:awp:n:Wuo3SYrF63nZqV9xnZnTzVd8Qvhg9hk9mh2urVUvyso\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4R3lVc1FiR2FralVxMlNPcVV0UnVyZTVBeTRpb0hLZGpvWXJmSkhIaVUiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJpZCI6InVybjpzY2VuYXJpbzpzaG9wcGluZy1hZ2VudDppbnZvaWNlLXN0YXRlbWVudCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c3VwcGxpZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsImNsYWltVHlwZSI6Imludm9pY2UiLCJtZXRob2QiOiJyZWNvcmRlZC1ieS1hdXRob3JpdHkiLCJhc09mIjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwicGF5bWVudCI6eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJpZCI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDQiLCJ0eXBlIjoiSW52b2ljZSIsInBheWVlQWNjb3VudCI6InVybjphY2NvdW50OnN1cHBsaWVyIiwicGF5bWVudER1ZURhdGUiOiIyMDI2LTExLTIwVDA5OjAwOjAwLjAwMFoiLCJwYXltZW50UmVjaXBpZW50IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInByaWNlQ3VycmVuY3kiOiJHQlAiLCJyZWZlcmVuY2VzT3JkZXIiOiJ1cm46YXdwOnBheW1lbnQtYWdyZWVtZW50OnNoYS0yNTYlM0FlMzc4M2E2MjdhODZiODNhMDQyMTM2YjlhM2YxNGQ5OWMyNDI0NzM1YTU1NDIwN2IxNTdkNzJlYzQxOGUyYjdhIiwic2V0dGxlcyI6InNoYS0yNTY6ZTM3ODNhNjI3YTg2YjgzYTA0MjEzNmI5YTNmMTRkOTljMjQyNDczNWE1NTQyMDdiMTU3ZDcyZWM0MThlMmI3YSIsInRvdGFsUGF5bWVudER1ZSI6IjYwMC4wMCJ9fQ.BUi9xP21h0-ZRjLOJh3zv75yvzGD-C1HIUvkFuMUafJjB7GfMYxn_MFhn10wcuJkDRs4jnCOwCrhp1nWhBEYBQ\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InFOLTlaWUlnbkROWGZGb2FNMGxkVXVYdnFRVDMwRm5Rc3VQNGc4ZEsxMTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOmtXQnZWWEN4aHdXRHZ6TzhoWEplZzktd0JMR2liM296WDczeUR5RUZZT2ciLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46U21TZlNvT21OMmRLdHFLaXMyWUk3OXJ1NGdJZ2pYWWRka1JtZ1QwaVh6dyIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46TThYcXREbTRKY2dWNkxZM3pGQmhpRUZORFpPc2ZyUzFKcU5oRElkamFfcyJ9LCJpZCI6InVybjphd3A6bjpBdktTX1hldTRma3Bid0MtTVVidHFzRzF5OWhub3dtZEd4alZkRFkzbnFnIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46Z21DelExU2ZVUUE2MGNMRlRZS0xGTlp5dlRwZl9WTHcwSTZvQnJzT2lsVSJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6cGF5bWVudC1yZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpzaG9wcGluZy1hZ2VudCIsInR5cGUiOiJJbnZva2VCb2R5In0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46RnZxV2x6UHlaOEVON0p0Wl9VTlpiNVRVNzdsbXgtVmlRckdBS182M3hlayJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOng2aWRucG51WVJTVTdIcHFoOXlpMC1GR2x2NjVScVp1aWFhTFVtM3hnWUEiLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46V1VxRENqQVhacDRNT0I1LVI1T2lZSkpQRGJESnNhMWVrZVFkNC04X1dJbyJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOnpaZzBIT0o2dDRfYS0tSEh6WFpadVhiV3hyS2tlVFpOX3N1ZTBlVm85ekkiLCJwb3NpdGlvbiI6IjEiLCJyb2xlIjoiY3JlZGVudGlhbCIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpnbUN6UTFTZlVRQTYwY0xGVFlLTEZOWnl2VHBmX1ZMdzBJNm9CcnNPaWxVIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpWTHRyRFpaWENNYzhXM1N3aVFuTGJLTzNKTGR2dGpXUldhLVJ1cDBsc3hvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImFncmVlbWVudCI6InVybjphd3A6YWdyZWVtZW50OjBkNzBjMDBjMWFjMzMyZDRlN2RhZWVhZWM1ZmE2NDZkIiwiYmFzaXNLaW5kIjoiYWdyZWVtZW50IiwiaWQiOiJ1cm46YXdwOm46TThYcXREbTRKY2dWNkxZM3pGQmhpRUZORFpPc2ZyUzFKcU5oRElkamFfcyIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOkl0aXg1SkJ6NDRjSC0wbGdnOFcwY2xodDRmOHlRLS1TNktPckl1V25PWmsiLCJpZCI6InVybjphd3A6bjpGdnFXbHpQeVo4RU43SnRaX1VOWmI1VFU3N2xteC1WaVFyR0FLXzYzeGVrIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpnbFVmOGtCWTR4OXV1RTNVWmZqOGRLZmowbkI4QmQ3clRxaEI0UXJick53IiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46UV9pMjVESDRlUm9JTEoxbkxrMlhDNmxnNnJ5M0lQVG1fTFFuU0U5ZHJjSSIsImlkIjoidXJuOmF3cDpuOldVcURDakFYWnA0TU9CNS1SNU9pWUpKUERiREpzYTFla2VRZDQtOF9XSW8iLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpzbEJHSU5rNHV5aXJsWVdrTzVKbmpmRktyU2xUeGlSTG9IUDZ1eno0WURFIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDQifSwiaWQiOiJ1cm46YXdwOm46Vkx0ckRaWlhDTWM4VzNTd2lRbkxiS08zSkxkdnRqV1JXYS1SdXAwbHN4byIsIm5hbWUiOiJpbnZvaWNlIiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOmludm9pY2UiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46SXRpeDVKQno0NGNILTBsZ2c4VzBjbGh0NGY4eVEtLVM2S09ySXVXbk9aayIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46dzNwVE5IY0d6NE5DWllyd09xY0VtX3NMTE8xWDFCcFVzM2FvWmlxM21jWSJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmU5YmQ0M2QxMzk1ZGUzNjk2MjA4ODM3MTdhM2VmOTE2MTlmOGY1MzQzY2JiMDhkM2NlZjZhZDNhYjBhYTJmNzYiLCJieXRlTGVuZ3RoIjoiMTAxNjciLCJpZCI6InVybjphd3A6bjp3M3BUTkhjR3o0TkNaWXJ3T3FjRW1fc0xMTzFYMUJwVXMzYW9aaXEzbWNZIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiaWQiOiJ1cm46YXdwOm46UV9pMjVESDRlUm9JTEoxbkxrMlhDNmxnNnJ5M0lQVG1fTFFuU0U5ZHJjSSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46QWpZYzc2NHl1REJ6WG1FeUloRFNFZW9OeVR2WnRGb0otTnBxR3pMZVFRRSJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmUzNDI4Y2I1MWZhMTM2MTBhZmU0Y2JhNTJhMTY1NzQ2MmY0OGM4OTIxYjkzZmRlNzdmMTY1MDk2OWYzM2E1Y2QiLCJieXRlTGVuZ3RoIjoiMTMzNzgiLCJpZCI6InVybjphd3A6bjpBalljNzY0eXVEQnpYbUV5SWhEU0Vlb055VHZadEZvSi1OcHFHekxlUVFFIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpScFJkUzY1V19DcFlRb1MzSnd6bTZLNVNUYUF4a3MyQ2ZKcGpJYjJmOUdzIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklrTTRSM2xWYzFGaVIyRnJhbFZ4TWxOUGNWVjBVblZ5WlRWQmVUUnBiMGhMWkdwdldYSm1Ta2hJYVZVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2TlRKaFltWmtNemhsWldWa1l6QTFOakJrTVdVMk9UazFaVFUxTmpFNU5UUTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHB6ZFhCd2JHbGxjaUlzSW1GamRHOXlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHpkWEJ3YkdsbGNpMWhaMlZ1ZERwaFkzUnZjaUlzSW1GamRHOXlTMmxrSWpvaWNVNHRPVnBaU1dkdVJFNVlaa1p2WVUwd2JHUlZkVmgyY1ZGVU16QkdibEZ6ZFZBMFp6aGtTekV4T0NJc0ltOXdaWEpoZEdsdmJuTWlPbHNpZFhKdU9tOXdPbkJoZVcxbGJuUWlMQ0oxY200NmIzQTZjR0ZwWkMxelpYSjJhV05sSWl3aWRYSnVPbTl3T25CaGVXMWxiblF0Y21WeGRXVnpkQ0lzSW5WeWJqcHZjRHB3WVhsdFpXNTBMWEJ5YjNacFpHVnlJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LldPR0s3THVCaS0zRmp1czkzcXVvVXdEanREanBkeDFXVUJlTWZWbGp4VHVGUTZhM2tTSHZveGdtUGVEdU5NMDg4WTZmemJGR3R1cWp4RDJBYzhSaUN3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46Z2xVZjhrQlk0eDl1dUUzVVpmajhkS2ZqMG5COEJkN3JUcWhCNFFyYnJOdyJ9LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpXdW8zU1lyRjYzblpxVjl4blpuVHpWZDhRdmhnOWhrOW1oMnVyVlV2eXNvIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklrTTRSM2xWYzFGaVIyRnJhbFZ4TWxOUGNWVjBVblZ5WlRWQmVUUnBiMGhMWkdwdldYSm1Ta2hJYVZVaUxDSjBlWEFpT2lKaGQzQXRjM1JoZEdWdFpXNTBLMnAzY3lKOS5leUpwWkNJNkluVnlianB6WTJWdVlYSnBienB6YUc5d2NHbHVaeTFoWjJWdWREcHBiblp2YVdObExYTjBZWFJsYldWdWRDSXNJbWx6YzNWbGNpSTZJblZ5YmpwbWFXTjBhVzl1WVd3NmMzVndjR3hwWlhJaUxDSnpkV0pxWldOMElqb2lkWEp1T21acFkzUnBiMjVoYkRwaWRYTnBibVZ6Y3lJc0ltTnNZV2x0Vkhsd1pTSTZJbWx1ZG05cFkyVWlMQ0p0WlhSb2IyUWlPaUp5WldOdmNtUmxaQzFpZVMxaGRYUm9iM0pwZEhraUxDSmhjMDltSWpvaU1qQXlOaTB4TVMweE0xUXdPVG93TURvd01DNHdNREJhSWl3aWNHRjViV1Z1ZENJNmV5SkFZMjl1ZEdWNGRDSTZJbWgwZEhCek9pOHZkek5wWkM1dmNtY3ZhbVZ6ZDNJdllYZHdMMk52Ym5SbGVIUXZkakVpTENKcFpDSTZJblZ5YmpwaGQzQTZaVzVuYVc1bExYTm9iM0J3YVc1bkxXRm5aVzUwTFdKeVlXNWphQzB4T25OMWNIQnNhV1Z5TFdGblpXNTBPakF3TURRaUxDSjBlWEJsSWpvaVNXNTJiMmxqWlNJc0luQmhlV1ZsUVdOamIzVnVkQ0k2SW5WeWJqcGhZMk52ZFc1ME9uTjFjSEJzYVdWeUlpd2ljR0Y1YldWdWRFUjFaVVJoZEdVaU9pSXlNREkyTFRFeExUSXdWREE1T2pBd09qQXdMakF3TUZvaUxDSndZWGx0Wlc1MFVtVmphWEJwWlc1MElqb2lkWEp1T21acFkzUnBiMjVoYkRwemRYQndiR2xsY2lJc0luQnlhV05sUTNWeWNtVnVZM2tpT2lKSFFsQWlMQ0p5WldabGNtVnVZMlZ6VDNKa1pYSWlPaUoxY200NllYZHdPbkJoZVcxbGJuUXRZV2R5WldWdFpXNTBPbk5vWVMweU5UWWxNMEZsTXpjNE0yRTJNamRoT0RaaU9ETmhNRFF5TVRNMllqbGhNMll4TkdRNU9XTXlOREkwTnpNMVlUVTFOREl3TjJJeE5UZGtOekpsWXpReE9HVXlZamRoSWl3aWMyVjBkR3hsY3lJNkluTm9ZUzB5TlRZNlpUTTNPRE5oTmpJM1lUZzJZamd6WVRBME1qRXpObUk1WVRObU1UUmtPVGxqTWpReU5EY3pOV0UxTlRReU1EZGlNVFUzWkRjeVpXTTBNVGhsTW1JM1lTSXNJblJ2ZEdGc1VHRjViV1Z1ZEVSMVpTSTZJall3TUM0d01DSjlmUS5CVWk5eFAyMWgwLVpSakxPSmgzenY3NXl2ekdELUMxSElVdmtGdU1VYWZKakI3R2ZNWXhuX01GaG4xMHdjdUprRFJzNGpuQ093Q3JocDFuV2hCRVlCUSIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnNsQkdJTms0dXlpcmxZV2tPNUpuamZGS3JTbFR4aVJMb0hQNnV6ejRZREUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46QXZLU19YZXU0ZmtwYndDLU1VYnRxc0cxeTlobm93bWRHeGpWZERZM25xZyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BheW1lbnQtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjpbeyJpZCI6InVybjphd3A6bjp4NmlkbnBudVlSU1U3SHBxaDl5aTAtRkdsdjY1UnFadWlhYUxVbTN4Z1lBIn0seyJpZCI6InVybjphd3A6bjp6WmcwSE9KNnQ0X2EtLUhIelhaWnVYYld4cktrZVRaTl9zdWUwZVZvOXpJIn1dLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOmtXQnZWWEN4aHdXRHZ6TzhoWEplZzktd0JMR2liM296WDczeUR5RUZZT2cifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zaG9wcGluZy1hZ2VudC1icmFuY2gtMTpzdXBwbGllci1hZ2VudDowMDA1Iiwia2luZCI6Imludm9rZSIsInByZXNlbnRGaWVsZHMiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOlNtU2ZTb09tTjJkS3RxS2lzMllJNzlydTRnSWdqWFlkZGtSbWdUMGlYencifSwidHlwZSI6WyJNZXNzYWdlIiwiSW52b2tlIl19.kPELvoChJlTRn0H2-rIb-8hr3a8Thq_qFuUb2jDUm9cwr1DyDvGLbDBBDHDapBhRngrcSRV1zbwcbQgcgEv-CQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -3434,6 +3867,7 @@
         }
       ],
       "caption": "The chosen merchant’s agent sends an invoke message to The shopper’s agent.",
+      "gateRun": 3,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3464,6 +3898,7 @@
       "agent": "business-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0005",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0005\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/payment-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0001\",\"from\":{\"id\":\"urn:awp:n:kWBvVXCxhwWDvzO8hXJeg9-wBLGib3ozX73yDyEFYOg\"},\"to\":{\"id\":\"urn:awp:n:SmSfSoOmN2dKtqKis2YI79ru4gIgjXYddkRmgT0iXzw\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:AvKS_Xeu4fkpbwC-MUbtqsG1y9hnowmdGxjVdDY3nqg\"},\"evidence\":[{\"id\":\"urn:awp:n:x6idnpnuYRSU7Hpqh9yi0-FGlv65RqZuiaaLUm3xgYA\"},{\"id\":\"urn:awp:n:zZg0HOJ6t4_a--HHzXZZuXbWxrKkeTZN_sue0eVo9zI\"}],\"@included\":[{\"id\":\"urn:awp:n:kWBvVXCxhwWDvzO8hXJeg9-wBLGib3ozX73yDyEFYOg\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:supplier-agent:actor\",\"onBehalfOf\":\"urn:fictional:supplier\"},{\"id\":\"urn:awp:n:SmSfSoOmN2dKtqKis2YI79ru4gIgjXYddkRmgT0iXzw\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:business-agent:agent\",\"party\":\"urn:fictional:business\"},{\"id\":\"urn:awp:n:AvKS_Xeu4fkpbwC-MUbtqsG1y9hnowmdGxjVdDY3nqg\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:M8XqtDm4JcgV6LY3zFBhiEFNDZOsfrS1JqNhDIdja_s\"},\"input\":{\"id\":\"urn:awp:n:gmCzQ1SfUQA60cLFTYKLFNZyvTpf_VLw0I6oBrsOilU\"},\"operation\":{\"id\":\"urn:op:payment-request\"},\"purpose\":\"urn:purpose:shopping-agent\"},{\"id\":\"urn:awp:n:x6idnpnuYRSU7Hpqh9yi0-FGlv65RqZuiaaLUm3xgYA\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:FvqWlzPyZ8EN7JtZ_UNZb5TU77lmx-ViQrGAK_63xek\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:zZg0HOJ6t4_a--HHzXZZuXbWxrKkeTZN_sue0eVo9zI\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:WUqDCjAXZp4MOB5-R5OiYJJPDbDJsa1ekeQd4-8_WIo\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:op:payment-request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:gmCzQ1SfUQA60cLFTYKLFNZyvTpf_VLw0I6oBrsOilU\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:VLtrDZZXCMc8W3SwiQnLbKO3JLdvtjWRWa-Rup0lsxo\"}]},{\"id\":\"urn:awp:n:M8XqtDm4JcgV6LY3zFBhiEFNDZOsfrS1JqNhDIdja_s\",\"type\":\"RequestBasis\",\"agreement\":\"urn:awp:agreement:0d70c00c1ac332d4e7daeeaec5fa646d\",\"basisKind\":\"agreement\"},{\"id\":\"urn:awp:n:FvqWlzPyZ8EN7JtZ_UNZb5TU77lmx-ViQrGAK_63xek\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Itix5JBz44cH-0lgg8W0clht4f8yQ--S6KOrIuWnOZk\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:supplier\",\"proofGraph\":\"urn:awp:n:glUf8kBY4x9uuE3UZfj8dKfj0nB8Bd7rTqhB4QrbrNw\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:WUqDCjAXZp4MOB5-R5OiYJJPDbDJsa1ekeQd4-8_WIo\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Q_i25DH4eRoILJ1nLk2XC6lg6ry3IPTm_LQnSE9drcI\",\"issuer\":\"urn:fictional:supplier\",\"proofGraph\":\"urn:awp:n:slBGINk4uyirlYWkO5JnjfFKrSlTxiRLoHP6uzz4YDE\"},{\"id\":\"urn:awp:n:VLtrDZZXCMc8W3SwiQnLbKO3JLdvtjWRWa-Rup0lsxo\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:engine-shopping-agent-branch-1:supplier-agent:0004\"},\"name\":\"invoice\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:invoice\"},{\"id\":\"urn:awp:n:Itix5JBz44cH-0lgg8W0clht4f8yQ--S6KOrIuWnOZk\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:w3pTNHcGz4NCZYrwOqcEm_sLLO1X1BpUs3aoZiq3mcY\"}},{\"id\":\"urn:awp:n:w3pTNHcGz4NCZYrwOqcEm_sLLO1X1BpUs3aoZiq3mcY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e9bd43d1395de369620883717a3ef91619f8f5343cbb08d3cef6ad3ab0aa2f76\",\"byteLength\":\"10167\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Q_i25DH4eRoILJ1nLk2XC6lg6ry3IPTm_LQnSE9drcI\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:AjYc764yuDBzXmEyIhDSEeoNyTvZtFoJ-NpqGzLeQQE\"}},{\"id\":\"urn:awp:n:AjYc764yuDBzXmEyIhDSEeoNyTvZtFoJ-NpqGzLeQQE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e3428cb51fa13610afe4cba52a1657462f48c8921b93fde77f1650969f33a5cd\",\"byteLength\":\"13378\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:glUf8kBY4x9uuE3UZfj8dKfj0nB8Bd7rTqhB4QrbrNw\",\"@graph\":[{\"id\":\"urn:awp:n:RpRdS65W_CpYQoS3Jwzm6K5STaAxks2CfJpjIb2f9Gs\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4R3lVc1FiR2FralVxMlNPcVV0UnVyZTVBeTRpb0hLZGpvWXJmSkhIaVUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NTJhYmZkMzhlZWVkYzA1NjBkMWU2OTk1ZTU1NjE5NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoicU4tOVpZSWduRE5YZkZvYU0wbGRVdVh2cVFUMzBGblFzdVA0ZzhkSzExOCIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOnBheW1lbnQiLCJ1cm46b3A6cGFpZC1zZXJ2aWNlIiwidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInVybjpvcDpwYXltZW50LXByb3ZpZGVyIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.WOGK7LuBi-3Fjus93quoUwDjtDjpdx1WUBeMfVljxTuFQ6a3kSHvoxgmPeDuNM088Y6fzbFGtuqjxD2Ac8RiCw\"}]},{\"id\":\"urn:awp:n:slBGINk4uyirlYWkO5JnjfFKrSlTxiRLoHP6uzz4YDE\",\"@graph\":[{\"id\":\"urn:awp:n:Wuo3SYrF63nZqV9xnZnTzVd8Qvhg9hk9mh2urVUvyso\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4R3lVc1FiR2FralVxMlNPcVV0UnVyZTVBeTRpb0hLZGpvWXJmSkhIaVUiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJpZCI6InVybjpzY2VuYXJpbzpzaG9wcGluZy1hZ2VudDppbnZvaWNlLXN0YXRlbWVudCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6c3VwcGxpZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsImNsYWltVHlwZSI6Imludm9pY2UiLCJtZXRob2QiOiJyZWNvcmRlZC1ieS1hdXRob3JpdHkiLCJhc09mIjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwicGF5bWVudCI6eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJpZCI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDQiLCJ0eXBlIjoiSW52b2ljZSIsInBheWVlQWNjb3VudCI6InVybjphY2NvdW50OnN1cHBsaWVyIiwicGF5bWVudER1ZURhdGUiOiIyMDI2LTExLTIwVDA5OjAwOjAwLjAwMFoiLCJwYXltZW50UmVjaXBpZW50IjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInByaWNlQ3VycmVuY3kiOiJHQlAiLCJyZWZlcmVuY2VzT3JkZXIiOiJ1cm46YXdwOnBheW1lbnQtYWdyZWVtZW50OnNoYS0yNTYlM0FlMzc4M2E2MjdhODZiODNhMDQyMTM2YjlhM2YxNGQ5OWMyNDI0NzM1YTU1NDIwN2IxNTdkNzJlYzQxOGUyYjdhIiwic2V0dGxlcyI6InNoYS0yNTY6ZTM3ODNhNjI3YTg2YjgzYTA0MjEzNmI5YTNmMTRkOTljMjQyNDczNWE1NTQyMDdiMTU3ZDcyZWM0MThlMmI3YSIsInRvdGFsUGF5bWVudER1ZSI6IjYwMC4wMCJ9fQ.BUi9xP21h0-ZRjLOJh3zv75yvzGD-C1HIUvkFuMUafJjB7GfMYxn_MFhn10wcuJkDRs4jnCOwCrhp1nWhBEYBQ\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InFOLTlaWUlnbkROWGZGb2FNMGxkVXVYdnFRVDMwRm5Rc3VQNGc4ZEsxMTgiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOmtXQnZWWEN4aHdXRHZ6TzhoWEplZzktd0JMR2liM296WDczeUR5RUZZT2ciLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpzdXBwbGllciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJ1c2luZXNzLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46U21TZlNvT21OMmRLdHFLaXMyWUk3OXJ1NGdJZ2pYWWRka1JtZ1QwaVh6dyIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpidXNpbmVzcyIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46TThYcXREbTRKY2dWNkxZM3pGQmhpRUZORFpPc2ZyUzFKcU5oRElkamFfcyJ9LCJpZCI6InVybjphd3A6bjpBdktTX1hldTRma3Bid0MtTVVidHFzRzF5OWhub3dtZEd4alZkRFkzbnFnIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46Z21DelExU2ZVUUE2MGNMRlRZS0xGTlp5dlRwZl9WTHcwSTZvQnJzT2lsVSJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6cGF5bWVudC1yZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpzaG9wcGluZy1hZ2VudCIsInR5cGUiOiJJbnZva2VCb2R5In0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46RnZxV2x6UHlaOEVON0p0Wl9VTlpiNVRVNzdsbXgtVmlRckdBS182M3hlayJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOng2aWRucG51WVJTVTdIcHFoOXlpMC1GR2x2NjVScVp1aWFhTFVtM3hnWUEiLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46V1VxRENqQVhacDRNT0I1LVI1T2lZSkpQRGJESnNhMWVrZVFkNC04X1dJbyJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOnpaZzBIT0o2dDRfYS0tSEh6WFpadVhiV3hyS2tlVFpOX3N1ZTBlVm85ekkiLCJwb3NpdGlvbiI6IjEiLCJyb2xlIjoiY3JlZGVudGlhbCIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOnBheW1lbnQtcmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpnbUN6UTFTZlVRQTYwY0xGVFlLTEZOWnl2VHBmX1ZMdzBJNm9CcnNPaWxVIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpWTHRyRFpaWENNYzhXM1N3aVFuTGJLTzNKTGR2dGpXUldhLVJ1cDBsc3hvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImFncmVlbWVudCI6InVybjphd3A6YWdyZWVtZW50OjBkNzBjMDBjMWFjMzMyZDRlN2RhZWVhZWM1ZmE2NDZkIiwiYmFzaXNLaW5kIjoiYWdyZWVtZW50IiwiaWQiOiJ1cm46YXdwOm46TThYcXREbTRKY2dWNkxZM3pGQmhpRUZORFpPc2ZyUzFKcU5oRElkamFfcyIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOkl0aXg1SkJ6NDRjSC0wbGdnOFcwY2xodDRmOHlRLS1TNktPckl1V25PWmsiLCJpZCI6InVybjphd3A6bjpGdnFXbHpQeVo4RU43SnRaX1VOWmI1VFU3N2xteC1WaVFyR0FLXzYzeGVrIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpnbFVmOGtCWTR4OXV1RTNVWmZqOGRLZmowbkI4QmQ3clRxaEI0UXJick53IiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46UV9pMjVESDRlUm9JTEoxbkxrMlhDNmxnNnJ5M0lQVG1fTFFuU0U5ZHJjSSIsImlkIjoidXJuOmF3cDpuOldVcURDakFYWnA0TU9CNS1SNU9pWUpKUERiREpzYTFla2VRZDQtOF9XSW8iLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnN1cHBsaWVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpzbEJHSU5rNHV5aXJsWVdrTzVKbmpmRktyU2xUeGlSTG9IUDZ1eno0WURFIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjphd3A6ZW5naW5lLXNob3BwaW5nLWFnZW50LWJyYW5jaC0xOnN1cHBsaWVyLWFnZW50OjAwMDQifSwiaWQiOiJ1cm46YXdwOm46Vkx0ckRaWlhDTWM4VzNTd2lRbkxiS08zSkxkdnRqV1JXYS1SdXAwbHN4byIsIm5hbWUiOiJpbnZvaWNlIiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOmludm9pY2UiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46SXRpeDVKQno0NGNILTBsZ2c4VzBjbGh0NGY4eVEtLVM2S09ySXVXbk9aayIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46dzNwVE5IY0d6NE5DWllyd09xY0VtX3NMTE8xWDFCcFVzM2FvWmlxM21jWSJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmU5YmQ0M2QxMzk1ZGUzNjk2MjA4ODM3MTdhM2VmOTE2MTlmOGY1MzQzY2JiMDhkM2NlZjZhZDNhYjBhYTJmNzYiLCJieXRlTGVuZ3RoIjoiMTAxNjciLCJpZCI6InVybjphd3A6bjp3M3BUTkhjR3o0TkNaWXJ3T3FjRW1fc0xMTzFYMUJwVXMzYW9aaXEzbWNZIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiaWQiOiJ1cm46YXdwOm46UV9pMjVESDRlUm9JTEoxbkxrMlhDNmxnNnJ5M0lQVG1fTFFuU0U5ZHJjSSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46QWpZYzc2NHl1REJ6WG1FeUloRFNFZW9OeVR2WnRGb0otTnBxR3pMZVFRRSJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OmUzNDI4Y2I1MWZhMTM2MTBhZmU0Y2JhNTJhMTY1NzQ2MmY0OGM4OTIxYjkzZmRlNzdmMTY1MDk2OWYzM2E1Y2QiLCJieXRlTGVuZ3RoIjoiMTMzNzgiLCJpZCI6InVybjphd3A6bjpBalljNzY0eXVEQnpYbUV5SWhEU0Vlb055VHZadEZvSi1OcHFHekxlUVFFIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpScFJkUzY1V19DcFlRb1MzSnd6bTZLNVNUYUF4a3MyQ2ZKcGpJYjJmOUdzIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklrTTRSM2xWYzFGaVIyRnJhbFZ4TWxOUGNWVjBVblZ5WlRWQmVUUnBiMGhMWkdwdldYSm1Ta2hJYVZVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2TlRKaFltWmtNemhsWldWa1l6QTFOakJrTVdVMk9UazFaVFUxTmpFNU5UUTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHB6ZFhCd2JHbGxjaUlzSW1GamRHOXlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHpkWEJ3YkdsbGNpMWhaMlZ1ZERwaFkzUnZjaUlzSW1GamRHOXlTMmxrSWpvaWNVNHRPVnBaU1dkdVJFNVlaa1p2WVUwd2JHUlZkVmgyY1ZGVU16QkdibEZ6ZFZBMFp6aGtTekV4T0NJc0ltOXdaWEpoZEdsdmJuTWlPbHNpZFhKdU9tOXdPbkJoZVcxbGJuUWlMQ0oxY200NmIzQTZjR0ZwWkMxelpYSjJhV05sSWl3aWRYSnVPbTl3T25CaGVXMWxiblF0Y21WeGRXVnpkQ0lzSW5WeWJqcHZjRHB3WVhsdFpXNTBMWEJ5YjNacFpHVnlJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LldPR0s3THVCaS0zRmp1czkzcXVvVXdEanREanBkeDFXVUJlTWZWbGp4VHVGUTZhM2tTSHZveGdtUGVEdU5NMDg4WTZmemJGR3R1cWp4RDJBYzhSaUN3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46Z2xVZjhrQlk0eDl1dUUzVVpmajhkS2ZqMG5COEJkN3JUcWhCNFFyYnJOdyJ9LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpXdW8zU1lyRjYzblpxVjl4blpuVHpWZDhRdmhnOWhrOW1oMnVyVlV2eXNvIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklrTTRSM2xWYzFGaVIyRnJhbFZ4TWxOUGNWVjBVblZ5WlRWQmVUUnBiMGhMWkdwdldYSm1Ta2hJYVZVaUxDSjBlWEFpT2lKaGQzQXRjM1JoZEdWdFpXNTBLMnAzY3lKOS5leUpwWkNJNkluVnlianB6WTJWdVlYSnBienB6YUc5d2NHbHVaeTFoWjJWdWREcHBiblp2YVdObExYTjBZWFJsYldWdWRDSXNJbWx6YzNWbGNpSTZJblZ5YmpwbWFXTjBhVzl1WVd3NmMzVndjR3hwWlhJaUxDSnpkV0pxWldOMElqb2lkWEp1T21acFkzUnBiMjVoYkRwaWRYTnBibVZ6Y3lJc0ltTnNZV2x0Vkhsd1pTSTZJbWx1ZG05cFkyVWlMQ0p0WlhSb2IyUWlPaUp5WldOdmNtUmxaQzFpZVMxaGRYUm9iM0pwZEhraUxDSmhjMDltSWpvaU1qQXlOaTB4TVMweE0xUXdPVG93TURvd01DNHdNREJhSWl3aWNHRjViV1Z1ZENJNmV5SkFZMjl1ZEdWNGRDSTZJbWgwZEhCek9pOHZkek5wWkM1dmNtY3ZhbVZ6ZDNJdllYZHdMMk52Ym5SbGVIUXZkakVpTENKcFpDSTZJblZ5YmpwaGQzQTZaVzVuYVc1bExYTm9iM0J3YVc1bkxXRm5aVzUwTFdKeVlXNWphQzB4T25OMWNIQnNhV1Z5TFdGblpXNTBPakF3TURRaUxDSjBlWEJsSWpvaVNXNTJiMmxqWlNJc0luQmhlV1ZsUVdOamIzVnVkQ0k2SW5WeWJqcGhZMk52ZFc1ME9uTjFjSEJzYVdWeUlpd2ljR0Y1YldWdWRFUjFaVVJoZEdVaU9pSXlNREkyTFRFeExUSXdWREE1T2pBd09qQXdMakF3TUZvaUxDSndZWGx0Wlc1MFVtVmphWEJwWlc1MElqb2lkWEp1T21acFkzUnBiMjVoYkRwemRYQndiR2xsY2lJc0luQnlhV05sUTNWeWNtVnVZM2tpT2lKSFFsQWlMQ0p5WldabGNtVnVZMlZ6VDNKa1pYSWlPaUoxY200NllYZHdPbkJoZVcxbGJuUXRZV2R5WldWdFpXNTBPbk5vWVMweU5UWWxNMEZsTXpjNE0yRTJNamRoT0RaaU9ETmhNRFF5TVRNMllqbGhNMll4TkdRNU9XTXlOREkwTnpNMVlUVTFOREl3TjJJeE5UZGtOekpsWXpReE9HVXlZamRoSWl3aWMyVjBkR3hsY3lJNkluTm9ZUzB5TlRZNlpUTTNPRE5oTmpJM1lUZzJZamd6WVRBME1qRXpObUk1WVRObU1UUmtPVGxqTWpReU5EY3pOV0UxTlRReU1EZGlNVFUzWkRjeVpXTTBNVGhsTW1JM1lTSXNJblJ2ZEdGc1VHRjViV1Z1ZEVSMVpTSTZJall3TUM0d01DSjlmUS5CVWk5eFAyMWgwLVpSakxPSmgzenY3NXl2ekdELUMxSElVdmtGdU1VYWZKakI3R2ZNWXhuX01GaG4xMHdjdUprRFJzNGpuQ093Q3JocDFuV2hCRVlCUSIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnNsQkdJTms0dXlpcmxZV2tPNUpuamZGS3JTbFR4aVJMb0hQNnV6ejRZREUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46QXZLU19YZXU0ZmtwYndDLU1VYnRxc0cxeTlobm93bWRHeGpWZERZM25xZyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BheW1lbnQtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtc2hvcHBpbmctYWdlbnQtYnJhbmNoLTE6c3VwcGxpZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjpbeyJpZCI6InVybjphd3A6bjp4NmlkbnBudVlSU1U3SHBxaDl5aTAtRkdsdjY1UnFadWlhYUxVbTN4Z1lBIn0seyJpZCI6InVybjphd3A6bjp6WmcwSE9KNnQ0X2EtLUhIelhaWnVYYld4cktrZVRaTl9zdWUwZVZvOXpJIn1dLCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOmtXQnZWWEN4aHdXRHZ6TzhoWEplZzktd0JMR2liM296WDczeUR5RUZZT2cifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1zaG9wcGluZy1hZ2VudC1icmFuY2gtMTpzdXBwbGllci1hZ2VudDowMDA1Iiwia2luZCI6Imludm9rZSIsInByZXNlbnRGaWVsZHMiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOlNtU2ZTb09tTjJkS3RxS2lzMllJNzlydTRnSWdqWFlkZGtSbWdUMGlYencifSwidHlwZSI6WyJNZXNzYWdlIiwiSW52b2tlIl19.kPELvoChJlTRn0H2-rIb-8hr3a8Thq_qFuUb2jDUm9cwr1DyDvGLbDBBDHDapBhRngrcSRV1zbwcbQgcgEv-CQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -3644,6 +4079,7 @@
         }
       ],
       "caption": "An invoke message from The chosen merchant’s agent reaches the inbound gate.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3694,6 +4130,7 @@
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
       "caption": "The message is intact, signed with The chosen merchant’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3755,6 +4192,7 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The chosen merchant's invoice statement: The chosen merchant is an accepted source for this kind of claim.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3800,6 +4238,7 @@
         "text": "A representation statement signed with The chosen merchant's pinned key must name this agent, this operation and a current validity period."
       },
       "caption": "The chosen merchant signed a statement that The chosen merchant’s agent acts for them in this operation.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3850,6 +4289,7 @@
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
       "caption": "The chosen merchant's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3900,6 +4340,7 @@
         "text": "Accept invoice from The chosen merchant by recorded-by-authority, at most 30 days old."
       },
       "caption": "The chosen merchant's invoice statement is fit for Agree the service: recorded-by-authority, 0 days old.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -3932,7 +4373,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
+      "messageId": "urn:awp:engine-shopping-agent-branch-1:supplier-agent:0005",
+      "messageDigest": "sha-256:de425f9e835cedc4453ffc30ed4eac68b9ae3a92cb08466d6cb51393566f45fa",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 6,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -4011,6 +4455,16 @@
       "seq": 90,
       "step": 10,
       "agent": "business-agent",
+      "actionDigest": "sha-256:e1c4d9c0d81f532fbc09745062cfa34bc815d1279044b688be3454f68854ccab",
+      "actionScope": {
+        "action": "pay",
+        "target": "urn:op:payment",
+        "operation": "urn:op:payment",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:business-agent:0002",
+        "recipient": "urn:fictional:bank",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "P1",
@@ -4024,6 +4478,7 @@
       ],
       "reason": "terms-acceptable",
       "caption": "The verified agreement is in its stated time window.",
+      "gateRun": 2,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -4064,6 +4519,16 @@
       "seq": 91,
       "step": 10,
       "agent": "business-agent",
+      "actionDigest": "sha-256:e1c4d9c0d81f532fbc09745062cfa34bc815d1279044b688be3454f68854ccab",
+      "actionScope": {
+        "action": "pay",
+        "target": "urn:op:payment",
+        "operation": "urn:op:payment",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:business-agent:0002",
+        "recipient": "urn:fictional:bank",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "P2",
@@ -4082,6 +4547,7 @@
       ],
       "reason": "terms-acceptable",
       "caption": "The agreed amount is 600.00 GBP; the payment asks for 600.00 GBP.",
+      "gateRun": 2,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -4122,6 +4588,16 @@
       "seq": 92,
       "step": 10,
       "agent": "business-agent",
+      "actionDigest": "sha-256:e1c4d9c0d81f532fbc09745062cfa34bc815d1279044b688be3454f68854ccab",
+      "actionScope": {
+        "action": "pay",
+        "target": "urn:op:payment",
+        "operation": "urn:op:payment",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:business-agent:0002",
+        "recipient": "urn:fictional:bank",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "P3",
@@ -4140,6 +4616,7 @@
       ],
       "reason": "recipient-established",
       "caption": "The payment recipient must be the party named by the agreement's compensation duty.",
+      "gateRun": 2,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -4180,6 +4657,16 @@
       "seq": 93,
       "step": 10,
       "agent": "business-agent",
+      "actionDigest": "sha-256:e1c4d9c0d81f532fbc09745062cfa34bc815d1279044b688be3454f68854ccab",
+      "actionScope": {
+        "action": "pay",
+        "target": "urn:op:payment",
+        "operation": "urn:op:payment",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:business-agent:0002",
+        "recipient": "urn:fictional:bank",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "P4",
@@ -4198,6 +4685,7 @@
       ],
       "reason": "source-accepted",
       "caption": "An accepted, current source binds this payee to the account, with terms permitting this use.",
+      "gateRun": 2,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -4238,6 +4726,16 @@
       "seq": 94,
       "step": 10,
       "agent": "business-agent",
+      "actionDigest": "sha-256:e1c4d9c0d81f532fbc09745062cfa34bc815d1279044b688be3454f68854ccab",
+      "actionScope": {
+        "action": "pay",
+        "target": "urn:op:payment",
+        "operation": "urn:op:payment",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:business-agent:0002",
+        "recipient": "urn:fictional:bank",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "P5",
@@ -4251,6 +4749,7 @@
       ],
       "reason": "limit-exceeded",
       "caption": "The mandate permits this purpose and amount within its payment and period limits.",
+      "gateRun": 2,
       "settlement": {
         "suite": "rdf-order",
         "objects": [
@@ -4291,12 +4790,23 @@
       "seq": 95,
       "step": 10,
       "agent": "business-agent",
+      "actionDigest": "sha-256:e1c4d9c0d81f532fbc09745062cfa34bc815d1279044b688be3454f68854ccab",
+      "actionScope": {
+        "action": "pay",
+        "target": "urn:op:payment",
+        "operation": "urn:op:payment",
+        "conversation": "urn:awp:engine-shopping-agent-branch-1:business-agent:0002",
+        "recipient": "urn:fictional:bank",
+        "purpose": "urn:purpose:shopping-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "limit-exceeded",
       "caption": "The mandate permits this purpose and amount within its payment and period limits.",
+      "gateRun": 2,
       "settlement": {
         "suite": "rdf-order",
         "objects": [

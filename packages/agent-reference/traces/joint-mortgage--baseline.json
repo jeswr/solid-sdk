@@ -108,7 +108,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -142,6 +142,16 @@
       "seq": 2,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -159,12 +169,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The joint agreement coordinator's mandate covers this action."
+      "caption": "The joint agreement coordinator's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -193,12 +214,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -211,12 +243,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -229,12 +272,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -247,12 +301,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits."
+      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -274,17 +339,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:46f0b0614022fa9ec4de79dd17a90b6aac1ce42e43454f37939222dd4fedf1e8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:reserve-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -363,6 +441,16 @@
       "seq": 16,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -380,12 +468,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The first applicant's mandate covers this action."
+      "caption": "The first applicant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -414,12 +513,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -432,12 +542,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -450,12 +571,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -468,12 +600,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The first applicant's limits."
+      "caption": "Inside what the agent may do on its own, and within The first applicant's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -495,17 +638,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3e5d6ede02880f434787fb407f1e685ccabfbc8ec6c42af89af79eab0d988a4a",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 1
     },
     {
       "seq": 23,
@@ -584,6 +740,16 @@
       "seq": 30,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -601,12 +767,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The second applicant's mandate covers this action."
+      "caption": "The second applicant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -635,12 +812,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -653,12 +841,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -671,12 +870,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 34,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -689,12 +899,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The second applicant's limits."
+      "caption": "Inside what the agent may do on its own, and within The second applicant's limits.",
+      "gateRun": 1
     },
     {
       "seq": 35,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -716,17 +937,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 36,
       "step": 3,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:f06904fe6e0f84d468ec35c8b9fda157b729a4648460da278a5d0ffe3f9cd90f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 1
     },
     {
       "seq": 37,
@@ -805,6 +1039,16 @@
       "seq": 44,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -822,12 +1066,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 45,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -856,12 +1111,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 46,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -874,12 +1140,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 47,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -892,12 +1169,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 48,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -910,12 +1198,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits.",
+      "gateRun": 1
     },
     {
       "seq": 49,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -937,17 +1236,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 50,
       "step": 4,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:25b6ae73151118dc6692c0a6673a0908e9973d0aafd30d64042f43e2ecf34f76",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 1
     },
     {
       "seq": 51,
@@ -1026,6 +1338,16 @@
       "seq": 58,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1043,12 +1365,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The joint agreement coordinator's mandate covers this action."
+      "caption": "The joint agreement coordinator's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 59,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1077,12 +1410,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 60,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1095,12 +1439,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 61,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1113,12 +1468,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 62,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1131,12 +1497,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits."
+      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits.",
+      "gateRun": 2
     },
     {
       "seq": 63,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1158,17 +1535,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 64,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:8c8b3c99e2bfb854fc6c3f638752e1dc77b6ee7fd7d4d591637640b1e0c3a909",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:accept-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 2
     },
     {
       "seq": 65,
@@ -1247,6 +1637,16 @@
       "seq": 72,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1264,12 +1664,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The joint agreement coordinator's mandate covers this action."
+      "caption": "The joint agreement coordinator's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 73,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1298,12 +1709,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 3
     },
     {
       "seq": 74,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1316,12 +1738,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 75,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1334,12 +1767,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 76,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1352,12 +1796,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits."
+      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits.",
+      "gateRun": 3
     },
     {
       "seq": 77,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1379,17 +1834,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 3
     },
     {
       "seq": 78,
       "step": 6,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:7c071b987839ad287f290173466bea98f2712f58d12fefa61c66ee52b2c696d3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:complete-plan",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 3
     },
     {
       "seq": 79,
@@ -1556,6 +2024,16 @@
       "seq": 94,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1573,12 +2051,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The first applicant's mandate covers this action."
+      "caption": "The first applicant's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 95,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1607,12 +2096,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 96,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1625,12 +2125,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 97,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1643,12 +2154,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 98,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1661,12 +2183,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The first applicant's limits."
+      "caption": "Inside what the agent may do on its own, and within The first applicant's limits.",
+      "gateRun": 2
     },
     {
       "seq": 99,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1688,17 +2221,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 100,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:276abe366a4c3b1f47ebee9f450679b9ae8dc31960fb77f46a42d7e929a058cb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-owner",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 2
     },
     {
       "seq": 101,
@@ -1777,6 +2323,16 @@
       "seq": 108,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1794,12 +2350,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The second applicant's mandate covers this action."
+      "caption": "The second applicant's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 109,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1828,12 +2395,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 110,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1846,12 +2424,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 111,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1864,12 +2453,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 112,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1882,12 +2482,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The second applicant's limits."
+      "caption": "Inside what the agent may do on its own, and within The second applicant's limits.",
+      "gateRun": 2
     },
     {
       "seq": 113,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1909,17 +2520,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 114,
       "step": 9,
       "agent": "second-applicant-agent",
+      "actionDigest": "sha-256:3666747b762f336e250df1cc319b67e2c917672dc9c10f715d9444c791eca65e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-second-applicant",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 2
     },
     {
       "seq": 115,
@@ -1998,6 +2622,16 @@
       "seq": 122,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -2015,12 +2649,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 123,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -2049,12 +2694,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 124,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2067,12 +2723,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 125,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2085,12 +2752,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 126,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -2103,12 +2781,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits.",
+      "gateRun": 2
     },
     {
       "seq": 127,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2130,17 +2819,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 128,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:5fa025b6bd595f1304debbef9f9c5eea6028a5ab125c4e45c75d4df0e0528997",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-receiver",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 2
     },
     {
       "seq": 129,
@@ -2219,6 +2921,16 @@
       "seq": 136,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -2236,12 +2948,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The joint agreement coordinator's mandate covers this action."
+      "caption": "The joint agreement coordinator's mandate covers this action.",
+      "gateRun": 4
     },
     {
       "seq": 137,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -2270,12 +2993,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only."
+      "caption": "The joint agreement coordinator: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 4
     },
     {
       "seq": 138,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2288,12 +3022,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 139,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2306,12 +3051,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 140,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -2324,12 +3080,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits."
+      "caption": "Inside what the agent may do on its own, and within The joint agreement coordinator's limits.",
+      "gateRun": 4
     },
     {
       "seq": 141,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2351,17 +3118,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 4
     },
     {
       "seq": 142,
       "step": 11,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:c675ac56b387807c06a7e322c2bf401473d28fe6552a8124634b25d5a9035fc7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:joint-mortgage:issue-to-coordinator",
+        "recipient": "urn:fictional:joint-mortgage:coordinator",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The joint agreement coordinator.",
+      "gateRun": 4
     },
     {
       "seq": 143,

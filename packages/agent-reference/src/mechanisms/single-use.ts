@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /** A separately keyed local register. State is committed before any signed success leaves. */
 import { z } from "zod";
@@ -85,6 +86,7 @@ export interface SingleUseRegister {
 }
 export class LocalSingleUseRegister implements SingleUseRegister {
   readonly identity: string;
+  private gateRun = 0;
   constructor(
     private readonly options: {
       identity: string;
@@ -103,12 +105,14 @@ export class LocalSingleUseRegister implements SingleUseRegister {
     this.options = { ...options, items: structuredClone(options.items) };
   }
   private event(
+    gateRun: number,
     check: "integrity" | "source" | "authority" | "terms" | "fitness",
     reason?: ReasonCode,
   ) {
     this.options.sink?.({
       part: "inbound-gate",
       kind: "check",
+      gateRun,
       check,
       verdict: reason ? "fail" : "pass",
       reason:
@@ -126,6 +130,7 @@ export class LocalSingleUseRegister implements SingleUseRegister {
     });
   }
   async withdraw(jws: string): Promise<RegisterResult> {
+    const gateRun = ++this.gateRun;
     const at = this.options.now();
     const schema = z.strictObject({
       type: z.literal("SingleUseWithdrawal"),
@@ -154,7 +159,7 @@ export class LocalSingleUseRegister implements SingleUseRegister {
       checked.signer?.subject !== request.issuer ||
       request.issuer !== item.issuer
     ) {
-      this.event("authority", "not-authorised");
+      this.event(gateRun, "authority", "not-authorised");
       return { ok: false, reason: "not-authorised" };
     }
     if (Math.abs(Date.parse(at) - Date.parse(request.at)) > this.options.maxAgeSeconds * 1000)
@@ -187,22 +192,24 @@ export class LocalSingleUseRegister implements SingleUseRegister {
       },
       at,
     );
-    this.event("authority");
+    this.event(gateRun, "authority");
     return { ok: true, jws: await signStatement(this.options.key, TYP.statement, status) };
   }
 
   async request(jws: string): Promise<RegisterResult> {
+    const gateRun = ++this.gateRun;
     const at = this.options.now();
     const record = (r: { type: string }) => this.options.ledger.append(r, at);
     const fail = (
       reason: ReasonCode,
       check: "integrity" | "source" | "authority" | "terms" | "fitness" = "authority",
     ): RegisterResult => {
-      this.event(check, reason);
+      this.event(gateRun, check, reason);
       record({ type: "single-use-refusal", reason } as { type: string });
       this.options.sink?.({
         part: "inbound-gate",
         kind: "decision",
+        gateRun,
         outcome: "refuse",
         reason,
         caption: `The register refuses ${reason}.`,
@@ -226,10 +233,10 @@ export class LocalSingleUseRegister implements SingleUseRegister {
       verified.signer.party !== request.party
     )
       return fail("bad-signature", "integrity");
-    this.event("integrity");
+    this.event(gateRun, "integrity");
     if (Math.abs(Date.parse(at) - Date.parse(request.at)) > this.options.maxAgeSeconds * 1000)
       return fail("stale-data", "fitness");
-    this.event("source");
+    this.event(gateRun, "source");
     const item = this.options.items.find((i) => i.id === request.item);
     if (!item) return fail("lookup-failed");
     if (!item.redeemers.includes(request.party)) return fail("not-authorised");
@@ -367,8 +374,8 @@ export class LocalSingleUseRegister implements SingleUseRegister {
         return fail("terms-not-acceptable", "terms");
     } else if (item.escrow && request.operation === "redeem")
       return fail("evidence-missing", "terms");
-    this.event("terms");
-    this.event("fitness");
+    this.event(gateRun, "terms");
+    this.event(gateRun, "fitness");
     // No await between this read and save. A file store has an exclusive process lock.
     const state = this.options.store.load();
     const key = `single-use:${item.id}`;
@@ -412,10 +419,11 @@ export class LocalSingleUseRegister implements SingleUseRegister {
     record({ type: "single-use-transition", requestDigest: digestOf(request), ...status } as {
       type: string;
     });
-    this.event("authority");
+    this.event(gateRun, "authority");
     this.options.sink?.({
       part: "inbound-gate",
       kind: "decision",
+      gateRun,
       outcome: "admit",
       reason: "authority-valid",
       caption: `The register records ${request.operation} before releasing its signed answer.`,

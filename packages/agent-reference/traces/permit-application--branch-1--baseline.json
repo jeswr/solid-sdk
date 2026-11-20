@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -105,7 +105,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The architect's unstructured content statement is intact and signed with The architect's pinned key."
+      "caption": "The architect's unstructured content statement is intact and signed with The architect's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -143,7 +144,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The architect's unstructured content statement: The architect is an accepted source for this kind of claim."
+      "caption": "The architect's unstructured content statement: The architect is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -161,7 +163,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The architect's unstructured content statement asks for nothing, so there is no authority to check."
+      "caption": "The architect's unstructured content statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -188,7 +191,8 @@
         "id": "urn:terms:permit-application:original",
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
-      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -220,7 +224,8 @@
         "id": "urn:profile:permit-application:unstructured-content",
         "text": "Accept unstructured-content from The architect by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The architect's unstructured content statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
+      "caption": "The architect's unstructured content statement is fit for Applying for a building permit: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -230,7 +235,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The architect's unstructured content statement is admitted."
+      "caption": "The architect's unstructured content statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -276,7 +282,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The architect's building height statement is intact and signed with The architect's pinned key."
+      "caption": "The architect's building height statement is intact and signed with The architect's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -314,7 +321,8 @@
         ],
         "answer": "Accepted, for building height claims only."
       },
-      "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim."
+      "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -332,7 +340,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The architect's building height statement asks for nothing, so there is no authority to check."
+      "caption": "The architect's building height statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -359,7 +368,8 @@
         "id": "urn:terms:permit-application:height",
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
-      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -391,7 +401,8 @@
         "id": "urn:profile:permit-application:building.height",
         "text": "Accept building height from The architect by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The architect's building height statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
+      "caption": "The architect's building height statement is fit for Applying for a building permit: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -401,7 +412,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The architect's building height statement is admitted."
+      "caption": "The architect's building height statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -438,6 +450,16 @@
       "seq": 16,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -455,12 +477,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The planning office's mandate covers this action."
+      "caption": "The planning office's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -489,12 +522,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The architect: Accepted, for Request the needed information only."
+      "caption": "The architect: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -507,12 +551,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -525,12 +580,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -543,12 +609,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The planning office's limits."
+      "caption": "Inside what the agent may do on its own, and within The planning office's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -561,12 +638,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -588,24 +676,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The planning office’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The planning office’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 23,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The architect’s agent."
+      "messageId": "urn:awp:engine-permit-application-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:103b52bd9a1f8863fae9260cc93a4089ccd75098bec535f7556676fbdb83bd85",
+      "caption": "The invoke message goes to The architect’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:1bbc50c87dceaa123313d3287b24a8579094ad72b75e131fe2d70c629028a290",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:permit-application:request",
+        "operation": "urn:op:permit-application:request",
+        "conversation": "urn:awp:engine-permit-application-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:permit-application:owner",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-permit-application-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-permit-application-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-permit-application-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:Fx3gUIAndC4V-B9ZSUgpV8ZuqTsGihQ9xLZ-TlaBIUE\"},\"to\":{\"id\":\"urn:awp:n:UBq2o9N_fQYHL6D-DRvLdSIJTDIZkFZW6kkZ5I6f9Ic\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:YVQKiTxFn8xD9_FeRjIN-o7XTupEyqggSDh8PXUv4fI\"},\"evidence\":{\"id\":\"urn:awp:n:-_HQK4noI6hXCDcYPX3pW1I0_2TJEzsn0Sr23meS8x4\"},\"@included\":[{\"id\":\"urn:awp:n:Fx3gUIAndC4V-B9ZSUgpV8ZuqTsGihQ9xLZ-TlaBIUE\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:permit-application:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:permit-application:receiver\"},{\"id\":\"urn:awp:n:UBq2o9N_fQYHL6D-DRvLdSIJTDIZkFZW6kkZ5I6f9Ic\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:permit-application:owner-agent:actor\",\"party\":\"urn:fictional:permit-application:owner\"},{\"id\":\"urn:awp:n:YVQKiTxFn8xD9_FeRjIN-o7XTupEyqggSDh8PXUv4fI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:W8Fb3mvhPFj0RRTWj4ZvpMjUo06pIBJ9wP_DtU9x4Ck\"},\"input\":{\"id\":\"urn:awp:n:7cmnoxJD1T0ejI87gU0WkB8TwvoskuvxW7ddQwjNv_M\"},\"operation\":{\"id\":\"urn:op:permit-application:request\"},\"purpose\":\"urn:purpose:permit-application\"},{\"id\":\"urn:awp:n:-_HQK4noI6hXCDcYPX3pW1I0_2TJEzsn0Sr23meS8x4\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:KTO9G4yaGjEgXRvOlzoGY2uiTW5BaqpOd-2rzm17O-w\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:permit-application:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:7cmnoxJD1T0ejI87gU0WkB8TwvoskuvxW7ddQwjNv_M\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:hrqQRLLqyod92y4tDDH21ReoYOABvekn9kMdpFEe0D8\"}]},{\"id\":\"urn:awp:n:W8Fb3mvhPFj0RRTWj4ZvpMjUo06pIBJ9wP_DtU9x4Ck\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:KTO9G4yaGjEgXRvOlzoGY2uiTW5BaqpOd-2rzm17O-w\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:YVrbncIqELxYkljhgA4377ZIFplyMyqeGo2GnRX7qcE\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:permit-application:receiver\",\"proofGraph\":\"urn:awp:n:ZMOrzb1UokNaXNl7LlLrMTBESFvsZ77oyEVuy1uCdVA\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:hrqQRLLqyod92y4tDDH21ReoYOABvekn9kMdpFEe0D8\",\"type\":\"PropertyValue\",\"domainValue\":\"unstructured-content\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:YVrbncIqELxYkljhgA4377ZIFplyMyqeGo2GnRX7qcE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:VGwwB7bUrOmkuwjdYymshsXIYgkwmGOLup4SDql_DN0\"}},{\"id\":\"urn:awp:n:VGwwB7bUrOmkuwjdYymshsXIYgkwmGOLup4SDql_DN0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:6d52a6474d67252e4fe3afb9eb40ccb5b81e2b1eb403e978f651518282578318\",\"byteLength\":\"9498\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:ZMOrzb1UokNaXNl7LlLrMTBESFvsZ77oyEVuy1uCdVA\",\"@graph\":[{\"id\":\"urn:awp:n:rgizJD2Faj26Gr_MZ51EPea9hjM32p4qwQFz7SPBeMw\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YjQ0OTAzZDNhYjg1ZWY2MjUwOTgyOGEwYzg0ODU1MzU6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXIiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiYWN0b3JLaWQiOiIwTmdoemFXMEJxczVYaFNQS0NMbldRX2ZBZ2dLSEo1M2FYaUJUZTZULXNnIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6cGVybWl0LWFwcGxpY2F0aW9uIiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpyZXF1ZXN0IiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpkZWNpc2lvbiJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.c-KXrFhXdZf_1ut4PZ-wkDWMRrWV9xZWCcfKs38P2-zzgGO3MNRDB2fKSc65Rg0sHfRKUsvToaSRRzLbgiYaAw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjpGeDNnVUlBbmRDNFYtQjlaU1VncFY4WnVxVHNHaWhROXhMWi1UbGFCSVVFIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46VUJxMm85Tl9mUVlITDZELURSdkxkU0lKVERJWmtGWlc2a2taNUk2ZjlJYyIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImJhc2lzIjp7ImlkIjoidXJuOmF3cDpuOlc4RmIzbXZoUEZqMFJSVFdqNFp2cE1qVW8wNnBJQko5d1BfRHRVOXg0Q2sifSwiaWQiOiJ1cm46YXdwOm46WVZRS2lUeEZuOHhEOV9GZVJqSU4tbzdYVHVwRXlxZ2dTRGg4UFhVdjRmSSIsImlucHV0Ijp7ImlkIjoidXJuOmF3cDpuOjdjbW5veEpEMVQwZWpJODdnVTBXa0I4VHd2b3NrdXZ4VzdkZFF3ak52X00ifSwib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpwZXJtaXQtYXBwbGljYXRpb24iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOktUTzlHNHlhR2pFZ1hSdk9sem9HWTJ1aVRXNUJhcXBPZC0ycnptMTdPLXcifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjotX0hRSzRub0k2aFhDRGNZUFgzcFcxSTBfMlRKRXpzbjBTcjIzbWVTOHg0IiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6cGVybWl0LWFwcGxpY2F0aW9uOnJlcXVlc3QiLCJ0eXBlIjoiT3BlcmF0aW9uUmVmIiwidmVyc2lvbiI6IjAuMSJ9LHsiaWQiOiJ1cm46YXdwOm46N2Ntbm94SkQxVDBlakk4N2dVMFdrQjhUd3Zvc2t1dnhXN2RkUXdqTnZfTSIsIml0ZW1MaXN0RWxlbWVudCI6W3siaWQiOiJ1cm46YXdwOm46aHJxUVJMTHF5b2Q5Mnk0dERESDIxUmVvWU9BQnZla245a01kcEZFZTBEOCJ9XSwidHlwZSI6Ik5hbWVkVmFsdWVDb2xsZWN0aW9uIn0seyJiYXNpc0tpbmQiOiJyZXByZXNlbnRlZCIsImlkIjoidXJuOmF3cDpuOlc4RmIzbXZoUEZqMFJSVFdqNFp2cE1qVW8wNnBJQko5d1BfRHRVOXg0Q2siLCJ0eXBlIjoiUmVxdWVzdEJhc2lzIn0seyJjcmVkZW50aWFsU3ViamVjdCI6InVybjphd3A6bjpZVnJibmNJcUVMeFlrbGpoZ0E0Mzc3WklGcGx5TXlxZUdvMkduUlg3cWNFIiwiaWQiOiJ1cm46YXdwOm46S1RPOUc0eWFHakVnWFJ2T2x6b0dZMnVpVFc1QmFxcE9kLTJyem0xN08tdyIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOlpNT3J6YjFVb2tOYVhObDdMbExyTVRCRVNGdnNaNzdveUVWdXkxdUNkVkEiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6InVuc3RydWN0dXJlZC1jb250ZW50IiwiaWQiOiJ1cm46YXdwOm46aHJxUVJMTHF5b2Q5Mnk0dERESDIxUmVvWU9BQnZla245a01kcEZFZTBEOCIsIm5hbWUiOiJyZXF1ZXN0IiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnJlcXVlc3QiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46WVZyYm5jSXFFTHhZa2xqaGdBNDM3N1pJRnBseU15cWVHbzJHblJYN3FjRSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46Vkd3d0I3YlVyT21rdXdqZFl5bXNoc1hJWWdrd21HT0x1cDRTRHFsX0ROMCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjZkNTJhNjQ3NGQ2NzI1MmU0ZmUzYWZiOWViNDBjY2I1YjgxZTJiMWViNDAzZTk3OGY2NTE1MTgyODI1NzgzMTgiLCJieXRlTGVuZ3RoIjoiOTQ5OCIsImlkIjoidXJuOmF3cDpuOlZHd3dCN2JVck9ta3V3amRZeW1zaHNYSVlna3dtR09MdXA0U0RxbF9ETjAiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOnJnaXpKRDJGYWoyNkdyX01aNTFFUGVhOWhqTTMycDRxd1FGejdTUEJlTXciLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWxKNU1qYzNZVzl1Vm1WeFZuTlVabHBDUlc5bU5VNWljVVpaYlhsMGRrcERibkZET0dwS2JWQXRkbFVpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZZalEwT1RBelpETmhZamcxWldZMk1qVXdPVGd5T0dFd1l6ZzBPRFUxTXpVNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZjbVZqWldsMlpYSWlMQ0poWTNSdmNpSTZJblZ5YmpwbWFXTjBhVzl1WVd3NmNHVnliV2wwTFdGd2NHeHBZMkYwYVc5dU9uSmxZMlZwZG1WeUxXRm5aVzUwT21GamRHOXlJaXdpWVdOMGIzSkxhV1FpT2lJd1RtZG9lbUZYTUVKeGN6VllhRk5RUzBOTWJsZFJYMlpCWjJkTFNFbzFNMkZZYVVKVVpUWlVMWE5uSWl3aWIzQmxjbUYwYVc5dWN5STZXeUoxY200NmIzQTZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianB5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianBrWldOcGMybHZiaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExURXpWREE0T2pVNU9qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU55MHdNUzB4TWxRd09Ub3dNRG93TUM0d01EQmFJaXdpYVhOemRXVmtRWFFpT2lJeU1ESTJMVEV4TFRFelZEQTVPakF3T2pBd0xqQXdNRm9pZlEuYy1LWHJGaFhkWmZfMXV0NFBaLXdrRFdNUnJXVjl4WldDY2ZLczM4UDItenpnR08zTU5SREIyZktTYzY1Umcwc0hmUktVc3ZUb2FTUlJ6TGJnaVlhQXciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpaTU9yemIxVW9rTmFYTmw3TGxMck1UQkVTRnZzWjc3b3lFVnV5MXVDZFZBIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOllWUUtpVHhGbjh4RDlfRmVSaklOLW83WFR1cEV5cWdnU0RoOFBYVXY0ZkkifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9wbGFpbi1sYW5ndWFnZS11cGdyYWRlLWxvY2FsLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLXBlcm1pdC1hcHBsaWNhdGlvbi1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46LV9IUUs0bm9JNmhYQ0RjWVBYM3BXMUkwXzJUSkV6c24wU3IyM21lUzh4NCJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOkZ4M2dVSUFuZEM0Vi1COVpTVWdwVjhadXFUc0dpaFE5eExaLVRsYUJJVUUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1wZXJtaXQtYXBwbGljYXRpb24tYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpVQnEybzlOX2ZRWUhMNkQtRFJ2TGRTSUpURElaa0ZaVzZra1o1STZmOUljIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.Ka6EcwphnWOCQqCauIwVsgnOfw6rdRHsnFYdy2xRQKDwxLzTR2XYdYgiL4F9zLyDgbQcgAsbkvzLT6b8dj5ABA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -728,7 +841,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "The planning office’s agent sends an invoke message to The architect’s agent."
+      "caption": "The planning office’s agent sends an invoke message to The architect’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 25,
@@ -736,6 +850,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-permit-application-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-permit-application-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-permit-application-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:Fx3gUIAndC4V-B9ZSUgpV8ZuqTsGihQ9xLZ-TlaBIUE\"},\"to\":{\"id\":\"urn:awp:n:UBq2o9N_fQYHL6D-DRvLdSIJTDIZkFZW6kkZ5I6f9Ic\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:YVQKiTxFn8xD9_FeRjIN-o7XTupEyqggSDh8PXUv4fI\"},\"evidence\":{\"id\":\"urn:awp:n:-_HQK4noI6hXCDcYPX3pW1I0_2TJEzsn0Sr23meS8x4\"},\"@included\":[{\"id\":\"urn:awp:n:Fx3gUIAndC4V-B9ZSUgpV8ZuqTsGihQ9xLZ-TlaBIUE\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:permit-application:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:permit-application:receiver\"},{\"id\":\"urn:awp:n:UBq2o9N_fQYHL6D-DRvLdSIJTDIZkFZW6kkZ5I6f9Ic\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:permit-application:owner-agent:actor\",\"party\":\"urn:fictional:permit-application:owner\"},{\"id\":\"urn:awp:n:YVQKiTxFn8xD9_FeRjIN-o7XTupEyqggSDh8PXUv4fI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:W8Fb3mvhPFj0RRTWj4ZvpMjUo06pIBJ9wP_DtU9x4Ck\"},\"input\":{\"id\":\"urn:awp:n:7cmnoxJD1T0ejI87gU0WkB8TwvoskuvxW7ddQwjNv_M\"},\"operation\":{\"id\":\"urn:op:permit-application:request\"},\"purpose\":\"urn:purpose:permit-application\"},{\"id\":\"urn:awp:n:-_HQK4noI6hXCDcYPX3pW1I0_2TJEzsn0Sr23meS8x4\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:KTO9G4yaGjEgXRvOlzoGY2uiTW5BaqpOd-2rzm17O-w\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:permit-application:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:7cmnoxJD1T0ejI87gU0WkB8TwvoskuvxW7ddQwjNv_M\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:hrqQRLLqyod92y4tDDH21ReoYOABvekn9kMdpFEe0D8\"}]},{\"id\":\"urn:awp:n:W8Fb3mvhPFj0RRTWj4ZvpMjUo06pIBJ9wP_DtU9x4Ck\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:KTO9G4yaGjEgXRvOlzoGY2uiTW5BaqpOd-2rzm17O-w\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:YVrbncIqELxYkljhgA4377ZIFplyMyqeGo2GnRX7qcE\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:permit-application:receiver\",\"proofGraph\":\"urn:awp:n:ZMOrzb1UokNaXNl7LlLrMTBESFvsZ77oyEVuy1uCdVA\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:hrqQRLLqyod92y4tDDH21ReoYOABvekn9kMdpFEe0D8\",\"type\":\"PropertyValue\",\"domainValue\":\"unstructured-content\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:YVrbncIqELxYkljhgA4377ZIFplyMyqeGo2GnRX7qcE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:VGwwB7bUrOmkuwjdYymshsXIYgkwmGOLup4SDql_DN0\"}},{\"id\":\"urn:awp:n:VGwwB7bUrOmkuwjdYymshsXIYgkwmGOLup4SDql_DN0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:6d52a6474d67252e4fe3afb9eb40ccb5b81e2b1eb403e978f651518282578318\",\"byteLength\":\"9498\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:ZMOrzb1UokNaXNl7LlLrMTBESFvsZ77oyEVuy1uCdVA\",\"@graph\":[{\"id\":\"urn:awp:n:rgizJD2Faj26Gr_MZ51EPea9hjM32p4qwQFz7SPBeMw\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YjQ0OTAzZDNhYjg1ZWY2MjUwOTgyOGEwYzg0ODU1MzU6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXIiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiYWN0b3JLaWQiOiIwTmdoemFXMEJxczVYaFNQS0NMbldRX2ZBZ2dLSEo1M2FYaUJUZTZULXNnIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6cGVybWl0LWFwcGxpY2F0aW9uIiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpyZXF1ZXN0IiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpkZWNpc2lvbiJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.c-KXrFhXdZf_1ut4PZ-wkDWMRrWV9xZWCcfKs38P2-zzgGO3MNRDB2fKSc65Rg0sHfRKUsvToaSRRzLbgiYaAw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjpGeDNnVUlBbmRDNFYtQjlaU1VncFY4WnVxVHNHaWhROXhMWi1UbGFCSVVFIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46VUJxMm85Tl9mUVlITDZELURSdkxkU0lKVERJWmtGWlc2a2taNUk2ZjlJYyIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImJhc2lzIjp7ImlkIjoidXJuOmF3cDpuOlc4RmIzbXZoUEZqMFJSVFdqNFp2cE1qVW8wNnBJQko5d1BfRHRVOXg0Q2sifSwiaWQiOiJ1cm46YXdwOm46WVZRS2lUeEZuOHhEOV9GZVJqSU4tbzdYVHVwRXlxZ2dTRGg4UFhVdjRmSSIsImlucHV0Ijp7ImlkIjoidXJuOmF3cDpuOjdjbW5veEpEMVQwZWpJODdnVTBXa0I4VHd2b3NrdXZ4VzdkZFF3ak52X00ifSwib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpwZXJtaXQtYXBwbGljYXRpb24iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOktUTzlHNHlhR2pFZ1hSdk9sem9HWTJ1aVRXNUJhcXBPZC0ycnptMTdPLXcifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjotX0hRSzRub0k2aFhDRGNZUFgzcFcxSTBfMlRKRXpzbjBTcjIzbWVTOHg0IiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6cGVybWl0LWFwcGxpY2F0aW9uOnJlcXVlc3QiLCJ0eXBlIjoiT3BlcmF0aW9uUmVmIiwidmVyc2lvbiI6IjAuMSJ9LHsiaWQiOiJ1cm46YXdwOm46N2Ntbm94SkQxVDBlakk4N2dVMFdrQjhUd3Zvc2t1dnhXN2RkUXdqTnZfTSIsIml0ZW1MaXN0RWxlbWVudCI6W3siaWQiOiJ1cm46YXdwOm46aHJxUVJMTHF5b2Q5Mnk0dERESDIxUmVvWU9BQnZla245a01kcEZFZTBEOCJ9XSwidHlwZSI6Ik5hbWVkVmFsdWVDb2xsZWN0aW9uIn0seyJiYXNpc0tpbmQiOiJyZXByZXNlbnRlZCIsImlkIjoidXJuOmF3cDpuOlc4RmIzbXZoUEZqMFJSVFdqNFp2cE1qVW8wNnBJQko5d1BfRHRVOXg0Q2siLCJ0eXBlIjoiUmVxdWVzdEJhc2lzIn0seyJjcmVkZW50aWFsU3ViamVjdCI6InVybjphd3A6bjpZVnJibmNJcUVMeFlrbGpoZ0E0Mzc3WklGcGx5TXlxZUdvMkduUlg3cWNFIiwiaWQiOiJ1cm46YXdwOm46S1RPOUc0eWFHakVnWFJ2T2x6b0dZMnVpVFc1QmFxcE9kLTJyem0xN08tdyIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOlpNT3J6YjFVb2tOYVhObDdMbExyTVRCRVNGdnNaNzdveUVWdXkxdUNkVkEiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6InVuc3RydWN0dXJlZC1jb250ZW50IiwiaWQiOiJ1cm46YXdwOm46aHJxUVJMTHF5b2Q5Mnk0dERESDIxUmVvWU9BQnZla245a01kcEZFZTBEOCIsIm5hbWUiOiJyZXF1ZXN0IiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnJlcXVlc3QiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46WVZyYm5jSXFFTHhZa2xqaGdBNDM3N1pJRnBseU15cWVHbzJHblJYN3FjRSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46Vkd3d0I3YlVyT21rdXdqZFl5bXNoc1hJWWdrd21HT0x1cDRTRHFsX0ROMCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjZkNTJhNjQ3NGQ2NzI1MmU0ZmUzYWZiOWViNDBjY2I1YjgxZTJiMWViNDAzZTk3OGY2NTE1MTgyODI1NzgzMTgiLCJieXRlTGVuZ3RoIjoiOTQ5OCIsImlkIjoidXJuOmF3cDpuOlZHd3dCN2JVck9ta3V3amRZeW1zaHNYSVlna3dtR09MdXA0U0RxbF9ETjAiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOnJnaXpKRDJGYWoyNkdyX01aNTFFUGVhOWhqTTMycDRxd1FGejdTUEJlTXciLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWxKNU1qYzNZVzl1Vm1WeFZuTlVabHBDUlc5bU5VNWljVVpaYlhsMGRrcERibkZET0dwS2JWQXRkbFVpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZZalEwT1RBelpETmhZamcxWldZMk1qVXdPVGd5T0dFd1l6ZzBPRFUxTXpVNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZjbVZqWldsMlpYSWlMQ0poWTNSdmNpSTZJblZ5YmpwbWFXTjBhVzl1WVd3NmNHVnliV2wwTFdGd2NHeHBZMkYwYVc5dU9uSmxZMlZwZG1WeUxXRm5aVzUwT21GamRHOXlJaXdpWVdOMGIzSkxhV1FpT2lJd1RtZG9lbUZYTUVKeGN6VllhRk5RUzBOTWJsZFJYMlpCWjJkTFNFbzFNMkZZYVVKVVpUWlVMWE5uSWl3aWIzQmxjbUYwYVc5dWN5STZXeUoxY200NmIzQTZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianB5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianBrWldOcGMybHZiaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExURXpWREE0T2pVNU9qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU55MHdNUzB4TWxRd09Ub3dNRG93TUM0d01EQmFJaXdpYVhOemRXVmtRWFFpT2lJeU1ESTJMVEV4TFRFelZEQTVPakF3T2pBd0xqQXdNRm9pZlEuYy1LWHJGaFhkWmZfMXV0NFBaLXdrRFdNUnJXVjl4WldDY2ZLczM4UDItenpnR08zTU5SREIyZktTYzY1Umcwc0hmUktVc3ZUb2FTUlJ6TGJnaVlhQXciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpaTU9yemIxVW9rTmFYTmw3TGxMck1UQkVTRnZzWjc3b3lFVnV5MXVDZFZBIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOllWUUtpVHhGbjh4RDlfRmVSaklOLW83WFR1cEV5cWdnU0RoOFBYVXY0ZkkifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9wbGFpbi1sYW5ndWFnZS11cGdyYWRlLWxvY2FsLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLXBlcm1pdC1hcHBsaWNhdGlvbi1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46LV9IUUs0bm9JNmhYQ0RjWVBYM3BXMUkwXzJUSkV6c24wU3IyM21lUzh4NCJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOkZ4M2dVSUFuZEM0Vi1COVpTVWdwVjhadXFUc0dpaFE5eExaLVRsYUJJVUUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1wZXJtaXQtYXBwbGljYXRpb24tYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpVQnEybzlOX2ZRWUhMNkQtRFJ2TGRTSUpURElaa0ZaVzZra1o1STZmOUljIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.Ka6EcwphnWOCQqCauIwVsgnOfw6rdRHsnFYdy2xRQKDwxLzTR2XYdYgiL4F9zLyDgbQcgAsbkvzLT6b8dj5ABA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -868,7 +983,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "An invoke message from The planning office’s agent reaches the inbound gate."
+      "caption": "An invoke message from The planning office’s agent reaches the inbound gate.",
+      "gateRun": 3
     },
     {
       "seq": 26,
@@ -895,7 +1011,8 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The planning office’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The planning office’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 3
     },
     {
       "seq": 27,
@@ -918,7 +1035,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 3
     },
     {
       "seq": 28,
@@ -940,7 +1058,8 @@
         "id": "urn:awp:representation:b44903d3ab85ef62509828a0c8485535:1794560400000",
         "text": "A representation statement signed with The planning office's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The planning office signed a statement that The planning office’s agent acts for them in this operation."
+      "caption": "The planning office signed a statement that The planning office’s agent acts for them in this operation.",
+      "gateRun": 3
     },
     {
       "seq": 29,
@@ -963,7 +1082,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 3
     },
     {
       "seq": 30,
@@ -981,7 +1101,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 3
     },
     {
       "seq": 31,
@@ -991,7 +1112,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-permit-application-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:103b52bd9a1f8863fae9260cc93a4089ccd75098bec535f7556676fbdb83bd85",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 3
     },
     {
       "seq": 32,
@@ -1005,6 +1129,16 @@
       "seq": 33,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1022,12 +1156,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The architect's mandate covers this action."
+      "caption": "The architect's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 34,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1056,12 +1201,23 @@
         "answer": "Accepted, for Applying for a building permit only."
       },
       "reason": "recipient-established",
-      "caption": "The planning office: Accepted, for Applying for a building permit only."
+      "caption": "The planning office: Accepted, for Applying for a building permit only.",
+      "gateRun": 1
     },
     {
       "seq": 35,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1074,12 +1230,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 36,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1092,12 +1259,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 37,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1110,12 +1288,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The architect's limits."
+      "caption": "Inside what the agent may do on its own, and within The architect's limits.",
+      "gateRun": 1
     },
     {
       "seq": 38,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1128,12 +1317,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 39,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1150,12 +1350,23 @@
         "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 40,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1168,12 +1379,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 41,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1190,12 +1412,23 @@
         "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 42,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1208,12 +1441,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 43,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1231,12 +1475,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The architect's unstructured content statement (The homeowner) is needed for this purpose."
+      "caption": "Context item The architect's unstructured content statement (The homeowner) is needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 44,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1249,12 +1504,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The architect's unstructured content statement: Its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's unstructured content statement: Its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 45,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1272,12 +1538,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The architect's building height statement (The homeowner) is needed for this purpose."
+      "caption": "Context item The architect's building height statement (The homeowner) is needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 46,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1290,12 +1567,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The architect's building height statement: Its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's building height statement: Its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 47,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1318,12 +1606,23 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from The planning office’s agent (The planning office) is not established as needed for this purpose."
+      "caption": "Context item invoke from The planning office’s agent (The planning office) is not established as needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 48,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8e309de83afca86db0635b57631b370ea14843bd5f7865fcbc721e2a398db1e0",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1341,18 +1640,30 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from The planning office’s agent: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The planning office’s agent: Default terms permit this interaction only and prohibit onward sharing.",
+      "gateRun": 1
     },
     {
       "seq": 49,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "context-not-clear",
-      "caption": "The task context is not clear for this text, recipient and purpose."
+      "caption": "The task context is not clear for this text, recipient and purpose.",
+      "gateRun": 1
     },
     {
       "seq": 50,
@@ -1373,6 +1684,8 @@
       "agent": "owner-agent",
       "part": "principal",
       "kind": "principal-reply",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "approvalDecision": "approve",
       "chat": {
         "who": "principal",
         "text": "Share this exact original drawing for this permit."
@@ -1383,6 +1696,16 @@
       "seq": 52,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1400,12 +1723,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The architect's mandate covers this action."
+      "caption": "The architect's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 53,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1434,12 +1768,23 @@
         "answer": "Accepted, for Applying for a building permit only."
       },
       "reason": "recipient-established",
-      "caption": "The planning office: Accepted, for Applying for a building permit only."
+      "caption": "The planning office: Accepted, for Applying for a building permit only.",
+      "gateRun": 2
     },
     {
       "seq": 54,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1452,12 +1797,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 55,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1470,12 +1826,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 56,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1488,12 +1855,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The architect's limits."
+      "caption": "Inside what the agent may do on its own, and within The architect's limits.",
+      "gateRun": 2
     },
     {
       "seq": 57,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1506,12 +1884,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 58,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1528,12 +1917,23 @@
         "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 2
     },
     {
       "seq": 59,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1546,12 +1946,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 60,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1568,12 +1979,23 @@
         "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 2
     },
     {
       "seq": 61,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1586,12 +2008,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 2
     },
     {
       "seq": 62,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1609,12 +2042,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The architect's unstructured content statement (The homeowner) is needed for this purpose."
+      "caption": "Context item The architect's unstructured content statement (The homeowner) is needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 63,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1627,12 +2071,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The architect's unstructured content statement: Its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's unstructured content statement: Its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 2
     },
     {
       "seq": 64,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1650,12 +2105,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The architect's building height statement (The homeowner) is needed for this purpose."
+      "caption": "Context item The architect's building height statement (The homeowner) is needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 65,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1668,12 +2134,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The architect's building height statement: Its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's building height statement: Its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 2
     },
     {
       "seq": 66,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1696,12 +2173,23 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from The planning office’s agent (The planning office) is not established as needed for this purpose."
+      "caption": "Context item invoke from The planning office’s agent (The planning office) is not established as needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 67,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1719,12 +2207,23 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from The planning office’s agent: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The planning office’s agent: Default terms permit this interaction only and prohibit onward sharing.",
+      "gateRun": 2
     },
     {
       "seq": 68,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1737,12 +2236,23 @@
         }
       ],
       "reason": "approval-given",
-      "caption": "The principal approved these exact bytes for this recipient and purpose."
+      "caption": "The principal approved these exact bytes for this recipient and purpose.",
+      "gateRun": 2
     },
     {
       "seq": 69,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1755,12 +2265,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The context rule permits this text."
+      "caption": "The context rule permits this text.",
+      "gateRun": 2
     },
     {
       "seq": 70,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1782,24 +2303,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The architect’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The architect’s agent's pinned key, and written to the record.",
+      "gateRun": 2
     },
     {
       "seq": 71,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The planning office’s agent."
+      "messageId": "urn:awp:engine-permit-application-branch-1:owner-agent:0002",
+      "messageDigest": "sha-256:157cb300638ccb9ffc094edde56abb1fed4331ffaffe96c33d2b85f446c02ecd",
+      "caption": "The invoke message goes to The planning office’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 72,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:85d97ea60ec726a96d7c993e5b455d691c7a4bcb6bbd88362458dc2b295b24a9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:permit-application",
+        "operation": "urn:op:permit-application",
+        "conversation": "urn:awp:engine-permit-application-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-permit-application-branch-1:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-permit-application-branch-1:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-permit-application-branch-1:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:DW9MomvnrG-Cbwn-z6U7mCo2WUEq8qR3tjMt8GHdZbk\"},\"to\":{\"id\":\"urn:awp:n:cebUepz_t50-IxeJEff4inIpWAuzXibKwuOzPng_TtQ\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:28vNbPBODlhPcEC05k4tZCVqATlOUcseXyqlAWZeBmc\"},\"evidence\":[{\"id\":\"urn:awp:n:W0eWnsMuFqooHqXPDMQ8L0aOEtao6NNXYZobDvbXMoU\"},{\"id\":\"urn:awp:n:uHwlezZqIruIrfnk_xbEMcvCFDLZVKcu0qU1QamTNjA\"},{\"id\":\"urn:awp:n:0BYD1M4wiSnIDNuHzipcaB7TkgAVZuw9pxCy4UNOm2s\"}],\"content\":{\"id\":\"urn:content:permit-application:original\"},\"@included\":[{\"id\":\"urn:awp:n:DW9MomvnrG-Cbwn-z6U7mCo2WUEq8qR3tjMt8GHdZbk\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:permit-application:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:permit-application:owner\"},{\"id\":\"urn:awp:n:cebUepz_t50-IxeJEff4inIpWAuzXibKwuOzPng_TtQ\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:permit-application:receiver-agent:actor\",\"party\":\"urn:fictional:permit-application:receiver\"},{\"id\":\"urn:awp:n:dT--IM1UCzFkzShDLdkXpNtjL2Vv_6JRmr1iTyuQFaY\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:permit-application:owner\"},{\"id\":\"urn:awp:n:28vNbPBODlhPcEC05k4tZCVqATlOUcseXyqlAWZeBmc\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:qkwFtDIlNC8VQ4tMpID-GJcEJyWehZz0EY4Ub0Qp-v4\"},\"input\":{\"id\":\"urn:awp:n:uhsIlGKifNIMVVK4Me4sGBFRtLAACWZu3uf9YzEUayA\"},\"operation\":{\"id\":\"urn:op:permit-application\"},\"purpose\":\"urn:purpose:permit-application\"},{\"id\":\"urn:awp:n:W0eWnsMuFqooHqXPDMQ8L0aOEtao6NNXYZobDvbXMoU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:WfoOYE_hCPLUua8srY7waxO_z0Fbp6GG8a9V3KCAvbw\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:uHwlezZqIruIrfnk_xbEMcvCFDLZVKcu0qU1QamTNjA\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:sxYhii3k70OuX2-CEfiww_ntF06ZGzW6eNu4D7TJOe4\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:0BYD1M4wiSnIDNuHzipcaB7TkgAVZuw9pxCy4UNOm2s\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:v7wlx4vQrNho_za8iSp0R3Ex5GBfwi_5QtbQRSYp9ZI\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:content:permit-application:original\",\"type\":\"ContentPart\",\"bytes\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" width=\\\"160\\\" height=\\\"100\\\"><path d=\\\"M10 90V20H150V90Z\\\"/><text x=\\\"20\\\" y=\\\"55\\\">Fictional extension: height 3.2 m</text></svg>\",\"digest\":\"sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6\",\"mediaType\":\"image/svg+xml\",\"position\":\"0\"},{\"id\":\"urn:op:permit-application\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:uhsIlGKifNIMVVK4Me4sGBFRtLAACWZu3uf9YzEUayA\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:RywLUK4TWmbsvF6YBU4eYPnf3u9gAysZCAkc5GN9fio\"}]},{\"id\":\"urn:awp:n:qkwFtDIlNC8VQ4tMpID-GJcEJyWehZz0EY4Ub0Qp-v4\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:WfoOYE_hCPLUua8srY7waxO_z0Fbp6GG8a9V3KCAvbw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:1CufXWvJ_95AgMZtAVm2vgbnjfh7JKnhMYBUEMFN12A\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:permit-application:owner\",\"proofGraph\":\"urn:awp:n:dGsLKHfnFw-fyF57br5M7Upm9QmtxHsyHqVxW58EfHs\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:sxYhii3k70OuX2-CEfiww_ntF06ZGzW6eNu4D7TJOe4\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:3W_mJBUypJptI-3Co9N7ipgJO12UK6BhCaL0OB9vnQQ\",\"issuer\":\"urn:fictional:permit-application:owner\",\"proofGraph\":\"urn:awp:n:zp__l6UJ2ZrTMgDNvugO60l0A6CzJBbKr7newMTIAzg\"},{\"id\":\"urn:awp:n:v7wlx4vQrNho_za8iSp0R3Ex5GBfwi_5QtbQRSYp9ZI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Bx7eso6JVqRT-HSFC3Jiy-zISotGKVUTiNDFhK4X-yE\",\"issuer\":\"urn:fictional:permit-application:owner\",\"proofGraph\":\"urn:awp:n:FYUt_JDp5pDKv8fAcP2JUmH56nVyQo4fczfwSgcuyRE\"},{\"id\":\"urn:awp:n:RywLUK4TWmbsvF6YBU4eYPnf3u9gAysZCAkc5GN9fio\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:CJAGBXACQU79rgUY1r6B_oVL757KFoDoWDX8S5bAwyA\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:CJAGBXACQU79rgUY1r6B_oVL757KFoDoWDX8S5bAwyA\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:thTYnkrM8k7tBLO2QsLz6vIF4IPSGExQeiKZFOx7tM4\"}]},{\"id\":\"urn:awp:n:thTYnkrM8k7tBLO2QsLz6vIF4IPSGExQeiKZFOx7tM4\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:scenario:permit-application:original\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:1CufXWvJ_95AgMZtAVm2vgbnjfh7JKnhMYBUEMFN12A\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:SZnhWMOeqUFjRA_zdmZrbguguQvThah9irgl_B_esUc\"}},{\"id\":\"urn:awp:n:SZnhWMOeqUFjRA_zdmZrbguguQvThah9irgl_B_esUc\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:701a380aff50201d7e844151e0f85011d787e14e4d549c828f5ee9a7f6a543f5\",\"byteLength\":\"9492\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:3W_mJBUypJptI-3Co9N7ipgJO12UK6BhCaL0OB9vnQQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Zx-TB0p-s9K2ntLsbGiwtmXfB8iMdZ1xMhGPWJTwMDg\"}},{\"id\":\"urn:awp:n:Zx-TB0p-s9K2ntLsbGiwtmXfB8iMdZ1xMhGPWJTwMDg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:2e0e6d685b5fbf90fee52789498cb29c28bdc6cd39af7df06c9aa324ebc329e8\",\"byteLength\":\"23713\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Bx7eso6JVqRT-HSFC3Jiy-zISotGKVUTiNDFhK4X-yE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:HlPfpstprXppSM9CaEa5U4vUfamfFf360dpMSm01Q-s\"}},{\"id\":\"urn:awp:n:HlPfpstprXppSM9CaEa5U4vUfamfFf360dpMSm01Q-s\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:b620160c1b05c2bfe6d9d84ad9b08eb587c8c4816622a028ebdbaeb23b934404\",\"byteLength\":\"24391\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:dGsLKHfnFw-fyF57br5M7Upm9QmtxHsyHqVxW58EfHs\",\"@graph\":[{\"id\":\"urn:awp:n:zq0AQB1kanQal7XtHjA1TzlfVFRGx--E5yWei7qGDjw\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZTM2ODY4OGE3ZjAzYWE0MmYzOTRmZDgyZGRmNTY1MzE6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOm93bmVyLWFnZW50OmFjdG9yIiwiYWN0b3JLaWQiOiI4M3NxUkhmMzhTejJmQjhDYlZzNzF0bm5mYkNuay04czNhYmNleUFWNVJZIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6cGVybWl0LWFwcGxpY2F0aW9uIiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpyZXF1ZXN0IiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpkZWNpc2lvbiJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.Zwq6nV-bTrf0fx8c8tXC2xxA0Rl788AoN2KoaGMLbCrJ221KixkeXCOOXBJ_JiBJxeNpwArK1Bv3ICeyXQU-Dg\"}]},{\"id\":\"urn:awp:n:zp__l6UJ2ZrTMgDNvugO60l0A6CzJBbKr7newMTIAzg\",\"@graph\":[{\"id\":\"urn:awp:n:IXiUBYTnfEgqvdcpc5AfWgCaQCOnKhnC65c97KnC-sI\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjoyYmRkNDhmOTg4ZjQzZTU4NDg3ZDg2YmQ4M2E4NjMxOWNlZDhiYzE1MWNlMTNhMTczNTUyNjg0YzA0ZGZmYmU2IiwiaWQiOiJ1cm46c2NlbmFyaW86cGVybWl0LWFwcGxpY2F0aW9uOm9yaWdpbmFsIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246c3ViamVjdCIsImNsYWltVHlwZSI6InVuc3RydWN0dXJlZC1jb250ZW50IiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczpwZXJtaXQtYXBwbGljYXRpb246b3JpZ2luYWwiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86cGVybWl0LWFwcGxpY2F0aW9uOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpwZXJtaXQtYXBwbGljYXRpb24ifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOnBlcm1pdC1hcHBsaWNhdGlvbjpvcmlnaW5hbCIsImNvbnN0cmFpbnRzIjpbeyJsZWZ0T3BlcmFuZCI6InB1cnBvc2UiLCJvcGVyYXRvciI6ImVxIiwicmlnaHRPcGVyYW5kIjoidXJuOnB1cnBvc2U6cGVybWl0LWFwcGxpY2F0aW9uIn1dfV19fX0.XzpdKEY41vKgk2VFGv6eH_3bmu4H_UffZTgfBAKa-gUBzXaqF83GKTUCRHBmMM_GoHqATGjCi9Xk9ivBtM65Dw\"}]},{\"id\":\"urn:awp:n:FYUt_JDp5pDKv8fAcP2JUmH56nVyQo4fczfwSgcuyRE\",\"@graph\":[{\"id\":\"urn:awp:n:GZG8IX7GeUqRVK3XHvvaeydOuEfJQLqwC2XoMXlvYwk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ2YWx1ZSI6My4yLCJ1bml0IjoibWV0cmUiLCJpZCI6InVybjpzY2VuYXJpbzpwZXJtaXQtYXBwbGljYXRpb246aGVpZ2h0IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246c3ViamVjdCIsImNsYWltVHlwZSI6ImJ1aWxkaW5nLmhlaWdodCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6cGVybWl0LWFwcGxpY2F0aW9uOmhlaWdodCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzpwZXJtaXQtYXBwbGljYXRpb246aGVpZ2h0IiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpwZXJtaXQtYXBwbGljYXRpb24ifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOnBlcm1pdC1hcHBsaWNhdGlvbjpoZWlnaHQiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOnBlcm1pdC1hcHBsaWNhdGlvbiJ9XX1dfX19.26550ibS-pzg_JwqdGnkarGj59NJ8v6zwVzY57CucH0GwA7VYYxuPwM76QbQs-VFiNUuzny_9BzLAtzbp9xIDw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:dT--IM1UCzFkzShDLdkXpNtjL2Vv_6JRmr1iTyuQFaY\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjpEVzlNb212bnJHLUNid24tejZVN21DbzJXVUVxOHFSM3RqTXQ4R0hkWmJrIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOm93bmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Y2ViVWVwel90NTAtSXhlSkVmZjRpbklwV0F1elhpYkt3dU96UG5nX1R0USIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImlkIjoidXJuOmF3cDpuOmRULS1JTTFVQ3pGa3pTaERMZGtYcE50akwyVnZfNkpSbXIxaVR5dVFGYVkiLCJtZXRob2QiOiJtb2RlbC1vdXRwdXQiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJ0eXBlIjoiTWVzc2FnZUF1dGhvcnNoaXAifSx7ImJhc2lzIjp7ImlkIjoidXJuOmF3cDpuOnFrd0Z0RElsTkM4VlE0dE1wSUQtR0pjRUp5V2VoWnowRVk0VWIwUXAtdjQifSwiaWQiOiJ1cm46YXdwOm46Mjh2TmJQQk9EbGhQY0VDMDVrNHRaQ1ZxQVRsT1Vjc2VYeXFsQVdaZUJtYyIsImlucHV0Ijp7ImlkIjoidXJuOmF3cDpuOnVoc0lsR0tpZk5JTVZWSzRNZTRzR0JGUnRMQUFDV1p1M3VmOVl6RVVheUEifSwib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbiJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6cGVybWl0LWFwcGxpY2F0aW9uIiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpXZm9PWUVfaENQTFV1YThzclk3d2F4T196MEZicDZHRzhhOVYzS0NBdmJ3In0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46VzBlV25zTXVGcW9vSHFYUERNUThMMGFPRXRhbzZOTlhZWm9iRHZiWE1vVSIsInBvc2l0aW9uIjoiMCIsInJvbGUiOiJyZXByZXNlbnRhdGlvbiIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpzeFloaWkzazcwT3VYMi1DRWZpd3dfbnRGMDZaR3pXNmVOdTREN1RKT2U0In0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46dUh3bGV6WnFJcnVJcmZua194YkVNY3ZDRkRMWlZLY3UwcVUxUWFtVE5qQSIsInBvc2l0aW9uIjoiMSIsInJvbGUiOiJjcmVkZW50aWFsIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOnY3d2x4NHZRck5ob196YThpU3AwUjNFeDVHQmZ3aV81UXRiUVJTWXA5WkkifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjowQllEMU00d2lTbklETnVIemlwY2FCN1RrZ0FWWnV3OXB4Q3k0VU5PbTJzIiwicG9zaXRpb24iOiIyIiwicm9sZSI6ImNyZWRlbnRpYWwiLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJieXRlcyI6IjxzdmcgeG1sbnM9XCJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Z1wiIHdpZHRoPVwiMTYwXCIgaGVpZ2h0PVwiMTAwXCI-PHBhdGggZD1cIk0xMCA5MFYyMEgxNTBWOTBaXCIvPjx0ZXh0IHg9XCIyMFwiIHk9XCI1NVwiPkZpY3Rpb25hbCBleHRlbnNpb246IGhlaWdodCAzLjIgbTwvdGV4dD48L3N2Zz4iLCJkaWdlc3QiOiJzaGEtMjU2OjJiZGQ0OGY5ODhmNDNlNTg0ODdkODZiZDgzYTg2MzE5Y2VkOGJjMTUxY2UxM2ExNzM1NTI2ODRjMDRkZmZiZTYiLCJpZCI6InVybjpjb250ZW50OnBlcm1pdC1hcHBsaWNhdGlvbjpvcmlnaW5hbCIsIm1lZGlhVHlwZSI6ImltYWdlL3N2Zyt4bWwiLCJwb3NpdGlvbiI6IjAiLCJ0eXBlIjoiQ29udGVudFBhcnQifSx7ImlkIjoidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbiIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjp1aHNJbEdLaWZOSU1WVks0TWU0c0dCRlJ0TEFBQ1dadTN1ZjlZekVVYXlBIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpSeXdMVUs0VFdtYnN2RjZZQlU0ZVlQbmYzdTlnQXlzWkNBa2M1R045ZmlvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46cWt3RnRESWxOQzhWUTR0TXBJRC1HSmNFSnlXZWhaejBFWTRVYjBRcC12NCIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOjFDdWZYV3ZKXzk1QWdNWnRBVm0ydmdibmpmaDdKS25oTVlCVUVNRk4xMkEiLCJpZCI6InVybjphd3A6bjpXZm9PWUVfaENQTFV1YThzclk3d2F4T196MEZicDZHRzhhOVYzS0NBdmJ3IiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnBlcm1pdC1hcHBsaWNhdGlvbjpvd25lciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46ZEdzTEtIZm5Gdy1meUY1N2JyNU03VXBtOVFtdHhIc3lIcVZ4VzU4RWZIcyIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOjNXX21KQlV5cEpwdEktM0NvOU43aXBnSk8xMlVLNkJoQ2FMME9COXZuUVEiLCJpZCI6InVybjphd3A6bjpzeFloaWkzazcwT3VYMi1DRWZpd3dfbnRGMDZaR3pXNmVOdTREN1RKT2U0IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOnpwX19sNlVKMlpyVE1nRE52dWdPNjBsMEE2Q3pKQmJLcjduZXdNVElBemciLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOkJ4N2VzbzZKVnFSVC1IU0ZDM0ppeS16SVNvdEdLVlVUaU5ERmhLNFgteUUiLCJpZCI6InVybjphd3A6bjp2N3dseDR2UXJOaG9femE4aVNwMFIzRXg1R0Jmd2lfNVF0YlFSU1lwOVpJIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOkZZVXRfSkRwNXBES3Y4ZkFjUDJKVW1INTZuVnlRbzRmY3pmd1NnY3V5UkUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOmF3cDpuOkNKQUdCWEFDUVU3OXJnVVkxcjZCX29WTDc1N0tGb0RvV0RYOFM1YkF3eUEifSwiaWQiOiJ1cm46YXdwOm46Unl3TFVLNFRXbWJzdkY2WUJVNGVZUG5mM3U5Z0F5c1pDQWtjNUdOOWZpbyIsIm5hbWUiOiJpdGVtcyIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDppdGVtcyIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpDSkFHQlhBQ1FVNzlyZ1VZMXI2Ql9vVkw3NTdLRm9Eb1dEWDhTNWJBd3lBIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjp0aFRZbmtyTThrN3RCTE8yUXNMejZ2SUY0SVBTR0V4UWVpS1pGT3g3dE00In1dLCJ0eXBlIjoiSXRlbUxpc3QifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOnNjZW5hcmlvOnBlcm1pdC1hcHBsaWNhdGlvbjpvcmlnaW5hbCJ9LCJpZCI6InVybjphd3A6bjp0aFRZbmtyTThrN3RCTE8yUXNMejZ2SUY0SVBTR0V4UWVpS1pGT3g3dE00IiwibmFtZSI6IjAiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6MCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjoxQ3VmWFd2Sl85NUFnTVp0QVZtMnZnYm5qZmg3SktuaE1ZQlVFTUZOMTJBIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpTWm5oV01PZXFVRmpSQV96ZG1acmJndWd1UXZUaGFoOWlyZ2xfQl9lc1VjIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6NzAxYTM4MGFmZjUwMjAxZDdlODQ0MTUxZTBmODUwMTFkNzg3ZTE0ZTRkNTQ5YzgyOGY1ZWU5YTdmNmE1NDNmNSIsImJ5dGVMZW5ndGgiOiI5NDkyIiwiaWQiOiJ1cm46YXdwOm46U1puaFdNT2VxVUZqUkFfemRtWnJiZ3VndVF2VGhhaDlpcmdsX0JfZXNVYyIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7ImlkIjoidXJuOmF3cDpuOjNXX21KQlV5cEpwdEktM0NvOU43aXBnSk8xMlVLNkJoQ2FMME9COXZuUVEiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOlp4LVRCMHAtczlLMm50THNiR2l3dG1YZkI4aU1kWjF4TWhHUFdKVHdNRGcifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjoyZTBlNmQ2ODViNWZiZjkwZmVlNTI3ODk0OThjYjI5YzI4YmRjNmNkMzlhZjdkZjA2YzlhYTMyNGViYzMyOWU4IiwiYnl0ZUxlbmd0aCI6IjIzNzEzIiwiaWQiOiJ1cm46YXdwOm46WngtVEIwcC1zOUsybnRMc2JHaXd0bVhmQjhpTWRaMXhNaEdQV0pUd01EZyIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7ImlkIjoidXJuOmF3cDpuOkJ4N2VzbzZKVnFSVC1IU0ZDM0ppeS16SVNvdEdLVlVUaU5ERmhLNFgteUUiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOkhsUGZwc3RwclhwcFNNOUNhRWE1VTR2VWZhbWZGZjM2MGRwTVNtMDFRLXMifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpiNjIwMTYwYzFiMDVjMmJmZTZkOWQ4NGFkOWIwOGViNTg3YzhjNDgxNjYyMmEwMjhlYmRiYWViMjNiOTM0NDA0IiwiYnl0ZUxlbmd0aCI6IjI0MzkxIiwiaWQiOiJ1cm46YXdwOm46SGxQZnBzdHByWHBwU005Q2FFYTVVNHZVZmFtZkZmMzYwZHBNU20wMVEtcyIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46enEwQVFCMWthblFhbDdYdEhqQTFUemxmVkZSR3gtLUU1eVdlaTdxR0RqdyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJa3cyZWtORFVqSXpUMGRmWm1ORFVFdERWM1ZsUlV4ME4xZFNUMWhVT1hSemMzSkNhRXcwT1dzNGJYTWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NlpUTTJPRFk0T0dFM1pqQXpZV0UwTW1Zek9UUm1aRGd5WkdSbU5UWTFNekU2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0NmIzZHVaWElpTENKaFkzUnZjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVPbTkzYm1WeUxXRm5aVzUwT21GamRHOXlJaXdpWVdOMGIzSkxhV1FpT2lJNE0zTnhVa2htTXpoVGVqSm1RamhEWWxaek56RjBibTVtWWtOdWF5MDRjek5oWW1ObGVVRldOVkpaSWl3aWIzQmxjbUYwYVc5dWN5STZXeUoxY200NmIzQTZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianB5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianBrWldOcGMybHZiaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExURXpWREE0T2pVNU9qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU55MHdNUzB4TWxRd09Ub3dNRG93TUM0d01EQmFJaXdpYVhOemRXVmtRWFFpT2lJeU1ESTJMVEV4TFRFelZEQTVPakF3T2pBd0xqQXdNRm9pZlEuWndxNm5WLWJUcmYwZng4Yzh0WEMyeHhBMFJsNzg4QW9OMktvYUdNTGJDckoyMjFLaXhrZVhDT09YQkpfSmlCSnhlTnB3QXJLMUJ2M0lDZXlYUVUtRGciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpkR3NMS0hmbkZ3LWZ5RjU3YnI1TTdVcG05UW10eEhzeUhxVnhXNThFZkhzIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOklYaVVCWVRuZkVncXZkY3BjNUFmV2dDYVFDT25LaG5DNjVjOTdLbkMtc0kiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWt3MmVrTkRVakl6VDBkZlptTkRVRXREVjNWbFJVeDBOMWRTVDFoVU9YUnpjM0pDYUV3ME9XczRiWE1pTENKMGVYQWlPaUpoZDNBdGMzUmhkR1Z0Wlc1MEsycDNjeUo5LmV5SmpiMjUwWlc1MFJHbG5aWE4wSWpvaWMyaGhMVEkxTmpveVltUmtORGhtT1RnNFpqUXpaVFU0TkRnM1pEZzJZbVE0TTJFNE5qTXhPV05sWkRoaVl6RTFNV05sTVROaE1UY3pOVFV5TmpnMFl6QTBaR1ptWW1VMklpd2lhV1FpT2lKMWNtNDZjMk5sYm1GeWFXODZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVPbTl5YVdkcGJtRnNJaXdpYVhOemRXVnlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZiM2R1WlhJaUxDSnpkV0pxWldOMElqb2lkWEp1T21acFkzUnBiMjVoYkRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0NmMzVmlhbVZqZENJc0ltTnNZV2x0Vkhsd1pTSTZJblZ1YzNSeWRXTjBkWEpsWkMxamIyNTBaVzUwSWl3aWJXVjBhRzlrSWpvaWNtVmpiM0prWldRdFlua3RZWFYwYUc5eWFYUjVJaXdpWVhOUFppSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSXNJblJsY20xeklqcDdJbkJ2YkdsamVTSTZleUpwWkNJNkluVnlianAwWlhKdGN6cHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZiM0pwWjJsdVlXd2lMQ0p3WlhKdGFYTnphVzl1Y3lJNlczc2lkSGx3WlNJNkluQmxjbTFwYzNOcGIyNGlMQ0poWTNScGIyNGlPaUoxYzJVaUxDSjBZWEpuWlhRaU9pSjFjbTQ2YzJObGJtRnlhVzg2Y0dWeWJXbDBMV0Z3Y0d4cFkyRjBhVzl1T205eWFXZHBibUZzSWl3aVkyOXVjM1J5WVdsdWRITWlPbHQ3SW14bFpuUlBjR1Z5WVc1a0lqb2ljSFZ5Y0c5elpTSXNJbTl3WlhKaGRHOXlJam9pWlhFaUxDSnlhV2RvZEU5d1pYSmhibVFpT2lKMWNtNDZjSFZ5Y0c5elpUcHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNGlmVjE5TEhzaWRIbHdaU0k2SW5CbGNtMXBjM05wYjI0aUxDSmhZM1JwYjI0aU9pSmthWE4wY21saWRYUmxJaXdpZEdGeVoyVjBJam9pZFhKdU9uTmpaVzVoY21sdk9uQmxjbTFwZEMxaGNIQnNhV05oZEdsdmJqcHZjbWxuYVc1aGJDSXNJbU52Ym5OMGNtRnBiblJ6SWpwYmV5SnNaV1owVDNCbGNtRnVaQ0k2SW5CMWNuQnZjMlVpTENKdmNHVnlZWFJ2Y2lJNkltVnhJaXdpY21sbmFIUlBjR1Z5WVc1a0lqb2lkWEp1T25CMWNuQnZjMlU2Y0dWeWJXbDBMV0Z3Y0d4cFkyRjBhVzl1SW4xZGZWMTlmWDAuWHpwZEtFWTQxdktnazJWRkd2NmVIXzNibXU0SF9VZmZaVGdmQkFLYS1nVUJ6WGFxRjgzR0tUVUNSSEJtTU1fR29IcUFUR2pDaTlYazlpdkJ0TTY1RHciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjp6cF9fbDZVSjJaclRNZ0ROdnVnTzYwbDBBNkN6SkJiS3I3bmV3TVRJQXpnIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOkdaRzhJWDdHZVVxUlZLM1hIdnZhZXlkT3VFZkpRTHF3QzJYb01YbHZZd2siLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWt3MmVrTkRVakl6VDBkZlptTkRVRXREVjNWbFJVeDBOMWRTVDFoVU9YUnpjM0pDYUV3ME9XczRiWE1pTENKMGVYQWlPaUpoZDNBdGMzUmhkR1Z0Wlc1MEsycDNjeUo5LmV5SjJZV3gxWlNJNk15NHlMQ0oxYm1sMElqb2liV1YwY21VaUxDSnBaQ0k2SW5WeWJqcHpZMlZ1WVhKcGJ6cHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZhR1ZwWjJoMElpd2lhWE56ZFdWeUlqb2lkWEp1T21acFkzUnBiMjVoYkRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0NmIzZHVaWElpTENKemRXSnFaV04wSWpvaWRYSnVPbVpwWTNScGIyNWhiRHB3WlhKdGFYUXRZWEJ3YkdsallYUnBiMjQ2YzNWaWFtVmpkQ0lzSW1Oc1lXbHRWSGx3WlNJNkltSjFhV3hrYVc1bkxtaGxhV2RvZENJc0ltMWxkR2h2WkNJNkluSmxZMjl5WkdWa0xXSjVMV0YxZEdodmNtbDBlU0lzSW1GelQyWWlPaUl5TURJMkxURXhMVEV6VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0owWlhKdGN5STZleUp3YjJ4cFkza2lPbnNpYVdRaU9pSjFjbTQ2ZEdWeWJYTTZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVPbWhsYVdkb2RDSXNJbkJsY20xcGMzTnBiMjV6SWpwYmV5SjBlWEJsSWpvaWNHVnliV2x6YzJsdmJpSXNJbUZqZEdsdmJpSTZJblZ6WlNJc0luUmhjbWRsZENJNkluVnlianB6WTJWdVlYSnBienB3WlhKdGFYUXRZWEJ3YkdsallYUnBiMjQ2YUdWcFoyaDBJaXdpWTI5dWMzUnlZV2x1ZEhNaU9sdDdJbXhsWm5SUGNHVnlZVzVrSWpvaWNIVnljRzl6WlNJc0ltOXdaWEpoZEc5eUlqb2laWEVpTENKeWFXZG9kRTl3WlhKaGJtUWlPaUoxY200NmNIVnljRzl6WlRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0aWZWMTlMSHNpZEhsd1pTSTZJbkJsY20xcGMzTnBiMjRpTENKaFkzUnBiMjRpT2lKa2FYTjBjbWxpZFhSbElpd2lkR0Z5WjJWMElqb2lkWEp1T25OalpXNWhjbWx2T25CbGNtMXBkQzFoY0hCc2FXTmhkR2x2Ympwb1pXbG5hSFFpTENKamIyNXpkSEpoYVc1MGN5STZXM3NpYkdWbWRFOXdaWEpoYm1RaU9pSndkWEp3YjNObElpd2liM0JsY21GMGIzSWlPaUpsY1NJc0luSnBaMmgwVDNCbGNtRnVaQ0k2SW5WeWJqcHdkWEp3YjNObE9uQmxjbTFwZEMxaGNIQnNhV05oZEdsdmJpSjlYWDFkZlgxOS4yNjU1MGliUy1wemdfSndxZEdua2FyR2o1OU5KOHY2endWelk1N0N1Y0gwR3dBN1ZZWXh1UHdNNzZRYlFzLVZGaU5VdXpueV85QnpMQXR6YnA5eElEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOkZZVXRfSkRwNXBES3Y4ZkFjUDJKVW1INTZuVnlRbzRmY3pmd1NnY3V5UkUifV0sImF1dGhvcnNoaXAiOnsiaWQiOiJ1cm46YXdwOm46ZFQtLUlNMVVDekZrelNoRExka1hwTnRqTDJWdl82SlJtcjFpVHl1UUZhWSJ9LCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOjI4dk5iUEJPRGxoUGNFQzA1azR0WkNWcUFUbE9VY3NlWHlxbEFXWmVCbWMifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9wbGFpbi1sYW5ndWFnZS11cGdyYWRlLWxvY2FsLzAuMSIsImNvbnRlbnQiOnsiaWQiOiJ1cm46Y29udGVudDpwZXJtaXQtYXBwbGljYXRpb246b3JpZ2luYWwifSwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtcGVybWl0LWFwcGxpY2F0aW9uLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6W3siaWQiOiJ1cm46YXdwOm46VzBlV25zTXVGcW9vSHFYUERNUThMMGFPRXRhbzZOTlhZWm9iRHZiWE1vVSJ9LHsiaWQiOiJ1cm46YXdwOm46dUh3bGV6WnFJcnVJcmZua194YkVNY3ZDRkRMWlZLY3UwcVUxUWFtVE5qQSJ9LHsiaWQiOiJ1cm46YXdwOm46MEJZRDFNNHdpU25JRE51SHppcGNhQjdUa2dBVlp1dzlweEN5NFVOT20ycyJ9XSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpEVzlNb212bnJHLUNid24tejZVN21DbzJXVUVxOHFSM3RqTXQ4R0hkWmJrIn0sImlkIjoidXJuOmF3cDplbmdpbmUtcGVybWl0LWFwcGxpY2F0aW9uLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46Y2ViVWVwel90NTAtSXhlSkVmZjRpbklwV0F1elhpYkt3dU96UG5nX1R0USJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.ZP67WaeSddxSKSnfGSz7mR8aYiU4MZCHM9C4-2HHzFWXEbnDFPgIurpHMP4mpQHUysNICcwPiMb2G-dv_DIACw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2048,7 +2594,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "The architect’s agent sends an invoke message to The planning office’s agent."
+      "caption": "The architect’s agent sends an invoke message to The planning office’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 73,
@@ -2056,6 +2603,7 @@
       "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-permit-application-branch-1:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-permit-application-branch-1:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-permit-application-branch-1:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:DW9MomvnrG-Cbwn-z6U7mCo2WUEq8qR3tjMt8GHdZbk\"},\"to\":{\"id\":\"urn:awp:n:cebUepz_t50-IxeJEff4inIpWAuzXibKwuOzPng_TtQ\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:28vNbPBODlhPcEC05k4tZCVqATlOUcseXyqlAWZeBmc\"},\"evidence\":[{\"id\":\"urn:awp:n:W0eWnsMuFqooHqXPDMQ8L0aOEtao6NNXYZobDvbXMoU\"},{\"id\":\"urn:awp:n:uHwlezZqIruIrfnk_xbEMcvCFDLZVKcu0qU1QamTNjA\"},{\"id\":\"urn:awp:n:0BYD1M4wiSnIDNuHzipcaB7TkgAVZuw9pxCy4UNOm2s\"}],\"content\":{\"id\":\"urn:content:permit-application:original\"},\"@included\":[{\"id\":\"urn:awp:n:DW9MomvnrG-Cbwn-z6U7mCo2WUEq8qR3tjMt8GHdZbk\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:permit-application:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:permit-application:owner\"},{\"id\":\"urn:awp:n:cebUepz_t50-IxeJEff4inIpWAuzXibKwuOzPng_TtQ\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:permit-application:receiver-agent:actor\",\"party\":\"urn:fictional:permit-application:receiver\"},{\"id\":\"urn:awp:n:dT--IM1UCzFkzShDLdkXpNtjL2Vv_6JRmr1iTyuQFaY\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:permit-application:owner\"},{\"id\":\"urn:awp:n:28vNbPBODlhPcEC05k4tZCVqATlOUcseXyqlAWZeBmc\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:qkwFtDIlNC8VQ4tMpID-GJcEJyWehZz0EY4Ub0Qp-v4\"},\"input\":{\"id\":\"urn:awp:n:uhsIlGKifNIMVVK4Me4sGBFRtLAACWZu3uf9YzEUayA\"},\"operation\":{\"id\":\"urn:op:permit-application\"},\"purpose\":\"urn:purpose:permit-application\"},{\"id\":\"urn:awp:n:W0eWnsMuFqooHqXPDMQ8L0aOEtao6NNXYZobDvbXMoU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:WfoOYE_hCPLUua8srY7waxO_z0Fbp6GG8a9V3KCAvbw\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:uHwlezZqIruIrfnk_xbEMcvCFDLZVKcu0qU1QamTNjA\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:sxYhii3k70OuX2-CEfiww_ntF06ZGzW6eNu4D7TJOe4\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:0BYD1M4wiSnIDNuHzipcaB7TkgAVZuw9pxCy4UNOm2s\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:v7wlx4vQrNho_za8iSp0R3Ex5GBfwi_5QtbQRSYp9ZI\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:content:permit-application:original\",\"type\":\"ContentPart\",\"bytes\":\"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" width=\\\"160\\\" height=\\\"100\\\"><path d=\\\"M10 90V20H150V90Z\\\"/><text x=\\\"20\\\" y=\\\"55\\\">Fictional extension: height 3.2 m</text></svg>\",\"digest\":\"sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6\",\"mediaType\":\"image/svg+xml\",\"position\":\"0\"},{\"id\":\"urn:op:permit-application\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:uhsIlGKifNIMVVK4Me4sGBFRtLAACWZu3uf9YzEUayA\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:RywLUK4TWmbsvF6YBU4eYPnf3u9gAysZCAkc5GN9fio\"}]},{\"id\":\"urn:awp:n:qkwFtDIlNC8VQ4tMpID-GJcEJyWehZz0EY4Ub0Qp-v4\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:WfoOYE_hCPLUua8srY7waxO_z0Fbp6GG8a9V3KCAvbw\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:1CufXWvJ_95AgMZtAVm2vgbnjfh7JKnhMYBUEMFN12A\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:permit-application:owner\",\"proofGraph\":\"urn:awp:n:dGsLKHfnFw-fyF57br5M7Upm9QmtxHsyHqVxW58EfHs\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:sxYhii3k70OuX2-CEfiww_ntF06ZGzW6eNu4D7TJOe4\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:3W_mJBUypJptI-3Co9N7ipgJO12UK6BhCaL0OB9vnQQ\",\"issuer\":\"urn:fictional:permit-application:owner\",\"proofGraph\":\"urn:awp:n:zp__l6UJ2ZrTMgDNvugO60l0A6CzJBbKr7newMTIAzg\"},{\"id\":\"urn:awp:n:v7wlx4vQrNho_za8iSp0R3Ex5GBfwi_5QtbQRSYp9ZI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Bx7eso6JVqRT-HSFC3Jiy-zISotGKVUTiNDFhK4X-yE\",\"issuer\":\"urn:fictional:permit-application:owner\",\"proofGraph\":\"urn:awp:n:FYUt_JDp5pDKv8fAcP2JUmH56nVyQo4fczfwSgcuyRE\"},{\"id\":\"urn:awp:n:RywLUK4TWmbsvF6YBU4eYPnf3u9gAysZCAkc5GN9fio\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:CJAGBXACQU79rgUY1r6B_oVL757KFoDoWDX8S5bAwyA\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:CJAGBXACQU79rgUY1r6B_oVL757KFoDoWDX8S5bAwyA\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:thTYnkrM8k7tBLO2QsLz6vIF4IPSGExQeiKZFOx7tM4\"}]},{\"id\":\"urn:awp:n:thTYnkrM8k7tBLO2QsLz6vIF4IPSGExQeiKZFOx7tM4\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:scenario:permit-application:original\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:1CufXWvJ_95AgMZtAVm2vgbnjfh7JKnhMYBUEMFN12A\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:SZnhWMOeqUFjRA_zdmZrbguguQvThah9irgl_B_esUc\"}},{\"id\":\"urn:awp:n:SZnhWMOeqUFjRA_zdmZrbguguQvThah9irgl_B_esUc\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:701a380aff50201d7e844151e0f85011d787e14e4d549c828f5ee9a7f6a543f5\",\"byteLength\":\"9492\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:3W_mJBUypJptI-3Co9N7ipgJO12UK6BhCaL0OB9vnQQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Zx-TB0p-s9K2ntLsbGiwtmXfB8iMdZ1xMhGPWJTwMDg\"}},{\"id\":\"urn:awp:n:Zx-TB0p-s9K2ntLsbGiwtmXfB8iMdZ1xMhGPWJTwMDg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:2e0e6d685b5fbf90fee52789498cb29c28bdc6cd39af7df06c9aa324ebc329e8\",\"byteLength\":\"23713\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Bx7eso6JVqRT-HSFC3Jiy-zISotGKVUTiNDFhK4X-yE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:HlPfpstprXppSM9CaEa5U4vUfamfFf360dpMSm01Q-s\"}},{\"id\":\"urn:awp:n:HlPfpstprXppSM9CaEa5U4vUfamfFf360dpMSm01Q-s\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:b620160c1b05c2bfe6d9d84ad9b08eb587c8c4816622a028ebdbaeb23b934404\",\"byteLength\":\"24391\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:dGsLKHfnFw-fyF57br5M7Upm9QmtxHsyHqVxW58EfHs\",\"@graph\":[{\"id\":\"urn:awp:n:zq0AQB1kanQal7XtHjA1TzlfVFRGx--E5yWei7qGDjw\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZTM2ODY4OGE3ZjAzYWE0MmYzOTRmZDgyZGRmNTY1MzE6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOm93bmVyLWFnZW50OmFjdG9yIiwiYWN0b3JLaWQiOiI4M3NxUkhmMzhTejJmQjhDYlZzNzF0bm5mYkNuay04czNhYmNleUFWNVJZIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6cGVybWl0LWFwcGxpY2F0aW9uIiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpyZXF1ZXN0IiwidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbjpkZWNpc2lvbiJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.Zwq6nV-bTrf0fx8c8tXC2xxA0Rl788AoN2KoaGMLbCrJ221KixkeXCOOXBJ_JiBJxeNpwArK1Bv3ICeyXQU-Dg\"}]},{\"id\":\"urn:awp:n:zp__l6UJ2ZrTMgDNvugO60l0A6CzJBbKr7newMTIAzg\",\"@graph\":[{\"id\":\"urn:awp:n:IXiUBYTnfEgqvdcpc5AfWgCaQCOnKhnC65c97KnC-sI\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjoyYmRkNDhmOTg4ZjQzZTU4NDg3ZDg2YmQ4M2E4NjMxOWNlZDhiYzE1MWNlMTNhMTczNTUyNjg0YzA0ZGZmYmU2IiwiaWQiOiJ1cm46c2NlbmFyaW86cGVybWl0LWFwcGxpY2F0aW9uOm9yaWdpbmFsIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246c3ViamVjdCIsImNsYWltVHlwZSI6InVuc3RydWN0dXJlZC1jb250ZW50IiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczpwZXJtaXQtYXBwbGljYXRpb246b3JpZ2luYWwiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86cGVybWl0LWFwcGxpY2F0aW9uOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpwZXJtaXQtYXBwbGljYXRpb24ifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOnBlcm1pdC1hcHBsaWNhdGlvbjpvcmlnaW5hbCIsImNvbnN0cmFpbnRzIjpbeyJsZWZ0T3BlcmFuZCI6InB1cnBvc2UiLCJvcGVyYXRvciI6ImVxIiwicmlnaHRPcGVyYW5kIjoidXJuOnB1cnBvc2U6cGVybWl0LWFwcGxpY2F0aW9uIn1dfV19fX0.XzpdKEY41vKgk2VFGv6eH_3bmu4H_UffZTgfBAKa-gUBzXaqF83GKTUCRHBmMM_GoHqATGjCi9Xk9ivBtM65Dw\"}]},{\"id\":\"urn:awp:n:FYUt_JDp5pDKv8fAcP2JUmH56nVyQo4fczfwSgcuyRE\",\"@graph\":[{\"id\":\"urn:awp:n:GZG8IX7GeUqRVK3XHvvaeydOuEfJQLqwC2XoMXlvYwk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ2YWx1ZSI6My4yLCJ1bml0IjoibWV0cmUiLCJpZCI6InVybjpzY2VuYXJpbzpwZXJtaXQtYXBwbGljYXRpb246aGVpZ2h0IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246c3ViamVjdCIsImNsYWltVHlwZSI6ImJ1aWxkaW5nLmhlaWdodCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6cGVybWl0LWFwcGxpY2F0aW9uOmhlaWdodCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzpwZXJtaXQtYXBwbGljYXRpb246aGVpZ2h0IiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpwZXJtaXQtYXBwbGljYXRpb24ifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOnBlcm1pdC1hcHBsaWNhdGlvbjpoZWlnaHQiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOnBlcm1pdC1hcHBsaWNhdGlvbiJ9XX1dfX19.26550ibS-pzg_JwqdGnkarGj59NJ8v6zwVzY57CucH0GwA7VYYxuPwM76QbQs-VFiNUuzny_9BzLAtzbp9xIDw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:dT--IM1UCzFkzShDLdkXpNtjL2Vv_6JRmr1iTyuQFaY\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjpEVzlNb212bnJHLUNid24tejZVN21DbzJXVUVxOHFSM3RqTXQ4R0hkWmJrIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOm93bmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6cGVybWl0LWFwcGxpY2F0aW9uOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Y2ViVWVwel90NTAtSXhlSkVmZjRpbklwV0F1elhpYkt3dU96UG5nX1R0USIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246cmVjZWl2ZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImlkIjoidXJuOmF3cDpuOmRULS1JTTFVQ3pGa3pTaERMZGtYcE50akwyVnZfNkpSbXIxaVR5dVFGYVkiLCJtZXRob2QiOiJtb2RlbC1vdXRwdXQiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJ0eXBlIjoiTWVzc2FnZUF1dGhvcnNoaXAifSx7ImJhc2lzIjp7ImlkIjoidXJuOmF3cDpuOnFrd0Z0RElsTkM4VlE0dE1wSUQtR0pjRUp5V2VoWnowRVk0VWIwUXAtdjQifSwiaWQiOiJ1cm46YXdwOm46Mjh2TmJQQk9EbGhQY0VDMDVrNHRaQ1ZxQVRsT1Vjc2VYeXFsQVdaZUJtYyIsImlucHV0Ijp7ImlkIjoidXJuOmF3cDpuOnVoc0lsR0tpZk5JTVZWSzRNZTRzR0JGUnRMQUFDV1p1M3VmOVl6RVVheUEifSwib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbiJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6cGVybWl0LWFwcGxpY2F0aW9uIiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpXZm9PWUVfaENQTFV1YThzclk3d2F4T196MEZicDZHRzhhOVYzS0NBdmJ3In0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46VzBlV25zTXVGcW9vSHFYUERNUThMMGFPRXRhbzZOTlhZWm9iRHZiWE1vVSIsInBvc2l0aW9uIjoiMCIsInJvbGUiOiJyZXByZXNlbnRhdGlvbiIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpzeFloaWkzazcwT3VYMi1DRWZpd3dfbnRGMDZaR3pXNmVOdTREN1RKT2U0In0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46dUh3bGV6WnFJcnVJcmZua194YkVNY3ZDRkRMWlZLY3UwcVUxUWFtVE5qQSIsInBvc2l0aW9uIjoiMSIsInJvbGUiOiJjcmVkZW50aWFsIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOnY3d2x4NHZRck5ob196YThpU3AwUjNFeDVHQmZ3aV81UXRiUVJTWXA5WkkifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjowQllEMU00d2lTbklETnVIemlwY2FCN1RrZ0FWWnV3OXB4Q3k0VU5PbTJzIiwicG9zaXRpb24iOiIyIiwicm9sZSI6ImNyZWRlbnRpYWwiLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJieXRlcyI6IjxzdmcgeG1sbnM9XCJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Z1wiIHdpZHRoPVwiMTYwXCIgaGVpZ2h0PVwiMTAwXCI-PHBhdGggZD1cIk0xMCA5MFYyMEgxNTBWOTBaXCIvPjx0ZXh0IHg9XCIyMFwiIHk9XCI1NVwiPkZpY3Rpb25hbCBleHRlbnNpb246IGhlaWdodCAzLjIgbTwvdGV4dD48L3N2Zz4iLCJkaWdlc3QiOiJzaGEtMjU2OjJiZGQ0OGY5ODhmNDNlNTg0ODdkODZiZDgzYTg2MzE5Y2VkOGJjMTUxY2UxM2ExNzM1NTI2ODRjMDRkZmZiZTYiLCJpZCI6InVybjpjb250ZW50OnBlcm1pdC1hcHBsaWNhdGlvbjpvcmlnaW5hbCIsIm1lZGlhVHlwZSI6ImltYWdlL3N2Zyt4bWwiLCJwb3NpdGlvbiI6IjAiLCJ0eXBlIjoiQ29udGVudFBhcnQifSx7ImlkIjoidXJuOm9wOnBlcm1pdC1hcHBsaWNhdGlvbiIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjp1aHNJbEdLaWZOSU1WVks0TWU0c0dCRlJ0TEFBQ1dadTN1ZjlZekVVYXlBIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpSeXdMVUs0VFdtYnN2RjZZQlU0ZVlQbmYzdTlnQXlzWkNBa2M1R045ZmlvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46cWt3RnRESWxOQzhWUTR0TXBJRC1HSmNFSnlXZWhaejBFWTRVYjBRcC12NCIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOjFDdWZYV3ZKXzk1QWdNWnRBVm0ydmdibmpmaDdKS25oTVlCVUVNRk4xMkEiLCJpZCI6InVybjphd3A6bjpXZm9PWUVfaENQTFV1YThzclk3d2F4T196MEZicDZHRzhhOVYzS0NBdmJ3IiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnBlcm1pdC1hcHBsaWNhdGlvbjpvd25lciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46ZEdzTEtIZm5Gdy1meUY1N2JyNU03VXBtOVFtdHhIc3lIcVZ4VzU4RWZIcyIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOjNXX21KQlV5cEpwdEktM0NvOU43aXBnSk8xMlVLNkJoQ2FMME9COXZuUVEiLCJpZCI6InVybjphd3A6bjpzeFloaWkzazcwT3VYMi1DRWZpd3dfbnRGMDZaR3pXNmVOdTREN1RKT2U0IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOnpwX19sNlVKMlpyVE1nRE52dWdPNjBsMEE2Q3pKQmJLcjduZXdNVElBemciLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOkJ4N2VzbzZKVnFSVC1IU0ZDM0ppeS16SVNvdEdLVlVUaU5ERmhLNFgteUUiLCJpZCI6InVybjphd3A6bjp2N3dseDR2UXJOaG9femE4aVNwMFIzRXg1R0Jmd2lfNVF0YlFSU1lwOVpJIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpwZXJtaXQtYXBwbGljYXRpb246b3duZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOkZZVXRfSkRwNXBES3Y4ZkFjUDJKVW1INTZuVnlRbzRmY3pmd1NnY3V5UkUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOmF3cDpuOkNKQUdCWEFDUVU3OXJnVVkxcjZCX29WTDc1N0tGb0RvV0RYOFM1YkF3eUEifSwiaWQiOiJ1cm46YXdwOm46Unl3TFVLNFRXbWJzdkY2WUJVNGVZUG5mM3U5Z0F5c1pDQWtjNUdOOWZpbyIsIm5hbWUiOiJpdGVtcyIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDppdGVtcyIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpDSkFHQlhBQ1FVNzlyZ1VZMXI2Ql9vVkw3NTdLRm9Eb1dEWDhTNWJBd3lBIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjp0aFRZbmtyTThrN3RCTE8yUXNMejZ2SUY0SVBTR0V4UWVpS1pGT3g3dE00In1dLCJ0eXBlIjoiSXRlbUxpc3QifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOnNjZW5hcmlvOnBlcm1pdC1hcHBsaWNhdGlvbjpvcmlnaW5hbCJ9LCJpZCI6InVybjphd3A6bjp0aFRZbmtyTThrN3RCTE8yUXNMejZ2SUY0SVBTR0V4UWVpS1pGT3g3dE00IiwibmFtZSI6IjAiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6MCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjoxQ3VmWFd2Sl85NUFnTVp0QVZtMnZnYm5qZmg3SktuaE1ZQlVFTUZOMTJBIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpTWm5oV01PZXFVRmpSQV96ZG1acmJndWd1UXZUaGFoOWlyZ2xfQl9lc1VjIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6NzAxYTM4MGFmZjUwMjAxZDdlODQ0MTUxZTBmODUwMTFkNzg3ZTE0ZTRkNTQ5YzgyOGY1ZWU5YTdmNmE1NDNmNSIsImJ5dGVMZW5ndGgiOiI5NDkyIiwiaWQiOiJ1cm46YXdwOm46U1puaFdNT2VxVUZqUkFfemRtWnJiZ3VndVF2VGhhaDlpcmdsX0JfZXNVYyIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7ImlkIjoidXJuOmF3cDpuOjNXX21KQlV5cEpwdEktM0NvOU43aXBnSk8xMlVLNkJoQ2FMME9COXZuUVEiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOlp4LVRCMHAtczlLMm50THNiR2l3dG1YZkI4aU1kWjF4TWhHUFdKVHdNRGcifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjoyZTBlNmQ2ODViNWZiZjkwZmVlNTI3ODk0OThjYjI5YzI4YmRjNmNkMzlhZjdkZjA2YzlhYTMyNGViYzMyOWU4IiwiYnl0ZUxlbmd0aCI6IjIzNzEzIiwiaWQiOiJ1cm46YXdwOm46WngtVEIwcC1zOUsybnRMc2JHaXd0bVhmQjhpTWRaMXhNaEdQV0pUd01EZyIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7ImlkIjoidXJuOmF3cDpuOkJ4N2VzbzZKVnFSVC1IU0ZDM0ppeS16SVNvdEdLVlVUaU5ERmhLNFgteUUiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOkhsUGZwc3RwclhwcFNNOUNhRWE1VTR2VWZhbWZGZjM2MGRwTVNtMDFRLXMifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpiNjIwMTYwYzFiMDVjMmJmZTZkOWQ4NGFkOWIwOGViNTg3YzhjNDgxNjYyMmEwMjhlYmRiYWViMjNiOTM0NDA0IiwiYnl0ZUxlbmd0aCI6IjI0MzkxIiwiaWQiOiJ1cm46YXdwOm46SGxQZnBzdHByWHBwU005Q2FFYTVVNHZVZmFtZkZmMzYwZHBNU20wMVEtcyIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46enEwQVFCMWthblFhbDdYdEhqQTFUemxmVkZSR3gtLUU1eVdlaTdxR0RqdyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJa3cyZWtORFVqSXpUMGRmWm1ORFVFdERWM1ZsUlV4ME4xZFNUMWhVT1hSemMzSkNhRXcwT1dzNGJYTWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NlpUTTJPRFk0T0dFM1pqQXpZV0UwTW1Zek9UUm1aRGd5WkdSbU5UWTFNekU2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0NmIzZHVaWElpTENKaFkzUnZjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVPbTkzYm1WeUxXRm5aVzUwT21GamRHOXlJaXdpWVdOMGIzSkxhV1FpT2lJNE0zTnhVa2htTXpoVGVqSm1RamhEWWxaek56RjBibTVtWWtOdWF5MDRjek5oWW1ObGVVRldOVkpaSWl3aWIzQmxjbUYwYVc5dWN5STZXeUoxY200NmIzQTZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianB5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbkJsY20xcGRDMWhjSEJzYVdOaGRHbHZianBrWldOcGMybHZiaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExURXpWREE0T2pVNU9qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU55MHdNUzB4TWxRd09Ub3dNRG93TUM0d01EQmFJaXdpYVhOemRXVmtRWFFpT2lJeU1ESTJMVEV4TFRFelZEQTVPakF3T2pBd0xqQXdNRm9pZlEuWndxNm5WLWJUcmYwZng4Yzh0WEMyeHhBMFJsNzg4QW9OMktvYUdNTGJDckoyMjFLaXhrZVhDT09YQkpfSmlCSnhlTnB3QXJLMUJ2M0lDZXlYUVUtRGciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpkR3NMS0hmbkZ3LWZ5RjU3YnI1TTdVcG05UW10eEhzeUhxVnhXNThFZkhzIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOklYaVVCWVRuZkVncXZkY3BjNUFmV2dDYVFDT25LaG5DNjVjOTdLbkMtc0kiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWt3MmVrTkRVakl6VDBkZlptTkRVRXREVjNWbFJVeDBOMWRTVDFoVU9YUnpjM0pDYUV3ME9XczRiWE1pTENKMGVYQWlPaUpoZDNBdGMzUmhkR1Z0Wlc1MEsycDNjeUo5LmV5SmpiMjUwWlc1MFJHbG5aWE4wSWpvaWMyaGhMVEkxTmpveVltUmtORGhtT1RnNFpqUXpaVFU0TkRnM1pEZzJZbVE0TTJFNE5qTXhPV05sWkRoaVl6RTFNV05sTVROaE1UY3pOVFV5TmpnMFl6QTBaR1ptWW1VMklpd2lhV1FpT2lKMWNtNDZjMk5sYm1GeWFXODZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVPbTl5YVdkcGJtRnNJaXdpYVhOemRXVnlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZiM2R1WlhJaUxDSnpkV0pxWldOMElqb2lkWEp1T21acFkzUnBiMjVoYkRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0NmMzVmlhbVZqZENJc0ltTnNZV2x0Vkhsd1pTSTZJblZ1YzNSeWRXTjBkWEpsWkMxamIyNTBaVzUwSWl3aWJXVjBhRzlrSWpvaWNtVmpiM0prWldRdFlua3RZWFYwYUc5eWFYUjVJaXdpWVhOUFppSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSXNJblJsY20xeklqcDdJbkJ2YkdsamVTSTZleUpwWkNJNkluVnlianAwWlhKdGN6cHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZiM0pwWjJsdVlXd2lMQ0p3WlhKdGFYTnphVzl1Y3lJNlczc2lkSGx3WlNJNkluQmxjbTFwYzNOcGIyNGlMQ0poWTNScGIyNGlPaUoxYzJVaUxDSjBZWEpuWlhRaU9pSjFjbTQ2YzJObGJtRnlhVzg2Y0dWeWJXbDBMV0Z3Y0d4cFkyRjBhVzl1T205eWFXZHBibUZzSWl3aVkyOXVjM1J5WVdsdWRITWlPbHQ3SW14bFpuUlBjR1Z5WVc1a0lqb2ljSFZ5Y0c5elpTSXNJbTl3WlhKaGRHOXlJam9pWlhFaUxDSnlhV2RvZEU5d1pYSmhibVFpT2lKMWNtNDZjSFZ5Y0c5elpUcHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNGlmVjE5TEhzaWRIbHdaU0k2SW5CbGNtMXBjM05wYjI0aUxDSmhZM1JwYjI0aU9pSmthWE4wY21saWRYUmxJaXdpZEdGeVoyVjBJam9pZFhKdU9uTmpaVzVoY21sdk9uQmxjbTFwZEMxaGNIQnNhV05oZEdsdmJqcHZjbWxuYVc1aGJDSXNJbU52Ym5OMGNtRnBiblJ6SWpwYmV5SnNaV1owVDNCbGNtRnVaQ0k2SW5CMWNuQnZjMlVpTENKdmNHVnlZWFJ2Y2lJNkltVnhJaXdpY21sbmFIUlBjR1Z5WVc1a0lqb2lkWEp1T25CMWNuQnZjMlU2Y0dWeWJXbDBMV0Z3Y0d4cFkyRjBhVzl1SW4xZGZWMTlmWDAuWHpwZEtFWTQxdktnazJWRkd2NmVIXzNibXU0SF9VZmZaVGdmQkFLYS1nVUJ6WGFxRjgzR0tUVUNSSEJtTU1fR29IcUFUR2pDaTlYazlpdkJ0TTY1RHciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjp6cF9fbDZVSjJaclRNZ0ROdnVnTzYwbDBBNkN6SkJiS3I3bmV3TVRJQXpnIn0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOkdaRzhJWDdHZVVxUlZLM1hIdnZhZXlkT3VFZkpRTHF3QzJYb01YbHZZd2siLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWt3MmVrTkRVakl6VDBkZlptTkRVRXREVjNWbFJVeDBOMWRTVDFoVU9YUnpjM0pDYUV3ME9XczRiWE1pTENKMGVYQWlPaUpoZDNBdGMzUmhkR1Z0Wlc1MEsycDNjeUo5LmV5SjJZV3gxWlNJNk15NHlMQ0oxYm1sMElqb2liV1YwY21VaUxDSnBaQ0k2SW5WeWJqcHpZMlZ1WVhKcGJ6cHdaWEp0YVhRdFlYQndiR2xqWVhScGIyNDZhR1ZwWjJoMElpd2lhWE56ZFdWeUlqb2lkWEp1T21acFkzUnBiMjVoYkRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0NmIzZHVaWElpTENKemRXSnFaV04wSWpvaWRYSnVPbVpwWTNScGIyNWhiRHB3WlhKdGFYUXRZWEJ3YkdsallYUnBiMjQ2YzNWaWFtVmpkQ0lzSW1Oc1lXbHRWSGx3WlNJNkltSjFhV3hrYVc1bkxtaGxhV2RvZENJc0ltMWxkR2h2WkNJNkluSmxZMjl5WkdWa0xXSjVMV0YxZEdodmNtbDBlU0lzSW1GelQyWWlPaUl5TURJMkxURXhMVEV6VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0owWlhKdGN5STZleUp3YjJ4cFkza2lPbnNpYVdRaU9pSjFjbTQ2ZEdWeWJYTTZjR1Z5YldsMExXRndjR3hwWTJGMGFXOXVPbWhsYVdkb2RDSXNJbkJsY20xcGMzTnBiMjV6SWpwYmV5SjBlWEJsSWpvaWNHVnliV2x6YzJsdmJpSXNJbUZqZEdsdmJpSTZJblZ6WlNJc0luUmhjbWRsZENJNkluVnlianB6WTJWdVlYSnBienB3WlhKdGFYUXRZWEJ3YkdsallYUnBiMjQ2YUdWcFoyaDBJaXdpWTI5dWMzUnlZV2x1ZEhNaU9sdDdJbXhsWm5SUGNHVnlZVzVrSWpvaWNIVnljRzl6WlNJc0ltOXdaWEpoZEc5eUlqb2laWEVpTENKeWFXZG9kRTl3WlhKaGJtUWlPaUoxY200NmNIVnljRzl6WlRwd1pYSnRhWFF0WVhCd2JHbGpZWFJwYjI0aWZWMTlMSHNpZEhsd1pTSTZJbkJsY20xcGMzTnBiMjRpTENKaFkzUnBiMjRpT2lKa2FYTjBjbWxpZFhSbElpd2lkR0Z5WjJWMElqb2lkWEp1T25OalpXNWhjbWx2T25CbGNtMXBkQzFoY0hCc2FXTmhkR2x2Ympwb1pXbG5hSFFpTENKamIyNXpkSEpoYVc1MGN5STZXM3NpYkdWbWRFOXdaWEpoYm1RaU9pSndkWEp3YjNObElpd2liM0JsY21GMGIzSWlPaUpsY1NJc0luSnBaMmgwVDNCbGNtRnVaQ0k2SW5WeWJqcHdkWEp3YjNObE9uQmxjbTFwZEMxaGNIQnNhV05oZEdsdmJpSjlYWDFkZlgxOS4yNjU1MGliUy1wemdfSndxZEdua2FyR2o1OU5KOHY2endWelk1N0N1Y0gwR3dBN1ZZWXh1UHdNNzZRYlFzLVZGaU5VdXpueV85QnpMQXR6YnA5eElEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOkZZVXRfSkRwNXBES3Y4ZkFjUDJKVW1INTZuVnlRbzRmY3pmd1NnY3V5UkUifV0sImF1dGhvcnNoaXAiOnsiaWQiOiJ1cm46YXdwOm46ZFQtLUlNMVVDekZrelNoRExka1hwTnRqTDJWdl82SlJtcjFpVHl1UUZhWSJ9LCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOjI4dk5iUEJPRGxoUGNFQzA1azR0WkNWcUFUbE9VY3NlWHlxbEFXWmVCbWMifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9wbGFpbi1sYW5ndWFnZS11cGdyYWRlLWxvY2FsLzAuMSIsImNvbnRlbnQiOnsiaWQiOiJ1cm46Y29udGVudDpwZXJtaXQtYXBwbGljYXRpb246b3JpZ2luYWwifSwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtcGVybWl0LWFwcGxpY2F0aW9uLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6W3siaWQiOiJ1cm46YXdwOm46VzBlV25zTXVGcW9vSHFYUERNUThMMGFPRXRhbzZOTlhZWm9iRHZiWE1vVSJ9LHsiaWQiOiJ1cm46YXdwOm46dUh3bGV6WnFJcnVJcmZua194YkVNY3ZDRkRMWlZLY3UwcVUxUWFtVE5qQSJ9LHsiaWQiOiJ1cm46YXdwOm46MEJZRDFNNHdpU25JRE51SHppcGNhQjdUa2dBVlp1dzlweEN5NFVOT20ycyJ9XSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpEVzlNb212bnJHLUNid24tejZVN21DbzJXVUVxOHFSM3RqTXQ4R0hkWmJrIn0sImlkIjoidXJuOmF3cDplbmdpbmUtcGVybWl0LWFwcGxpY2F0aW9uLWJyYW5jaC0xOm93bmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46Y2ViVWVwel90NTAtSXhlSkVmZjRpbklwV0F1elhpYkt3dU96UG5nX1R0USJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.ZP67WaeSddxSKSnfGSz7mR8aYiU4MZCHM9C4-2HHzFWXEbnDFPgIurpHMP4mpQHUysNICcwPiMb2G-dv_DIACw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2316,7 +2864,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "An invoke message from The architect’s agent reaches the inbound gate."
+      "caption": "An invoke message from The architect’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 74,
@@ -2343,7 +2892,8 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The architect’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The architect’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 75,
@@ -2381,7 +2931,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The architect's unstructured content statement: The architect is an accepted source for this kind of claim."
+      "caption": "The architect's unstructured content statement: The architect is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 76,
@@ -2419,7 +2970,8 @@
         ],
         "answer": "Accepted, for building height claims only."
       },
-      "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim."
+      "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 77,
@@ -2441,7 +2993,8 @@
         "id": "urn:awp:representation:e368688a7f03aa42f394fd82ddf56531:1794560400000",
         "text": "A representation statement signed with The architect's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The architect signed a statement that The architect’s agent acts for them in this operation."
+      "caption": "The architect signed a statement that The architect’s agent acts for them in this operation.",
+      "gateRun": 1
     },
     {
       "seq": 78,
@@ -2468,7 +3021,8 @@
         "id": "urn:terms:permit-application:original",
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
-      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 79,
@@ -2495,7 +3049,8 @@
         "id": "urn:terms:permit-application:height",
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
-      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application."
+      "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
+      "gateRun": 1
     },
     {
       "seq": 80,
@@ -2522,7 +3077,8 @@
         "id": "urn:profile:permit-application:unstructured-content",
         "text": "Accept unstructured-content from The architect by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The architect's unstructured content statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
+      "caption": "The architect's unstructured content statement is fit for Applying for a building permit: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 81,
@@ -2549,7 +3105,8 @@
         "id": "urn:profile:permit-application:building.height",
         "text": "Accept building height from The architect by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The architect's building height statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
+      "caption": "The architect's building height statement is fit for Applying for a building permit: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 82,
@@ -2559,7 +3116,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-permit-application-branch-1:owner-agent:0002",
+      "messageDigest": "sha-256:157cb300638ccb9ffc094edde56abb1fed4331ffaffe96c33d2b85f446c02ecd",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 1
     },
     {
       "seq": 83,
@@ -2642,6 +3202,16 @@
       "seq": 88,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9e249da2a1691874cc615793447b260e717a0597d5b2c486b6a7b1db7a3ceb9a",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:permit-application:decision",
+        "operation": "urn:op:permit-application:decision",
+        "conversation": "urn:scenario:permit-application:task",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -2659,12 +3229,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The planning office's mandate covers this action."
+      "caption": "The planning office's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 89,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9e249da2a1691874cc615793447b260e717a0597d5b2c486b6a7b1db7a3ceb9a",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:permit-application:decision",
+        "operation": "urn:op:permit-application:decision",
+        "conversation": "urn:scenario:permit-application:task",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -2677,18 +3258,30 @@
         }
       ],
       "reason": "method-not-accepted",
-      "caption": "The proposed action relies on a statement that was not admitted."
+      "caption": "The proposed action relies on a statement that was not admitted.",
+      "gateRun": 2
     },
     {
       "seq": 90,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9e249da2a1691874cc615793447b260e717a0597d5b2c486b6a7b1db7a3ceb9a",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:permit-application:decision",
+        "operation": "urn:op:permit-application:decision",
+        "conversation": "urn:scenario:permit-application:task",
+        "recipient": "urn:fictional:permit-application:receiver",
+        "purpose": "urn:purpose:permit-application",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "method-not-accepted",
-      "caption": "Unaccepted support cannot authorize an action."
+      "caption": "Unaccepted support cannot authorize an action.",
+      "gateRun": 2
     }
   ]
 }

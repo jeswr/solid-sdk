@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -130,7 +130,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The first person's calendar busy reason statement is intact and signed with The first person's pinned key."
+      "caption": "The first person's calendar busy reason statement is intact and signed with The first person's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -168,7 +169,8 @@
         ],
         "answer": "Accepted, for calendar busy reason claims only."
       },
-      "caption": "The first person's calendar busy reason statement: The first person is an accepted source for this kind of claim."
+      "caption": "The first person's calendar busy reason statement: The first person is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -186,7 +188,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The first person's calendar busy reason statement asks for nothing, so there is no authority to check."
+      "caption": "The first person's calendar busy reason statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -213,7 +216,8 @@
         "id": "urn:terms:find-a-time:reason",
         "text": "Its terms allow this: use for Private calendar."
       },
-      "caption": "The first person's calendar busy reason statement: its terms allow this: use for Private calendar."
+      "caption": "The first person's calendar busy reason statement: its terms allow this: use for Private calendar.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -245,7 +249,8 @@
         "id": "urn:profile:find-a-time:calendar.busy-reason",
         "text": "Accept calendar busy reason from The first person by self-reported, at most 30 days old."
       },
-      "caption": "The first person's calendar busy reason statement is fit for Two people's agents find a time to meet: self-reported, 0 days old."
+      "caption": "The first person's calendar busy reason statement is fit for Two people's agents find a time to meet: self-reported, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -255,7 +260,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The first person's calendar busy reason statement is admitted."
+      "caption": "The first person's calendar busy reason statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -292,6 +298,16 @@
       "seq": 9,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -309,12 +325,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The second person's mandate covers this action."
+      "caption": "The second person's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -343,12 +370,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The first person: Accepted, for Request the needed information only."
+      "caption": "The first person: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -361,12 +399,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -379,12 +428,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -397,12 +457,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The second person's limits."
+      "caption": "Inside what the agent may do on its own, and within The second person's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -415,12 +486,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -442,24 +524,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The second person’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The second person’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 16,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The first person’s agent."
+      "messageId": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:cb2740594aab86484fd868b44d32e51686dc98cfeb9831af2d35ec9d6b1186d3",
+      "caption": "The invoke message goes to The first person’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:b5b200e8e9c357fd95094e59f8eeff796c175d125a7258b12c8ad983e05ead88",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:find-a-time:request",
+        "operation": "urn:op:find-a-time:request",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:find-a-time:owner",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-find-a-time-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-find-a-time-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:5CvDE7rTMNd5EDpon0VrH-r0Q0h73_SRVAG3-8gNX4E\"},\"to\":{\"id\":\"urn:awp:n:Jnk_erBIKIqIccM3INGzHESZmgM3ayQmG1IzQr8Les4\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:gLZWMk2xfawFHWqhTxrGgDoUvUOlC0NSTp5akRRu7AA\"},\"evidence\":{\"id\":\"urn:awp:n:svDrLaoCxC5HTkf0E1EF9f5vNKaRorYfIz-K3scThE0\"},\"@included\":[{\"id\":\"urn:awp:n:5CvDE7rTMNd5EDpon0VrH-r0Q0h73_SRVAG3-8gNX4E\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:find-a-time:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:find-a-time:receiver\"},{\"id\":\"urn:awp:n:Jnk_erBIKIqIccM3INGzHESZmgM3ayQmG1IzQr8Les4\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:find-a-time:owner-agent:actor\",\"party\":\"urn:fictional:find-a-time:owner\"},{\"id\":\"urn:awp:n:gLZWMk2xfawFHWqhTxrGgDoUvUOlC0NSTp5akRRu7AA\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:iapYhN90TVImWfdC48HdlcA4vSTUAVQ-L5sVwX5Io5M\"},\"input\":{\"id\":\"urn:awp:n:Tq9BMTcDXTw8te-afvzVUba80fPhQHsqlSJ-YGaTypg\"},\"operation\":{\"id\":\"urn:op:find-a-time:request\"},\"purpose\":\"urn:purpose:find-a-time\"},{\"id\":\"urn:awp:n:svDrLaoCxC5HTkf0E1EF9f5vNKaRorYfIz-K3scThE0\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:R1cR-tMZjA6ywBMx-w1vIgjEkjrN-YEdONQKaBsu9W0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:find-a-time:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:Tq9BMTcDXTw8te-afvzVUba80fPhQHsqlSJ-YGaTypg\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:89TgG4FY4dR81na42y23c9sMEN_3QZrBt5RRnGqRmYE\"}]},{\"id\":\"urn:awp:n:iapYhN90TVImWfdC48HdlcA4vSTUAVQ-L5sVwX5Io5M\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:R1cR-tMZjA6ywBMx-w1vIgjEkjrN-YEdONQKaBsu9W0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:1_CNqJTbV5AAOEOp_KXdevQFHYDxP1uYOD0DzyttD38\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:find-a-time:receiver\",\"proofGraph\":\"urn:awp:n:cZFFnbN-WxyIgggSHhzmcsi0s5H7kcq4t8yFkMIUb9U\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:89TgG4FY4dR81na42y23c9sMEN_3QZrBt5RRnGqRmYE\",\"type\":\"PropertyValue\",\"domainValue\":\"calendar.busy-reason\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:1_CNqJTbV5AAOEOp_KXdevQFHYDxP1uYOD0DzyttD38\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:zOh4Xhd9Rfyoc10Ze8hP3k4bCOdznnCvEkenHxB1cWY\"}},{\"id\":\"urn:awp:n:zOh4Xhd9Rfyoc10Ze8hP3k4bCOdznnCvEkenHxB1cWY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:20b53c5410b4f4c559580c247122b3f1e8483f740a001058ed441bbe18053d79\",\"byteLength\":\"9460\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cZFFnbN-WxyIgggSHhzmcsi0s5H7kcq4t8yFkMIUb9U\",\"@graph\":[{\"id\":\"urn:awp:n:XjoqHTIg58fZu3sZBh4gkMquWcr8iKlTzX7xf8X7RPg\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Y2Q3Yzg1ZDE2NDhmNzY3ODM2MjdmMTAxODQyYzM1MjA6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoiME5naHphVzBCcXM1WGhTUEtDTG5XUV9mQWdnS0hKNTNhWGlCVGU2VC1zZyIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOmZpbmQtYS10aW1lIiwidXJuOm9wOmZpbmQtYS10aW1lOnJlcXVlc3QiLCJ1cm46b3A6ZmluZC1hLXRpbWU6c2xvdHMiXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.MfWz9CvNPmUbA9Tp4pRs_e10STWyUoygANPRcL-CEFEghMjnJz7MiuBJ6bumaQMEPQ_o7seZq04yubc9XIweDQ\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOjVDdkRFN3JUTU5kNUVEcG9uMFZySC1yMFEwaDczX1NSVkFHMy04Z05YNEUiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmZpbmQtYS10aW1lOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Sm5rX2VyQklLSXFJY2NNM0lOR3pIRVNabWdNM2F5UW1HMUl6UXI4TGVzNCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpvd25lciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46aWFwWWhOOTBUVkltV2ZkQzQ4SGRsY0E0dlNUVUFWUS1MNXNWd1g1SW81TSJ9LCJpZCI6InVybjphd3A6bjpnTFpXTWsyeGZhd0ZIV3FoVHhyR2dEb1V2VU9sQzBOU1RwNWFrUlJ1N0FBIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46VHE5Qk1UY0RYVHc4dGUtYWZ2elZVYmE4MGZQaFFIc3FsU0otWUdhVHlwZyJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6ZmluZC1hLXRpbWU6cmVxdWVzdCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6ZmluZC1hLXRpbWUiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOlIxY1ItdE1aakE2eXdCTXgtdzF2SWdqRWtqck4tWUVkT05RS2FCc3U5VzAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpzdkRyTGFvQ3hDNUhUa2YwRTFFRjlmNXZOS2FSb3JZZkl6LUszc2NUaEUwIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6ZmluZC1hLXRpbWU6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpUcTlCTVRjRFhUdzh0ZS1hZnZ6VlViYTgwZlBoUUhzcWxTSi1ZR2FUeXBnIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjo4OVRnRzRGWTRkUjgxbmE0MnkyM2M5c01FTl8zUVpyQnQ1UlJuR3FSbVlFIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46aWFwWWhOOTBUVkltV2ZkQzQ4SGRsY0E0dlNUVUFWUS1MNXNWd1g1SW81TSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOjFfQ05xSlRiVjVBQU9FT3BfS1hkZXZRRkhZRHhQMXVZT0QwRHp5dHREMzgiLCJpZCI6InVybjphd3A6bjpSMWNSLXRNWmpBNnl3Qk14LXcxdklnakVranJOLVlFZE9OUUthQnN1OVcwIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmZpbmQtYS10aW1lOnJlY2VpdmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpjWkZGbmJOLVd4eUlnZ2dTSGh6bWNzaTBzNUg3a2NxNHQ4eUZrTUlVYjlVIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiZG9tYWluVmFsdWUiOiJjYWxlbmRhci5idXN5LXJlYXNvbiIsImlkIjoidXJuOmF3cDpuOjg5VGdHNEZZNGRSODFuYTQyeTIzYzlzTUVOXzNRWnJCdDVSUm5HcVJtWUUiLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOjFfQ05xSlRiVjVBQU9FT3BfS1hkZXZRRkhZRHhQMXVZT0QwRHp5dHREMzgiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOnpPaDRYaGQ5UmZ5b2MxMFplOGhQM2s0YkNPZHpubkN2RWtlbkh4QjFjV1kifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjoyMGI1M2M1NDEwYjRmNGM1NTk1ODBjMjQ3MTIyYjNmMWU4NDgzZjc0MGEwMDEwNThlZDQ0MWJiZTE4MDUzZDc5IiwiYnl0ZUxlbmd0aCI6Ijk0NjAiLCJpZCI6InVybjphd3A6bjp6T2g0WGhkOVJmeW9jMTBaZThoUDNrNGJDT2R6bm5DdkVrZW5IeEIxY1dZIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpYam9xSFRJZzU4Zlp1M3NaQmg0Z2tNcXVXY3I4aUtsVHpYN3hmOFg3UlBnIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WTJRM1l6ZzFaREUyTkRobU56WTNPRE0yTWpkbU1UQXhPRFF5WXpNMU1qQTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBtYVc1a0xXRXRkR2x0WlRweVpXTmxhWFpsY2lJc0ltRmpkRzl5SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBtYVc1a0xXRXRkR2x0WlRweVpXTmxhWFpsY2kxaFoyVnVkRHBoWTNSdmNpSXNJbUZqZEc5eVMybGtJam9pTUU1bmFIcGhWekJDY1hNMVdHaFRVRXREVEc1WFVWOW1RV2RuUzBoS05UTmhXR2xDVkdVMlZDMXpaeUlzSW05d1pYSmhkR2x2Ym5NaU9sc2lkWEp1T205d09tWnBibVF0WVMxMGFXMWxJaXdpZFhKdU9tOXdPbVpwYm1RdFlTMTBhVzFsT25KbGNYVmxjM1FpTENKMWNtNDZiM0E2Wm1sdVpDMWhMWFJwYldVNmMyeHZkSE1pWFN3aWRtRnNhV1JHY205dElqb2lNakF5TmkweE1TMHhNMVF3T0RvMU9Ub3dNQzR3TURCYUlpd2lkbUZzYVdSVmJuUnBiQ0k2SWpJd01qY3RNREV0TVRKVU1EazZNREE2TURBdU1EQXdXaUlzSW1semMzVmxaRUYwSWpvaU1qQXlOaTB4TVMweE0xUXdPVG93TURvd01DNHdNREJhSW4wLk1mV3o5Q3ZOUG1VYkE5VHA0cFJzX2UxMFNUV3lVb3lnQU5QUmNMLUNFRkVnaE1qbkp6N01pdUJKNmJ1bWFRTUVQUV9vN3NlWnEwNHl1YmM5WEl3ZURRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46Y1pGRm5iTi1XeHlJZ2dnU0hoem1jc2kwczVIN2tjcTR0OHlGa01JVWI5VSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpnTFpXTWsyeGZhd0ZIV3FoVHhyR2dEb1V2VU9sQzBOU1RwNWFrUlJ1N0FBIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtZmluZC1hLXRpbWUtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnN2RHJMYW9DeEM1SFRrZjBFMUVGOWY1dk5LYVJvcllmSXotSzNzY1RoRTAifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjo1Q3ZERTdyVE1OZDVFRHBvbjBWckgtcjBRMGg3M19TUlZBRzMtOGdOWDRFIn0sImlkIjoidXJuOmF3cDplbmdpbmUtZmluZC1hLXRpbWUtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpKbmtfZXJCSUtJcUljY00zSU5HekhFU1ptZ00zYXlRbUcxSXpRcjhMZXM0In0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.GA4Kduzk8F6Sr-4YC0h1vGuV-63eyQS0sHi3DLU8uBE9go1VWryKomUL92wWc0t9T--vTiyFgqUULkn-yhneAQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -582,7 +689,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The second person’s agent sends an invoke message to The first person’s agent."
+      "caption": "The second person’s agent sends an invoke message to The first person’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 18,
@@ -590,6 +698,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-find-a-time-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-find-a-time-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:5CvDE7rTMNd5EDpon0VrH-r0Q0h73_SRVAG3-8gNX4E\"},\"to\":{\"id\":\"urn:awp:n:Jnk_erBIKIqIccM3INGzHESZmgM3ayQmG1IzQr8Les4\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:gLZWMk2xfawFHWqhTxrGgDoUvUOlC0NSTp5akRRu7AA\"},\"evidence\":{\"id\":\"urn:awp:n:svDrLaoCxC5HTkf0E1EF9f5vNKaRorYfIz-K3scThE0\"},\"@included\":[{\"id\":\"urn:awp:n:5CvDE7rTMNd5EDpon0VrH-r0Q0h73_SRVAG3-8gNX4E\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:find-a-time:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:find-a-time:receiver\"},{\"id\":\"urn:awp:n:Jnk_erBIKIqIccM3INGzHESZmgM3ayQmG1IzQr8Les4\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:find-a-time:owner-agent:actor\",\"party\":\"urn:fictional:find-a-time:owner\"},{\"id\":\"urn:awp:n:gLZWMk2xfawFHWqhTxrGgDoUvUOlC0NSTp5akRRu7AA\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:iapYhN90TVImWfdC48HdlcA4vSTUAVQ-L5sVwX5Io5M\"},\"input\":{\"id\":\"urn:awp:n:Tq9BMTcDXTw8te-afvzVUba80fPhQHsqlSJ-YGaTypg\"},\"operation\":{\"id\":\"urn:op:find-a-time:request\"},\"purpose\":\"urn:purpose:find-a-time\"},{\"id\":\"urn:awp:n:svDrLaoCxC5HTkf0E1EF9f5vNKaRorYfIz-K3scThE0\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:R1cR-tMZjA6ywBMx-w1vIgjEkjrN-YEdONQKaBsu9W0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:find-a-time:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:Tq9BMTcDXTw8te-afvzVUba80fPhQHsqlSJ-YGaTypg\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:89TgG4FY4dR81na42y23c9sMEN_3QZrBt5RRnGqRmYE\"}]},{\"id\":\"urn:awp:n:iapYhN90TVImWfdC48HdlcA4vSTUAVQ-L5sVwX5Io5M\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:R1cR-tMZjA6ywBMx-w1vIgjEkjrN-YEdONQKaBsu9W0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:1_CNqJTbV5AAOEOp_KXdevQFHYDxP1uYOD0DzyttD38\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:find-a-time:receiver\",\"proofGraph\":\"urn:awp:n:cZFFnbN-WxyIgggSHhzmcsi0s5H7kcq4t8yFkMIUb9U\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:89TgG4FY4dR81na42y23c9sMEN_3QZrBt5RRnGqRmYE\",\"type\":\"PropertyValue\",\"domainValue\":\"calendar.busy-reason\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:1_CNqJTbV5AAOEOp_KXdevQFHYDxP1uYOD0DzyttD38\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:zOh4Xhd9Rfyoc10Ze8hP3k4bCOdznnCvEkenHxB1cWY\"}},{\"id\":\"urn:awp:n:zOh4Xhd9Rfyoc10Ze8hP3k4bCOdznnCvEkenHxB1cWY\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:20b53c5410b4f4c559580c247122b3f1e8483f740a001058ed441bbe18053d79\",\"byteLength\":\"9460\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cZFFnbN-WxyIgggSHhzmcsi0s5H7kcq4t8yFkMIUb9U\",\"@graph\":[{\"id\":\"urn:awp:n:XjoqHTIg58fZu3sZBh4gkMquWcr8iKlTzX7xf8X7RPg\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Y2Q3Yzg1ZDE2NDhmNzY3ODM2MjdmMTAxODQyYzM1MjA6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoiME5naHphVzBCcXM1WGhTUEtDTG5XUV9mQWdnS0hKNTNhWGlCVGU2VC1zZyIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOmZpbmQtYS10aW1lIiwidXJuOm9wOmZpbmQtYS10aW1lOnJlcXVlc3QiLCJ1cm46b3A6ZmluZC1hLXRpbWU6c2xvdHMiXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.MfWz9CvNPmUbA9Tp4pRs_e10STWyUoygANPRcL-CEFEghMjnJz7MiuBJ6bumaQMEPQ_o7seZq04yubc9XIweDQ\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOjVDdkRFN3JUTU5kNUVEcG9uMFZySC1yMFEwaDczX1NSVkFHMy04Z05YNEUiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpyZWNlaXZlciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmZpbmQtYS10aW1lOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Sm5rX2VyQklLSXFJY2NNM0lOR3pIRVNabWdNM2F5UW1HMUl6UXI4TGVzNCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpmaW5kLWEtdGltZTpvd25lciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46aWFwWWhOOTBUVkltV2ZkQzQ4SGRsY0E0dlNUVUFWUS1MNXNWd1g1SW81TSJ9LCJpZCI6InVybjphd3A6bjpnTFpXTWsyeGZhd0ZIV3FoVHhyR2dEb1V2VU9sQzBOU1RwNWFrUlJ1N0FBIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46VHE5Qk1UY0RYVHc4dGUtYWZ2elZVYmE4MGZQaFFIc3FsU0otWUdhVHlwZyJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6ZmluZC1hLXRpbWU6cmVxdWVzdCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6ZmluZC1hLXRpbWUiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOlIxY1ItdE1aakE2eXdCTXgtdzF2SWdqRWtqck4tWUVkT05RS2FCc3U5VzAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpzdkRyTGFvQ3hDNUhUa2YwRTFFRjlmNXZOS2FSb3JZZkl6LUszc2NUaEUwIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6ZmluZC1hLXRpbWU6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpUcTlCTVRjRFhUdzh0ZS1hZnZ6VlViYTgwZlBoUUhzcWxTSi1ZR2FUeXBnIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjo4OVRnRzRGWTRkUjgxbmE0MnkyM2M5c01FTl8zUVpyQnQ1UlJuR3FSbVlFIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46aWFwWWhOOTBUVkltV2ZkQzQ4SGRsY0E0dlNUVUFWUS1MNXNWd1g1SW81TSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOjFfQ05xSlRiVjVBQU9FT3BfS1hkZXZRRkhZRHhQMXVZT0QwRHp5dHREMzgiLCJpZCI6InVybjphd3A6bjpSMWNSLXRNWmpBNnl3Qk14LXcxdklnakVranJOLVlFZE9OUUthQnN1OVcwIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmZpbmQtYS10aW1lOnJlY2VpdmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpjWkZGbmJOLVd4eUlnZ2dTSGh6bWNzaTBzNUg3a2NxNHQ4eUZrTUlVYjlVIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiZG9tYWluVmFsdWUiOiJjYWxlbmRhci5idXN5LXJlYXNvbiIsImlkIjoidXJuOmF3cDpuOjg5VGdHNEZZNGRSODFuYTQyeTIzYzlzTUVOXzNRWnJCdDVSUm5HcVJtWUUiLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOjFfQ05xSlRiVjVBQU9FT3BfS1hkZXZRRkhZRHhQMXVZT0QwRHp5dHREMzgiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOnpPaDRYaGQ5UmZ5b2MxMFplOGhQM2s0YkNPZHpubkN2RWtlbkh4QjFjV1kifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjoyMGI1M2M1NDEwYjRmNGM1NTk1ODBjMjQ3MTIyYjNmMWU4NDgzZjc0MGEwMDEwNThlZDQ0MWJiZTE4MDUzZDc5IiwiYnl0ZUxlbmd0aCI6Ijk0NjAiLCJpZCI6InVybjphd3A6bjp6T2g0WGhkOVJmeW9jMTBaZThoUDNrNGJDT2R6bm5DdkVrZW5IeEIxY1dZIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpYam9xSFRJZzU4Zlp1M3NaQmg0Z2tNcXVXY3I4aUtsVHpYN3hmOFg3UlBnIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WTJRM1l6ZzFaREUyTkRobU56WTNPRE0yTWpkbU1UQXhPRFF5WXpNMU1qQTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBtYVc1a0xXRXRkR2x0WlRweVpXTmxhWFpsY2lJc0ltRmpkRzl5SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBtYVc1a0xXRXRkR2x0WlRweVpXTmxhWFpsY2kxaFoyVnVkRHBoWTNSdmNpSXNJbUZqZEc5eVMybGtJam9pTUU1bmFIcGhWekJDY1hNMVdHaFRVRXREVEc1WFVWOW1RV2RuUzBoS05UTmhXR2xDVkdVMlZDMXpaeUlzSW05d1pYSmhkR2x2Ym5NaU9sc2lkWEp1T205d09tWnBibVF0WVMxMGFXMWxJaXdpZFhKdU9tOXdPbVpwYm1RdFlTMTBhVzFsT25KbGNYVmxjM1FpTENKMWNtNDZiM0E2Wm1sdVpDMWhMWFJwYldVNmMyeHZkSE1pWFN3aWRtRnNhV1JHY205dElqb2lNakF5TmkweE1TMHhNMVF3T0RvMU9Ub3dNQzR3TURCYUlpd2lkbUZzYVdSVmJuUnBiQ0k2SWpJd01qY3RNREV0TVRKVU1EazZNREE2TURBdU1EQXdXaUlzSW1semMzVmxaRUYwSWpvaU1qQXlOaTB4TVMweE0xUXdPVG93TURvd01DNHdNREJhSW4wLk1mV3o5Q3ZOUG1VYkE5VHA0cFJzX2UxMFNUV3lVb3lnQU5QUmNMLUNFRkVnaE1qbkp6N01pdUJKNmJ1bWFRTUVQUV9vN3NlWnEwNHl1YmM5WEl3ZURRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46Y1pGRm5iTi1XeHlJZ2dnU0hoem1jc2kwczVIN2tjcTR0OHlGa01JVWI5VSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpnTFpXTWsyeGZhd0ZIV3FoVHhyR2dEb1V2VU9sQzBOU1RwNWFrUlJ1N0FBIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtZmluZC1hLXRpbWUtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnN2RHJMYW9DeEM1SFRrZjBFMUVGOWY1dk5LYVJvcllmSXotSzNzY1RoRTAifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjo1Q3ZERTdyVE1OZDVFRHBvbjBWckgtcjBRMGg3M19TUlZBRzMtOGdOWDRFIn0sImlkIjoidXJuOmF3cDplbmdpbmUtZmluZC1hLXRpbWUtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpKbmtfZXJCSUtJcUljY00zSU5HekhFU1ptZ00zYXlRbUcxSXpRcjhMZXM0In0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.GA4Kduzk8F6Sr-4YC0h1vGuV-63eyQS0sHi3DLU8uBE9go1VWryKomUL92wWc0t9T--vTiyFgqUULkn-yhneAQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -722,7 +831,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The second person’s agent reaches the inbound gate."
+      "caption": "An invoke message from The second person’s agent reaches the inbound gate.",
+      "gateRun": 2
     },
     {
       "seq": 19,
@@ -749,7 +859,8 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The second person’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The second person’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
     },
     {
       "seq": 20,
@@ -772,7 +883,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 2
     },
     {
       "seq": 21,
@@ -794,7 +906,8 @@
         "id": "urn:awp:representation:cd7c85d1648f76783627f101842c3520:1794560400000",
         "text": "A representation statement signed with The second person's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The second person signed a statement that The second person’s agent acts for them in this operation."
+      "caption": "The second person signed a statement that The second person’s agent acts for them in this operation.",
+      "gateRun": 2
     },
     {
       "seq": 22,
@@ -817,7 +930,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 2
     },
     {
       "seq": 23,
@@ -835,7 +949,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 2
     },
     {
       "seq": 24,
@@ -845,7 +960,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:cb2740594aab86484fd868b44d32e51686dc98cfeb9831af2d35ec9d6b1186d3",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2
     },
     {
       "seq": 25,
@@ -859,6 +977,16 @@
       "seq": 26,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -876,12 +1004,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The first person's mandate covers this action."
+      "caption": "The first person's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -910,12 +1049,23 @@
         "answer": "Accepted, for Two people's agents find a time to meet only."
       },
       "reason": "recipient-established",
-      "caption": "The second person: Accepted, for Two people's agents find a time to meet only."
+      "caption": "The second person: Accepted, for Two people's agents find a time to meet only.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -928,12 +1078,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -946,12 +1107,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -964,12 +1136,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The first person's limits."
+      "caption": "Inside what the agent may do on its own, and within The first person's limits.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -982,18 +1165,30 @@
         }
       ],
       "reason": "excessive-scope",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0aceb3ac52657bdfaa197e21cc4320ccf674dc1ea60ed18c91d29a60dd8918f3",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:find-a-time",
+        "operation": "urn:op:find-a-time",
+        "conversation": "urn:awp:engine-find-a-time-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:find-a-time:receiver",
+        "purpose": "urn:purpose:find-a-time",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "excessive-scope",
-      "caption": "The credential is not necessary for this purpose."
+      "caption": "The credential is not necessary for this purpose.",
+      "gateRun": 1
     }
   ]
 }

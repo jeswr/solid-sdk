@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
@@ -8,7 +9,7 @@ import { runScenario } from "../src/engine/run.js";
 const root = join(import.meta.dirname, "..");
 it("runs supplier onboarding and both catalogue refusals through current documents, credential status and source gates", async () => {
   const { profile, scenario } = loadCase(root, "supplier-onboarding");
-  const paths = await runScenario(profile, scenario);
+  const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
   expect(paths.every((p) => p.matches && !p.blocked)).toBe(true);
   expect(
     paths[0]?.trace?.events.some(
@@ -18,6 +19,11 @@ it("runs supplier onboarding and both catalogue refusals through current documen
   expect(paths[1]?.trace?.events.at(-1)).toMatchObject({
     outcome: "stop",
     reason: "status-withdrawn",
+  });
+  expect(paths[2]).toMatchObject({
+    disagrees: true,
+    note: "an effect followed a stop",
+    actual: { outcome: "refuse", reason: "source-not-authoritative", check: "source" },
   });
   expect(paths[2]?.trace?.events.at(-1)).toMatchObject({
     outcome: "stop",

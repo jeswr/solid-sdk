@@ -118,7 +118,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -152,6 +152,16 @@
       "seq": 2,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -169,12 +179,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The licence registrar's mandate covers this action."
+      "caption": "The licence registrar's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -203,12 +224,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -221,12 +253,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -239,12 +282,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -257,12 +311,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -284,17 +349,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ed10a37835689befd013c482202a3563c37397dad2eb409f51c5eca35391c381",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:reserve-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -373,6 +451,16 @@
       "seq": 16,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -390,12 +478,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The photographer's mandate covers this action."
+      "caption": "The photographer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -424,12 +523,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -442,12 +552,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -460,12 +581,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -478,12 +610,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The photographer's limits."
+      "caption": "Inside what the agent may do on its own, and within The photographer's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -505,17 +648,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:4cfd76161e8e32fe3e9893764ace958fb547ef0eb70aab6950e4aef3a0f98109",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 1
     },
     {
       "seq": 23,
@@ -594,6 +750,16 @@
       "seq": 30,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -611,12 +777,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The publisher's mandate covers this action."
+      "caption": "The publisher's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -645,12 +822,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -663,12 +851,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -681,12 +880,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 34,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -699,12 +909,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+      "caption": "Inside what the agent may do on its own, and within The publisher's limits.",
+      "gateRun": 1
     },
     {
       "seq": 35,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -726,17 +947,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 36,
       "step": 3,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:8abdc0369803d0c1a288f78000c6fd20f03508b3d818ae8a9b54f835218db829",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 1
     },
     {
       "seq": 37,
@@ -815,6 +1049,16 @@
       "seq": 44,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -832,12 +1076,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The licence registrar's mandate covers this action."
+      "caption": "The licence registrar's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 45,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -866,12 +1121,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 46,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -884,12 +1150,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 47,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -902,12 +1179,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 48,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -920,12 +1208,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits.",
+      "gateRun": 2
     },
     {
       "seq": 49,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -947,17 +1246,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 50,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:e7ad01476d0824986075eb6532eee078934daea170b4f463b90e1cced490e633",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:accept-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 2
     },
     {
       "seq": 51,
@@ -1036,6 +1348,16 @@
       "seq": 58,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1053,12 +1375,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The licence registrar's mandate covers this action."
+      "caption": "The licence registrar's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 59,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1087,12 +1420,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 3
     },
     {
       "seq": 60,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1105,12 +1449,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 61,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1123,12 +1478,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 62,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1141,12 +1507,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits.",
+      "gateRun": 3
     },
     {
       "seq": 63,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1168,17 +1545,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 3
     },
     {
       "seq": 64,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ab39a15cb07d52e7ddd5e405f61e92aaf8fb9dad10843d1dc6428a8b7cf12fbb",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:complete-plan",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 3
     },
     {
       "seq": 65,
@@ -1323,6 +1713,16 @@
       "seq": 78,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1340,12 +1740,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The photographer's mandate covers this action."
+      "caption": "The photographer's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 79,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1374,12 +1785,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 80,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1392,12 +1814,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 81,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1410,12 +1843,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 82,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1428,12 +1872,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The photographer's limits."
+      "caption": "Inside what the agent may do on its own, and within The photographer's limits.",
+      "gateRun": 2
     },
     {
       "seq": 83,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1455,17 +1910,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 84,
       "step": 7,
       "agent": "photographer-agent",
+      "actionDigest": "sha-256:387b00716117a5afef03892183e585a84ffd1729251b10e828432811437750e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-photographer",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 2
     },
     {
       "seq": 85,
@@ -1544,6 +2012,16 @@
       "seq": 92,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1561,12 +2039,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The publisher's mandate covers this action."
+      "caption": "The publisher's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 93,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1595,12 +2084,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 94,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1613,12 +2113,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 95,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1631,12 +2142,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 96,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1649,12 +2171,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+      "caption": "Inside what the agent may do on its own, and within The publisher's limits.",
+      "gateRun": 2
     },
     {
       "seq": 97,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1676,17 +2209,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 98,
       "step": 8,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:0f2fcafdb0b0df672f04345f332791be83fe47a0c838c45b08d996c900f05748",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-owner",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 2
     },
     {
       "seq": 99,
@@ -1765,6 +2311,16 @@
       "seq": 106,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1782,12 +2338,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The licence registrar's mandate covers this action."
+      "caption": "The licence registrar's mandate covers this action.",
+      "gateRun": 4
     },
     {
       "seq": 107,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1816,12 +2383,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only."
+      "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 4
     },
     {
       "seq": 108,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1834,12 +2412,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 109,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1852,12 +2441,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 110,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1870,12 +2470,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits."
+      "caption": "Inside what the agent may do on its own, and within The licence registrar's limits.",
+      "gateRun": 4
     },
     {
       "seq": 111,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1897,17 +2508,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 4
     },
     {
       "seq": 112,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:1c83bc03d9e01bf0ef0caac7c7f296bce14cdcee2fe746d34f5c2d02c28cc853",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:issue-to-coordinator",
+        "recipient": "urn:fictional:content-licence:coordinator",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
+      "gateRun": 4
     },
     {
       "seq": 113,
@@ -1986,6 +2610,16 @@
       "seq": 120,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -2003,12 +2637,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The publisher's mandate covers this action."
+      "caption": "The publisher's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 121,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -2037,12 +2682,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The publishing platform: Accepted, for Accepting the same agreement terms only."
+      "caption": "The publishing platform: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 3
     },
     {
       "seq": 122,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2055,12 +2711,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 123,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2073,12 +2740,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 124,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -2091,12 +2769,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The publisher's limits."
+      "caption": "Inside what the agent may do on its own, and within The publisher's limits.",
+      "gateRun": 3
     },
     {
       "seq": 125,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2118,17 +2807,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 3
     },
     {
       "seq": 126,
       "step": 10,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f08bf53f8fd6fad5e745399665c124a4bcbeb9f69ea741c9b7d142975f7935a5",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:content-licence:present-credential",
+        "recipient": "urn:fictional:content-licence:external-receiver",
+        "purpose": "urn:purpose:content-licence",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: share Accepting the same agreement terms with The publishing platform."
+      "effectRelease": true,
+      "caption": "The action goes: share Accepting the same agreement terms with The publishing platform.",
+      "gateRun": 3
     },
     {
       "seq": 127,

@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -95,6 +95,16 @@
       "seq": 2,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -112,12 +122,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "A taxpayer's mandate covers this action."
+      "caption": "A taxpayer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -146,12 +167,23 @@
         "answer": "Accepted, for An accountant files a tax return only."
       },
       "reason": "recipient-established",
-      "caption": "The tax authority: Accepted, for An accountant files a tax return only."
+      "caption": "The tax authority: Accepted, for An accountant files a tax return only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -164,12 +196,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -182,12 +225,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -200,12 +254,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within A taxpayer's limits."
+      "caption": "Inside what the agent may do on its own, and within A taxpayer's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -218,12 +283,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -245,24 +321,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The representative’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The representative’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 9,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The receiving agent."
+      "messageId": "urn:awp:engine-tax-agent-main:owner-agent:0002",
+      "messageDigest": "sha-256:e9b7c8917be80a4fd820bc62c05afe0cbfb49ec2f5bc4ecc2d32869885eacde1",
+      "caption": "The invoke message goes to The receiving agent.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 1,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:e308c9b9c2771842687b7c8dc1d0a24fd46a9f42d4d73619be262b04e01130e1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:tax-agent",
+        "operation": "urn:op:tax-agent",
+        "conversation": "urn:awp:engine-tax-agent-main:owner-agent:0001",
+        "recipient": "urn:fictional:tax-agent:receiver",
+        "purpose": "urn:purpose:tax-agent",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-tax-agent-main:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-tax-agent-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-tax-agent-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:wImRy9p5GabudU9GQ-iUO9HwKLmI8FmtZKvx9VDnfvI\"},\"to\":{\"id\":\"urn:awp:n:UtNj-ChGMckZ6JJxl_PqObA4Sw2tMrQ5CGQ1U_bQmn0\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:hbv4fER9BRMZw-j1upkH8yWuCLgLMDJQPIiGSqmlx2Q\"},\"evidence\":{\"id\":\"urn:awp:n:aE0RYDCXCsGHQvBxaSUyCgzHz8LlD5zBGeOD_h0Y-eU\"},\"@included\":[{\"id\":\"urn:awp:n:wImRy9p5GabudU9GQ-iUO9HwKLmI8FmtZKvx9VDnfvI\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:tax-agent:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:tax-agent:subject\"},{\"id\":\"urn:awp:n:UtNj-ChGMckZ6JJxl_PqObA4Sw2tMrQ5CGQ1U_bQmn0\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:tax-agent:receiver-agent:actor\",\"party\":\"urn:fictional:tax-agent:receiver\"},{\"id\":\"urn:awp:n:hbv4fER9BRMZw-j1upkH8yWuCLgLMDJQPIiGSqmlx2Q\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:MLWurwV267RrgFGpkqZI83cmoza3B0ksqlPBd8R47I4\"},\"input\":{\"id\":\"urn:awp:n:ifY-0e3ENpU_kd6qmO-ohufgWA4dwOBGIWkOKK1VKNs\"},\"operation\":{\"id\":\"urn:op:tax-agent\"},\"purpose\":\"urn:purpose:tax-agent\"},{\"id\":\"urn:awp:n:aE0RYDCXCsGHQvBxaSUyCgzHz8LlD5zBGeOD_h0Y-eU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:IeQsXUcpeA93LsSogOu8RDrIzsTEdA_9fDeQTItDIjc\"},\"format\":\"mandate-chain+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:tax-agent\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:ifY-0e3ENpU_kd6qmO-ohufgWA4dwOBGIWkOKK1VKNs\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:lUGi5Jb0Ftr11ZSRyz5UgUvxvk57Doc91qbQ7j9PnmE\"},{\"id\":\"urn:awp:n:Fdwa_F2e_y9Ii0KPZ_NWL-nGk8l60usydf4mGuz67FI\"}]},{\"id\":\"urn:awp:n:MLWurwV267RrgFGpkqZI83cmoza3B0ksqlPBd8R47I4\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:IeQsXUcpeA93LsSogOu8RDrIzsTEdA_9fDeQTItDIjc\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:AxNcm-gUS7FaKSTtBAVMggX2e0gOR7MSvGWpgMfMsXk\"},{\"id\":\"urn:awp:n:k8SXfJLpBhtMda549OvF4hw42yWVoAYR-UiCkGtGAng\"},{\"id\":\"urn:awp:n:UBVHCqRHp7qryQD2AXW7znYKwrA8bKTwX2-UKr89Syk\"}],\"envelopeBytes\":\"[[\\\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpyZWdpc3Rlci1zdGF0dXMiLCJpZCI6InBvd2VyIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoyfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8ifQ.JcgzXR4XKEYR1QThaFQpb17be3amPpFwFfuuR603rtNsrFICc-9FzOzZ8KTdpMiYutm0s10eRbT_KdH-ehGxDw\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tcG93ZXIiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpwb3dlciIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXItc3RhdHVzIiwiaWQiOiJmaXJtIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoxfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmcifQ.j0nJfkuyu5NPSeU0az176QDRmeLwxXsafJdLS5Js41bNclUdXAClt0PllDyKJNnSSLmToFi5GU21tSZApGVfAQ\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmciLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpvd25lci1hZ2VudDphY3RvciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpmaXJtLXBvd2VyIiwiYWN0aW9ucyI6WyJpbnZva2UiXSwic2NvcGUiOnsib3BlcmF0aW9ucyI6WyJ1cm46b3A6dGF4LWFnZW50Il0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6dGF4LWFnZW50Il19LCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.UzEwuwaQhZusgV9BZ_JWtJnVn_FNTKTSLBuYo3srlkRGLPYSR5qkPTYEGJuL0tmJwFvyac562n9PqI9gZjrwDw\\\"]]\",\"statementPayload\":{\"id\":\"urn:awp:n:3ZnKwIzxK7Dl05E58Bmnvs2JHEDBCtP4fRQsluBeSMM\"}},{\"id\":\"urn:awp:n:lUGi5Jb0Ftr11ZSRyz5UgUvxvk57Doc91qbQ7j9PnmE\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:tax-agent:subject\"},\"name\":\"subject\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:Fdwa_F2e_y9Ii0KPZ_NWL-nGk8l60usydf4mGuz67FI\",\"type\":\"PropertyValue\",\"domainValue\":\"file-return\",\"name\":\"request\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:AxNcm-gUS7FaKSTtBAVMggX2e0gOR7MSvGWpgMfMsXk\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:6wQPL0LkvQEjnR8vnkOF957WazQ58eY9vcYuxLjsU-Y\",\"issuer\":\"urn:fictional:tax-agent:register\",\"proofGraph\":\"urn:awp:n:I9t5f7hILuOUM245GvyJBJX2ckqrj1EqEI6kg4yac10\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:k8SXfJLpBhtMda549OvF4hw42yWVoAYR-UiCkGtGAng\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:KpE1ilqg7kL3WE1USJW2k0tLGFe6YX7a-6k272lS8eQ\",\"issuer\":\"urn:fictional:tax-agent:holder\",\"proofGraph\":\"urn:awp:n:TMng1OyP0DbGZfnzxfwMWGcJQYqXJIITgFF24-EOkOo\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:UBVHCqRHp7qryQD2AXW7znYKwrA8bKTwX2-UKr89Syk\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:xlTiU1Yx0fz5y0cs1IDywMqDYMxh2148wPIXNnTrMSE\",\"issuer\":\"urn:fictional:tax-agent:second-holder\",\"proofGraph\":\"urn:awp:n:YETwEFkXfl1lto_xsDB5_8az7-YdLuAj69yXv2e1BZU\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:3ZnKwIzxK7Dl05E58Bmnvs2JHEDBCtP4fRQsluBeSMM\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:0-lJWheec3Vo-Dh1ELeZaiFIqR6TNNjGjPOp3C8LBPk\"}]},{\"id\":\"urn:awp:n:0-lJWheec3Vo-Dh1ELeZaiFIqR6TNNjGjPOp3C8LBPk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:u7FNQxOa0gxdBRAuGqhqiflK4HQQAs7-kmtE9KbaifM\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:6wQPL0LkvQEjnR8vnkOF957WazQ58eY9vcYuxLjsU-Y\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:0VQ51Y2pIAgsn72aau4HTS-jf1Urqw9oUofAeIQWkCE\"}},{\"id\":\"urn:awp:n:KpE1ilqg7kL3WE1USJW2k0tLGFe6YX7a-6k272lS8eQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:1ftV47kEt8RpyDIgZJBlpcrNJtlHafqcdZlxWHZkTP0\"}},{\"id\":\"urn:awp:n:xlTiU1Yx0fz5y0cs1IDywMqDYMxh2148wPIXNnTrMSE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:s_epr_9S8TlKksdEOQZkGroPShaSVAFnx7V9gw0lk8I\"}},{\"id\":\"urn:awp:n:u7FNQxOa0gxdBRAuGqhqiflK4HQQAs7-kmtE9KbaifM\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:TZG8KU9Ti4_AxmH14aXpB87yiifTGSyImJfgRku5CyQ\"},{\"id\":\"urn:awp:n:5Xqn0g1z3ARYdG2ZmJXKAmj3aWqxbCRMTJfM7ykDkJw\"},{\"id\":\"urn:awp:n:JC4a1Uq0jC90Lo5V-IFutD5f94oOOoCD5LNZSCKx33Y\"}]},{\"id\":\"urn:awp:n:TZG8KU9Ti4_AxmH14aXpB87yiifTGSyImJfgRku5CyQ\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpyZWdpc3Rlci1zdGF0dXMiLCJpZCI6InBvd2VyIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoyfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8ifQ.JcgzXR4XKEYR1QThaFQpb17be3amPpFwFfuuR603rtNsrFICc-9FzOzZ8KTdpMiYutm0s10eRbT_KdH-ehGxDw\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:5Xqn0g1z3ARYdG2ZmJXKAmj3aWqxbCRMTJfM7ykDkJw\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tcG93ZXIiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpwb3dlciIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXItc3RhdHVzIiwiaWQiOiJmaXJtIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoxfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmcifQ.j0nJfkuyu5NPSeU0az176QDRmeLwxXsafJdLS5Js41bNclUdXAClt0PllDyKJNnSSLmToFi5GU21tSZApGVfAQ\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:JC4a1Uq0jC90Lo5V-IFutD5f94oOOoCD5LNZSCKx33Y\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmciLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpvd25lci1hZ2VudDphY3RvciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpmaXJtLXBvd2VyIiwiYWN0aW9ucyI6WyJpbnZva2UiXSwic2NvcGUiOnsib3BlcmF0aW9ucyI6WyJ1cm46b3A6dGF4LWFnZW50Il0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6dGF4LWFnZW50Il19LCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.UzEwuwaQhZusgV9BZ_JWtJnVn_FNTKTSLBuYo3srlkRGLPYSR5qkPTYEGJuL0tmJwFvyac562n9PqI9gZjrwDw\",\"name\":\"2\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:2\"},{\"id\":\"urn:awp:n:0VQ51Y2pIAgsn72aau4HTS-jf1Urqw9oUofAeIQWkCE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:da4e827a6d7affc1d3b61d0a82e4d113f67c6d6390bc67a42a2f9b1a6bb684ac\",\"byteLength\":\"18008\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:1ftV47kEt8RpyDIgZJBlpcrNJtlHafqcdZlxWHZkTP0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e4badf8e09484ca0429e3a8a643adbc02dc95521be1161a7e1afd226848055dd\",\"byteLength\":\"18776\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:s_epr_9S8TlKksdEOQZkGroPShaSVAFnx7V9gw0lk8I\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:6316170c10243d9762d6559fafffd159535bf2b8988e198d5969e496f683dc43\",\"byteLength\":\"17065\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:I9t5f7hILuOUM245GvyJBJX2ckqrj1EqEI6kg4yac10\",\"@graph\":[{\"id\":\"urn:awp:n:oG5AQHFtmI9pnYnF77dmtWSZQ47hstzZ5QkPhopu-fA\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpyZWdpc3Rlci1zdGF0dXMiLCJpZCI6InBvd2VyIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoyfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8ifQ.JcgzXR4XKEYR1QThaFQpb17be3amPpFwFfuuR603rtNsrFICc-9FzOzZ8KTdpMiYutm0s10eRbT_KdH-ehGxDw\"}]},{\"id\":\"urn:awp:n:TMng1OyP0DbGZfnzxfwMWGcJQYqXJIITgFF24-EOkOo\",\"@graph\":[{\"id\":\"urn:awp:n:E6P4J2Idms4j9_TP-kpECoqFL471JcIdFZEhy206Tjk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tcG93ZXIiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpwb3dlciIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXItc3RhdHVzIiwiaWQiOiJmaXJtIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoxfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmcifQ.j0nJfkuyu5NPSeU0az176QDRmeLwxXsafJdLS5Js41bNclUdXAClt0PllDyKJNnSSLmToFi5GU21tSZApGVfAQ\"}]},{\"id\":\"urn:awp:n:YETwEFkXfl1lto_xsDB5_8az7-YdLuAj69yXv2e1BZU\",\"@graph\":[{\"id\":\"urn:awp:n:YIOdrAv9eOythLObZZed44y0N7VsEQZsTJ0yV7wu3Xc\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmciLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpvd25lci1hZ2VudDphY3RvciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpmaXJtLXBvd2VyIiwiYWN0aW9ucyI6WyJpbnZva2UiXSwic2NvcGUiOnsib3BlcmF0aW9ucyI6WyJ1cm46b3A6dGF4LWFnZW50Il0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6dGF4LWFnZW50Il19LCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.UzEwuwaQhZusgV9BZ_JWtJnVn_FNTKTSLBuYo3srlkRGLPYSR5qkPTYEGJuL0tmJwFvyac562n9PqI9gZjrwDw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..ZnaTFvmQ4nprgvUUtHVDNDZlcCSqgfLx9mhO-jdUfG6V-EQh4YTwla8u86peBjwIzP3HHWolj1DKevkVgBXQCQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -412,7 +513,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The representative’s agent sends an invoke message to The receiving agent."
+      "caption": "The representative’s agent sends an invoke message to The receiving agent.",
+      "gateRun": 1
     },
     {
       "seq": 11,
@@ -420,6 +522,7 @@
       "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-tax-agent-main:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-tax-agent-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-tax-agent-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:wImRy9p5GabudU9GQ-iUO9HwKLmI8FmtZKvx9VDnfvI\"},\"to\":{\"id\":\"urn:awp:n:UtNj-ChGMckZ6JJxl_PqObA4Sw2tMrQ5CGQ1U_bQmn0\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:hbv4fER9BRMZw-j1upkH8yWuCLgLMDJQPIiGSqmlx2Q\"},\"evidence\":{\"id\":\"urn:awp:n:aE0RYDCXCsGHQvBxaSUyCgzHz8LlD5zBGeOD_h0Y-eU\"},\"@included\":[{\"id\":\"urn:awp:n:wImRy9p5GabudU9GQ-iUO9HwKLmI8FmtZKvx9VDnfvI\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:tax-agent:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:tax-agent:subject\"},{\"id\":\"urn:awp:n:UtNj-ChGMckZ6JJxl_PqObA4Sw2tMrQ5CGQ1U_bQmn0\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:tax-agent:receiver-agent:actor\",\"party\":\"urn:fictional:tax-agent:receiver\"},{\"id\":\"urn:awp:n:hbv4fER9BRMZw-j1upkH8yWuCLgLMDJQPIiGSqmlx2Q\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:MLWurwV267RrgFGpkqZI83cmoza3B0ksqlPBd8R47I4\"},\"input\":{\"id\":\"urn:awp:n:ifY-0e3ENpU_kd6qmO-ohufgWA4dwOBGIWkOKK1VKNs\"},\"operation\":{\"id\":\"urn:op:tax-agent\"},\"purpose\":\"urn:purpose:tax-agent\"},{\"id\":\"urn:awp:n:aE0RYDCXCsGHQvBxaSUyCgzHz8LlD5zBGeOD_h0Y-eU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:IeQsXUcpeA93LsSogOu8RDrIzsTEdA_9fDeQTItDIjc\"},\"format\":\"mandate-chain+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:tax-agent\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:ifY-0e3ENpU_kd6qmO-ohufgWA4dwOBGIWkOKK1VKNs\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:lUGi5Jb0Ftr11ZSRyz5UgUvxvk57Doc91qbQ7j9PnmE\"},{\"id\":\"urn:awp:n:Fdwa_F2e_y9Ii0KPZ_NWL-nGk8l60usydf4mGuz67FI\"}]},{\"id\":\"urn:awp:n:MLWurwV267RrgFGpkqZI83cmoza3B0ksqlPBd8R47I4\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:IeQsXUcpeA93LsSogOu8RDrIzsTEdA_9fDeQTItDIjc\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:AxNcm-gUS7FaKSTtBAVMggX2e0gOR7MSvGWpgMfMsXk\"},{\"id\":\"urn:awp:n:k8SXfJLpBhtMda549OvF4hw42yWVoAYR-UiCkGtGAng\"},{\"id\":\"urn:awp:n:UBVHCqRHp7qryQD2AXW7znYKwrA8bKTwX2-UKr89Syk\"}],\"envelopeBytes\":\"[[\\\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpyZWdpc3Rlci1zdGF0dXMiLCJpZCI6InBvd2VyIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoyfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8ifQ.JcgzXR4XKEYR1QThaFQpb17be3amPpFwFfuuR603rtNsrFICc-9FzOzZ8KTdpMiYutm0s10eRbT_KdH-ehGxDw\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tcG93ZXIiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpwb3dlciIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXItc3RhdHVzIiwiaWQiOiJmaXJtIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoxfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmcifQ.j0nJfkuyu5NPSeU0az176QDRmeLwxXsafJdLS5Js41bNclUdXAClt0PllDyKJNnSSLmToFi5GU21tSZApGVfAQ\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmciLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpvd25lci1hZ2VudDphY3RvciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpmaXJtLXBvd2VyIiwiYWN0aW9ucyI6WyJpbnZva2UiXSwic2NvcGUiOnsib3BlcmF0aW9ucyI6WyJ1cm46b3A6dGF4LWFnZW50Il0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6dGF4LWFnZW50Il19LCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.UzEwuwaQhZusgV9BZ_JWtJnVn_FNTKTSLBuYo3srlkRGLPYSR5qkPTYEGJuL0tmJwFvyac562n9PqI9gZjrwDw\\\"]]\",\"statementPayload\":{\"id\":\"urn:awp:n:3ZnKwIzxK7Dl05E58Bmnvs2JHEDBCtP4fRQsluBeSMM\"}},{\"id\":\"urn:awp:n:lUGi5Jb0Ftr11ZSRyz5UgUvxvk57Doc91qbQ7j9PnmE\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:tax-agent:subject\"},\"name\":\"subject\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:Fdwa_F2e_y9Ii0KPZ_NWL-nGk8l60usydf4mGuz67FI\",\"type\":\"PropertyValue\",\"domainValue\":\"file-return\",\"name\":\"request\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:AxNcm-gUS7FaKSTtBAVMggX2e0gOR7MSvGWpgMfMsXk\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:6wQPL0LkvQEjnR8vnkOF957WazQ58eY9vcYuxLjsU-Y\",\"issuer\":\"urn:fictional:tax-agent:register\",\"proofGraph\":\"urn:awp:n:I9t5f7hILuOUM245GvyJBJX2ckqrj1EqEI6kg4yac10\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:k8SXfJLpBhtMda549OvF4hw42yWVoAYR-UiCkGtGAng\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:KpE1ilqg7kL3WE1USJW2k0tLGFe6YX7a-6k272lS8eQ\",\"issuer\":\"urn:fictional:tax-agent:holder\",\"proofGraph\":\"urn:awp:n:TMng1OyP0DbGZfnzxfwMWGcJQYqXJIITgFF24-EOkOo\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:UBVHCqRHp7qryQD2AXW7znYKwrA8bKTwX2-UKr89Syk\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:xlTiU1Yx0fz5y0cs1IDywMqDYMxh2148wPIXNnTrMSE\",\"issuer\":\"urn:fictional:tax-agent:second-holder\",\"proofGraph\":\"urn:awp:n:YETwEFkXfl1lto_xsDB5_8az7-YdLuAj69yXv2e1BZU\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:3ZnKwIzxK7Dl05E58Bmnvs2JHEDBCtP4fRQsluBeSMM\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:0-lJWheec3Vo-Dh1ELeZaiFIqR6TNNjGjPOp3C8LBPk\"}]},{\"id\":\"urn:awp:n:0-lJWheec3Vo-Dh1ELeZaiFIqR6TNNjGjPOp3C8LBPk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:u7FNQxOa0gxdBRAuGqhqiflK4HQQAs7-kmtE9KbaifM\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:6wQPL0LkvQEjnR8vnkOF957WazQ58eY9vcYuxLjsU-Y\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:0VQ51Y2pIAgsn72aau4HTS-jf1Urqw9oUofAeIQWkCE\"}},{\"id\":\"urn:awp:n:KpE1ilqg7kL3WE1USJW2k0tLGFe6YX7a-6k272lS8eQ\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:1ftV47kEt8RpyDIgZJBlpcrNJtlHafqcdZlxWHZkTP0\"}},{\"id\":\"urn:awp:n:xlTiU1Yx0fz5y0cs1IDywMqDYMxh2148wPIXNnTrMSE\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:s_epr_9S8TlKksdEOQZkGroPShaSVAFnx7V9gw0lk8I\"}},{\"id\":\"urn:awp:n:u7FNQxOa0gxdBRAuGqhqiflK4HQQAs7-kmtE9KbaifM\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:TZG8KU9Ti4_AxmH14aXpB87yiifTGSyImJfgRku5CyQ\"},{\"id\":\"urn:awp:n:5Xqn0g1z3ARYdG2ZmJXKAmj3aWqxbCRMTJfM7ykDkJw\"},{\"id\":\"urn:awp:n:JC4a1Uq0jC90Lo5V-IFutD5f94oOOoCD5LNZSCKx33Y\"}]},{\"id\":\"urn:awp:n:TZG8KU9Ti4_AxmH14aXpB87yiifTGSyImJfgRku5CyQ\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpyZWdpc3Rlci1zdGF0dXMiLCJpZCI6InBvd2VyIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoyfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8ifQ.JcgzXR4XKEYR1QThaFQpb17be3amPpFwFfuuR603rtNsrFICc-9FzOzZ8KTdpMiYutm0s10eRbT_KdH-ehGxDw\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:5Xqn0g1z3ARYdG2ZmJXKAmj3aWqxbCRMTJfM7ykDkJw\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tcG93ZXIiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpwb3dlciIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXItc3RhdHVzIiwiaWQiOiJmaXJtIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoxfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmcifQ.j0nJfkuyu5NPSeU0az176QDRmeLwxXsafJdLS5Js41bNclUdXAClt0PllDyKJNnSSLmToFi5GU21tSZApGVfAQ\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:JC4a1Uq0jC90Lo5V-IFutD5f94oOOoCD5LNZSCKx33Y\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmciLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpvd25lci1hZ2VudDphY3RvciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpmaXJtLXBvd2VyIiwiYWN0aW9ucyI6WyJpbnZva2UiXSwic2NvcGUiOnsib3BlcmF0aW9ucyI6WyJ1cm46b3A6dGF4LWFnZW50Il0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6dGF4LWFnZW50Il19LCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.UzEwuwaQhZusgV9BZ_JWtJnVn_FNTKTSLBuYo3srlkRGLPYSR5qkPTYEGJuL0tmJwFvyac562n9PqI9gZjrwDw\",\"name\":\"2\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:2\"},{\"id\":\"urn:awp:n:0VQ51Y2pIAgsn72aau4HTS-jf1Urqw9oUofAeIQWkCE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:da4e827a6d7affc1d3b61d0a82e4d113f67c6d6390bc67a42a2f9b1a6bb684ac\",\"byteLength\":\"18008\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:1ftV47kEt8RpyDIgZJBlpcrNJtlHafqcdZlxWHZkTP0\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:e4badf8e09484ca0429e3a8a643adbc02dc95521be1161a7e1afd226848055dd\",\"byteLength\":\"18776\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:s_epr_9S8TlKksdEOQZkGroPShaSVAFnx7V9gw0lk8I\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:6316170c10243d9762d6559fafffd159535bf2b8988e198d5969e496f683dc43\",\"byteLength\":\"17065\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:I9t5f7hILuOUM245GvyJBJX2ckqrj1EqEI6kg4yac10\",\"@graph\":[{\"id\":\"urn:awp:n:oG5AQHFtmI9pnYnF77dmtWSZQ47hstzZ5QkPhopu-fA\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImRSUDYzMnUzMUFqOTJHQ200N0xuY2RrWW8wdVBSUTRickY3NkdQLVpwS1UiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6cmVnaXN0ZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6aG9sZGVyIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpyZWdpc3Rlci1zdGF0dXMiLCJpZCI6InBvd2VyIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoyfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8ifQ.JcgzXR4XKEYR1QThaFQpb17be3amPpFwFfuuR603rtNsrFICc-9FzOzZ8KTdpMiYutm0s10eRbT_KdH-ehGxDw\"}]},{\"id\":\"urn:awp:n:TMng1OyP0DbGZfnzxfwMWGcJQYqXJIITgFF24-EOkOo\",\"@graph\":[{\"id\":\"urn:awp:n:E6P4J2Idms4j9_TP-kpECoqFL471JcIdFZEhy206Tjk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tcG93ZXIiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpwb3dlciIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOnRheC1hZ2VudCJdLCJzdWJqZWN0cyI6WyJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpzdWJqZWN0Il0sInB1cnBvc2VzIjpbInVybjpwdXJwb3NlOnRheC1hZ2VudCJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpob2xkZXItc3RhdHVzIiwiaWQiOiJmaXJtIn0sIm1heURlbGVnYXRlIjp7ImRlcHRoIjoxfSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmcifQ.j0nJfkuyu5NPSeU0az176QDRmeLwxXsafJdLS5Js41bNclUdXAClt0PllDyKJNnSSLmToFi5GU21tSZApGVfAQ\"}]},{\"id\":\"urn:awp:n:YETwEFkXfl1lto_xsDB5_8az7-YdLuAj69yXv2e1BZU\",\"@graph\":[{\"id\":\"urn:awp:n:YIOdrAv9eOythLObZZed44y0N7VsEQZsTJ0yV7wu3Xc\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Il9sUDZKTnVZYWYyQU0xdEV3SDhrUHRVbTEtX0ZUcWNxYjdzVUlFdFBXNmciLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmFnZW50LXBvd2VyIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDp0YXgtYWdlbnQ6c2Vjb25kLWhvbGRlciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpvd25lci1hZ2VudDphY3RvciIsImVudGl0eSI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOnRheC1hZ2VudDpmaXJtLXBvd2VyIiwiYWN0aW9ucyI6WyJpbnZva2UiXSwic2NvcGUiOnsib3BlcmF0aW9ucyI6WyJ1cm46b3A6dGF4LWFnZW50Il0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6dGF4LWFnZW50OnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6dGF4LWFnZW50Il19LCJ2YWxpZEZyb20iOiIyMDI2LTExLTAxVDAwOjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMi0wMVQwMDowMDowMC4wMDBaIiwic3RhdHVzIjp7InJlZiI6InVybjpmaWN0aW9uYWw6dGF4LWFnZW50OmZpcm0tc3RhdHVzIiwiaWQiOiJhZ2VudCJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiODNzcVJIZjM4U3oyZkI4Q2JWczcxdG5uZmJDbmstOHMzYWJjZXlBVjVSWSJ9.UzEwuwaQhZusgV9BZ_JWtJnVn_FNTKTSLBuYo3srlkRGLPYSR5qkPTYEGJuL0tmJwFvyac562n9PqI9gZjrwDw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..ZnaTFvmQ4nprgvUUtHVDNDZlcCSqgfLx9mhO-jdUfG6V-EQh4YTwla8u86peBjwIzP3HHWolj1DKevkVgBXQCQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -583,7 +686,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The representative’s agent reaches the inbound gate."
+      "caption": "An invoke message from The representative’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 12,
@@ -610,7 +714,8 @@
         "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The representative’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The representative’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 13,
@@ -633,7 +738,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 1
     },
     {
       "seq": 14,
@@ -655,7 +761,8 @@
         "id": "urn:authority:verified-chain",
         "text": "A representation statement signed with A taxpayer's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "A taxpayer signed a statement that The representative’s agent acts for them in this operation."
+      "caption": "A taxpayer signed a statement that The representative’s agent acts for them in this operation.",
+      "gateRun": 1
     },
     {
       "seq": 15,
@@ -678,7 +785,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 1
     },
     {
       "seq": 16,
@@ -696,7 +804,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 1
     },
     {
       "seq": 17,
@@ -706,7 +815,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-tax-agent-main:owner-agent:0002",
+      "messageDigest": "sha-256:e9b7c8917be80a4fd820bc62c05afe0cbfb49ec2f5bc4ecc2d32869885eacde1",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 1
     }
   ]
 }

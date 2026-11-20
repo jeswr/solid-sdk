@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { expect, it } from "vitest";
@@ -52,22 +53,25 @@ it("asks Sam about an undecided use of his own statement, binds the approval to 
   expect(main.disagrees).toBe(false);
 
   // The valuer's approval does not carry over to a different valuation party.
-  expect(reused.disagrees).toBe(true);
+  expect(reused).toMatchObject({
+    disagrees: false,
+    actual: { outcome: "ask-principal", check: "data-terms", reason: "approval-required" },
+  });
   const reusedAsks = reused.trace.events.filter(
     (event) => event.kind === "ask-principal" && event.reason === "approval-required",
   );
   expect(reusedAsks).toHaveLength(2);
-  expect(reused.actual).toMatchObject({ outcome: "go" });
 
-  // Harbour's statement is never put to Sam; the gate stops before data terms (recorded
-  // disagreement with the brief's data-terms / prohibited).
-  expect(hold.actual).toMatchObject({ outcome: "go" });
+  // Disclosure stops Harbour's statement before Sam can be asked about it.
+  expect(hold).toMatchObject({
+    disagrees: false,
+    actual: { outcome: "stop", check: "disclosure", reason: "excessive-scope" },
+    expected: { outcome: "stop", reason: "excessive-scope" },
+  });
   expect(hold.trace.events.findLast((event) => event.kind === "decision")).toMatchObject({
     reason: "excessive-scope",
     outcome: "stop",
   });
-  expect(hold.expected).toEqual({ outcome: "stop", reason: "prohibited" });
-  expect(hold.disagrees).toBe(true);
   const holdAsks = hold.trace.events.filter(
     (event) => event.kind === "ask-principal" && event.reason === "approval-required",
   );

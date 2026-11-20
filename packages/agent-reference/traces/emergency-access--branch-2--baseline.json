@@ -3,7 +3,7 @@
   "schema": "agent-trace/0.1",
   "useCase": "emergency-access",
   "path": {
-    "index": 2,
+    "index": 1,
     "what": "The same flag is used by someone not on the register"
   },
   "parties": [
@@ -106,7 +106,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -141,7 +141,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The clinician's emergency declaration statement is intact and signed with The clinician's pinned key."
+      "caption": "The clinician's emergency declaration statement is intact and signed with The clinician's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -179,7 +180,8 @@
         ],
         "answer": "Accepted, for emergency declaration claims only."
       },
-      "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim."
+      "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -197,7 +199,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The clinician's emergency declaration statement asks for nothing, so there is no authority to check."
+      "caption": "The clinician's emergency declaration statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -224,7 +227,8 @@
         "id": "urn:terms:emergency",
         "text": "Its terms allow this: ."
       },
-      "caption": "The clinician's emergency declaration statement: its terms allow this: ."
+      "caption": "The clinician's emergency declaration statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -256,7 +260,8 @@
         "id": "urn:profile:emergency-access:emergency.declaration",
         "text": "Accept emergency declaration from The clinician by self-reported, at most 1 days old."
       },
-      "caption": "The clinician's emergency declaration statement is fit for Access to allergies in an emergency: self-reported, 0 days old."
+      "caption": "The clinician's emergency declaration statement is fit for Access to allergies in an emergency: self-reported, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -266,7 +271,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The clinician's emergency declaration statement is admitted."
+      "caption": "The clinician's emergency declaration statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -312,7 +318,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The family practice's clinical summary statement is intact and signed with The family practice's pinned key."
+      "caption": "The family practice's clinical summary statement is intact and signed with The family practice's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -350,7 +357,8 @@
         ],
         "answer": "Accepted, for clinical summary claims only."
       },
-      "caption": "The family practice's clinical summary statement: The family practice is an accepted source for this kind of claim."
+      "caption": "The family practice's clinical summary statement: The family practice is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 10,
@@ -368,7 +376,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The family practice's clinical summary statement asks for nothing, so there is no authority to check."
+      "caption": "The family practice's clinical summary statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 11,
@@ -395,7 +404,8 @@
         "id": "urn:terms:summary",
         "text": "Its terms allow this: ."
       },
-      "caption": "The family practice's clinical summary statement: its terms allow this: ."
+      "caption": "The family practice's clinical summary statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 12,
@@ -427,7 +437,8 @@
         "id": "urn:profile:emergency-access:clinical.summary",
         "text": "Accept clinical summary from The family practice by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The family practice's clinical summary statement is fit for Access to allergies in an emergency: recorded-by-authority, 0 days old."
+      "caption": "The family practice's clinical summary statement is fit for Access to allergies in an emergency: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 13,
@@ -437,7 +448,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The family practice's clinical summary statement is admitted."
+      "caption": "The family practice's clinical summary statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 14,
@@ -474,6 +486,16 @@
       "seq": 16,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -491,12 +513,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The clinician's mandate covers this action."
+      "caption": "The clinician's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -530,12 +563,23 @@
         "answer": "Accepted, for the unlabelled resource only."
       },
       "reason": "recipient-established",
-      "caption": "The patient: Accepted, for the unlabelled resource only."
+      "caption": "The patient: Accepted, for the unlabelled resource only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -548,12 +592,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -566,12 +621,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -584,12 +650,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The clinician's limits."
+      "caption": "Inside what the agent may do on its own, and within The clinician's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -602,12 +679,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -624,12 +712,23 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The clinician's emergency declaration statement: its terms allow this: ."
+      "caption": "The clinician's emergency declaration statement: its terms allow this: .",
+      "gateRun": 1
     },
     {
       "seq": 23,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -642,12 +741,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -669,24 +779,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The clinician’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The clinician’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The patient’s record agent."
+      "messageId": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
+      "messageDigest": "sha-256:2835911278d8476d5fda9d2122766e521d5d1c926e38c8c74e5cc0f02ea25403",
+      "caption": "The invoke message goes to The patient’s record agent.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 3,
       "agent": "clinician-agent",
+      "actionDigest": "sha-256:1c669e94a87cc0f2a842b77b43398b6223d87565bba4db463ae0820c4b0327a0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:patient",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-emergency-access-branch-2:clinician-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-emergency-access-branch-2:clinician-agent:0001\",\"from\":{\"id\":\"urn:awp:n:3Uv4JCjNVlwE4OZL_fwRSX_ruq1trhB2OAbixbrf6t0\"},\"to\":{\"id\":\"urn:awp:n:hOYVIEWhFj5DqCfe2CN0MFJDXgQ5pFJOKf__IrlTslM\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:TVSfoe8mnvLJg9zG7ee9zOybQobQKUs6GPmWqUmKt_Q\"},\"evidence\":[{\"id\":\"urn:awp:n:CDW_3QmgB35IoN004d_PnIM-jpJHjkDraEcRGXOngOc\"},{\"id\":\"urn:awp:n:QVxYtc1-o7KS-sJvyGGx_b_eZdRuvt3RCYT7x_svJQc\"}],\"@included\":[{\"id\":\"urn:awp:n:3Uv4JCjNVlwE4OZL_fwRSX_ruq1trhB2OAbixbrf6t0\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:clinician-agent:agent\",\"onBehalfOf\":\"urn:fictional:clinician\"},{\"id\":\"urn:awp:n:hOYVIEWhFj5DqCfe2CN0MFJDXgQ5pFJOKf__IrlTslM\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:record-agent:agent\",\"party\":\"urn:fictional:patient\"},{\"id\":\"urn:awp:n:TVSfoe8mnvLJg9zG7ee9zOybQobQKUs6GPmWqUmKt_Q\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:wym5zDoViO7XFJeRhFqm25IYRaUjEJeY-cMpCzovFYY\"},\"input\":{\"id\":\"urn:awp:n:kZ5Eqwqr78AIZoCWxomU1kOrcbWz9D0pZ75s16C3FjA\"},\"operation\":{\"id\":\"urn:op:emergency-read\"},\"purpose\":\"urn:purpose:emergency-access\"},{\"id\":\"urn:awp:n:CDW_3QmgB35IoN004d_PnIM-jpJHjkDraEcRGXOngOc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:0FvxzSYqC4KEcGmd3BiCn1r7oStnOkIIhUv2szRtTzM\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:QVxYtc1-o7KS-sJvyGGx_b_eZdRuvt3RCYT7x_svJQc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:OQs37Wi-gVCOiijLJUAcf8i3wKst8mSV9wLuJQgp6cI\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:op:emergency-read\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:kZ5Eqwqr78AIZoCWxomU1kOrcbWz9D0pZ75s16C3FjA\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Z9RftnMgCsRf7gmKKlVvK4ERVdFvu25RvX6aMyUWNVE\"}]},{\"id\":\"urn:awp:n:wym5zDoViO7XFJeRhFqm25IYRaUjEJeY-cMpCzovFYY\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:0FvxzSYqC4KEcGmd3BiCn1r7oStnOkIIhUv2szRtTzM\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:O3dm4RQJ3-ISuaoMNDP2pbip3cgG6R_iyzCJXZpI5EI\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:clinician\",\"proofGraph\":\"urn:awp:n:KQXyoZBk7tPc7FsIsPEpWu7OMMMEgRvOn6GeAlyfOoA\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:OQs37Wi-gVCOiijLJUAcf8i3wKst8mSV9wLuJQgp6cI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:dt3eOZ5Ws1ddzisSR5KQhCe0_x0diNXB63FWhQRhMTs\",\"issuer\":\"urn:fictional:clinician\",\"proofGraph\":\"urn:awp:n:Yu4MNSKRobQt_nb-IXFsiRO51SLIiNZgRbFmRGK80mY\"},{\"id\":\"urn:awp:n:Z9RftnMgCsRf7gmKKlVvK4ERVdFvu25RvX6aMyUWNVE\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:1myuVv30Xc15kynzewCIP5bYmN7l5lzXdkKgkEC-B4s\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:1myuVv30Xc15kynzewCIP5bYmN7l5lzXdkKgkEC-B4s\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:yULCeVAEULfjCfqsH7z1m1EXpsYogRYCwTDCubewDro\"},{\"id\":\"urn:awp:n:OsYO97ZkWCwqJ8jUYevL0kp6lAL0lOQ1op3kbd2JJ_w\"}]},{\"id\":\"urn:awp:n:yULCeVAEULfjCfqsH7z1m1EXpsYogRYCwTDCubewDro\",\"type\":\"PropertyValue\",\"domainValue\":\"allergies\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:OsYO97ZkWCwqJ8jUYevL0kp6lAL0lOQ1op3kbd2JJ_w\",\"type\":\"PropertyValue\",\"domainValue\":\"current-medicines\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:O3dm4RQJ3-ISuaoMNDP2pbip3cgG6R_iyzCJXZpI5EI\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:guVjgmDR_HFSr09smVFvQkxHAVegyKDB6R56MQfEwUs\"}},{\"id\":\"urn:awp:n:guVjgmDR_HFSr09smVFvQkxHAVegyKDB6R56MQfEwUs\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:7dc4ff2dbaab6ffd107f289504a596e48d303fb7cb1bfb8f3d9f0e31010abee8\",\"byteLength\":\"8694\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:dt3eOZ5Ws1ddzisSR5KQhCe0_x0diNXB63FWhQRhMTs\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:v0Mu89p0ABi2Pg3m3Sm83aF-xAXb6hxrh7l2MjfMteQ\"}},{\"id\":\"urn:awp:n:v0Mu89p0ABi2Pg3m3Sm83aF-xAXb6hxrh7l2MjfMteQ\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d265facc6f108894d25da96fbd450f664f06101646fece61dda5f0026af1e8e5\",\"byteLength\":\"15336\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:KQXyoZBk7tPc7FsIsPEpWu7OMMMEgRvOn6GeAlyfOoA\",\"@graph\":[{\"id\":\"urn:awp:n:NTEJI0i2Zu3r4XuU7cWCOrCDBX5fAR0nfbVEtp8eHvM\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlBVZ24wQUlrZ0pfZjZiWU96NzdSYWlNYngzVHRkeUx3SE1UWXhCVlVuRXciLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YTU2ZWZhMmQ1MjVlNWNkOTI2MWUwODc1NTU2NzEwNDk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4iLCJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2xpbmljaWFuLWFnZW50OmFnZW50IiwiYWN0b3JLaWQiOiJ6MGdReTdzWDdYdTRqWWpYbENpVVc1VzhqRkFKbWdmaFVQWVVvQThwMkF3Iiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6ZW1lcmdlbmN5LXJlYWQiLCJ1cm46b3A6ZHV0eS1ub3RpZmljYXRpb24iXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.5JDrJcgHwMzTLb65m0HpdXLQnXQ1S-40VkQJPqw9aKVLltRDl9U7rUcPMUEEjPStblDLqKWAxvvAMjNYSQpzAw\"}]},{\"id\":\"urn:awp:n:Yu4MNSKRobQt_nb-IXFsiRO51SLIiNZgRbFmRGK80mY\",\"@graph\":[{\"id\":\"urn:awp:n:DSZHmLiakUUZJxXkkFwgUaCMQH74yGKfcKu_7W--nyg\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlBVZ24wQUlrZ0pfZjZiWU96NzdSYWlNYngzVHRkeUx3SE1UWXhCVlVuRXciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJkZWNsYXJlZCI6ImVtZXJnZW5jeSIsImlkIjoidXJuOnNjZW5hcmlvOmVtZXJnZW5jeS1hY2Nlc3M6ZW1lcmdlbmN5IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4iLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4iLCJjbGFpbVR5cGUiOiJlbWVyZ2VuY3kuZGVjbGFyYXRpb24iLCJtZXRob2QiOiJzZWxmLXJlcG9ydGVkIiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczplbWVyZ2VuY3kiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86ZW1lcmdlbmN5LWFjY2VzczplbWVyZ2VuY3kifSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzplbWVyZ2VuY3ktYWNjZXNzOmVtZXJnZW5jeSJ9XX19fQ.atd892ehHguAd8TKD0jz4kg_zHErtsJQnpYP0mlxxsQUfj-Pd_zXKdqPUBjT5IXcPQVaWKLHZGhgT9L9d0AtCw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InowZ1F5N3NYN1h1NGpZalhsQ2lVVzVXOGpGQUptZ2ZoVVBZVW9BOHAyQXciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4tYWdlbnQ6YWdlbnQiLCJpZCI6InVybjphd3A6bjozVXY0SkNqTlZsd0U0T1pMX2Z3UlNYX3J1cTF0cmhCMk9BYml4YnJmNnQwIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6Y2xpbmljaWFuIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6cmVjb3JkLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46aE9ZVklFV2hGajVEcUNmZTJDTjBNRkpEWGdRNXBGSk9LZl9fSXJsVHNsTSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwYXRpZW50IiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjp3eW01ekRvVmlPN1hGSmVSaEZxbTI1SVlSYVVqRUplWS1jTXBDem92RllZIn0sImlkIjoidXJuOmF3cDpuOlRWU2ZvZThtbnZMSmc5ekc3ZWU5ek95YlFvYlFLVXM2R1BtV3FVbUt0X1EiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjprWjVFcXdxcjc4QUlab0NXeG9tVTFrT3JjYld6OUQwcFo3NXMxNkMzRmpBIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDplbWVyZ2VuY3ktcmVhZCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6ZW1lcmdlbmN5LWFjY2VzcyIsInR5cGUiOiJJbnZva2VCb2R5In0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46MEZ2eHpTWXFDNEtFY0dtZDNCaUNuMXI3b1N0bk9rSUloVXYyc3pSdFR6TSJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOkNEV18zUW1nQjM1SW9OMDA0ZF9QbklNLWpwSkhqa0RyYUVjUkdYT25nT2MiLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46T1FzMzdXaS1nVkNPaWlqTEpVQWNmOGkzd0tzdDhtU1Y5d0x1SlFncDZjSSJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOlFWeFl0YzEtbzdLUy1zSnZ5R0d4X2JfZVpkUnV2dDNSQ1lUN3hfc3ZKUWMiLCJwb3NpdGlvbiI6IjEiLCJyb2xlIjoiY3JlZGVudGlhbCIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOmVtZXJnZW5jeS1yZWFkIiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOmtaNUVxd3FyNzhBSVpvQ1d4b21VMWtPcmNiV3o5RDBwWjc1czE2QzNGakEiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlo5UmZ0bk1nQ3NSZjdnbUtLbFZ2SzRFUlZkRnZ1MjVSdlg2YU15VVdOVkUifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjp3eW01ekRvVmlPN1hGSmVSaEZxbTI1SVlSYVVqRUplWS1jTXBDem92RllZIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46TzNkbTRSUUozLUlTdWFvTU5EUDJwYmlwM2NnRzZSX2l5ekNKWFpwSTVFSSIsImlkIjoidXJuOmF3cDpuOjBGdnh6U1lxQzRLRWNHbWQzQmlDbjFyN29TdG5Pa0lJaFV2MnN6UnRUek0iLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6Y2xpbmljaWFuIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpLUVh5b1pCazd0UGM3RnNJc1BFcFd1N09NTU1FZ1J2T242R2VBbHlmT29BIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46ZHQzZU9aNVdzMWRkemlzU1I1S1FoQ2UwX3gwZGlOWEI2M0ZXaFFSaE1UcyIsImlkIjoidXJuOmF3cDpuOk9RczM3V2ktZ1ZDT2lpakxKVUFjZjhpM3dLc3Q4bVNWOXdMdUpRZ3A2Y0kiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmNsaW5pY2lhbiIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46WXU0TU5TS1JvYlF0X25iLUlYRnNpUk81MVNMSWlOWmdSYkZtUkdLODBtWSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46YXdwOm46MW15dVZ2MzBYYzE1a3luemV3Q0lQNWJZbU43bDVselhka0tna0VDLUI0cyJ9LCJpZCI6InVybjphd3A6bjpaOVJmdG5NZ0NzUmY3Z21LS2xWdks0RVJWZEZ2dTI1UnZYNmFNeVVXTlZFIiwibmFtZSI6Iml0ZW1zIiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOml0ZW1zIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOjFteXVWdjMwWGMxNWt5bnpld0NJUDViWW1ON2w1bHpYZGtLZ2tFQy1CNHMiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOnlVTENlVkFFVUxmakNmcXNIN3oxbTFFWHBzWW9nUllDd1REQ3ViZXdEcm8ifSx7ImlkIjoidXJuOmF3cDpuOk9zWU85N1prV0N3cUo4alVZZXZMMGtwNmxBTDBsT1Exb3Aza2JkMkpKX3cifV0sInR5cGUiOiJJdGVtTGlzdCJ9LHsiZG9tYWluVmFsdWUiOiJhbGxlcmdpZXMiLCJpZCI6InVybjphd3A6bjp5VUxDZVZBRVVMZmpDZnFzSDd6MW0xRVhwc1lvZ1JZQ3dUREN1YmV3RHJvIiwibmFtZSI6IjAiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6MCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6ImN1cnJlbnQtbWVkaWNpbmVzIiwiaWQiOiJ1cm46YXdwOm46T3NZTzk3WmtXQ3dxSjhqVVlldkwwa3A2bEFMMGxPUTFvcDNrYmQySkpfdyIsIm5hbWUiOiIxIiwicG9zaXRpb24iOiIxIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOjEiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46TzNkbTRSUUozLUlTdWFvTU5EUDJwYmlwM2NnRzZSX2l5ekNKWFpwSTVFSSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46Z3VWamdtRFJfSEZTcjA5c21WRnZRa3hIQVZlZ3lLREI2UjU2TVFmRXdVcyJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjdkYzRmZjJkYmFhYjZmZmQxMDdmMjg5NTA0YTU5NmU0OGQzMDNmYjdjYjFiZmI4ZjNkOWYwZTMxMDEwYWJlZTgiLCJieXRlTGVuZ3RoIjoiODY5NCIsImlkIjoidXJuOmF3cDpuOmd1VmpnbURSX0hGU3IwOXNtVkZ2UWt4SEFWZWd5S0RCNlI1Nk1RZkV3VXMiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJpZCI6InVybjphd3A6bjpkdDNlT1o1V3MxZGR6aXNTUjVLUWhDZTBfeDBkaU5YQjYzRldoUVJoTVRzIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjp2ME11ODlwMEFCaTJQZzNtM1NtODNhRi14QVhiNmh4cmg3bDJNamZNdGVRIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6ZDI2NWZhY2M2ZjEwODg5NGQyNWRhOTZmYmQ0NTBmNjY0ZjA2MTAxNjQ2ZmVjZTYxZGRhNWYwMDI2YWYxZThlNSIsImJ5dGVMZW5ndGgiOiIxNTMzNiIsImlkIjoidXJuOmF3cDpuOnYwTXU4OXAwQUJpMlBnM20zU204M2FGLXhBWGI2aHhyaDdsMk1qZk10ZVEiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOk5URUpJMGkyWnUzcjRYdVU3Y1dDT3JDREJYNWZBUjBuZmJWRXRwOGVIdk0iLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWxCVloyNHdRVWxyWjBwZlpqWmlXVTk2TnpkU1lXbE5Zbmd6VkhSa2VVeDNTRTFVV1hoQ1ZsVnVSWGNpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZZVFUyWldaaE1tUTFNalZsTldOa09USTJNV1V3T0RjMU5UVTJOekV3TkRrNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGpiR2x1YVdOcFlXNGlMQ0poWTNSdmNpSTZJblZ5YmpwbWFXTjBhVzl1WVd3NlkyeHBibWxqYVdGdUxXRm5aVzUwT21GblpXNTBJaXdpWVdOMGIzSkxhV1FpT2lKNk1HZFJlVGR6V0RkWWRUUnFXV3BZYkVOcFZWYzFWemhxUmtGS2JXZG1hRlZRV1ZWdlFUaHdNa0YzSWl3aWIzQmxjbUYwYVc5dWN5STZXeUoxY200NmIzQTZaVzFsY21kbGJtTjVMWEpsWVdRaUxDSjFjbTQ2YjNBNlpIVjBlUzF1YjNScFptbGpZWFJwYjI0aVhTd2lkbUZzYVdSR2NtOXRJam9pTWpBeU5pMHhNUzB4TTFRd09EbzFPVG93TUM0d01EQmFJaXdpZG1Gc2FXUlZiblJwYkNJNklqSXdNamN0TURFdE1USlVNRGs2TURBNk1EQXVNREF3V2lJc0ltbHpjM1ZsWkVGMElqb2lNakF5TmkweE1TMHhNMVF3T1Rvd01Eb3dNQzR3TURCYUluMC41SkRySmNnSHdNelRMYjY1bTBIcGRYTFFuWFExUy00MFZrUUpQcXc5YUtWTGx0UkRsOVU3clVjUE1VRUVqUFN0YmxETHFLV0F4dnZBTWpOWVNRcHpBdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOktRWHlvWkJrN3RQYzdGc0lzUEVwV3U3T01NTUVnUnZPbjZHZUFseWZPb0EifSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46RFNaSG1MaWFrVVVaSnhYa2tGd2dVYUNNUUg3NHlHS2ZjS3VfN1ctLW55ZyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEJWWjI0d1FVbHJaMHBmWmpaaVdVOTZOemRTWVdsTlluZ3pWSFJrZVV4M1NFMVVXWGhDVmxWdVJYY2lMQ0owZVhBaU9pSmhkM0F0YzNSaGRHVnRaVzUwSzJwM2N5SjkuZXlKa1pXTnNZWEpsWkNJNkltVnRaWEpuWlc1amVTSXNJbWxrSWpvaWRYSnVPbk5qWlc1aGNtbHZPbVZ0WlhKblpXNWplUzFoWTJObGMzTTZaVzFsY21kbGJtTjVJaXdpYVhOemRXVnlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGpiR2x1YVdOcFlXNGlMQ0p6ZFdKcVpXTjBJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGpiR2x1YVdOcFlXNGlMQ0pqYkdGcGJWUjVjR1VpT2lKbGJXVnlaMlZ1WTNrdVpHVmpiR0Z5WVhScGIyNGlMQ0p0WlhSb2IyUWlPaUp6Wld4bUxYSmxjRzl5ZEdWa0lpd2lZWE5QWmlJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lJc0luUmxjbTF6SWpwN0luQnZiR2xqZVNJNmV5SnBaQ0k2SW5WeWJqcDBaWEp0Y3pwbGJXVnlaMlZ1WTNraUxDSndaWEp0YVhOemFXOXVjeUk2VzNzaWRIbHdaU0k2SW5CbGNtMXBjM05wYjI0aUxDSmhZM1JwYjI0aU9pSjFjMlVpTENKMFlYSm5aWFFpT2lKMWNtNDZjMk5sYm1GeWFXODZaVzFsY21kbGJtTjVMV0ZqWTJWemN6cGxiV1Z5WjJWdVkza2lmU3g3SW5SNWNHVWlPaUp3WlhKdGFYTnphVzl1SWl3aVlXTjBhVzl1SWpvaVpHbHpkSEpwWW5WMFpTSXNJblJoY21kbGRDSTZJblZ5YmpwelkyVnVZWEpwYnpwbGJXVnlaMlZ1WTNrdFlXTmpaWE56T21WdFpYSm5aVzVqZVNKOVhYMTlmUS5hdGQ4OTJlaEhndUFkOFRLRDBqejRrZ196SEVydHNKUW5wWVAwbWx4eHNRVWZqLVBkX3pYS2RxUFVCalQ1SVhjUFFWYVdLTEhaR2hnVDlMOWQwQXRDdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOll1NE1OU0tSb2JRdF9uYi1JWEZzaVJPNTFTTElpTlpnUmJGbVJHSzgwbVkifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46VFZTZm9lOG1udkxKZzl6RzdlZTl6T3liUW9iUUtVczZHUG1XcVVtS3RfUSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3NpZ25lZC1lZDI1NTE5LzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLWVtZXJnZW5jeS1hY2Nlc3MtYnJhbmNoLTI6Y2xpbmljaWFuLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6W3siaWQiOiJ1cm46YXdwOm46Q0RXXzNRbWdCMzVJb04wMDRkX1BuSU0tanBKSGprRHJhRWNSR1hPbmdPYyJ9LHsiaWQiOiJ1cm46YXdwOm46UVZ4WXRjMS1vN0tTLXNKdnlHR3hfYl9lWmRSdXZ0M1JDWVQ3eF9zdkpRYyJ9XSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjozVXY0SkNqTlZsd0U0T1pMX2Z3UlNYX3J1cTF0cmhCMk9BYml4YnJmNnQwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtZW1lcmdlbmN5LWFjY2Vzcy1icmFuY2gtMjpjbGluaWNpYW4tYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpoT1lWSUVXaEZqNURxQ2ZlMkNOME1GSkRYZ1E1cEZKT0tmX19JcmxUc2xNIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.ANZ1r8KKjj5JEIRJevAjPtFEtq3WztIbuuhSk6ZtXdoJ6J-_2tB78rCLOn1-HXlgebacK97JH04ixEYwlKD8DQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -853,7 +988,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The clinician’s agent sends an invoke message to The patient’s record agent."
+      "caption": "The clinician’s agent sends an invoke message to The patient’s record agent.",
+      "gateRun": 1
     },
     {
       "seq": 27,
@@ -861,6 +997,7 @@
       "agent": "record-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-emergency-access-branch-2:clinician-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-emergency-access-branch-2:clinician-agent:0001\",\"from\":{\"id\":\"urn:awp:n:3Uv4JCjNVlwE4OZL_fwRSX_ruq1trhB2OAbixbrf6t0\"},\"to\":{\"id\":\"urn:awp:n:hOYVIEWhFj5DqCfe2CN0MFJDXgQ5pFJOKf__IrlTslM\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:TVSfoe8mnvLJg9zG7ee9zOybQobQKUs6GPmWqUmKt_Q\"},\"evidence\":[{\"id\":\"urn:awp:n:CDW_3QmgB35IoN004d_PnIM-jpJHjkDraEcRGXOngOc\"},{\"id\":\"urn:awp:n:QVxYtc1-o7KS-sJvyGGx_b_eZdRuvt3RCYT7x_svJQc\"}],\"@included\":[{\"id\":\"urn:awp:n:3Uv4JCjNVlwE4OZL_fwRSX_ruq1trhB2OAbixbrf6t0\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:clinician-agent:agent\",\"onBehalfOf\":\"urn:fictional:clinician\"},{\"id\":\"urn:awp:n:hOYVIEWhFj5DqCfe2CN0MFJDXgQ5pFJOKf__IrlTslM\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:record-agent:agent\",\"party\":\"urn:fictional:patient\"},{\"id\":\"urn:awp:n:TVSfoe8mnvLJg9zG7ee9zOybQobQKUs6GPmWqUmKt_Q\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:wym5zDoViO7XFJeRhFqm25IYRaUjEJeY-cMpCzovFYY\"},\"input\":{\"id\":\"urn:awp:n:kZ5Eqwqr78AIZoCWxomU1kOrcbWz9D0pZ75s16C3FjA\"},\"operation\":{\"id\":\"urn:op:emergency-read\"},\"purpose\":\"urn:purpose:emergency-access\"},{\"id\":\"urn:awp:n:CDW_3QmgB35IoN004d_PnIM-jpJHjkDraEcRGXOngOc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:0FvxzSYqC4KEcGmd3BiCn1r7oStnOkIIhUv2szRtTzM\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:QVxYtc1-o7KS-sJvyGGx_b_eZdRuvt3RCYT7x_svJQc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:OQs37Wi-gVCOiijLJUAcf8i3wKst8mSV9wLuJQgp6cI\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:op:emergency-read\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:kZ5Eqwqr78AIZoCWxomU1kOrcbWz9D0pZ75s16C3FjA\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Z9RftnMgCsRf7gmKKlVvK4ERVdFvu25RvX6aMyUWNVE\"}]},{\"id\":\"urn:awp:n:wym5zDoViO7XFJeRhFqm25IYRaUjEJeY-cMpCzovFYY\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:0FvxzSYqC4KEcGmd3BiCn1r7oStnOkIIhUv2szRtTzM\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:O3dm4RQJ3-ISuaoMNDP2pbip3cgG6R_iyzCJXZpI5EI\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:clinician\",\"proofGraph\":\"urn:awp:n:KQXyoZBk7tPc7FsIsPEpWu7OMMMEgRvOn6GeAlyfOoA\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:OQs37Wi-gVCOiijLJUAcf8i3wKst8mSV9wLuJQgp6cI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:dt3eOZ5Ws1ddzisSR5KQhCe0_x0diNXB63FWhQRhMTs\",\"issuer\":\"urn:fictional:clinician\",\"proofGraph\":\"urn:awp:n:Yu4MNSKRobQt_nb-IXFsiRO51SLIiNZgRbFmRGK80mY\"},{\"id\":\"urn:awp:n:Z9RftnMgCsRf7gmKKlVvK4ERVdFvu25RvX6aMyUWNVE\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:1myuVv30Xc15kynzewCIP5bYmN7l5lzXdkKgkEC-B4s\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:1myuVv30Xc15kynzewCIP5bYmN7l5lzXdkKgkEC-B4s\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:yULCeVAEULfjCfqsH7z1m1EXpsYogRYCwTDCubewDro\"},{\"id\":\"urn:awp:n:OsYO97ZkWCwqJ8jUYevL0kp6lAL0lOQ1op3kbd2JJ_w\"}]},{\"id\":\"urn:awp:n:yULCeVAEULfjCfqsH7z1m1EXpsYogRYCwTDCubewDro\",\"type\":\"PropertyValue\",\"domainValue\":\"allergies\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:OsYO97ZkWCwqJ8jUYevL0kp6lAL0lOQ1op3kbd2JJ_w\",\"type\":\"PropertyValue\",\"domainValue\":\"current-medicines\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:O3dm4RQJ3-ISuaoMNDP2pbip3cgG6R_iyzCJXZpI5EI\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:guVjgmDR_HFSr09smVFvQkxHAVegyKDB6R56MQfEwUs\"}},{\"id\":\"urn:awp:n:guVjgmDR_HFSr09smVFvQkxHAVegyKDB6R56MQfEwUs\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:7dc4ff2dbaab6ffd107f289504a596e48d303fb7cb1bfb8f3d9f0e31010abee8\",\"byteLength\":\"8694\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:dt3eOZ5Ws1ddzisSR5KQhCe0_x0diNXB63FWhQRhMTs\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:v0Mu89p0ABi2Pg3m3Sm83aF-xAXb6hxrh7l2MjfMteQ\"}},{\"id\":\"urn:awp:n:v0Mu89p0ABi2Pg3m3Sm83aF-xAXb6hxrh7l2MjfMteQ\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d265facc6f108894d25da96fbd450f664f06101646fece61dda5f0026af1e8e5\",\"byteLength\":\"15336\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:KQXyoZBk7tPc7FsIsPEpWu7OMMMEgRvOn6GeAlyfOoA\",\"@graph\":[{\"id\":\"urn:awp:n:NTEJI0i2Zu3r4XuU7cWCOrCDBX5fAR0nfbVEtp8eHvM\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlBVZ24wQUlrZ0pfZjZiWU96NzdSYWlNYngzVHRkeUx3SE1UWXhCVlVuRXciLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YTU2ZWZhMmQ1MjVlNWNkOTI2MWUwODc1NTU2NzEwNDk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4iLCJhY3RvciI6InVybjpmaWN0aW9uYWw6Y2xpbmljaWFuLWFnZW50OmFnZW50IiwiYWN0b3JLaWQiOiJ6MGdReTdzWDdYdTRqWWpYbENpVVc1VzhqRkFKbWdmaFVQWVVvQThwMkF3Iiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6ZW1lcmdlbmN5LXJlYWQiLCJ1cm46b3A6ZHV0eS1ub3RpZmljYXRpb24iXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.5JDrJcgHwMzTLb65m0HpdXLQnXQ1S-40VkQJPqw9aKVLltRDl9U7rUcPMUEEjPStblDLqKWAxvvAMjNYSQpzAw\"}]},{\"id\":\"urn:awp:n:Yu4MNSKRobQt_nb-IXFsiRO51SLIiNZgRbFmRGK80mY\",\"@graph\":[{\"id\":\"urn:awp:n:DSZHmLiakUUZJxXkkFwgUaCMQH74yGKfcKu_7W--nyg\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlBVZ24wQUlrZ0pfZjZiWU96NzdSYWlNYngzVHRkeUx3SE1UWXhCVlVuRXciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJkZWNsYXJlZCI6ImVtZXJnZW5jeSIsImlkIjoidXJuOnNjZW5hcmlvOmVtZXJnZW5jeS1hY2Nlc3M6ZW1lcmdlbmN5IiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4iLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4iLCJjbGFpbVR5cGUiOiJlbWVyZ2VuY3kuZGVjbGFyYXRpb24iLCJtZXRob2QiOiJzZWxmLXJlcG9ydGVkIiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczplbWVyZ2VuY3kiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86ZW1lcmdlbmN5LWFjY2VzczplbWVyZ2VuY3kifSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzplbWVyZ2VuY3ktYWNjZXNzOmVtZXJnZW5jeSJ9XX19fQ.atd892ehHguAd8TKD0jz4kg_zHErtsJQnpYP0mlxxsQUfj-Pd_zXKdqPUBjT5IXcPQVaWKLHZGhgT9L9d0AtCw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InowZ1F5N3NYN1h1NGpZalhsQ2lVVzVXOGpGQUptZ2ZoVVBZVW9BOHAyQXciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpjbGluaWNpYW4tYWdlbnQ6YWdlbnQiLCJpZCI6InVybjphd3A6bjozVXY0SkNqTlZsd0U0T1pMX2Z3UlNYX3J1cTF0cmhCMk9BYml4YnJmNnQwIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6Y2xpbmljaWFuIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6cmVjb3JkLWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46aE9ZVklFV2hGajVEcUNmZTJDTjBNRkpEWGdRNXBGSk9LZl9fSXJsVHNsTSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpwYXRpZW50IiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjp3eW01ekRvVmlPN1hGSmVSaEZxbTI1SVlSYVVqRUplWS1jTXBDem92RllZIn0sImlkIjoidXJuOmF3cDpuOlRWU2ZvZThtbnZMSmc5ekc3ZWU5ek95YlFvYlFLVXM2R1BtV3FVbUt0X1EiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjprWjVFcXdxcjc4QUlab0NXeG9tVTFrT3JjYld6OUQwcFo3NXMxNkMzRmpBIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDplbWVyZ2VuY3ktcmVhZCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6ZW1lcmdlbmN5LWFjY2VzcyIsInR5cGUiOiJJbnZva2VCb2R5In0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46MEZ2eHpTWXFDNEtFY0dtZDNCaUNuMXI3b1N0bk9rSUloVXYyc3pSdFR6TSJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOkNEV18zUW1nQjM1SW9OMDA0ZF9QbklNLWpwSkhqa0RyYUVjUkdYT25nT2MiLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46T1FzMzdXaS1nVkNPaWlqTEpVQWNmOGkzd0tzdDhtU1Y5d0x1SlFncDZjSSJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOlFWeFl0YzEtbzdLUy1zSnZ5R0d4X2JfZVpkUnV2dDNSQ1lUN3hfc3ZKUWMiLCJwb3NpdGlvbiI6IjEiLCJyb2xlIjoiY3JlZGVudGlhbCIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOmVtZXJnZW5jeS1yZWFkIiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOmtaNUVxd3FyNzhBSVpvQ1d4b21VMWtPcmNiV3o5RDBwWjc1czE2QzNGakEiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlo5UmZ0bk1nQ3NSZjdnbUtLbFZ2SzRFUlZkRnZ1MjVSdlg2YU15VVdOVkUifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjp3eW01ekRvVmlPN1hGSmVSaEZxbTI1SVlSYVVqRUplWS1jTXBDem92RllZIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46TzNkbTRSUUozLUlTdWFvTU5EUDJwYmlwM2NnRzZSX2l5ekNKWFpwSTVFSSIsImlkIjoidXJuOmF3cDpuOjBGdnh6U1lxQzRLRWNHbWQzQmlDbjFyN29TdG5Pa0lJaFV2MnN6UnRUek0iLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6Y2xpbmljaWFuIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpLUVh5b1pCazd0UGM3RnNJc1BFcFd1N09NTU1FZ1J2T242R2VBbHlmT29BIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46ZHQzZU9aNVdzMWRkemlzU1I1S1FoQ2UwX3gwZGlOWEI2M0ZXaFFSaE1UcyIsImlkIjoidXJuOmF3cDpuOk9RczM3V2ktZ1ZDT2lpakxKVUFjZjhpM3dLc3Q4bVNWOXdMdUpRZ3A2Y0kiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmNsaW5pY2lhbiIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46WXU0TU5TS1JvYlF0X25iLUlYRnNpUk81MVNMSWlOWmdSYkZtUkdLODBtWSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46YXdwOm46MW15dVZ2MzBYYzE1a3luemV3Q0lQNWJZbU43bDVselhka0tna0VDLUI0cyJ9LCJpZCI6InVybjphd3A6bjpaOVJmdG5NZ0NzUmY3Z21LS2xWdks0RVJWZEZ2dTI1UnZYNmFNeVVXTlZFIiwibmFtZSI6Iml0ZW1zIiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOml0ZW1zIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOjFteXVWdjMwWGMxNWt5bnpld0NJUDViWW1ON2w1bHpYZGtLZ2tFQy1CNHMiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOnlVTENlVkFFVUxmakNmcXNIN3oxbTFFWHBzWW9nUllDd1REQ3ViZXdEcm8ifSx7ImlkIjoidXJuOmF3cDpuOk9zWU85N1prV0N3cUo4alVZZXZMMGtwNmxBTDBsT1Exb3Aza2JkMkpKX3cifV0sInR5cGUiOiJJdGVtTGlzdCJ9LHsiZG9tYWluVmFsdWUiOiJhbGxlcmdpZXMiLCJpZCI6InVybjphd3A6bjp5VUxDZVZBRVVMZmpDZnFzSDd6MW0xRVhwc1lvZ1JZQ3dUREN1YmV3RHJvIiwibmFtZSI6IjAiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6MCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6ImN1cnJlbnQtbWVkaWNpbmVzIiwiaWQiOiJ1cm46YXdwOm46T3NZTzk3WmtXQ3dxSjhqVVlldkwwa3A2bEFMMGxPUTFvcDNrYmQySkpfdyIsIm5hbWUiOiIxIiwicG9zaXRpb24iOiIxIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOjEiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46TzNkbTRSUUozLUlTdWFvTU5EUDJwYmlwM2NnRzZSX2l5ekNKWFpwSTVFSSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46Z3VWamdtRFJfSEZTcjA5c21WRnZRa3hIQVZlZ3lLREI2UjU2TVFmRXdVcyJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjdkYzRmZjJkYmFhYjZmZmQxMDdmMjg5NTA0YTU5NmU0OGQzMDNmYjdjYjFiZmI4ZjNkOWYwZTMxMDEwYWJlZTgiLCJieXRlTGVuZ3RoIjoiODY5NCIsImlkIjoidXJuOmF3cDpuOmd1VmpnbURSX0hGU3IwOXNtVkZ2UWt4SEFWZWd5S0RCNlI1Nk1RZkV3VXMiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJpZCI6InVybjphd3A6bjpkdDNlT1o1V3MxZGR6aXNTUjVLUWhDZTBfeDBkaU5YQjYzRldoUVJoTVRzIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjp2ME11ODlwMEFCaTJQZzNtM1NtODNhRi14QVhiNmh4cmg3bDJNamZNdGVRIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6ZDI2NWZhY2M2ZjEwODg5NGQyNWRhOTZmYmQ0NTBmNjY0ZjA2MTAxNjQ2ZmVjZTYxZGRhNWYwMDI2YWYxZThlNSIsImJ5dGVMZW5ndGgiOiIxNTMzNiIsImlkIjoidXJuOmF3cDpuOnYwTXU4OXAwQUJpMlBnM20zU204M2FGLXhBWGI2aHhyaDdsMk1qZk10ZVEiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOk5URUpJMGkyWnUzcjRYdVU3Y1dDT3JDREJYNWZBUjBuZmJWRXRwOGVIdk0iLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWxCVloyNHdRVWxyWjBwZlpqWmlXVTk2TnpkU1lXbE5Zbmd6VkhSa2VVeDNTRTFVV1hoQ1ZsVnVSWGNpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZZVFUyWldaaE1tUTFNalZsTldOa09USTJNV1V3T0RjMU5UVTJOekV3TkRrNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGpiR2x1YVdOcFlXNGlMQ0poWTNSdmNpSTZJblZ5YmpwbWFXTjBhVzl1WVd3NlkyeHBibWxqYVdGdUxXRm5aVzUwT21GblpXNTBJaXdpWVdOMGIzSkxhV1FpT2lKNk1HZFJlVGR6V0RkWWRUUnFXV3BZYkVOcFZWYzFWemhxUmtGS2JXZG1hRlZRV1ZWdlFUaHdNa0YzSWl3aWIzQmxjbUYwYVc5dWN5STZXeUoxY200NmIzQTZaVzFsY21kbGJtTjVMWEpsWVdRaUxDSjFjbTQ2YjNBNlpIVjBlUzF1YjNScFptbGpZWFJwYjI0aVhTd2lkbUZzYVdSR2NtOXRJam9pTWpBeU5pMHhNUzB4TTFRd09EbzFPVG93TUM0d01EQmFJaXdpZG1Gc2FXUlZiblJwYkNJNklqSXdNamN0TURFdE1USlVNRGs2TURBNk1EQXVNREF3V2lJc0ltbHpjM1ZsWkVGMElqb2lNakF5TmkweE1TMHhNMVF3T1Rvd01Eb3dNQzR3TURCYUluMC41SkRySmNnSHdNelRMYjY1bTBIcGRYTFFuWFExUy00MFZrUUpQcXc5YUtWTGx0UkRsOVU3clVjUE1VRUVqUFN0YmxETHFLV0F4dnZBTWpOWVNRcHpBdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOktRWHlvWkJrN3RQYzdGc0lzUEVwV3U3T01NTUVnUnZPbjZHZUFseWZPb0EifSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46RFNaSG1MaWFrVVVaSnhYa2tGd2dVYUNNUUg3NHlHS2ZjS3VfN1ctLW55ZyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEJWWjI0d1FVbHJaMHBmWmpaaVdVOTZOemRTWVdsTlluZ3pWSFJrZVV4M1NFMVVXWGhDVmxWdVJYY2lMQ0owZVhBaU9pSmhkM0F0YzNSaGRHVnRaVzUwSzJwM2N5SjkuZXlKa1pXTnNZWEpsWkNJNkltVnRaWEpuWlc1amVTSXNJbWxrSWpvaWRYSnVPbk5qWlc1aGNtbHZPbVZ0WlhKblpXNWplUzFoWTJObGMzTTZaVzFsY21kbGJtTjVJaXdpYVhOemRXVnlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGpiR2x1YVdOcFlXNGlMQ0p6ZFdKcVpXTjBJam9pZFhKdU9tWnBZM1JwYjI1aGJEcGpiR2x1YVdOcFlXNGlMQ0pqYkdGcGJWUjVjR1VpT2lKbGJXVnlaMlZ1WTNrdVpHVmpiR0Z5WVhScGIyNGlMQ0p0WlhSb2IyUWlPaUp6Wld4bUxYSmxjRzl5ZEdWa0lpd2lZWE5QWmlJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lJc0luUmxjbTF6SWpwN0luQnZiR2xqZVNJNmV5SnBaQ0k2SW5WeWJqcDBaWEp0Y3pwbGJXVnlaMlZ1WTNraUxDSndaWEp0YVhOemFXOXVjeUk2VzNzaWRIbHdaU0k2SW5CbGNtMXBjM05wYjI0aUxDSmhZM1JwYjI0aU9pSjFjMlVpTENKMFlYSm5aWFFpT2lKMWNtNDZjMk5sYm1GeWFXODZaVzFsY21kbGJtTjVMV0ZqWTJWemN6cGxiV1Z5WjJWdVkza2lmU3g3SW5SNWNHVWlPaUp3WlhKdGFYTnphVzl1SWl3aVlXTjBhVzl1SWpvaVpHbHpkSEpwWW5WMFpTSXNJblJoY21kbGRDSTZJblZ5YmpwelkyVnVZWEpwYnpwbGJXVnlaMlZ1WTNrdFlXTmpaWE56T21WdFpYSm5aVzVqZVNKOVhYMTlmUS5hdGQ4OTJlaEhndUFkOFRLRDBqejRrZ196SEVydHNKUW5wWVAwbWx4eHNRVWZqLVBkX3pYS2RxUFVCalQ1SVhjUFFWYVdLTEhaR2hnVDlMOWQwQXRDdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOll1NE1OU0tSb2JRdF9uYi1JWEZzaVJPNTFTTElpTlpnUmJGbVJHSzgwbVkifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46VFZTZm9lOG1udkxKZzl6RzdlZTl6T3liUW9iUUtVczZHUG1XcVVtS3RfUSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3NpZ25lZC1lZDI1NTE5LzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLWVtZXJnZW5jeS1hY2Nlc3MtYnJhbmNoLTI6Y2xpbmljaWFuLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6W3siaWQiOiJ1cm46YXdwOm46Q0RXXzNRbWdCMzVJb04wMDRkX1BuSU0tanBKSGprRHJhRWNSR1hPbmdPYyJ9LHsiaWQiOiJ1cm46YXdwOm46UVZ4WXRjMS1vN0tTLXNKdnlHR3hfYl9lWmRSdXZ0M1JDWVQ3eF9zdkpRYyJ9XSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjozVXY0SkNqTlZsd0U0T1pMX2Z3UlNYX3J1cTF0cmhCMk9BYml4YnJmNnQwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtZW1lcmdlbmN5LWFjY2Vzcy1icmFuY2gtMjpjbGluaWNpYW4tYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpoT1lWSUVXaEZqNURxQ2ZlMkNOME1GSkRYZ1E1cEZKT0tmX19JcmxUc2xNIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.ANZ1r8KKjj5JEIRJevAjPtFEtq3WztIbuuhSk6ZtXdoJ6J-_2tB78rCLOn1-HXlgebacK97JH04ixEYwlKD8DQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1037,7 +1174,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The clinician’s agent reaches the inbound gate."
+      "caption": "An invoke message from The clinician’s agent reaches the inbound gate.",
+      "gateRun": 2
     },
     {
       "seq": 28,
@@ -1064,7 +1202,8 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The clinician’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The clinician’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
     },
     {
       "seq": 29,
@@ -1102,7 +1241,8 @@
         ],
         "answer": "Accepted, for emergency declaration claims only."
       },
-      "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim."
+      "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 30,
@@ -1124,7 +1264,8 @@
         "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
         "text": "A representation statement signed with The clinician's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The clinician signed a statement that The clinician’s agent acts for them in this operation."
+      "caption": "The clinician signed a statement that The clinician’s agent acts for them in this operation.",
+      "gateRun": 2
     },
     {
       "seq": 31,
@@ -1151,7 +1292,8 @@
         "id": "urn:terms:emergency",
         "text": "Its terms allow this: ."
       },
-      "caption": "The clinician's emergency declaration statement: its terms allow this: ."
+      "caption": "The clinician's emergency declaration statement: its terms allow this: .",
+      "gateRun": 2
     },
     {
       "seq": 32,
@@ -1183,7 +1325,8 @@
         "id": "urn:profile:emergency-access:emergency.declaration",
         "text": "Accept emergency declaration from The clinician by self-reported, at most 1 days old."
       },
-      "caption": "The clinician's emergency declaration statement is fit for the unlabelled resource: self-reported, 0 days old."
+      "caption": "The clinician's emergency declaration statement is fit for the unlabelled resource: self-reported, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 33,
@@ -1193,7 +1336,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
+      "messageDigest": "sha-256:2835911278d8476d5fda9d2122766e521d5d1c926e38c8c74e5cc0f02ea25403",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2
     },
     {
       "seq": 34,
@@ -1239,7 +1385,8 @@
         }
       ],
       "reason": "source-unknown",
-      "caption": "No current admitted professional-register role for the authenticated requester."
+      "caption": "No current admitted professional-register role for the authenticated requester.",
+      "gateRun": 3
     },
     {
       "seq": 36,
@@ -1253,6 +1400,16 @@
       "seq": 37,
       "step": 5,
       "agent": "record-agent",
+      "actionDigest": "sha-256:fa45ad0b980f5e75cd04ab236ec077ed890fd9378b38654df39a3ee0ce2b392d",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:clinician",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1274,18 +1431,30 @@
         "id": "urn:awp:mandate:52b76acca7332ca12262f6e32ee71914:emergency-access",
         "text": "No rule in The patient's mandate lets the agent read the unlabelled resource with The clinician for Emergency access (source-unknown)."
       },
-      "caption": "The patient's mandate does not allow this: read the unlabelled resource with The clinician."
+      "caption": "The patient's mandate does not allow this: read the unlabelled resource with The clinician.",
+      "gateRun": 1
     },
     {
       "seq": 38,
       "step": 5,
       "agent": "record-agent",
+      "actionDigest": "sha-256:fa45ad0b980f5e75cd04ab236ec077ed890fd9378b38654df39a3ee0ce2b392d",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:emergency-read",
+        "operation": "urn:op:emergency-read",
+        "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
+        "recipient": "urn:fictional:clinician",
+        "purpose": "urn:purpose:emergency-access",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "source-unknown",
-      "caption": "The action is stopped; nothing leaves."
+      "caption": "The action is stopped; nothing leaves.",
+      "gateRun": 1
     }
   ]
 }

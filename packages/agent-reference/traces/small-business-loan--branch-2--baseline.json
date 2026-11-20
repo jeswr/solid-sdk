@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -122,7 +122,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The accounting platform's business accounts statement is intact and signed with The accounting platform's pinned key."
+      "caption": "The accounting platform's business accounts statement is intact and signed with The accounting platform's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -160,7 +161,8 @@
         ],
         "answer": "Accepted, for business accounts claims only."
       },
-      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim."
+      "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -178,7 +180,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The accounting platform's business accounts statement asks for nothing, so there is no authority to check."
+      "caption": "The accounting platform's business accounts statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -205,7 +208,8 @@
         "id": "urn:terms:small-business-loan:accounts",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -237,7 +241,8 @@
         "id": "urn:profile:small-business-loan:business.accounts",
         "text": "Accept business accounts from The accounting platform by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The accounting platform's business accounts statement was not produced in a way A loan for a small company accepts."
+      "caption": "The accounting platform's business accounts statement was not produced in a way A loan for a small company accepts.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -249,6 +254,7 @@
       "outcome": "ask-more",
       "reason": "method-not-accepted",
       "caption": "Required claim: business accounts. Accepted sources: The accounting platform. Accepted methods: recorded-by-authority.",
+      "gateRun": 1,
       "refs": [
         {
           "layer": "meaning",
@@ -278,7 +284,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional tax authority's business tax filing statement is intact and signed with The fictional tax authority's pinned key."
+      "caption": "The fictional tax authority's business tax filing statement is intact and signed with The fictional tax authority's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 8,
@@ -316,7 +323,8 @@
         ],
         "answer": "Accepted, for business tax filing claims only."
       },
-      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim."
+      "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -334,7 +342,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional tax authority's business tax filing statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional tax authority's business tax filing statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -361,7 +370,8 @@
         "id": "urn:terms:small-business-loan:tax-filing",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -393,7 +403,8 @@
         "id": "urn:profile:small-business-loan:business.tax-filing",
         "text": "Accept business tax filing from The fictional tax authority by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional tax authority's business tax filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The fictional tax authority's business tax filing statement is fit for A loan for a small company: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -403,7 +414,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional tax authority's business tax filing statement is admitted."
+      "caption": "The fictional tax authority's business tax filing statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -449,7 +461,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The company register's organization role statement is intact and signed with The company register's pinned key."
+      "caption": "The company register's organization role statement is intact and signed with The company register's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 15,
@@ -487,7 +500,8 @@
         ],
         "answer": "Accepted, for organization role claims only."
       },
-      "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim."
+      "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -505,7 +519,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The company register's organization role statement asks for nothing, so there is no authority to check."
+      "caption": "The company register's organization role statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -532,7 +547,8 @@
         "id": "urn:terms:small-business-loan:director-role",
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
-      "caption": "The company register's organization role statement: its terms allow this: use for Small business loan; share for Small business loan."
+      "caption": "The company register's organization role statement: its terms allow this: use for Small business loan; share for Small business loan.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -564,7 +580,8 @@
         "id": "urn:profile:small-business-loan:organization.role",
         "text": "Accept organization role from The company register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The company register's organization role statement is fit for A loan for a small company: recorded-by-authority, 0 days old."
+      "caption": "The company register's organization role statement is fit for A loan for a small company: recorded-by-authority, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -574,7 +591,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The company register's organization role statement is admitted."
+      "caption": "The company register's organization role statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -611,6 +629,16 @@
       "seq": 22,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:92b8b4995405a7bb975be96f0fc15081a7b373e5ae8301a7b9e22e22e2b76ec1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -632,12 +660,23 @@
         "text": "The company's mandate lets the agent use A loan for a small company, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The company's mandate covers this action."
+      "caption": "The company's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 23,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:92b8b4995405a7bb975be96f0fc15081a7b373e5ae8301a7b9e22e22e2b76ec1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -650,18 +689,30 @@
         }
       ],
       "reason": "method-not-accepted",
-      "caption": "Required business accounts was refused: method-not-accepted."
+      "caption": "Required business accounts was refused: method-not-accepted.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:92b8b4995405a7bb975be96f0fc15081a7b373e5ae8301a7b9e22e22e2b76ec1",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:small-business-loan",
+        "operation": "urn:op:small-business-loan",
+        "conversation": "urn:awp:engine-small-business-loan-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:small-business-loan:receiver",
+        "purpose": "urn:purpose:small-business-loan",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "method-not-accepted",
-      "caption": "A refused source cannot authorize the action."
+      "caption": "A refused source cannot authorize the action.",
+      "gateRun": 1
     }
   ]
 }

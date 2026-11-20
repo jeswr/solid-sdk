@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -116,7 +116,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The employer's benefit income statement is intact and signed with The employer's pinned key."
+      "caption": "The employer's benefit income statement is intact and signed with The employer's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -154,7 +155,8 @@
         ],
         "answer": "Accepted, for benefit income claims only."
       },
-      "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim."
+      "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -172,7 +174,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The employer's benefit income statement asks for nothing, so there is no authority to check."
+      "caption": "The employer's benefit income statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -199,7 +202,8 @@
         "id": "urn:terms:benefit-claim:income",
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim."
+      "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -231,7 +235,8 @@
         "id": "urn:profile:benefit-claim:benefit.income",
         "text": "Accept benefit income from The employer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The employer's benefit income statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
+      "caption": "The employer's benefit income statement is fit for Claiming a benefit: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -241,7 +246,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The employer's benefit income statement is admitted."
+      "caption": "The employer's benefit income statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -287,7 +293,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The landlord's benefit rent statement is intact and signed with The landlord's pinned key."
+      "caption": "The landlord's benefit rent statement is intact and signed with The landlord's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -325,7 +332,8 @@
         ],
         "answer": "Accepted, for benefit rent claims only."
       },
-      "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim."
+      "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -343,7 +351,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The landlord's benefit rent statement asks for nothing, so there is no authority to check."
+      "caption": "The landlord's benefit rent statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -370,7 +379,8 @@
         "id": "urn:terms:benefit-claim:rent",
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The landlord's benefit rent statement: its terms allow this: use for Benefit claim; share for Benefit claim."
+      "caption": "The landlord's benefit rent statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -402,7 +412,8 @@
         "id": "urn:profile:benefit-claim:benefit.rent",
         "text": "Accept benefit rent from The landlord by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The landlord's benefit rent statement is fit for Claiming a benefit: recorded-by-authority, 0 days old."
+      "caption": "The landlord's benefit rent statement is fit for Claiming a benefit: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -412,7 +423,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The landlord's benefit rent statement is admitted."
+      "caption": "The landlord's benefit rent statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -458,7 +470,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The household register's benefit household statement is intact and signed with The household register's pinned key."
+      "caption": "The household register's benefit household statement is intact and signed with The household register's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -496,7 +509,8 @@
         ],
         "answer": "Accepted, for benefit household claims only."
       },
-      "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim."
+      "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -514,7 +528,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The household register's benefit household statement asks for nothing, so there is no authority to check."
+      "caption": "The household register's benefit household statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -541,7 +556,8 @@
         "id": "urn:terms:benefit-claim:household",
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
-      "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim."
+      "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -573,7 +589,8 @@
         "id": "urn:profile:benefit-claim:benefit.household",
         "text": "Accept benefit household from The household register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The household register's benefit household statement was not produced in a way Claiming a benefit accepts."
+      "caption": "The household register's benefit household statement was not produced in a way Claiming a benefit accepts.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -585,6 +602,7 @@
       "outcome": "ask-more",
       "reason": "method-not-accepted",
       "caption": "Required claim: benefit household. Accepted sources: The household register. Accepted methods: recorded-by-authority.",
+      "gateRun": 3,
       "refs": [
         {
           "layer": "meaning",
@@ -605,6 +623,16 @@
       "seq": 22,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -622,12 +650,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The benefits office's mandate covers this action."
+      "caption": "The benefits office's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 23,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -656,12 +695,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The claimant: Accepted, for Request the needed information only."
+      "caption": "The claimant: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -674,12 +724,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -692,12 +753,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -710,12 +782,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The benefits office's limits."
+      "caption": "Inside what the agent may do on its own, and within The benefits office's limits.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -728,12 +811,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -755,24 +849,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The benefits office’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The benefits office’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The claimant’s agent."
+      "messageId": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:48a66aa026225e4295d309e4747715c2b4dabdd2f77c2f26b59683d9e4a7b02b",
+      "caption": "The invoke message goes to The claimant’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:bc579da13b8ee3517b5db3941f9c5d3146ab1f0330182610847c975f9c471387",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:benefit-claim:request",
+        "operation": "urn:op:benefit-claim:request",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:owner",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\"},\"to\":{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\"},\"evidence\":{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\"},\"@included\":[{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:benefit-claim:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:benefit-claim:receiver\"},{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:benefit-claim:owner-agent:actor\",\"party\":\"urn:fictional:benefit-claim:owner\"},{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\"},\"input\":{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\"},\"operation\":{\"id\":\"urn:op:benefit-claim:request\"},\"purpose\":\"urn:purpose:benefit-claim\"},{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:benefit-claim:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\"}]},{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:benefit-claim:receiver\",\"proofGraph\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\",\"type\":\"PropertyValue\",\"domainValue\":\"benefit.income\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\"}},{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9\",\"byteLength\":\"8723\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"@graph\":[{\"id\":\"urn:awp:n:89U_ruJDXqM9FQP7N7k24tzxiWPA6_g8T4YebvyTMw4\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YWYzODA5NGZkZTQxMzEwNzZmNjZmYTg4Y2MzNTc1Mzk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpiZW5lZml0LWNsYWltIiwidXJuOm9wOmJlbmVmaXQtY2xhaW06cmVxdWVzdCJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.M_gAqi-H8ODTX9SNWJlbrjOfpbCewxhgZHsQskLidpKc_be0s9U_VMX84uOfjEKUdT3Rh5aOmw3foUWJIdQCDQ\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46UGJpWVBMeVBjM2ExQzczUG1JYm10OUtSdGhLTXpIaWQ0dXdHNVNvQWh2VSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIn0sImlkIjoidXJuOmF3cDpuOm50RjVPU3B6Q21sRTYta1otMDJnRnRPRVAzV2t6a2JOdFBPVVh5OUJwWjgiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUTGxoaEJ3QlV1bzRQVV9ndmptUDhJYzh0dm5MMm02NUN1emJkUXFqZHo0In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpiZW5lZml0LWNsYWltOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmJlbmVmaXQtY2xhaW0iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpOcDlHN19xNEF1QXJzdjNkZ0dYM2hfOG1HZHFNVmFRYlZiNHJOeHctOHZvIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YmVuZWZpdC1jbGFpbTpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRMbGhoQndCVXVvNFBVX2d2am1QOEljOHR2bkwybTY1Q3V6YmRRcWpkejQiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlJsY25ucEJJVVVBb3FNazFvbVR5em1LVTV1SjdFNlVsVnBZSjBtd0I5WDQifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46S2VRSlNpT21KdjA2NmY4T0QwSDh1YVdkaHpOOGxkdHFQNi1CdHdkc1U0dyIsImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YmVuZWZpdC1jbGFpbTpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiYmVuZWZpdC5pbmNvbWUiLCJpZCI6InVybjphd3A6bjpSbGNubnBCSVVVQW9xTWsxb21UeXptS1U1dUo3RTZVbFZwWUowbXdCOVg0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpLZVFKU2lPbUp2MDY2ZjhPRDBIOHVhV2Roek44bGR0cVA2LUJ0d2RzVTR3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpZTDNLTUFrY1ZEZExPT0dYdEFRNXlCT3BSbERvd3U2NUdOeVZvYU5xbXZVIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YjkzOWU5ZmY0ZmM0NDEwZjVjZjgyZTUxYmFiZTUyYzAwM2I0MjJkNWMzYmI5NzUyOGEyMjg3ZjY1MjRlNTdjOSIsImJ5dGVMZW5ndGgiOiI4NzIzIiwiaWQiOiJ1cm46YXdwOm46WUwzS01Ba2NWRGRMT09HWHRBUTV5Qk9wUmxEb3d1NjVHTnlWb2FOcW12VSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46ODlVX3J1SkRYcU05RlFQN043azI0dHp4aVdQQTZfZzhUNFllYnZ5VE13NCIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NllXWXpPREE1Tkdaa1pUUXhNekV3TnpabU5qWm1ZVGc0WTJNek5UYzFNems2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaVpXNWxabWwwTFdOc1lXbHRPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tSmxibVZtYVhRdFkyeGhhVzA2Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwaVpXNWxabWwwTFdOc1lXbHRJaXdpZFhKdU9tOXdPbUpsYm1WbWFYUXRZMnhoYVcwNmNtVnhkV1Z6ZENKZExDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aWFYTnpkV1ZrUVhRaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaWZRLk1fZ0FxaS1IOE9EVFg5U05XSmxicmpPZnBiQ2V3eGhnWkhzUXNrTGlkcEtjX2JlMHM5VV9WTVg4NHVPZmpFS1VkVDNSaDVhT213M2ZvVVdKSWRRQ0RRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpudEY1T1NwekNtbEU2LWtaLTAyZ0Z0T0VQM1dremtiTnRQT1VYeTlCcFo4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYmVuZWZpdC1jbGFpbS1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46TnA5RzdfcTRBdUFyc3YzZGdHWDNoXzhtR2RxTVZhUWJWYjRyTnh3LTh2byJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlBiaVlQTHlQYzNhMUM3M1BtSWJtdDlLUnRoS016SGlkNHV3RzVTb0FodlUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1iZW5lZml0LWNsYWltLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.vkwu7dpvok03xMbf8o8At22NMUU-MoEODFheG3CH-dGZRkTcfj-oYYKCrfLba9u5XARopL6NAicC7jLN2Dp4Ag\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -894,7 +1013,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The benefits office’s agent sends an invoke message to The claimant’s agent."
+      "caption": "The benefits office’s agent sends an invoke message to The claimant’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 31,
@@ -902,6 +1022,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-benefit-claim-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\"},\"to\":{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\"},\"evidence\":{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\"},\"@included\":[{\"id\":\"urn:awp:n:PbiYPLyPc3a1C73PmIbmt9KRthKMzHid4uwG5SoAhvU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:benefit-claim:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:benefit-claim:receiver\"},{\"id\":\"urn:awp:n:fIB1DdW01ZEzwz4c4adpGjUV1rIgPqFRip_XyVE1W0I\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:benefit-claim:owner-agent:actor\",\"party\":\"urn:fictional:benefit-claim:owner\"},{\"id\":\"urn:awp:n:ntF5OSpzCmlE6-kZ-02gFtOEP3WkzkbNtPOUXy9BpZ8\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\"},\"input\":{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\"},\"operation\":{\"id\":\"urn:op:benefit-claim:request\"},\"purpose\":\"urn:purpose:benefit-claim\"},{\"id\":\"urn:awp:n:Np9G7_q4AuArsv3dgGX3h_8mGdqMVaQbVb4rNxw-8vo\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:benefit-claim:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TLlhhBwBUuo4PU_gvjmP8Ic8tvnL2m65CuzbdQqjdz4\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\"}]},{\"id\":\"urn:awp:n:p7JIgBbS8oR7-NFKBfWuH9M-c6P2lnRyb6OrKMdTF3A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:oPqUaDm9e_-sMHhXmYLn-XjRxKTw_GKoMvDLDRSYGO8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:benefit-claim:receiver\",\"proofGraph\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:RlcnnpBIUUAoqMk1omTyzmKU5uJ7E6UlVpYJ0mwB9X4\",\"type\":\"PropertyValue\",\"domainValue\":\"benefit.income\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:KeQJSiOmJv066f8OD0H8uaWdhzN8ldtqP6-BtwdsU4w\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\"}},{\"id\":\"urn:awp:n:YL3KMAkcVDdLOOGXtAQ5yBOpRlDowu65GNyVoaNqmvU\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:b939e9ff4fc4410f5cf82e51babe52c003b422d5c3bb97528a2287f6524e57c9\",\"byteLength\":\"8723\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:tcRdAuMUaNEtFU1SWShl3GagJult7SzzAMYvVQE9me8\",\"@graph\":[{\"id\":\"urn:awp:n:89U_ruJDXqM9FQP7N7k24tzxiWPA6_g8T4YebvyTMw4\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246YWYzODA5NGZkZTQxMzEwNzZmNjZmYTg4Y2MzNTc1Mzk6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpiZW5lZml0LWNsYWltIiwidXJuOm9wOmJlbmVmaXQtY2xhaW06cmVxdWVzdCJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.M_gAqi-H8ODTX9SNWJlbrjOfpbCewxhgZHsQskLidpKc_be0s9U_VMX84uOfjEKUdT3Rh5aOmw3foUWJIdQCDQ\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46UGJpWVBMeVBjM2ExQzczUG1JYm10OUtSdGhLTXpIaWQ0dXdHNVNvQWh2VSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmJlbmVmaXQtY2xhaW06cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpiZW5lZml0LWNsYWltOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIn0sImlkIjoidXJuOmF3cDpuOm50RjVPU3B6Q21sRTYta1otMDJnRnRPRVAzV2t6a2JOdFBPVVh5OUJwWjgiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUTGxoaEJ3QlV1bzRQVV9ndmptUDhJYzh0dm5MMm02NUN1emJkUXFqZHo0In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpiZW5lZml0LWNsYWltOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmJlbmVmaXQtY2xhaW0iLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpOcDlHN19xNEF1QXJzdjNkZ0dYM2hfOG1HZHFNVmFRYlZiNHJOeHctOHZvIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YmVuZWZpdC1jbGFpbTpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRMbGhoQndCVXVvNFBVX2d2am1QOEljOHR2bkwybTY1Q3V6YmRRcWpkejQiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlJsY25ucEJJVVVBb3FNazFvbVR5em1LVTV1SjdFNlVsVnBZSjBtd0I5WDQifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpwN0pJZ0JiUzhvUjctTkZLQmZXdUg5TS1jNlAybG5SeWI2T3JLTWRURjNBIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46S2VRSlNpT21KdjA2NmY4T0QwSDh1YVdkaHpOOGxkdHFQNi1CdHdkc1U0dyIsImlkIjoidXJuOmF3cDpuOm9QcVVhRG05ZV8tc01IaFhtWUxuLVhqUnhLVHdfR0tvTXZETERSU1lHTzgiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YmVuZWZpdC1jbGFpbTpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiYmVuZWZpdC5pbmNvbWUiLCJpZCI6InVybjphd3A6bjpSbGNubnBCSVVVQW9xTWsxb21UeXptS1U1dUo3RTZVbFZwWUowbXdCOVg0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpLZVFKU2lPbUp2MDY2ZjhPRDBIOHVhV2Roek44bGR0cVA2LUJ0d2RzVTR3Iiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpZTDNLTUFrY1ZEZExPT0dYdEFRNXlCT3BSbERvd3U2NUdOeVZvYU5xbXZVIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YjkzOWU5ZmY0ZmM0NDEwZjVjZjgyZTUxYmFiZTUyYzAwM2I0MjJkNWMzYmI5NzUyOGEyMjg3ZjY1MjRlNTdjOSIsImJ5dGVMZW5ndGgiOiI4NzIzIiwiaWQiOiJ1cm46YXdwOm46WUwzS01Ba2NWRGRMT09HWHRBUTV5Qk9wUmxEb3d1NjVHTnlWb2FOcW12VSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46ODlVX3J1SkRYcU05RlFQN043azI0dHp4aVdQQTZfZzhUNFllYnZ5VE13NCIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NllXWXpPREE1Tkdaa1pUUXhNekV3TnpabU5qWm1ZVGc0WTJNek5UYzFNems2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaVpXNWxabWwwTFdOc1lXbHRPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tSmxibVZtYVhRdFkyeGhhVzA2Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwaVpXNWxabWwwTFdOc1lXbHRJaXdpZFhKdU9tOXdPbUpsYm1WbWFYUXRZMnhoYVcwNmNtVnhkV1Z6ZENKZExDSjJZV3hwWkVaeWIyMGlPaUl5TURJMkxURXhMVEV6VkRBNE9qVTVPakF3TGpBd01Gb2lMQ0oyWVd4cFpGVnVkR2xzSWpvaU1qQXlOeTB3TVMweE1sUXdPVG93TURvd01DNHdNREJhSWl3aWFYTnpkV1ZrUVhRaU9pSXlNREkyTFRFeExURXpWREE1T2pBd09qQXdMakF3TUZvaWZRLk1fZ0FxaS1IOE9EVFg5U05XSmxicmpPZnBiQ2V3eGhnWkhzUXNrTGlkcEtjX2JlMHM5VV9WTVg4NHVPZmpFS1VkVDNSaDVhT213M2ZvVVdKSWRRQ0RRIiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46dGNSZEF1TVVhTkV0RlUxU1dTaGwzR2FnSnVsdDdTenpBTVl2VlFFOW1lOCJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpudEY1T1NwekNtbEU2LWtaLTAyZ0Z0T0VQM1dremtiTnRQT1VYeTlCcFo4In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvc2lnbmVkLWVkMjU1MTkvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYmVuZWZpdC1jbGFpbS1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46TnA5RzdfcTRBdUFyc3YzZGdHWDNoXzhtR2RxTVZhUWJWYjRyTnh3LTh2byJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOlBiaVlQTHlQYzNhMUM3M1BtSWJtdDlLUnRoS016SGlkNHV3RzVTb0FodlUifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1iZW5lZml0LWNsYWltLWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46ZklCMURkVzAxWkV6d3o0YzRhZHBHalVWMXJJZ1BxRlJpcF9YeVZFMVcwSSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.vkwu7dpvok03xMbf8o8At22NMUU-MoEODFheG3CH-dGZRkTcfj-oYYKCrfLba9u5XARopL6NAicC7jLN2Dp4Ag\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1033,7 +1154,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The benefits office’s agent reaches the inbound gate."
+      "caption": "An invoke message from The benefits office’s agent reaches the inbound gate.",
+      "gateRun": 4
     },
     {
       "seq": 32,
@@ -1060,7 +1182,8 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The benefits office’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The benefits office’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 4
     },
     {
       "seq": 33,
@@ -1083,7 +1206,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 4
     },
     {
       "seq": 34,
@@ -1105,7 +1229,8 @@
         "id": "urn:awp:representation:af38094fde4131076f66fa88cc357539:1794560400000",
         "text": "A representation statement signed with The benefits office's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The benefits office signed a statement that The benefits office’s agent acts for them in this operation."
+      "caption": "The benefits office signed a statement that The benefits office’s agent acts for them in this operation.",
+      "gateRun": 4
     },
     {
       "seq": 35,
@@ -1128,7 +1253,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 4
     },
     {
       "seq": 36,
@@ -1146,7 +1272,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 4
     },
     {
       "seq": 37,
@@ -1156,7 +1283,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-benefit-claim-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:48a66aa026225e4295d309e4747715c2b4dabdd2f77c2f26b59683d9e4a7b02b",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 4
     },
     {
       "seq": 38,
@@ -1170,6 +1300,16 @@
       "seq": 39,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:972f242219f465375b241fe42b29d6d1c6989cb76e50bae5739efdc50eef5091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:benefit-claim",
+        "operation": "urn:op:benefit-claim",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:receiver",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1187,12 +1327,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The claimant's mandate covers this action."
+      "caption": "The claimant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 40,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:972f242219f465375b241fe42b29d6d1c6989cb76e50bae5739efdc50eef5091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:benefit-claim",
+        "operation": "urn:op:benefit-claim",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:receiver",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -1205,18 +1356,30 @@
         }
       ],
       "reason": "method-not-accepted",
-      "caption": "Required benefit household was refused: method-not-accepted."
+      "caption": "Required benefit household was refused: method-not-accepted.",
+      "gateRun": 1
     },
     {
       "seq": 41,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:972f242219f465375b241fe42b29d6d1c6989cb76e50bae5739efdc50eef5091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:benefit-claim",
+        "operation": "urn:op:benefit-claim",
+        "conversation": "urn:awp:engine-benefit-claim-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:benefit-claim:receiver",
+        "purpose": "urn:purpose:benefit-claim",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "method-not-accepted",
-      "caption": "A refused source cannot authorize the action."
+      "caption": "A refused source cannot authorize the action.",
+      "gateRun": 1
     }
   ]
 }

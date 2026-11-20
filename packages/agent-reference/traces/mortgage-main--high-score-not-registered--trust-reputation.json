@@ -201,7 +201,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -274,7 +274,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional lender's signed product terms is intact and signed with The fictional lender's pinned key."
+      "caption": "The fictional lender's signed product terms is intact and signed with The fictional lender's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -312,7 +313,8 @@
         ],
         "answer": "Accepted, for mortgage product claims only."
       },
-      "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
+      "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -330,7 +332,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional lender's signed product terms asks for nothing, so there is no authority to check."
+      "caption": "The fictional lender's signed product terms asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -357,7 +360,8 @@
         "id": "urn:awp:product-terms:northbank-fixed-5",
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
-      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -399,7 +403,8 @@
         "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage product from The fictional lender, Sam’s fictional bank, Willow Lending, a fictional unlisted lender by published-by-lender, at most 31 days old."
       },
-      "caption": "The fictional lender's signed product terms is fit for A mortgage in principle: published-by-lender, 12 days old."
+      "caption": "The fictional lender's signed product terms is fit for A mortgage in principle: published-by-lender, 12 days old.",
+      "gateRun": 1
     },
     {
       "seq": 8,
@@ -409,7 +414,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional lender's signed product terms is admitted."
+      "caption": "The fictional lender's signed product terms is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -461,7 +467,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "Sam’s fictional bank's signed product terms is intact and signed with Sam’s fictional bank's pinned key."
+      "caption": "Sam’s fictional bank's signed product terms is intact and signed with Sam’s fictional bank's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -499,7 +506,8 @@
         ],
         "answer": "Accepted, for mortgage product claims only."
       },
-      "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
+      "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -517,7 +525,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "Sam’s fictional bank's signed product terms asks for nothing, so there is no authority to check."
+      "caption": "Sam’s fictional bank's signed product terms asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -544,7 +553,8 @@
         "id": "urn:awp:product-terms:harbourbank-fixed-2",
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
-      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -586,7 +596,8 @@
         "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage product from The fictional lender, Sam’s fictional bank, Willow Lending, a fictional unlisted lender by published-by-lender, at most 31 days old."
       },
-      "caption": "Sam’s fictional bank's signed product terms is fit for A mortgage in principle: published-by-lender, 12 days old."
+      "caption": "Sam’s fictional bank's signed product terms is fit for A mortgage in principle: published-by-lender, 12 days old.",
+      "gateRun": 2
     },
     {
       "seq": 15,
@@ -596,7 +607,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "Sam’s fictional bank's signed product terms is admitted."
+      "caption": "Sam’s fictional bank's signed product terms is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 16,
@@ -648,7 +660,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is intact and signed with Willow Lending, a fictional unlisted lender's pinned key."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is intact and signed with Willow Lending, a fictional unlisted lender's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -686,7 +699,8 @@
         ],
         "answer": "Accepted, for mortgage product claims only."
       },
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: Willow Lending, a fictional unlisted lender is an accepted source for this kind of claim."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: Willow Lending, a fictional unlisted lender is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -704,7 +718,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms asks for nothing, so there is no authority to check."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -731,7 +746,8 @@
         "id": "urn:fictional:willow-product-terms",
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 3
     },
     {
       "seq": 21,
@@ -773,7 +789,8 @@
         "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage product from The fictional lender, Sam’s fictional bank, Willow Lending, a fictional unlisted lender by published-by-lender, at most 31 days old."
       },
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is fit for A mortgage in principle: published-by-lender, 12 days old."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is fit for A mortgage in principle: published-by-lender, 12 days old.",
+      "gateRun": 3
     },
     {
       "seq": 22,
@@ -783,7 +800,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is admitted."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 23,
@@ -826,6 +844,16 @@
       "seq": 25,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -843,12 +871,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "Sam, the fictional applicant's mandate covers this action."
+      "caption": "Sam, the fictional applicant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -877,12 +916,23 @@
         "answer": "Accepted, for Search mortgage products only."
       },
       "reason": "recipient-established",
-      "caption": "The mortgage product index: Accepted, for Search mortgage products only."
+      "caption": "The mortgage product index: Accepted, for Search mortgage products only.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -895,12 +945,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -913,12 +974,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -931,12 +1003,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits."
+      "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -949,12 +1032,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -976,24 +1070,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Sent unsigned and with no identifier, as the public read configuration requires; written to the record."
+      "caption": "Sent unsigned and with no identifier, as the public read configuration requires; written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The mortgage product index’s agent."
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002",
+      "messageDigest": "sha-256:be7643df892d8865bd8a2c47be38e9271d1fea75643dad5b11dc7079d0315f16",
+      "caption": "The invoke message goes to The mortgage product index’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 3,
       "agent": "sams-agent",
+      "actionDigest": "sha-256:5966afac672fb1571669edec9b58ecad0a526e2fa34d95f29f24a269d446ac78",
+      "actionScope": {
+        "action": "use",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "recipient": "https://mortgage-index.example/#org",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001\",\"from\":{\"id\":\"urn:awp:n:fjkjfD59mT0HMLX5G83WIab4RDrGTNoXqdN1IKA7gko\"},\"to\":{\"id\":\"urn:awp:n:TQ8NpIow_F6yM8AFw3Rf-2LQpf-HRfl6GK2DeGHHKt0\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:WK_nX1moWXZtWyDpBmpdqdhLilcE_0M2TsWmnEIYJvs\"},\"@included\":[{\"id\":\"urn:awp:n:fjkjfD59mT0HMLX5G83WIab4RDrGTNoXqdN1IKA7gko\",\"type\":\"ParticipantRef\"},{\"id\":\"urn:awp:n:TQ8NpIow_F6yM8AFw3Rf-2LQpf-HRfl6GK2DeGHHKt0\",\"type\":\"AudienceRef\",\"actor\":\"https://mortgage-index.example/agents/search#agent\",\"party\":\"https://mortgage-index.example/#org\"},{\"id\":\"urn:awp:n:WK_nX1moWXZtWyDpBmpdqdhLilcE_0M2TsWmnEIYJvs\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:DnzgJwFVYO_bt2acPSYgnQnEeMT6MW2It2kRWayrJVQ\"},\"input\":{\"id\":\"urn:awp:n:FzRcpIJMWRm6u_oRPFe42RUxc9yr26bIAccifUAL_TM\"},\"operation\":{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\"},\"purpose\":\"https://w3id.org/jeswr/awp#purpose/product-search\"},{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:FzRcpIJMWRm6u_oRPFe42RUxc9yr26bIAccifUAL_TM\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:h2RKf1b0a-yK0WaKaXndjcYhmaP9VbMTAYvTQanrP2Q\"},{\"id\":\"urn:awp:n:5hyGfXTezzWC_RPDonEpCIVFNcF2gDNIc1zPufR4MJI\"}]},{\"id\":\"urn:awp:n:DnzgJwFVYO_bt2acPSYgnQnEeMT6MW2It2kRWayrJVQ\",\"type\":\"RequestBasis\",\"basisKind\":\"public\"},{\"id\":\"urn:awp:n:h2RKf1b0a-yK0WaKaXndjcYhmaP9VbMTAYvTQanrP2Q\",\"type\":\"PropertyValue\",\"domainValue\":\"residential\",\"name\":\"propertyUse\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:propertyUse\"},{\"id\":\"urn:awp:n:5hyGfXTezzWC_RPDonEpCIVFNcF2gDNIc1zPufR4MJI\",\"type\":\"PropertyValue\",\"domainValue\":\"fixed\",\"name\":\"rateType\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:rateType\"}],\"presentFields\":\"https://w3id.org/jeswr/awp#content\"}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1085,7 +1204,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "Sam, the fictional applicant sends an invoke message to The mortgage product index’s agent."
+      "caption": "Sam, the fictional applicant sends an invoke message to The mortgage product index’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 34,
@@ -1093,6 +1213,7 @@
       "agent": "index",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001\",\"from\":{\"id\":\"urn:awp:n:fjkjfD59mT0HMLX5G83WIab4RDrGTNoXqdN1IKA7gko\"},\"to\":{\"id\":\"urn:awp:n:TQ8NpIow_F6yM8AFw3Rf-2LQpf-HRfl6GK2DeGHHKt0\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:WK_nX1moWXZtWyDpBmpdqdhLilcE_0M2TsWmnEIYJvs\"},\"@included\":[{\"id\":\"urn:awp:n:fjkjfD59mT0HMLX5G83WIab4RDrGTNoXqdN1IKA7gko\",\"type\":\"ParticipantRef\"},{\"id\":\"urn:awp:n:TQ8NpIow_F6yM8AFw3Rf-2LQpf-HRfl6GK2DeGHHKt0\",\"type\":\"AudienceRef\",\"actor\":\"https://mortgage-index.example/agents/search#agent\",\"party\":\"https://mortgage-index.example/#org\"},{\"id\":\"urn:awp:n:WK_nX1moWXZtWyDpBmpdqdhLilcE_0M2TsWmnEIYJvs\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:DnzgJwFVYO_bt2acPSYgnQnEeMT6MW2It2kRWayrJVQ\"},\"input\":{\"id\":\"urn:awp:n:FzRcpIJMWRm6u_oRPFe42RUxc9yr26bIAccifUAL_TM\"},\"operation\":{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\"},\"purpose\":\"https://w3id.org/jeswr/awp#purpose/product-search\"},{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:FzRcpIJMWRm6u_oRPFe42RUxc9yr26bIAccifUAL_TM\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:h2RKf1b0a-yK0WaKaXndjcYhmaP9VbMTAYvTQanrP2Q\"},{\"id\":\"urn:awp:n:5hyGfXTezzWC_RPDonEpCIVFNcF2gDNIc1zPufR4MJI\"}]},{\"id\":\"urn:awp:n:DnzgJwFVYO_bt2acPSYgnQnEeMT6MW2It2kRWayrJVQ\",\"type\":\"RequestBasis\",\"basisKind\":\"public\"},{\"id\":\"urn:awp:n:h2RKf1b0a-yK0WaKaXndjcYhmaP9VbMTAYvTQanrP2Q\",\"type\":\"PropertyValue\",\"domainValue\":\"residential\",\"name\":\"propertyUse\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:propertyUse\"},{\"id\":\"urn:awp:n:5hyGfXTezzWC_RPDonEpCIVFNcF2gDNIc1zPufR4MJI\",\"type\":\"PropertyValue\",\"domainValue\":\"fixed\",\"name\":\"rateType\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:rateType\"}],\"presentFields\":\"https://w3id.org/jeswr/awp#content\"}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1194,7 +1315,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from Sam, the fictional applicant reaches the inbound gate."
+      "caption": "An invoke message from Sam, the fictional applicant reaches the inbound gate.",
+      "gateRun": 4
     },
     {
       "seq": 35,
@@ -1221,7 +1343,8 @@
         "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, unsigned, which its configuration allows for this kind, addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, unsigned, which its configuration allows for this kind, addressed here, inside its time window and not seen before.",
+      "gateRun": 4
     },
     {
       "seq": 36,
@@ -1244,7 +1367,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 4
     },
     {
       "seq": 37,
@@ -1262,7 +1386,8 @@
         }
       ],
       "reason": "no-principal",
-      "caption": "This request is made on no one's behalf: a public read, with no identifier for the asker."
+      "caption": "This request is made on no one's behalf: a public read, with no identifier for the asker.",
+      "gateRun": 4
     },
     {
       "seq": 38,
@@ -1285,7 +1410,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 4
     },
     {
       "seq": 39,
@@ -1303,7 +1429,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 4
     },
     {
       "seq": 40,
@@ -1313,12 +1440,24 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002",
+      "messageDigest": "sha-256:be7643df892d8865bd8a2c47be38e9271d1fea75643dad5b11dc7079d0315f16",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 4
     },
     {
       "seq": 41,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1336,12 +1475,22 @@
         }
       ],
       "reason": "no-action",
-      "caption": "This protocol message proposes no additional action."
+      "caption": "This protocol message proposes no additional action.",
+      "gateRun": 1
     },
     {
       "seq": 42,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1359,12 +1508,22 @@
         }
       ],
       "reason": "no-principal",
-      "caption": "The message goes to no one in particular."
+      "caption": "The message goes to no one in particular.",
+      "gateRun": 1
     },
     {
       "seq": 43,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1377,12 +1536,22 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 44,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1399,12 +1568,22 @@
         "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 45,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1417,12 +1596,22 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 46,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1439,12 +1628,22 @@
         "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 47,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1457,12 +1656,22 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 48,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1479,12 +1688,22 @@
         "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 49,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1497,12 +1716,22 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the carried statements against the conversation's purpose."
+      "caption": "The gate checks the carried statements against the conversation's purpose.",
+      "gateRun": 1
     },
     {
       "seq": 50,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1519,12 +1748,22 @@
         "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 51,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1541,12 +1780,22 @@
         "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 52,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1563,12 +1812,22 @@
         "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 53,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1581,12 +1840,22 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The message release check is complete."
+      "caption": "The message release check is complete.",
+      "gateRun": 1
     },
     {
       "seq": 54,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1608,24 +1877,47 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The mortgage product index’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The mortgage product index’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 55,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The deliver message goes to Sam, the fictional applicant."
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001",
+      "messageDigest": "sha-256:22eaec4378c7ef5fb272dd18d719cdd8e79598ed68e749425d3daa39bc24be2d",
+      "caption": "The deliver message goes to Sam, the fictional applicant.",
+      "gateRun": 1
     },
     {
       "seq": 56,
       "step": 3,
       "agent": "index",
+      "actionDigest": "sha-256:3f7a0c3c6760fd98e8434949f872f26a31dfadec787f7ca65d18c505f9e4f694",
+      "actionScope": {
+        "action": "distribute",
+        "target": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "operation": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "conversation": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001",
+        "purpose": "https://w3id.org/jeswr/awp#purpose/product-search",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001\",\"type\":[\"Message\",\"Deliver\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\",\"kind\":\"deliver\",\"conversation\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001\",\"from\":{\"id\":\"urn:awp:n:d9wtQUoYZEWKIWr6lfQcuJ8feAWO_rbsyeH996VI-Jk\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\",\"body\":{\"id\":\"urn:awp:n:mN18ME0z2TaOLo5JWmwu8W6u1_I34JlX5AqhUivR864\"},\"evidence\":[{\"id\":\"urn:awp:n:Fl37dUG8jmY0Hk6wSia6-3lDhxGPNaHskreGBt20WZM\"},{\"id\":\"urn:awp:n:4KNzZYFv8gBm6xu9K2xjzI_l0Y66CDJxDu1eszyMKq8\"},{\"id\":\"urn:awp:n:B3qUBNS5WULrb_ydeQHYk6wSPRjARJbxFMg4varTHDA\"},{\"id\":\"urn:awp:n:9pb7v587ew1Zn4e8b8v8VQsgugJsQDP2KLREivOKVEE\"},{\"id\":\"urn:awp:n:kJXamkVvcsu7qk2PAvL73-EDAwmzg_4YjGQ8_pj56rk\"}],\"@included\":[{\"id\":\"urn:awp:n:d9wtQUoYZEWKIWr6lfQcuJ8feAWO_rbsyeH996VI-Jk\",\"type\":\"ParticipantRef\",\"actor\":\"https://mortgage-index.example/agents/search#agent\",\"onBehalfOf\":\"https://mortgage-index.example/#org\",\"operator\":\"https://mortgage-index.example/#org\"},{\"id\":\"urn:awp:n:mN18ME0z2TaOLo5JWmwu8W6u1_I34JlX5AqhUivR864\",\"type\":\"DeliverBody\",\"basis\":{\"id\":\"urn:awp:n:edd_MPyC67LWRpQpjMzQmIhkssY01QfhaO8xPGzggWo\"},\"operation\":{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\"},\"output\":{\"id\":\"urn:awp:n:tT8SnhT8Z2ttLBCU7vHp2wqnasAo2fWEnxqSewEjFLw\"},\"ref\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\"},{\"id\":\"urn:awp:n:Fl37dUG8jmY0Hk6wSia6-3lDhxGPNaHskreGBt20WZM\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:7RK_EMPhOJ_1LLt3C3R3iI-frJKJ60SmU9FeVj8gRZI\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:4KNzZYFv8gBm6xu9K2xjzI_l0Y66CDJxDu1eszyMKq8\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:UG80Dco67sb0OD9VNnC2SXRBXRkqgYrkohpWDY9Pe2U\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:B3qUBNS5WULrb_ydeQHYk6wSPRjARJbxFMg4varTHDA\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:nGM6oemE1SSjGq_OIz1bzofAIoOdDxfu_HYMl2HEnT4\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:9pb7v587ew1Zn4e8b8v8VQsgugJsQDP2KLREivOKVEE\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:h1yLgDaFdpZ_BmwtY75yAGO8BQzxkXOMTGSLxaSave8\"},\"format\":\"agent-reputation+jws\",\"position\":\"3\",\"role\":\"membership\"},{\"id\":\"urn:awp:n:kJXamkVvcsu7qk2PAvL73-EDAwmzg_4YjGQ8_pj56rk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:EFTsruqpvM1XwKZhgNEV3yY5WLf26Z2AjATRaz0P-V8\"},\"format\":\"agent-reputation+jws\",\"position\":\"4\",\"role\":\"membership\"},{\"id\":\"urn:awp:n:edd_MPyC67LWRpQpjMzQmIhkssY01QfhaO8xPGzggWo\",\"type\":\"RequestBasis\",\"basisKind\":\"invocation\",\"invocation\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\"},{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:tT8SnhT8Z2ttLBCU7vHp2wqnasAo2fWEnxqSewEjFLw\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:66fc9274eefbf571e294fe1fa81cb09a04e3cf5a5ca833421263ffa23992b5a6\",\"byteLength\":\"16249\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:7RK_EMPhOJ_1LLt3C3R3iI-frJKJ60SmU9FeVj8gRZI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:RXlL5Pp41HVKscd7yYegkK-_qrpiX78OCWpMiU41qFg\",\"issuedAt\":\"2026-11-01T09:00:00Z\",\"issuer\":\"https://northbank.example/#org\",\"proofGraph\":\"urn:awp:n:_5j8t-zihm5lQpZQWbnu9_3LYcDg-A-AG6_lsnyYWkg\"},{\"id\":\"urn:awp:n:UG80Dco67sb0OD9VNnC2SXRBXRkqgYrkohpWDY9Pe2U\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:8AM40YJBtxMtYz_XG7fRw2bea0hkR2P-0w4XWrX6XV8\",\"issuedAt\":\"2026-11-01T09:00:00Z\",\"issuer\":\"https://harbourbank.example/#org\",\"proofGraph\":\"urn:awp:n:tfpkaqUfuTseBGxONYwDI1ra7OA8nq8XtiMVHn9JU4U\"},{\"id\":\"urn:awp:n:nGM6oemE1SSjGq_OIz1bzofAIoOdDxfu_HYMl2HEnT4\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:ivCAUe4-r2nWiepLKeW8C22E5Eef47tcZIQiLA_OV4M\",\"issuedAt\":\"2026-11-01T09:00:00Z\",\"issuer\":\"https://willow-lending.example/#org\",\"proofGraph\":\"urn:awp:n:FGKrRhuwHyHVdxSKlzmedZAtAXD20Jlmr2Fp5aNntHE\"},{\"id\":\"urn:awp:n:h1yLgDaFdpZ_BmwtY75yAGO8BQzxkXOMTGSLxaSave8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:bxUZefy-z-h82leqvuVYXWHmV-lS1N3z9wZufVuHXgw\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"https://fictional-ratings.example/#service\",\"proofGraph\":\"urn:awp:n:qn5exGsiMFr8smDyJntXk6JCuTRCc9YPL40BgHXtIAU\",\"validUntil\":\"2026-11-14T09:00:00.000Z\"},{\"id\":\"urn:awp:n:EFTsruqpvM1XwKZhgNEV3yY5WLf26Z2AjATRaz0P-V8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:EQcpJmdSxRWU8H7XXQn3xc5YLUyc3mD6i4TleUBc5sg\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"https://fictional-ratings.example/#service\",\"proofGraph\":\"urn:awp:n:beDM_NI9AlPHAjf5UtiW7WPd9HdypvqfFhJOIkZbE28\",\"validUntil\":\"2026-11-14T09:00:00.000Z\"},{\"id\":\"urn:awp:n:RXlL5Pp41HVKscd7yYegkK-_qrpiX78OCWpMiU41qFg\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:B9rDvzYsoxBBiUnunYQep4bYp9AMDDTqEJkTh7NRN44\"}},{\"id\":\"urn:awp:n:B9rDvzYsoxBBiUnunYQep4bYp9AMDDTqEJkTh7NRN44\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:ac6690042105fd6d61b62cea7051df051a6f8b14a7d771d7a74dd4c16e87bcc9\",\"byteLength\":\"29213\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:8AM40YJBtxMtYz_XG7fRw2bea0hkR2P-0w4XWrX6XV8\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:NRnI6EJCOKiEbqTlKOTlv8Ntduyy7OXUm73DSN5q7P8\"}},{\"id\":\"urn:awp:n:NRnI6EJCOKiEbqTlKOTlv8Ntduyy7OXUm73DSN5q7P8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:4d879bd4d2cfceebfee3d4ab451aafbbc93734427ff703c16faab86d14a7091b\",\"byteLength\":\"29223\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:ivCAUe4-r2nWiepLKeW8C22E5Eef47tcZIQiLA_OV4M\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:oulSR0udqWaY90NggmIK2IfYUmevU4JGEyn0x1itUb8\"}},{\"id\":\"urn:awp:n:oulSR0udqWaY90NggmIK2IfYUmevU4JGEyn0x1itUb8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:cc1f2af6910d64c6c6f1ba1ee6cb8c6670a37762122d47f4133eb37aad4800bf\",\"byteLength\":\"29198\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:bxUZefy-z-h82leqvuVYXWHmV-lS1N3z9wZufVuHXgw\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:ltb6Nd2ACislxFthlpsTMDD41OJsb800Qx_UTEqxdqg\"}},{\"id\":\"urn:awp:n:ltb6Nd2ACislxFthlpsTMDD41OJsb800Qx_UTEqxdqg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:3dba6cc5f31415f19fe56bb7f00c494a94ed62b78eb1d2ed65719ad7176a323c\",\"byteLength\":\"8738\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:EQcpJmdSxRWU8H7XXQn3xc5YLUyc3mD6i4TleUBc5sg\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:ws2VMEnI0N2YtzTYjl2se6CLk2BlxsGlckgojsb7gxA\"}},{\"id\":\"urn:awp:n:ws2VMEnI0N2YtzTYjl2se6CLk2BlxsGlckgojsb7gxA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:bf2905bfcc082066879fe7f7e1a157652c3d5c8ce37f1681fc323547e0d6c259\",\"byteLength\":\"8748\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:_5j8t-zihm5lQpZQWbnu9_3LYcDg-A-AG6_lsnyYWkg\",\"@graph\":[{\"id\":\"urn:awp:n:u3fAlsX1vQzUC6lHx_oXDyU2dtEqAOoWZOVhBSLnrJw\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4MldVTEVZejJieVRnQkRJLTZBY3g3eU9wcWJleWh4Umx1T2tIWTdQam8iLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiTW9ydGdhZ2VQcm9kdWN0IiwiaXNzdWVkQXQiOiIyMDI2LTExLTAxVDA5OjAwOjAwWiIsInByb2R1Y3QiOnsibmFtZSI6IjUteWVhciBmaXhlZCIsInByb3BlcnR5VXNlIjoicmVzaWRlbnRpYWwiLCJyYXRlVHlwZSI6ImZpeGVkIiwicmF0ZVBlcmNlbnQiOjQuMSwiZml4ZWRZZWFycyI6NSwibWF4TG9hblRvVmFsdWVQZXJjZW50Ijo5MH0sInN5bnRoZXRpYyI6dHJ1ZSwiaWQiOiJ1cm46YXdwOnByb2R1Y3Q6bm9ydGhiYW5rLWZpeGVkLTUiLCJpc3N1ZXIiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJjbGFpbVR5cGUiOiJtb3J0Z2FnZS5wcm9kdWN0IiwibWV0aG9kIjoicHVibGlzaGVkLWJ5LWxlbmRlciIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjphd3A6cHJvZHVjdC10ZXJtczpub3J0aGJhbmstZml4ZWQtNSIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjphd3A6cHJvZHVjdDpub3J0aGJhbmstZml4ZWQtNSIsImNvbnN0cmFpbnRzIjpbeyJsZWZ0T3BlcmFuZCI6InB1cnBvc2UiLCJvcGVyYXRvciI6ImVxIiwicmlnaHRPcGVyYW5kIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjcHVycG9zZS9wcm9kdWN0LXNlYXJjaCJ9XX0seyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46YXdwOnByb2R1Y3Q6bm9ydGhiYW5rLWZpeGVkLTUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI3B1cnBvc2UvcHJvZHVjdC1zZWFyY2gifV19XX19fQ.k9YfkffKUxSOOT2Ewcz1iz0wpOiQLzuUI_A64ezONa6n_snLz47M-S6NY1UHg45YzhMmStrHVEXtxDKV6CvQDg\"}]},{\"id\":\"urn:awp:n:tfpkaqUfuTseBGxONYwDI1ra7OA8nq8XtiMVHn9JU4U\",\"@graph\":[{\"id\":\"urn:awp:n:B_yY3u3X6p_MMn5tMcPT8rRANgttJalD62QeJXBSoaY\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InU1bnpZUUw4ajAzY1pwcjFJYTFFeENNaTdWQ3lPLVBaVGE1Sy1RclBfaEkiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiTW9ydGdhZ2VQcm9kdWN0IiwiaXNzdWVkQXQiOiIyMDI2LTExLTAxVDA5OjAwOjAwWiIsInByb2R1Y3QiOnsibmFtZSI6IjIteWVhciBmaXhlZCIsInByb3BlcnR5VXNlIjoicmVzaWRlbnRpYWwiLCJyYXRlVHlwZSI6ImZpeGVkIiwicmF0ZVBlcmNlbnQiOjMuOCwiZml4ZWRZZWFycyI6MiwibWF4TG9hblRvVmFsdWVQZXJjZW50Ijo4MH0sInN5bnRoZXRpYyI6dHJ1ZSwiaWQiOiJ1cm46YXdwOnByb2R1Y3Q6aGFyYm91cmJhbmstZml4ZWQtMiIsImlzc3VlciI6Imh0dHBzOi8vaGFyYm91cmJhbmsuZXhhbXBsZS8jb3JnIiwiY2xhaW1UeXBlIjoibW9ydGdhZ2UucHJvZHVjdCIsIm1ldGhvZCI6InB1Ymxpc2hlZC1ieS1sZW5kZXIiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46YXdwOnByb2R1Y3QtdGVybXM6aGFyYm91cmJhbmstZml4ZWQtMiIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjphd3A6cHJvZHVjdDpoYXJib3VyYmFuay1maXhlZC0yIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNwdXJwb3NlL3Byb2R1Y3Qtc2VhcmNoIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjphd3A6cHJvZHVjdDpoYXJib3VyYmFuay1maXhlZC0yIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNwdXJwb3NlL3Byb2R1Y3Qtc2VhcmNoIn1dfV19fX0.VMvENid0VjAl6wAg4yChJnIz7AnP8kl9Tp4iy3Rvep2QVLvxHVZn3duGigX8NYuF7ynuOAbWlM9up-ibYzt9Cw\"}]},{\"id\":\"urn:awp:n:FGKrRhuwHyHVdxSKlzmedZAtAXD20Jlmr2Fp5aNntHE\",\"@graph\":[{\"id\":\"urn:awp:n:TRUboM4v-r7-FKB8cgWgoPxmGUqIBJs69a47lPg09vU\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Im5KN1RYbmpGVFF5ZFdzOGp3aXhnN2ZWN2U2Y0dyeTFQS2dMWF9ROWdKenciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiTW9ydGdhZ2VQcm9kdWN0IiwiaXNzdWVkQXQiOiIyMDI2LTExLTAxVDA5OjAwOjAwWiIsInByb2R1Y3QiOnsibmFtZSI6IjUteWVhciBmaXhlZCIsInByb3BlcnR5VXNlIjoicmVzaWRlbnRpYWwiLCJyYXRlVHlwZSI6ImZpeGVkIiwicmF0ZVBlcmNlbnQiOjQuMSwiZml4ZWRZZWFycyI6NSwibWF4TG9hblRvVmFsdWVQZXJjZW50Ijo5MH0sInN5bnRoZXRpYyI6dHJ1ZSwiaWQiOiJ1cm46ZmljdGlvbmFsOndpbGxvdy1wcm9kdWN0IiwiaXNzdWVyIjoiaHR0cHM6Ly93aWxsb3ctbGVuZGluZy5leGFtcGxlLyNvcmciLCJjbGFpbVR5cGUiOiJtb3J0Z2FnZS5wcm9kdWN0IiwibWV0aG9kIjoicHVibGlzaGVkLWJ5LWxlbmRlciIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjpmaWN0aW9uYWw6d2lsbG93LXByb2R1Y3QtdGVybXMiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46ZmljdGlvbmFsOndpbGxvdy1wcm9kdWN0IiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNwdXJwb3NlL3Byb2R1Y3Qtc2VhcmNoIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpmaWN0aW9uYWw6d2lsbG93LXByb2R1Y3QiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI3B1cnBvc2UvcHJvZHVjdC1zZWFyY2gifV19XX19fQ.y7URjcPSFDz4NBmXvDj9YRrmzkCvs3KlSpM_--twMv1thjikp9Vjc6NaPoq1ubG2afmE8jIfwc4oxTbUxp7wDQ\"}]},{\"id\":\"urn:awp:n:qn5exGsiMFr8smDyJntXk6JCuTRCc9YPL40BgHXtIAU\",\"@graph\":[{\"id\":\"urn:awp:n:IMJnJTP_kTh6vDrdG6qLrZIAYL4FX7WU-8SkyXwR8SU\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlpEUVYtRlBKell2dnBNZUJDLVNiU184MXE0Q0hGdS00MC11LTVhRlozSDgiLCJ0eXAiOiJhd3AtYWdlbnQtcmVwdXRhdGlvbitqd3MifQ.eyJ0eXBlIjoiQWdlbnRSZXB1dGF0aW9uIiwiaXNzdWVyIjoiaHR0cHM6Ly9maWN0aW9uYWwtcmF0aW5ncy5leGFtcGxlLyNzZXJ2aWNlIiwic3ViamVjdCI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50Iiwic3ViamVjdEtleSI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJzY29yZSI6MC45MywibWV0aG9kIjoiZXZpZGVuY2UtcmV2aWV3ZWQtYWdlbnQtYmVoYXZpb3VyIiwiZXZpZGVuY2UiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1iZWhhdmlvdXItcmV2aWV3Il0sImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTEtMTRUMDk6MDA6MDAuMDAwWiJ9.oShpa41D_XfCGy4LrgcRm7ZsrCAityamBahiWv32GKMdAO__HqdETaeWfIPvb9I20Sp-cG1B94ODdDbuyuYSBg\"}]},{\"id\":\"urn:awp:n:beDM_NI9AlPHAjf5UtiW7WPd9HdypvqfFhJOIkZbE28\",\"@graph\":[{\"id\":\"urn:awp:n:Z7yDdHmvunOzoOtj8rHVkJGkmwKAeKjTGORBt3kGj4k\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlpEUVYtRlBKell2dnBNZUJDLVNiU184MXE0Q0hGdS00MC11LTVhRlozSDgiLCJ0eXAiOiJhd3AtYWdlbnQtcmVwdXRhdGlvbitqd3MifQ.eyJ0eXBlIjoiQWdlbnRSZXB1dGF0aW9uIiwiaXNzdWVyIjoiaHR0cHM6Ly9maWN0aW9uYWwtcmF0aW5ncy5leGFtcGxlLyNzZXJ2aWNlIiwic3ViamVjdCI6Imh0dHBzOi8vd2lsbG93LWxlbmRpbmcuZXhhbXBsZS8jb3JnIiwiYWN0b3IiOiJodHRwczovL3dpbGxvdy1sZW5kaW5nLmV4YW1wbGUvYWdlbnRzL2ludGFrZSNhZ2VudCIsInN1YmplY3RLZXkiOiJod1p5Z3FXaTZRcVp1N1ZxZUJWVmttNmtFZHp3akg0TURsa1JuOWoxWW9JIiwic2NvcmUiOjAuOTksIm1ldGhvZCI6ImV2aWRlbmNlLXJldmlld2VkLWFnZW50LWJlaGF2aW91ciIsImV2aWRlbmNlIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtYmVoYXZpb3VyLXJldmlldyJdLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTExLTE0VDA5OjAwOjAwLjAwMFoifQ.rGGmgxmAbjuJmLWglwp2zLWp99m3NFYFea3LnbPJvoYiA1sv0Qtt51QoRx3KVfprUfgw0YXpdBldbhlspGaFDQ\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjdtZ2tZTnRSX013RW5oSUQ5T1BzVjduRHJFbHVUWGN3bmN4RUd6eUZzZUkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..fnVoWGUIG_z5JQTIZry3IWRHOQ56ypNyLPxXnbmnyBMI5nSkX0hC5J1wSA-s9dVyOtLI9s7qkr9qV2o_hRF3Ag\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1947,7 +2239,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The mortgage product index’s agent sends a deliver message to Sam, the fictional applicant."
+      "caption": "The mortgage product index’s agent sends a deliver message to Sam, the fictional applicant.",
+      "gateRun": 1
     },
     {
       "seq": 57,
@@ -1955,6 +2248,7 @@
       "agent": "sams-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001\",\"type\":[\"Message\",\"Deliver\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\",\"kind\":\"deliver\",\"conversation\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0001\",\"from\":{\"id\":\"urn:awp:n:d9wtQUoYZEWKIWr6lfQcuJ8feAWO_rbsyeH996VI-Jk\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\",\"body\":{\"id\":\"urn:awp:n:mN18ME0z2TaOLo5JWmwu8W6u1_I34JlX5AqhUivR864\"},\"evidence\":[{\"id\":\"urn:awp:n:Fl37dUG8jmY0Hk6wSia6-3lDhxGPNaHskreGBt20WZM\"},{\"id\":\"urn:awp:n:4KNzZYFv8gBm6xu9K2xjzI_l0Y66CDJxDu1eszyMKq8\"},{\"id\":\"urn:awp:n:B3qUBNS5WULrb_ydeQHYk6wSPRjARJbxFMg4varTHDA\"},{\"id\":\"urn:awp:n:9pb7v587ew1Zn4e8b8v8VQsgugJsQDP2KLREivOKVEE\"},{\"id\":\"urn:awp:n:kJXamkVvcsu7qk2PAvL73-EDAwmzg_4YjGQ8_pj56rk\"}],\"@included\":[{\"id\":\"urn:awp:n:d9wtQUoYZEWKIWr6lfQcuJ8feAWO_rbsyeH996VI-Jk\",\"type\":\"ParticipantRef\",\"actor\":\"https://mortgage-index.example/agents/search#agent\",\"onBehalfOf\":\"https://mortgage-index.example/#org\",\"operator\":\"https://mortgage-index.example/#org\"},{\"id\":\"urn:awp:n:mN18ME0z2TaOLo5JWmwu8W6u1_I34JlX5AqhUivR864\",\"type\":\"DeliverBody\",\"basis\":{\"id\":\"urn:awp:n:edd_MPyC67LWRpQpjMzQmIhkssY01QfhaO8xPGzggWo\"},\"operation\":{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\"},\"output\":{\"id\":\"urn:awp:n:tT8SnhT8Z2ttLBCU7vHp2wqnasAo2fWEnxqSewEjFLw\"},\"ref\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\"},{\"id\":\"urn:awp:n:Fl37dUG8jmY0Hk6wSia6-3lDhxGPNaHskreGBt20WZM\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:7RK_EMPhOJ_1LLt3C3R3iI-frJKJ60SmU9FeVj8gRZI\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:4KNzZYFv8gBm6xu9K2xjzI_l0Y66CDJxDu1eszyMKq8\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:UG80Dco67sb0OD9VNnC2SXRBXRkqgYrkohpWDY9Pe2U\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:B3qUBNS5WULrb_ydeQHYk6wSPRjARJbxFMg4varTHDA\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:nGM6oemE1SSjGq_OIz1bzofAIoOdDxfu_HYMl2HEnT4\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:9pb7v587ew1Zn4e8b8v8VQsgugJsQDP2KLREivOKVEE\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:h1yLgDaFdpZ_BmwtY75yAGO8BQzxkXOMTGSLxaSave8\"},\"format\":\"agent-reputation+jws\",\"position\":\"3\",\"role\":\"membership\"},{\"id\":\"urn:awp:n:kJXamkVvcsu7qk2PAvL73-EDAwmzg_4YjGQ8_pj56rk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:EFTsruqpvM1XwKZhgNEV3yY5WLf26Z2AjATRaz0P-V8\"},\"format\":\"agent-reputation+jws\",\"position\":\"4\",\"role\":\"membership\"},{\"id\":\"urn:awp:n:edd_MPyC67LWRpQpjMzQmIhkssY01QfhaO8xPGzggWo\",\"type\":\"RequestBasis\",\"basisKind\":\"invocation\",\"invocation\":\"urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002\"},{\"id\":\"https://w3id.org/jeswr/awp#op/mortgage-product-search\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:tT8SnhT8Z2ttLBCU7vHp2wqnasAo2fWEnxqSewEjFLw\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:66fc9274eefbf571e294fe1fa81cb09a04e3cf5a5ca833421263ffa23992b5a6\",\"byteLength\":\"16249\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:7RK_EMPhOJ_1LLt3C3R3iI-frJKJ60SmU9FeVj8gRZI\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:RXlL5Pp41HVKscd7yYegkK-_qrpiX78OCWpMiU41qFg\",\"issuedAt\":\"2026-11-01T09:00:00Z\",\"issuer\":\"https://northbank.example/#org\",\"proofGraph\":\"urn:awp:n:_5j8t-zihm5lQpZQWbnu9_3LYcDg-A-AG6_lsnyYWkg\"},{\"id\":\"urn:awp:n:UG80Dco67sb0OD9VNnC2SXRBXRkqgYrkohpWDY9Pe2U\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:8AM40YJBtxMtYz_XG7fRw2bea0hkR2P-0w4XWrX6XV8\",\"issuedAt\":\"2026-11-01T09:00:00Z\",\"issuer\":\"https://harbourbank.example/#org\",\"proofGraph\":\"urn:awp:n:tfpkaqUfuTseBGxONYwDI1ra7OA8nq8XtiMVHn9JU4U\"},{\"id\":\"urn:awp:n:nGM6oemE1SSjGq_OIz1bzofAIoOdDxfu_HYMl2HEnT4\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:ivCAUe4-r2nWiepLKeW8C22E5Eef47tcZIQiLA_OV4M\",\"issuedAt\":\"2026-11-01T09:00:00Z\",\"issuer\":\"https://willow-lending.example/#org\",\"proofGraph\":\"urn:awp:n:FGKrRhuwHyHVdxSKlzmedZAtAXD20Jlmr2Fp5aNntHE\"},{\"id\":\"urn:awp:n:h1yLgDaFdpZ_BmwtY75yAGO8BQzxkXOMTGSLxaSave8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:bxUZefy-z-h82leqvuVYXWHmV-lS1N3z9wZufVuHXgw\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"https://fictional-ratings.example/#service\",\"proofGraph\":\"urn:awp:n:qn5exGsiMFr8smDyJntXk6JCuTRCc9YPL40BgHXtIAU\",\"validUntil\":\"2026-11-14T09:00:00.000Z\"},{\"id\":\"urn:awp:n:EFTsruqpvM1XwKZhgNEV3yY5WLf26Z2AjATRaz0P-V8\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:EQcpJmdSxRWU8H7XXQn3xc5YLUyc3mD6i4TleUBc5sg\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"https://fictional-ratings.example/#service\",\"proofGraph\":\"urn:awp:n:beDM_NI9AlPHAjf5UtiW7WPd9HdypvqfFhJOIkZbE28\",\"validUntil\":\"2026-11-14T09:00:00.000Z\"},{\"id\":\"urn:awp:n:RXlL5Pp41HVKscd7yYegkK-_qrpiX78OCWpMiU41qFg\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:B9rDvzYsoxBBiUnunYQep4bYp9AMDDTqEJkTh7NRN44\"}},{\"id\":\"urn:awp:n:B9rDvzYsoxBBiUnunYQep4bYp9AMDDTqEJkTh7NRN44\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:ac6690042105fd6d61b62cea7051df051a6f8b14a7d771d7a74dd4c16e87bcc9\",\"byteLength\":\"29213\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:8AM40YJBtxMtYz_XG7fRw2bea0hkR2P-0w4XWrX6XV8\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:NRnI6EJCOKiEbqTlKOTlv8Ntduyy7OXUm73DSN5q7P8\"}},{\"id\":\"urn:awp:n:NRnI6EJCOKiEbqTlKOTlv8Ntduyy7OXUm73DSN5q7P8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:4d879bd4d2cfceebfee3d4ab451aafbbc93734427ff703c16faab86d14a7091b\",\"byteLength\":\"29223\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:ivCAUe4-r2nWiepLKeW8C22E5Eef47tcZIQiLA_OV4M\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:oulSR0udqWaY90NggmIK2IfYUmevU4JGEyn0x1itUb8\"}},{\"id\":\"urn:awp:n:oulSR0udqWaY90NggmIK2IfYUmevU4JGEyn0x1itUb8\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:cc1f2af6910d64c6c6f1ba1ee6cb8c6670a37762122d47f4133eb37aad4800bf\",\"byteLength\":\"29198\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:bxUZefy-z-h82leqvuVYXWHmV-lS1N3z9wZufVuHXgw\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:ltb6Nd2ACislxFthlpsTMDD41OJsb800Qx_UTEqxdqg\"}},{\"id\":\"urn:awp:n:ltb6Nd2ACislxFthlpsTMDD41OJsb800Qx_UTEqxdqg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:3dba6cc5f31415f19fe56bb7f00c494a94ed62b78eb1d2ed65719ad7176a323c\",\"byteLength\":\"8738\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:EQcpJmdSxRWU8H7XXQn3xc5YLUyc3mD6i4TleUBc5sg\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:ws2VMEnI0N2YtzTYjl2se6CLk2BlxsGlckgojsb7gxA\"}},{\"id\":\"urn:awp:n:ws2VMEnI0N2YtzTYjl2se6CLk2BlxsGlckgojsb7gxA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:bf2905bfcc082066879fe7f7e1a157652c3d5c8ce37f1681fc323547e0d6c259\",\"byteLength\":\"8748\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:_5j8t-zihm5lQpZQWbnu9_3LYcDg-A-AG6_lsnyYWkg\",\"@graph\":[{\"id\":\"urn:awp:n:u3fAlsX1vQzUC6lHx_oXDyU2dtEqAOoWZOVhBSLnrJw\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IkM4MldVTEVZejJieVRnQkRJLTZBY3g3eU9wcWJleWh4Umx1T2tIWTdQam8iLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiTW9ydGdhZ2VQcm9kdWN0IiwiaXNzdWVkQXQiOiIyMDI2LTExLTAxVDA5OjAwOjAwWiIsInByb2R1Y3QiOnsibmFtZSI6IjUteWVhciBmaXhlZCIsInByb3BlcnR5VXNlIjoicmVzaWRlbnRpYWwiLCJyYXRlVHlwZSI6ImZpeGVkIiwicmF0ZVBlcmNlbnQiOjQuMSwiZml4ZWRZZWFycyI6NSwibWF4TG9hblRvVmFsdWVQZXJjZW50Ijo5MH0sInN5bnRoZXRpYyI6dHJ1ZSwiaWQiOiJ1cm46YXdwOnByb2R1Y3Q6bm9ydGhiYW5rLWZpeGVkLTUiLCJpc3N1ZXIiOiJodHRwczovL25vcnRoYmFuay5leGFtcGxlLyNvcmciLCJjbGFpbVR5cGUiOiJtb3J0Z2FnZS5wcm9kdWN0IiwibWV0aG9kIjoicHVibGlzaGVkLWJ5LWxlbmRlciIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjphd3A6cHJvZHVjdC10ZXJtczpub3J0aGJhbmstZml4ZWQtNSIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjphd3A6cHJvZHVjdDpub3J0aGJhbmstZml4ZWQtNSIsImNvbnN0cmFpbnRzIjpbeyJsZWZ0T3BlcmFuZCI6InB1cnBvc2UiLCJvcGVyYXRvciI6ImVxIiwicmlnaHRPcGVyYW5kIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjcHVycG9zZS9wcm9kdWN0LXNlYXJjaCJ9XX0seyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46YXdwOnByb2R1Y3Q6bm9ydGhiYW5rLWZpeGVkLTUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI3B1cnBvc2UvcHJvZHVjdC1zZWFyY2gifV19XX19fQ.k9YfkffKUxSOOT2Ewcz1iz0wpOiQLzuUI_A64ezONa6n_snLz47M-S6NY1UHg45YzhMmStrHVEXtxDKV6CvQDg\"}]},{\"id\":\"urn:awp:n:tfpkaqUfuTseBGxONYwDI1ra7OA8nq8XtiMVHn9JU4U\",\"@graph\":[{\"id\":\"urn:awp:n:B_yY3u3X6p_MMn5tMcPT8rRANgttJalD62QeJXBSoaY\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6InU1bnpZUUw4ajAzY1pwcjFJYTFFeENNaTdWQ3lPLVBaVGE1Sy1RclBfaEkiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiTW9ydGdhZ2VQcm9kdWN0IiwiaXNzdWVkQXQiOiIyMDI2LTExLTAxVDA5OjAwOjAwWiIsInByb2R1Y3QiOnsibmFtZSI6IjIteWVhciBmaXhlZCIsInByb3BlcnR5VXNlIjoicmVzaWRlbnRpYWwiLCJyYXRlVHlwZSI6ImZpeGVkIiwicmF0ZVBlcmNlbnQiOjMuOCwiZml4ZWRZZWFycyI6MiwibWF4TG9hblRvVmFsdWVQZXJjZW50Ijo4MH0sInN5bnRoZXRpYyI6dHJ1ZSwiaWQiOiJ1cm46YXdwOnByb2R1Y3Q6aGFyYm91cmJhbmstZml4ZWQtMiIsImlzc3VlciI6Imh0dHBzOi8vaGFyYm91cmJhbmsuZXhhbXBsZS8jb3JnIiwiY2xhaW1UeXBlIjoibW9ydGdhZ2UucHJvZHVjdCIsIm1ldGhvZCI6InB1Ymxpc2hlZC1ieS1sZW5kZXIiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46YXdwOnByb2R1Y3QtdGVybXM6aGFyYm91cmJhbmstZml4ZWQtMiIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjphd3A6cHJvZHVjdDpoYXJib3VyYmFuay1maXhlZC0yIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNwdXJwb3NlL3Byb2R1Y3Qtc2VhcmNoIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjphd3A6cHJvZHVjdDpoYXJib3VyYmFuay1maXhlZC0yIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNwdXJwb3NlL3Byb2R1Y3Qtc2VhcmNoIn1dfV19fX0.VMvENid0VjAl6wAg4yChJnIz7AnP8kl9Tp4iy3Rvep2QVLvxHVZn3duGigX8NYuF7ynuOAbWlM9up-ibYzt9Cw\"}]},{\"id\":\"urn:awp:n:FGKrRhuwHyHVdxSKlzmedZAtAXD20Jlmr2Fp5aNntHE\",\"@graph\":[{\"id\":\"urn:awp:n:TRUboM4v-r7-FKB8cgWgoPxmGUqIBJs69a47lPg09vU\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Im5KN1RYbmpGVFF5ZFdzOGp3aXhnN2ZWN2U2Y0dyeTFQS2dMWF9ROWdKenciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJ0eXBlIjoiTW9ydGdhZ2VQcm9kdWN0IiwiaXNzdWVkQXQiOiIyMDI2LTExLTAxVDA5OjAwOjAwWiIsInByb2R1Y3QiOnsibmFtZSI6IjUteWVhciBmaXhlZCIsInByb3BlcnR5VXNlIjoicmVzaWRlbnRpYWwiLCJyYXRlVHlwZSI6ImZpeGVkIiwicmF0ZVBlcmNlbnQiOjQuMSwiZml4ZWRZZWFycyI6NSwibWF4TG9hblRvVmFsdWVQZXJjZW50Ijo5MH0sInN5bnRoZXRpYyI6dHJ1ZSwiaWQiOiJ1cm46ZmljdGlvbmFsOndpbGxvdy1wcm9kdWN0IiwiaXNzdWVyIjoiaHR0cHM6Ly93aWxsb3ctbGVuZGluZy5leGFtcGxlLyNvcmciLCJjbGFpbVR5cGUiOiJtb3J0Z2FnZS5wcm9kdWN0IiwibWV0aG9kIjoicHVibGlzaGVkLWJ5LWxlbmRlciIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjpmaWN0aW9uYWw6d2lsbG93LXByb2R1Y3QtdGVybXMiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46ZmljdGlvbmFsOndpbGxvdy1wcm9kdWN0IiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNwdXJwb3NlL3Byb2R1Y3Qtc2VhcmNoIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpmaWN0aW9uYWw6d2lsbG93LXByb2R1Y3QiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI3B1cnBvc2UvcHJvZHVjdC1zZWFyY2gifV19XX19fQ.y7URjcPSFDz4NBmXvDj9YRrmzkCvs3KlSpM_--twMv1thjikp9Vjc6NaPoq1ubG2afmE8jIfwc4oxTbUxp7wDQ\"}]},{\"id\":\"urn:awp:n:qn5exGsiMFr8smDyJntXk6JCuTRCc9YPL40BgHXtIAU\",\"@graph\":[{\"id\":\"urn:awp:n:IMJnJTP_kTh6vDrdG6qLrZIAYL4FX7WU-8SkyXwR8SU\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlpEUVYtRlBKell2dnBNZUJDLVNiU184MXE0Q0hGdS00MC11LTVhRlozSDgiLCJ0eXAiOiJhd3AtYWdlbnQtcmVwdXRhdGlvbitqd3MifQ.eyJ0eXBlIjoiQWdlbnRSZXB1dGF0aW9uIiwiaXNzdWVyIjoiaHR0cHM6Ly9maWN0aW9uYWwtcmF0aW5ncy5leGFtcGxlLyNzZXJ2aWNlIiwic3ViamVjdCI6Imh0dHBzOi8vbm9ydGhiYW5rLmV4YW1wbGUvI29yZyIsImFjdG9yIjoiaHR0cHM6Ly9ub3J0aGJhbmsuZXhhbXBsZS9hZ2VudHMvaW50YWtlI2FnZW50Iiwic3ViamVjdEtleSI6ImlmQXNNdkZ5ZHdWTm5JYnpsQlBjNnBQbWd1ak81by1oMm93THdfQ3pkcVEiLCJzY29yZSI6MC45MywibWV0aG9kIjoiZXZpZGVuY2UtcmV2aWV3ZWQtYWdlbnQtYmVoYXZpb3VyIiwiZXZpZGVuY2UiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1iZWhhdmlvdXItcmV2aWV3Il0sImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTEtMTRUMDk6MDA6MDAuMDAwWiJ9.oShpa41D_XfCGy4LrgcRm7ZsrCAityamBahiWv32GKMdAO__HqdETaeWfIPvb9I20Sp-cG1B94ODdDbuyuYSBg\"}]},{\"id\":\"urn:awp:n:beDM_NI9AlPHAjf5UtiW7WPd9HdypvqfFhJOIkZbE28\",\"@graph\":[{\"id\":\"urn:awp:n:Z7yDdHmvunOzoOtj8rHVkJGkmwKAeKjTGORBt3kGj4k\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlpEUVYtRlBKell2dnBNZUJDLVNiU184MXE0Q0hGdS00MC11LTVhRlozSDgiLCJ0eXAiOiJhd3AtYWdlbnQtcmVwdXRhdGlvbitqd3MifQ.eyJ0eXBlIjoiQWdlbnRSZXB1dGF0aW9uIiwiaXNzdWVyIjoiaHR0cHM6Ly9maWN0aW9uYWwtcmF0aW5ncy5leGFtcGxlLyNzZXJ2aWNlIiwic3ViamVjdCI6Imh0dHBzOi8vd2lsbG93LWxlbmRpbmcuZXhhbXBsZS8jb3JnIiwiYWN0b3IiOiJodHRwczovL3dpbGxvdy1sZW5kaW5nLmV4YW1wbGUvYWdlbnRzL2ludGFrZSNhZ2VudCIsInN1YmplY3RLZXkiOiJod1p5Z3FXaTZRcVp1N1ZxZUJWVmttNmtFZHp3akg0TURsa1JuOWoxWW9JIiwic2NvcmUiOjAuOTksIm1ldGhvZCI6ImV2aWRlbmNlLXJldmlld2VkLWFnZW50LWJlaGF2aW91ciIsImV2aWRlbmNlIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtYmVoYXZpb3VyLXJldmlldyJdLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTExLTE0VDA5OjAwOjAwLjAwMFoifQ.rGGmgxmAbjuJmLWglwp2zLWp99m3NFYFea3LnbPJvoYiA1sv0Qtt51QoRx3KVfprUfgw0YXpdBldbhlspGaFDQ\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjdtZ2tZTnRSX013RW5oSUQ5T1BzVjduRHJFbHVUWGN3bmN4RUd6eUZzZUkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..fnVoWGUIG_z5JQTIZry3IWRHOQ56ypNyLPxXnbmnyBMI5nSkX0hC5J1wSA-s9dVyOtLI9s7qkr9qV2o_hRF3Ag\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2326,7 +2620,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "A deliver message from The mortgage product index’s agent reaches the inbound gate."
+      "caption": "A deliver message from The mortgage product index’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 58,
@@ -2353,7 +2648,8 @@
         "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The mortgage product index’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The mortgage product index’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 59,
@@ -2406,7 +2702,8 @@
         ],
         "answer": "Accepted, for mortgage product claims only."
       },
-      "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim."
+      "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 60,
@@ -2454,7 +2751,8 @@
         ],
         "answer": "Accepted, for mortgage product claims only."
       },
-      "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim."
+      "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 61,
@@ -2498,7 +2796,8 @@
         ],
         "answer": "No register answers for this source."
       },
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: Willow Lending, a fictional unlisted lender is not accepted as a source for this kind of claim."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms: Willow Lending, a fictional unlisted lender is not accepted as a source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 62,
@@ -2516,7 +2815,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "This message asks for nothing, so there is no authority to check."
+      "caption": "This message asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 63,
@@ -2543,7 +2843,8 @@
         "id": "urn:awp:product-terms:northbank-fixed-5",
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
-      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 64,
@@ -2570,7 +2871,8 @@
         "id": "urn:awp:product-terms:harbourbank-fixed-2",
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
-      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search."
+      "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
+      "gateRun": 1
     },
     {
       "seq": 65,
@@ -2607,7 +2909,8 @@
         "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage product from The fictional lender, Sam’s fictional bank, Willow Lending, a fictional unlisted lender by published-by-lender, at most 31 days old."
       },
-      "caption": "The fictional lender's signed product terms is fit for Search mortgage products: published-by-lender, 12 days old."
+      "caption": "The fictional lender's signed product terms is fit for Search mortgage products: published-by-lender, 12 days old.",
+      "gateRun": 1
     },
     {
       "seq": 66,
@@ -2644,7 +2947,8 @@
         "id": "urn:profile:mortgage-payment:mortgage.product",
         "text": "Accept mortgage product from The fictional lender, Sam’s fictional bank, Willow Lending, a fictional unlisted lender by published-by-lender, at most 31 days old."
       },
-      "caption": "Sam’s fictional bank's signed product terms is fit for Search mortgage products: published-by-lender, 12 days old."
+      "caption": "Sam’s fictional bank's signed product terms is fit for Search mortgage products: published-by-lender, 12 days old.",
+      "gateRun": 1
     },
     {
       "seq": 67,
@@ -2654,7 +2958,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted; statements that did not pass are labelled as not admitted."
+      "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001",
+      "messageDigest": "sha-256:22eaec4378c7ef5fb272dd18d719cdd8e79598ed68e749425d3daa39bc24be2d",
+      "caption": "The message is admitted; statements that did not pass are labelled as not admitted.",
+      "gateRun": 1
     },
     {
       "seq": 68,

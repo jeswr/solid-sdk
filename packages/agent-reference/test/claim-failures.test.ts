@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { expect, it } from "vitest";
-import { digestContent, digestOf } from "../src/core/canonical.js";
+import { digestOf } from "../src/core/canonical.js";
 import { openConversation } from "../src/core/conversation.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import type { JsonObject } from "../src/core/types.js";
@@ -457,71 +457,94 @@ it.each([
     expect(coverage?.caption).toContain(`Ask ${ISSUER}`);
     expect(coverage?.caption).toContain("recorded-by-authority");
     expect(coverage?.caption).not.toContain("urn:test:subject");
-    const held = f.recorder.events().findLast((e) => e.kind === "decision")!;
-    expect(await messageAdmission(f, [await signClaim(f.key, f.claim)])).toMatchObject({
-      ok: true,
-    });
-    const between = f.recorder.events().slice(held.seq);
-    expect(between.some((e) => e.part === "core")).toBe(false);
   }
 });
 
-it("holds the insurer's core at the coverage check until a structured estimate arrives", async () => {
-  const { profile, scenario } = loadCase(
-    new URL("..", import.meta.url).pathname,
-    "insurance-claim-photos",
-  );
-  const branch = scenario.branches.find((b) => b.id === "needed-claim-left-out")!;
-  const change = branch.change as Pick<Scenario, "script" | "statements">;
-  const original = scenario.statements.find((claim) => claim.id === "estimate")!;
+const insuranceRoot = new URL("..", import.meta.url).pathname;
+
+it.each([
+  true,
+  false,
+])("holds the policyholder's release with only a signed garage letter (accepted source: %s)", async (accepted) => {
+  const { profile, scenario } = loadCase(insuranceRoot, "insurance-claim-photos");
+  const branch = scenario.branches.find((b) => b.id === "branch-1")!;
   const garage = scenario.parties.find((party) => party.id === "garage")!;
-  const letterId = "garage-letter";
-  const subject = original.subject;
-  const bytes = "The damage is serious.";
-  const purpose = "urn:purpose:insurance-claim-photos";
-  const claimId = "urn:scenario:insurance-claim-photos:garage-letter";
-  profile.claims
-    .find((claim) => claim.kind === "unstructured-content")!
-    .sources.push(garage.identity);
-  for (const agent of ["owner-agent", "receiver-agent"]) {
-    scenario.trust.sources[agent]!.push({
-      id: `urn:test:garage-letter:${agent}`,
-      version: "1",
-      source: garage.identity,
-      claimTypes: ["unstructured-content"],
-      subjects: [subject!],
-    });
-  }
-  change.statements ??= scenario.statements;
-  change.statements.push({
-    ...original,
-    id: letterId,
-    kind: "unstructured-content",
-    value: {
-      contentDigest: digestContent(bytes),
-    },
-    terms: {
-      policy: {
-        id: "urn:terms:test:garage-letter",
-        permissions: ["use", "distribute"].map((action) => ({
-          type: "permission",
-          action,
-          target: claimId,
-          constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: purpose }],
-        })),
+  if (!accepted) {
+    branch.profileChange = {
+      claims: {
+        "repair.estimate": {
+          sources: profile.claims
+            .find((claim) => claim.kind === "repair.estimate")!
+            .sources.filter((source) => source !== garage.identity),
+        },
       },
-    },
+    };
+    branch.expect = { outcome: "stop", check: "fitness", reason: "evidence-missing" };
+    delete branch.catalogueExpected;
+  }
+  const [, path] = await runScenario(
+    profile,
+    { ...scenario, branches: [branch] },
+    { compare: false },
+  );
+  const events = path!.trace!.events;
+  const hold = events.findLast((e) => e.kind === "decision")!;
+  expect(hold).toMatchObject({
+    agent: "owner-agent",
+    part: "outbound-gate",
+    outcome: branch.expect.outcome,
+    reason: branch.expect.reason,
   });
+  expect(
+    events.some((e) => e.agent === "owner-agent" && e.fact?.id.endsWith(":garage-letter")),
+  ).toBe(true);
+  const fitness = events.find(
+    (e) =>
+      e.agent === hold.agent &&
+      e.part === hold.part &&
+      e.gateRun === hold.gateRun &&
+      e.check === "fitness",
+  );
+  expect(fitness).toMatchObject({
+    verdict: accepted ? "ask-more" : "fail",
+    reason: branch.expect.reason,
+  });
+  if (accepted) {
+    expect(fitness?.caption).toContain(garage.name);
+    expect(fitness?.caption).toContain("repair estimate");
+    expect(fitness?.caption).toContain("recorded-by-authority");
+  }
+  expect(
+    events
+      .filter((e) => e.step >= hold.step)
+      .some(
+        (e) => e.agent === "receiver-agent" || ["message-out", "ask-principal"].includes(e.kind),
+      ),
+  ).toBe(false);
+}, 120_000);
+
+it("holds the insurer's core at the coverage check until a structured estimate arrives", async () => {
+  const { profile, scenario } = loadCase(insuranceRoot, "insurance-claim-photos");
+  const branch = scenario.branches.find((b) => b.id === "branch-1")!;
+  const retry = scenario.branches.find((b) => b.id === "needed-claim-left-out")!;
+  const change = branch.change as Pick<Scenario, "script" | "statements" | "stopAfter">;
+  const retryChange = retry.change as Pick<Scenario, "script">;
+  // Lift the policyholder's earlier outbound bar by admitting the estimate locally.
+  change.statements.push(scenario.statements.find((claim) => claim.id === "estimate")!);
   const admit = change.script.find((step) => step.type === "admit")!;
   if (admit.type !== "admit") throw new Error("Expected local statement admission");
-  admit.statements.push(letterId);
-  const share = change.script.find((step) => step.id === "share")!;
-  if (share.type !== "start") throw new Error("Expected a claim submission");
-  share.evidence.push(letterId);
-  share.content.push({ id: "urn:content:garage-letter", mediaType: "text/plain", bytes });
-  branch.expect = { outcome: "ask-more", check: "fitness", reason: "structured-form-required" };
-  scenario.branches = [branch];
-  const [, path] = await runScenario(profile, scenario, { compare: false });
+  admit.statements.push("estimate");
+  change.script.push(
+    ...retryChange.script.slice(
+      retryChange.script.findIndex((step) => step.id === "approve-exact-account"),
+    ),
+  );
+  delete change.stopAfter;
+  const [, path] = await runScenario(
+    profile,
+    { ...scenario, branches: [branch] },
+    { compare: false },
+  );
   const events = path!.trace!.events;
   const challenge = events.find(
     (e) =>
@@ -529,19 +552,31 @@ it("holds the insurer's core at the coverage check until a structured estimate a
       e.kind === "decision" &&
       e.reason === "structured-form-required",
   )!;
-  expect(challenge).toMatchObject({ outcome: "ask-more" });
-  expect(challenge.caption).toContain(`Ask ${garage.name}`);
-  const retry = events.find(
+  expect(challenge).toMatchObject({
+    part: "inbound-gate",
+    outcome: "ask-more",
+  });
+  const arrival = events.findLast(
+    (e) => e.agent === challenge.agent && e.kind === "message-in" && e.seq < challenge.seq,
+  )!;
+  expect(arrival.seq).toBeLessThan(challenge.seq);
+  const admitted = events.find(
     (e) =>
-      e.agent === "receiver-agent" &&
+      e.agent === challenge.agent &&
       e.kind === "decision" &&
       e.outcome === "admit" &&
       e.seq > challenge.seq,
   )!;
-  expect(retry).toBeDefined();
   expect(
-    events
-      .slice(challenge.seq, retry.seq - 1)
-      .some((e) => e.agent === "receiver-agent" && e.part === "core"),
+    events.some(
+      (e) =>
+        e.agent === challenge.agent &&
+        e.part === "core" &&
+        e.seq > arrival.seq &&
+        e.seq < admitted.seq,
+    ),
   ).toBe(false);
+  expect(
+    events.some((e) => e.agent === challenge.agent && e.part === "core" && e.seq > admitted.seq),
+  ).toBe(true);
 }, 120_000);

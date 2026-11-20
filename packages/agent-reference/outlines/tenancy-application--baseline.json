@@ -3,7 +3,7 @@
   "schema": "agent-outline/0.1",
   "entries": [
     {
-      "agent": "clinician-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -11,7 +11,7 @@
       "reason": "intact"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
@@ -19,7 +19,7 @@
       "reason": "source-accepted"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
@@ -27,7 +27,7 @@
       "reason": "no-action"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
@@ -35,7 +35,7 @@
       "reason": "terms-acceptable"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -43,13 +43,13 @@
       "reason": "fit-for-use"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -57,7 +57,7 @@
       "reason": "intact"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
@@ -65,7 +65,7 @@
       "reason": "source-accepted"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
@@ -73,7 +73,7 @@
       "reason": "no-action"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
@@ -81,7 +81,7 @@
       "reason": "terms-acceptable"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -89,13 +89,13 @@
       "reason": "fit-for-use"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "record-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -103,7 +103,7 @@
       "reason": "intact"
     },
     {
-      "agent": "record-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
@@ -111,7 +111,7 @@
       "reason": "source-accepted"
     },
     {
-      "agent": "record-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
@@ -119,7 +119,7 @@
       "reason": "no-action"
     },
     {
-      "agent": "record-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
@@ -127,7 +127,7 @@
       "reason": "terms-acceptable"
     },
     {
-      "agent": "record-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -135,13 +135,13 @@
       "reason": "fit-for-use"
     },
     {
-      "agent": "record-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -149,7 +149,7 @@
       "reason": "within-mandate"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -157,7 +157,7 @@
       "reason": "recipient-established"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -165,7 +165,7 @@
       "reason": "no-personal-data"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -173,7 +173,7 @@
       "reason": "no-personal-data"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -181,39 +181,7 @@
       "reason": "within-limits"
     },
     {
-      "agent": "clinician-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "pass",
-      "reason": "minimal-disclosure"
-    },
-    {
-      "agent": "clinician-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "pass",
-      "reason": "terms-allow"
-    },
-    {
-      "agent": "clinician-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "pass",
-      "reason": "minimal-disclosure"
-    },
-    {
-      "agent": "clinician-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "pass",
-      "reason": "terms-allow"
-    },
-    {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -221,7 +189,7 @@
       "reason": "no-personal-data"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -229,23 +197,23 @@
       "reason": "evidence-complete"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-out"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -253,7 +221,7 @@
       "reason": "intact"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
@@ -261,15 +229,7 @@
       "reason": "source-accepted"
     },
     {
-      "agent": "record-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "source",
-      "verdict": "pass",
-      "reason": "source-accepted"
-    },
-    {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
@@ -277,7 +237,7 @@
       "reason": "authority-valid"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
@@ -285,15 +245,7 @@
       "reason": "terms-acceptable"
     },
     {
-      "agent": "record-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "terms",
-      "verdict": "pass",
-      "reason": "terms-acceptable"
-    },
-    {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -301,21 +253,53 @@
       "reason": "fit-for-use"
     },
     {
-      "agent": "record-agent",
-      "part": "inbound-gate",
-      "kind": "check",
-      "check": "fitness",
-      "verdict": "pass",
-      "reason": "fit-for-use"
-    },
-    {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -323,7 +307,7 @@
       "reason": "within-mandate"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -331,7 +315,7 @@
       "reason": "recipient-established"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -339,7 +323,7 @@
       "reason": "no-personal-data"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -347,7 +331,7 @@
       "reason": "no-personal-data"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -355,23 +339,15 @@
       "reason": "within-limits"
     },
     {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "pass",
-      "reason": "terms-allow"
-    },
-    {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "pass",
-      "reason": "minimal-disclosure"
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -379,23 +355,23 @@
       "reason": "evidence-complete"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "record-agent",
+      "agent": "owner-agent",
       "part": "transport",
       "kind": "message-out"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -403,168 +379,109 @@
       "reason": "intact"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "pass",
+      "reason": "source-accepted"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
-      "verdict": "not-applicable",
-      "reason": "no-action"
+      "verdict": "pass",
+      "reason": "authority-valid"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "not-applicable",
-      "reason": "no-data"
+      "verdict": "pass",
+      "reason": "terms-acceptable"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "pass",
+      "reason": "fit-for-use"
     },
     {
-      "agent": "clinician-agent",
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "mandate",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "recipient",
-      "verdict": "pass",
-      "reason": "recipient-established"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "limits-approval",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "evidence",
-      "verdict": "pass",
-      "reason": "evidence-complete"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "decision",
-      "verdict": "pass"
-    },
-    {
-      "agent": "record-agent",
-      "part": "transport",
-      "kind": "message-out"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "mandate",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "recipient",
-      "verdict": "pass",
-      "reason": "recipient-established"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "limits-approval",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "evidence",
-      "verdict": "pass",
-      "reason": "evidence-complete"
-    },
-    {
-      "agent": "record-agent",
-      "part": "outbound-gate",
-      "kind": "decision",
-      "verdict": "pass"
-    },
-    {
-      "agent": "record-agent",
-      "part": "transport",
-      "kind": "message-out"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "transport",
-      "kind": "message-in"
-    },
-    {
-      "agent": "patient-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -572,15 +489,15 @@
       "reason": "intact"
     },
     {
-      "agent": "patient-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "pass",
+      "reason": "source-accepted"
     },
     {
-      "agent": "patient-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
@@ -588,93 +505,29 @@
       "reason": "no-action"
     },
     {
-      "agent": "patient-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "not-applicable",
-      "reason": "no-data"
+      "verdict": "pass",
+      "reason": "terms-acceptable"
     },
     {
-      "agent": "patient-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "pass",
+      "reason": "fit-for-use"
     },
     {
-      "agent": "patient-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "mandate",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "recipient",
-      "verdict": "pass",
-      "reason": "recipient-established"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "pass",
-      "reason": "minimal-disclosure"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "pass",
-      "reason": "terms-allow"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "limits-approval",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "evidence",
-      "verdict": "pass",
-      "reason": "evidence-complete"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "outbound-gate",
-      "kind": "decision",
-      "verdict": "pass"
-    },
-    {
-      "agent": "patient-agent",
-      "part": "transport",
-      "kind": "message-out"
-    },
-    {
-      "agent": "contact-agent",
-      "part": "transport",
-      "kind": "message-in"
-    },
-    {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "integrity",
@@ -682,15 +535,15 @@
       "reason": "intact"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "source",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "pass",
+      "reason": "source-accepted"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
@@ -698,37 +551,37 @@
       "reason": "no-action"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "terms",
-      "verdict": "not-applicable",
-      "reason": "no-data"
+      "verdict": "pass",
+      "reason": "terms-acceptable"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "check",
       "check": "fitness",
-      "verdict": "not-applicable",
-      "reason": "no-claims"
+      "verdict": "pass",
+      "reason": "fit-for-use"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
-      "verdict": "not-applicable",
-      "reason": "no-action"
+      "verdict": "pass",
+      "reason": "within-mandate"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -736,7 +589,31 @@
       "reason": "recipient-established"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -744,7 +621,7 @@
       "reason": "minimal-disclosure"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -752,15 +629,31 @@
       "reason": "terms-allow"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
-      "check": "limits-approval",
-      "verdict": "not-applicable",
-      "reason": "no-action"
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -768,15 +661,98 @@
       "reason": "evidence-complete"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass"
     },
     {
-      "agent": "contact-agent",
+      "agent": "owner-agent",
       "part": "transport",
       "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
     }
   ]
 }

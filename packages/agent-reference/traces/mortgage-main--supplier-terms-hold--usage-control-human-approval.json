@@ -4,7 +4,7 @@
   "useCase": "mortgage-in-principle",
   "path": {
     "index": 2,
-    "what": "The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose."
+    "what": "The valuer asks Sam for the bank balance statement. A balance is not needed for a valuation, so the disclosure check stops it and Sam is never asked. Harbour's signed terms are a second bar that Sam's approval could not lift."
   },
   "parties": [
     {
@@ -82,7 +82,7 @@
   ],
   "scenario": {
     "id": "mortgage-main--supplier-terms-hold",
-    "title": "A mortgage in principle: The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose.",
+    "title": "A mortgage in principle: The valuer asks Sam for the bank balance statement. A balance is not needed for a valuation, so the disclosure check stops it and Sam is never asked. Harbour's signed terms are a second bar that Sam's approval could not lift.",
     "steps": {
       "1": "Sam signs a mandate.",
       "2": "Sam asks for a mortgage in principle.",
@@ -193,7 +193,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [

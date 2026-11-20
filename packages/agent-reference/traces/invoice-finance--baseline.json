@@ -85,7 +85,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -116,7 +116,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The buyer's invoice valid statement is intact and signed with The buyer's pinned key."
+      "caption": "The buyer's invoice valid statement is intact and signed with The buyer's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -154,7 +155,8 @@
         ],
         "answer": "Accepted, for invoice valid claims only."
       },
-      "caption": "The buyer's invoice valid statement: The buyer is an accepted source for this kind of claim."
+      "caption": "The buyer's invoice valid statement: The buyer is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -172,7 +174,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The buyer's invoice valid statement asks for nothing, so there is no authority to check."
+      "caption": "The buyer's invoice valid statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -199,7 +202,8 @@
         "id": "urn:terms:invoice-finance:item",
         "text": "Its terms allow this: use for Invoice finance."
       },
-      "caption": "The buyer's invoice valid statement: its terms allow this: use for Invoice finance."
+      "caption": "The buyer's invoice valid statement: its terms allow this: use for Invoice finance.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -231,7 +235,8 @@
         "id": "urn:profile:invoice-finance:invoice.valid",
         "text": "Accept invoice valid from The buyer by recorded-by-authority, at most 1 days old."
       },
-      "caption": "The buyer's invoice valid statement is fit for Financing an invoice once: recorded-by-authority, 0 days old."
+      "caption": "The buyer's invoice valid statement is fit for Financing an invoice once: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -241,7 +246,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The buyer's invoice valid statement is admitted."
+      "caption": "The buyer's invoice valid statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -278,6 +284,16 @@
       "seq": 9,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -295,12 +311,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The first financier's mandate covers this action."
+      "caption": "The first financier's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -329,12 +356,23 @@
         "answer": "Accepted, for Financing an invoice once only."
       },
       "reason": "recipient-established",
-      "caption": "The first financier: Accepted, for Financing an invoice once only."
+      "caption": "The first financier: Accepted, for Financing an invoice once only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -347,12 +385,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -365,12 +414,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -383,7 +443,8 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The first financier's limits."
+      "caption": "Inside what the agent may do on its own, and within The first financier's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
@@ -391,6 +452,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "integrity",
       "verdict": "pass",
       "reason": "intact",
@@ -402,6 +464,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "source",
       "verdict": "pass",
       "reason": "source-accepted",
@@ -413,6 +476,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "terms",
       "verdict": "pass",
       "reason": "terms-acceptable",
@@ -424,6 +488,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "fitness",
       "verdict": "pass",
       "reason": "fit-for-use",
@@ -435,6 +500,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "authority",
       "verdict": "pass",
       "reason": "authority-valid",
@@ -446,6 +512,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "decision",
+      "gateRun": 1,
       "outcome": "admit",
       "reason": "authority-valid",
       "caption": "The register records status before releasing its signed answer."
@@ -456,6 +523,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "integrity",
       "verdict": "pass",
       "reason": "intact",
@@ -467,6 +535,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "source",
       "verdict": "pass",
       "reason": "source-accepted",
@@ -478,6 +547,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "terms",
       "verdict": "pass",
       "reason": "terms-acceptable",
@@ -489,6 +559,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "fitness",
       "verdict": "pass",
       "reason": "fit-for-use",
@@ -500,6 +571,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "authority",
       "verdict": "pass",
       "reason": "authority-valid",
@@ -511,6 +583,7 @@
       "agent": "register",
       "part": "inbound-gate",
       "kind": "decision",
+      "gateRun": 2,
       "outcome": "admit",
       "reason": "authority-valid",
       "caption": "The register records redeem before releasing its signed answer."
@@ -519,6 +592,16 @@
       "seq": 26,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -540,17 +623,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f43e57e76eb2904da058f619172a172fcb738990aef2d9e62ed6d6553bcc69e5",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:invoice-finance",
+        "operation": "urn:op:invoice-finance",
+        "conversation": "urn:scenario:invoice-finance:redeem-and-act",
+        "recipient": "urn:fictional:invoice-finance:owner",
+        "purpose": "urn:purpose:invoice-finance",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Financing an invoice once with The first financier."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Financing an invoice once with The first financier.",
+      "gateRun": 1
     }
   ]
 }

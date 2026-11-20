@@ -102,6 +102,21 @@
       "part": "principal",
       "kind": "ask-principal",
       "reason": "source-unknown"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "reason": "source-unknown"
+    },
+    {
+      "agent": "blair-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "source-unknown"
     }
   ]
 }

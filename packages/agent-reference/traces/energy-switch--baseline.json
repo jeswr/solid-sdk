@@ -108,7 +108,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -142,6 +142,16 @@
       "seq": 2,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -159,12 +169,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The switching service's mandate covers this action."
+      "caption": "The switching service's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 3,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -193,12 +214,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 4,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -211,12 +243,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 5,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -229,12 +272,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 6,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -247,12 +301,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The switching service's limits."
+      "caption": "Inside what the agent may do on its own, and within The switching service's limits.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -274,17 +339,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 1,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ca6f01f7ae70731199f495622c6a52176c75c2671626cfc62a07a59cbcbd5ee7",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:reserve-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 1
     },
     {
       "seq": 9,
@@ -363,6 +441,16 @@
       "seq": 16,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -380,12 +468,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The household's mandate covers this action."
+      "caption": "The household's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -414,12 +513,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -432,12 +542,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -450,12 +571,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 20,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -468,12 +600,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The household's limits."
+      "caption": "Inside what the agent may do on its own, and within The household's limits.",
+      "gateRun": 1
     },
     {
       "seq": 21,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -495,17 +638,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 22,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:3b75a2f6198781734f129e1eb70d837512828ae697f3df302fdeb30144c396af",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 1
     },
     {
       "seq": 23,
@@ -584,6 +740,16 @@
       "seq": 30,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -601,12 +767,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The energy supplier's mandate covers this action."
+      "caption": "The energy supplier's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -635,12 +812,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -653,12 +841,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -671,12 +870,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 34,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -689,12 +899,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The energy supplier's limits."
+      "caption": "Inside what the agent may do on its own, and within The energy supplier's limits.",
+      "gateRun": 1
     },
     {
       "seq": 35,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -716,17 +937,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 36,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:3a351b2ec1ba9f54ec838e7e1032874b23b4ea339c145db8928944ce34ad96c8",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 1
     },
     {
       "seq": 37,
@@ -805,6 +1039,16 @@
       "seq": 44,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -822,12 +1066,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The switching service's mandate covers this action."
+      "caption": "The switching service's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 45,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -856,12 +1111,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 46,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -874,12 +1140,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 47,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -892,12 +1169,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 48,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -910,12 +1198,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The switching service's limits."
+      "caption": "Inside what the agent may do on its own, and within The switching service's limits.",
+      "gateRun": 2
     },
     {
       "seq": 49,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -937,17 +1236,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 50,
       "step": 4,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:769bb86f8cd513734bb91bd9dd56fbdfd97b770c03f1951c3d5f967f1fc39c5e",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:accept-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 2
     },
     {
       "seq": 51,
@@ -1026,6 +1338,16 @@
       "seq": 58,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1043,12 +1365,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The switching service's mandate covers this action."
+      "caption": "The switching service's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 59,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1077,12 +1410,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 3
     },
     {
       "seq": 60,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1095,12 +1439,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 61,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1113,12 +1468,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 62,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1131,12 +1497,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The switching service's limits."
+      "caption": "Inside what the agent may do on its own, and within The switching service's limits.",
+      "gateRun": 3
     },
     {
       "seq": 63,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1158,17 +1535,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 3
     },
     {
       "seq": 64,
       "step": 5,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:385aee01c46480932d65689aa98cfa6ce6d8baca7d8581cb3e422ed882e05f3b",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:complete-plan",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 3
     },
     {
       "seq": 65,
@@ -1313,6 +1703,16 @@
       "seq": 78,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1330,12 +1730,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The household's mandate covers this action."
+      "caption": "The household's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 79,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1364,12 +1775,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 80,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1382,12 +1804,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 81,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1400,12 +1833,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 82,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1418,12 +1862,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The household's limits."
+      "caption": "Inside what the agent may do on its own, and within The household's limits.",
+      "gateRun": 2
     },
     {
       "seq": 83,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1445,17 +1900,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 84,
       "step": 7,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:4cb94890202fd176ee10d3eedb4afad58eb0a893d55f972bed5a71834e9a275c",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-owner",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 2
     },
     {
       "seq": 85,
@@ -1534,6 +2002,16 @@
       "seq": 92,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1551,12 +2029,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The energy supplier's mandate covers this action."
+      "caption": "The energy supplier's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 93,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1585,12 +2074,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 2
     },
     {
       "seq": 94,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1603,12 +2103,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 95,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1621,12 +2132,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 96,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1639,12 +2161,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The energy supplier's limits."
+      "caption": "Inside what the agent may do on its own, and within The energy supplier's limits.",
+      "gateRun": 2
     },
     {
       "seq": 97,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1666,17 +2199,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 2
     },
     {
       "seq": 98,
       "step": 8,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:21eeda9641f8f6f8cfa9d78991ef382ae44ace1c18abd641e633f476a34f58b0",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-receiver",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 2
     },
     {
       "seq": 99,
@@ -1755,6 +2301,16 @@
       "seq": 106,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1772,12 +2328,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The switching service's mandate covers this action."
+      "caption": "The switching service's mandate covers this action.",
+      "gateRun": 4
     },
     {
       "seq": 107,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1806,12 +2373,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The switching service: Accepted, for Accepting the same agreement terms only."
+      "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 4
     },
     {
       "seq": 108,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1824,12 +2402,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 109,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1842,12 +2431,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 4
     },
     {
       "seq": 110,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1860,12 +2460,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The switching service's limits."
+      "caption": "Inside what the agent may do on its own, and within The switching service's limits.",
+      "gateRun": 4
     },
     {
       "seq": 111,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1887,17 +2498,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 4
     },
     {
       "seq": 112,
       "step": 9,
       "agent": "coordinator-agent",
+      "actionDigest": "sha-256:ecf5ca0a0f6ffe86d15ab94669da4eea796ffa6cf3402fd23a649f1095629968",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:issue-to-coordinator",
+        "recipient": "urn:fictional:energy-switch:coordinator",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
+      "gateRun": 4
     },
     {
       "seq": 113,
@@ -1976,6 +2600,16 @@
       "seq": 120,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1993,12 +2627,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The energy supplier's mandate covers this action."
+      "caption": "The energy supplier's mandate covers this action.",
+      "gateRun": 3
     },
     {
       "seq": 121,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -2027,12 +2672,23 @@
         "answer": "Accepted, for Accepting the same agreement terms only."
       },
       "reason": "recipient-established",
-      "caption": "The old supplier: Accepted, for Accepting the same agreement terms only."
+      "caption": "The old supplier: Accepted, for Accepting the same agreement terms only.",
+      "gateRun": 3
     },
     {
       "seq": 122,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2045,12 +2701,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 123,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2063,12 +2730,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 3
     },
     {
       "seq": 124,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -2081,12 +2759,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The energy supplier's limits."
+      "caption": "Inside what the agent may do on its own, and within The energy supplier's limits.",
+      "gateRun": 3
     },
     {
       "seq": 125,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2108,17 +2797,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 3
     },
     {
       "seq": 126,
       "step": 10,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:90f573b11ab337fa2ba6582606d956811a5625f3eff616e4dea769f577d40b92",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agreement",
+        "operation": "urn:op:agreement",
+        "conversation": "urn:scenario:energy-switch:present-credential",
+        "recipient": "urn:fictional:energy-switch:external-receiver",
+        "purpose": "urn:purpose:energy-switch",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: share Accepting the same agreement terms with The old supplier."
+      "effectRelease": true,
+      "caption": "The action goes: share Accepting the same agreement terms with The old supplier.",
+      "gateRun": 3
     },
     {
       "seq": 127,

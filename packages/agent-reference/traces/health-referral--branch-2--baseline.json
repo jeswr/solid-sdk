@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -116,7 +116,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The professional register's organization role statement is intact and signed with The professional register's pinned key."
+      "caption": "The professional register's organization role statement is intact and signed with The professional register's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -155,7 +156,8 @@
         ],
         "answer": "No register answers for this source."
       },
-      "caption": "The professional register's organization role statement: The professional register is not accepted as a source for this kind of claim."
+      "caption": "The professional register's organization role statement: The professional register is not accepted as a source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -173,7 +175,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The professional register's organization role statement asks for nothing, so there is no authority to check."
+      "caption": "The professional register's organization role statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -184,7 +187,8 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-unknown",
-      "caption": "The professional register's organization role statement is refused and kept out of memory."
+      "caption": "The professional register's organization role statement is refused and kept out of memory.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -198,6 +202,16 @@
       "seq": 6,
       "step": 2,
       "agent": "practice-agent",
+      "actionDigest": "sha-256:668d153c1d9e84638aef2cd5ab9934c8518a50bb33dfa7780dfe8bb128a8c758",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:health-referral",
+        "operation": "urn:op:health-referral",
+        "conversation": "urn:awp:engine-health-referral-branch-2:practice-agent:0001",
+        "recipient": "urn:fictional:clinic",
+        "purpose": "urn:purpose:health-referral",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -219,12 +233,23 @@
         "text": "The family practice's mandate lets the agent use the unlabelled resource, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The family practice's mandate covers this action."
+      "caption": "The family practice's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 2,
       "agent": "practice-agent",
+      "actionDigest": "sha-256:668d153c1d9e84638aef2cd5ab9934c8518a50bb33dfa7780dfe8bb128a8c758",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:health-referral",
+        "operation": "urn:op:health-referral",
+        "conversation": "urn:awp:engine-health-referral-branch-2:practice-agent:0001",
+        "recipient": "urn:fictional:clinic",
+        "purpose": "urn:purpose:health-referral",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -237,18 +262,30 @@
         }
       ],
       "reason": "source-unknown",
-      "caption": "Required organization role was refused: source-unknown."
+      "caption": "Required organization role was refused: source-unknown.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 2,
       "agent": "practice-agent",
+      "actionDigest": "sha-256:668d153c1d9e84638aef2cd5ab9934c8518a50bb33dfa7780dfe8bb128a8c758",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:health-referral",
+        "operation": "urn:op:health-referral",
+        "conversation": "urn:awp:engine-health-referral-branch-2:practice-agent:0001",
+        "recipient": "urn:fictional:clinic",
+        "purpose": "urn:purpose:health-referral",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "source-unknown",
-      "caption": "A refused source cannot authorize the action."
+      "caption": "A refused source cannot authorize the action.",
+      "gateRun": 1
     }
   ]
 }

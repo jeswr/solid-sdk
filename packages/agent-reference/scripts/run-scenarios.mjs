@@ -1,13 +1,16 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath } from "url";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { promisify } from "util";
 import { availableAdapters } from "../dist/derive/adapters/index.js";
 import { SPARQ_AGGREGATE } from "../dist/derive/adapters/sparq-aggregate.js";
 import { ProofCache } from "../dist/derive/cache.js";
@@ -36,10 +39,29 @@ let executed = 0;
 const registry = await availableAdapters();
 let commit = "unknown";
 try {
-  commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  commit = (await promisify(execFile)("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
 } catch {}
 mkdirSync(join(root, "traces"), { recursive: true });
 mkdirSync(join(root, "outlines"), { recursive: true });
+// Write each configuration before running the next. The full matrix includes large traces.
+async function* pathsFor(profile, scenario) {
+  const configurations =
+    selectedConfiguration === "baseline"
+      ? [undefined]
+      : selectedConfiguration
+        ? [selectedConfiguration]
+        : [undefined, ...scenario.configurations.map((entry) => entry.id)];
+  const proofCache = new ProofCache(join(root, "proofs"));
+  for (const configuration of configurations)
+    yield* await runScenario(profile, scenario, {
+      commit,
+      configuration,
+      compare: !record,
+      reportExpectationFailures: true,
+      registry,
+      proofCache,
+    });
+}
 for (const file of readdirSync(join(root, "scenarios"))
   .filter((f) => f.endsWith(".json"))
   .sort()) {
@@ -47,14 +69,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
   const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
-  for (const path of await runScenario(profile, scenario, {
-    commit,
-    configuration:
-      selectedConfiguration === "baseline" ? undefined : (selectedConfiguration ?? "all"),
-    compare: !record,
-    registry,
-    proofCache: new ProofCache(join(root, "proofs")),
-  })) {
+  for await (const path of pathsFor(profile, scenario)) {
     assertPublishable(path);
     if (
       path.blocked &&
@@ -140,7 +155,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       events: path.trace.events.length,
     });
   }
-  if (record) {
+  if (record && (!selectedConfiguration || selectedConfiguration === "baseline")) {
     original.expect = scenario.expect;
     for (const branch of original.branches)
       branch.outline = scenario.branches.find((b) => b.id === branch.id).outline;

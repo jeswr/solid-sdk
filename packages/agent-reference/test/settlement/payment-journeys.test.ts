@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
@@ -24,7 +25,9 @@ function run(id: string) {
   let result = runs.get(id);
   if (!result) {
     const input = loadCase(root, id);
-    result = runScenario(input.profile, input.scenario);
+    result = runScenario(input.profile, input.scenario, {
+      reportExpectationFailures: id === "pay-an-invoice",
+    });
     runs.set(id, result);
   }
   return result;

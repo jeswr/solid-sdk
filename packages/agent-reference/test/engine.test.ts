@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readdirSync, readFileSync } from "fs";
@@ -28,7 +29,7 @@ it("loads every declared case and preserves every catalogue branch, without clai
   const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8"));
   for (const file of readdirSync(join(root, "scenarios"))) {
     const { profile, scenario } = loadCase(root, file.slice(0, -5));
-    const results = await runScenario(profile, scenario);
+    const results = await runScenario(profile, scenario, { reportExpectationFailures: true });
     expect(results).toHaveLength(
       scenario.branches.filter((branch) => !branch.onlyUnder).length + 1,
     );
@@ -49,6 +50,11 @@ it("loads every declared case and preserves every catalogue branch, without clai
       } else {
         runs++;
         expect(result.matches).toBe(true);
+        const row = manifest.paths.find(
+          (p: { scenario: string; path: string; configuration?: string }) =>
+            !p.configuration && p.scenario === scenario.id && p.path === result.path,
+        );
+        expect(result.disagrees ? "disagrees" : "runs").toBe(row?.status);
         expect(result.trace?.useCase).toBe(scenario.useCase ?? scenario.id);
         expect(result.trace?.path).toEqual(
           result.path === "main"

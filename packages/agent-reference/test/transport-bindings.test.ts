@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /** biome-ignore-all lint/style/useNamingConvention: The test reads MCP’s _meta member. */
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
@@ -332,11 +333,10 @@ it("runs the transport-specific adversarial branches through separately keyed ag
   }
   const refusalPath = pathResult("a2a-task-state-lies");
   expect(refusalPath.note).toBeUndefined();
-  // The strict suite comparison judges the first different admission before the fault witness.
   expect(refusalPath).toMatchObject({
-    actual: { outcome: "admit" },
+    actual: { outcome: "admit", reason: "intact", check: "integrity" },
     expected: { outcome: "admit", reason: "intact" },
-    disagrees: true,
+    disagrees: false,
   });
   const refusal = refusalPath.trace.events;
   const a2aMain = pathResult("main", "transport-a2a").trace;

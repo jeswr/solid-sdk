@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
@@ -274,4 +275,53 @@ it.each([
     construction.mockRestore();
     signing.mockRestore();
   }
+}, 90_000);
+
+it("checks record-backed credentials before asking approval for an agreement invocation", async () => {
+  const { profile, scenario } = loadCase(
+    new URL("../", import.meta.url).pathname,
+    "pay-an-invoice",
+  );
+  const invoke = scenario.script.find((step) => step.type === "invoke-agreement")!;
+  if (invoke.type !== "invoke-agreement") throw new Error("Missing agreement invocation");
+  const supplier = scenario.mandates.find((mandate) => mandate.agent === invoke.agent)!;
+  const permission = supplier.autonomous.find((rule) => rule.target === invoke.operation)!;
+  supplier.autonomous = supplier.autonomous.filter((rule) => rule !== permission);
+  supplier.withApproval.push(permission);
+  profile.claims.find((claim) => claim.kind === "invoice")!.recordBacked = true;
+  scenario.stopAfter = invoke.id;
+  scenario.branches = [];
+  scenario.result = undefined;
+
+  const [path] = await runScenario(profile, scenario, { compare: false });
+  const events = path!.trace!.events;
+  const stop = events.findLast(
+    (event) => event.agent === invoke.agent && event.kind === "decision",
+  )!;
+  expect(stop).toMatchObject({ outcome: "stop", reason: "evidence-invalid" });
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      agent: invoke.agent,
+      kind: "check",
+      gateRun: stop.gateRun,
+      part: "outbound-gate",
+      check: "evidence",
+      verdict: "fail",
+      reason: "evidence-invalid",
+    }),
+  );
+  expect(
+    events.some(
+      (event) =>
+        event.agent === invoke.agent && event.step === stop.step && event.kind === "ask-principal",
+    ),
+  ).toBe(false);
+  expect(
+    events.some(
+      (event) =>
+        event.agent === invoke.agent &&
+        event.kind === "message-out" &&
+        event.packet?.kind === "invoke",
+    ),
+  ).toBe(false);
 }, 90_000);

@@ -408,7 +408,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -439,7 +439,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional address register's contact address statement is intact and signed with The fictional address register's pinned key."
+      "caption": "The fictional address register's contact address statement is intact and signed with The fictional address register's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -477,7 +478,8 @@
         ],
         "answer": "Accepted, for contact address claims only."
       },
-      "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim."
+      "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -495,7 +497,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional address register's contact address statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional address register's contact address statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -522,7 +525,8 @@
         "id": "urn:terms:change-of-address:new-address",
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
-      "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address."
+      "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -554,7 +558,8 @@
         "id": "urn:profile:change-of-address:contact.address",
         "text": "Accept contact address from The fictional address register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional address register's contact address statement is fit for Telling everyone about a new address: recorded-by-authority, 0 days old."
+      "caption": "The fictional address register's contact address statement is fit for Telling everyone about a new address: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -564,7 +569,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional address register's contact address statement is admitted."
+      "caption": "The fictional address register's contact address statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -601,6 +607,16 @@
       "seq": 9,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f018cdd4c22397baa33e83fe6ed66f154b45893c1c42b858c7a6cdb08f49c5d6",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:change-of-address",
+        "operation": "urn:op:change-of-address",
+        "conversation": "urn:awp:engine-change-of-address-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:change-of-address:organization-21",
+        "purpose": "urn:purpose:change-of-address",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -618,12 +634,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The person's mandate covers this action."
+      "caption": "The person's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f018cdd4c22397baa33e83fe6ed66f154b45893c1c42b858c7a6cdb08f49c5d6",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:change-of-address",
+        "operation": "urn:op:change-of-address",
+        "conversation": "urn:awp:engine-change-of-address-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:change-of-address:organization-21",
+        "purpose": "urn:purpose:change-of-address",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -652,12 +679,23 @@
         "answer": "Accepted, for Telling everyone about a new address only."
       },
       "reason": "recipient-established",
-      "caption": "Fictional organization 21: Accepted, for Telling everyone about a new address only."
+      "caption": "Fictional organization 21: Accepted, for Telling everyone about a new address only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f018cdd4c22397baa33e83fe6ed66f154b45893c1c42b858c7a6cdb08f49c5d6",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:change-of-address",
+        "operation": "urn:op:change-of-address",
+        "conversation": "urn:awp:engine-change-of-address-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:change-of-address:organization-21",
+        "purpose": "urn:purpose:change-of-address",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -670,12 +708,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f018cdd4c22397baa33e83fe6ed66f154b45893c1c42b858c7a6cdb08f49c5d6",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:change-of-address",
+        "operation": "urn:op:change-of-address",
+        "conversation": "urn:awp:engine-change-of-address-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:change-of-address:organization-21",
+        "purpose": "urn:purpose:change-of-address",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -688,12 +737,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f018cdd4c22397baa33e83fe6ed66f154b45893c1c42b858c7a6cdb08f49c5d6",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:change-of-address",
+        "operation": "urn:op:change-of-address",
+        "conversation": "urn:awp:engine-change-of-address-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:change-of-address:organization-21",
+        "purpose": "urn:purpose:change-of-address",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -710,18 +770,30 @@
         "id": "urn:awp:mandate:26a8497b5950e4dfd2b073948185d67d:change-of-address",
         "text": ""
       },
-      "caption": "The mandate says to ask The person first."
+      "caption": "The mandate says to ask The person first.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:f018cdd4c22397baa33e83fe6ed66f154b45893c1c42b858c7a6cdb08f49c5d6",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:change-of-address",
+        "operation": "urn:op:change-of-address",
+        "conversation": "urn:awp:engine-change-of-address-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:change-of-address:organization-21",
+        "purpose": "urn:purpose:change-of-address",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "approval-required",
-      "caption": "The gate holds the action and asks The person."
+      "caption": "The gate holds the action and asks The person.",
+      "gateRun": 1
     },
     {
       "seq": 15,
@@ -731,7 +803,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "Fictional organization 21 asks for 0 of your statements: nothing. They would use them for Change of address. May I share them?"
+        "text": "Fictional organization 21 asks for one of your statements: The fictional address register's contact address statement (contact.address). They would use them for Change of address. May I share them?"
       },
       "caption": "The person is asked to approve this exact action; the approval will be bound to its digest."
     }

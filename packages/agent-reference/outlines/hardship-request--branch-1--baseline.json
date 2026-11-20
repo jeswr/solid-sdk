@@ -93,16 +93,8 @@
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "pass",
-      "reason": "minimal-disclosure"
-    },
-    {
-      "agent": "receiver-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "pass",
-      "reason": "terms-allow"
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
     },
     {
       "agent": "receiver-agent",
@@ -226,6 +218,13 @@
       "part": "principal",
       "kind": "ask-principal",
       "reason": "approval-required"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "reason": "approval-denied"
     }
   ]
 }

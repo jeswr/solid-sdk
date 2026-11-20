@@ -469,46 +469,16 @@
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "check",
-      "check": "recipient",
-      "verdict": "pass",
-      "reason": "recipient-established"
-    },
-    {
-      "agent": "receiver-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "receiver-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "receiver-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "limits-approval",
-      "verdict": "ask-principal",
-      "reason": "approval-required"
+      "check": "fitness",
+      "verdict": "fail",
+      "reason": "method-not-accepted"
     },
     {
       "agent": "receiver-agent",
       "part": "outbound-gate",
       "kind": "decision",
-      "verdict": "ask-principal",
-      "reason": "approval-required"
-    },
-    {
-      "agent": "receiver-agent",
-      "part": "principal",
-      "kind": "ask-principal",
-      "reason": "approval-required"
+      "verdict": "fail",
+      "reason": "method-not-accepted"
     }
   ]
 }

@@ -105,7 +105,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -148,7 +148,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The second applicant’s employer's income payslip statement is intact and signed with The second applicant’s employer's pinned key."
+      "caption": "The second applicant’s employer's income payslip statement is intact and signed with The second applicant’s employer's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -186,7 +187,8 @@
         ],
         "answer": "Accepted, for income payslip claims only."
       },
-      "caption": "The second applicant’s employer's income payslip statement: The second applicant’s employer is an accepted source for this kind of claim."
+      "caption": "The second applicant’s employer's income payslip statement: The second applicant’s employer is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -204,7 +206,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The second applicant’s employer's income payslip statement asks for nothing, so there is no authority to check."
+      "caption": "The second applicant’s employer's income payslip statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -231,7 +234,8 @@
         "id": "urn:terms:joint-mortgage:other-payslip",
         "text": "Its terms allow this: use for Joint mortgage."
       },
-      "caption": "The second applicant’s employer's income payslip statement: its terms allow this: use for Joint mortgage."
+      "caption": "The second applicant’s employer's income payslip statement: its terms allow this: use for Joint mortgage.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -263,7 +267,8 @@
         "id": "urn:profile:joint-mortgage:income.payslip",
         "text": "Accept income payslip from The second applicant’s employer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The second applicant’s employer's income payslip statement is fit for A joint mortgage for two people: recorded-by-authority, 0 days old."
+      "caption": "The second applicant’s employer's income payslip statement is fit for A joint mortgage for two people: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -273,7 +278,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The second applicant’s employer's income payslip statement is admitted."
+      "caption": "The second applicant’s employer's income payslip statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -310,6 +316,16 @@
       "seq": 9,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -327,12 +343,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -361,12 +388,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The first applicant: Accepted, for Request the needed information only."
+      "caption": "The first applicant: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -379,12 +417,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -397,12 +446,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -415,12 +475,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -433,12 +504,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -460,24 +542,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 16,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The first applicant’s agent."
+      "messageId": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002",
+      "messageDigest": "sha-256:0bf3ce28aa1e142bffc0b44997efbbe543f229adcb9c8625814d08ed75279b60",
+      "caption": "The invoke message goes to The first applicant’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:43b8817b6627d8b2a4a151720f6ee4e64c58368c0c1a37a1d9dc25fe57c210be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:joint-mortgage:request",
+        "operation": "urn:op:joint-mortgage:request",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:owner",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:C7YMZO3NQ17erakuYwgZaDWLo9qJCzVGzrf2uGRvO7c\"},\"to\":{\"id\":\"urn:awp:n:XQ8uClbBrGVQzTul-_4epp-doUGAjuFvukRco7OagNc\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:e6wrItAwh3DIMHF4d86FjAANVbF6sDyJikFcDtghDCg\"},\"evidence\":{\"id\":\"urn:awp:n:1eCwlsOJYcjaqjbFw1zHAVoPw9TvyCBhfJoOBGb3hbs\"},\"@included\":[{\"id\":\"urn:awp:n:C7YMZO3NQ17erakuYwgZaDWLo9qJCzVGzrf2uGRvO7c\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:joint-mortgage:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:joint-mortgage:receiver\"},{\"id\":\"urn:awp:n:XQ8uClbBrGVQzTul-_4epp-doUGAjuFvukRco7OagNc\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:joint-mortgage:owner-agent:actor\",\"party\":\"urn:fictional:joint-mortgage:owner\"},{\"id\":\"urn:awp:n:e6wrItAwh3DIMHF4d86FjAANVbF6sDyJikFcDtghDCg\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:UXCQ3zedTsbzNS9OOvPeT30fEOkRXrDiWXommD41tRM\"},\"input\":{\"id\":\"urn:awp:n:DcIzCDwEiXqp9bcKo1qdYf_7vQNfudHVbsxt9FKO7U0\"},\"operation\":{\"id\":\"urn:op:joint-mortgage:request\"},\"purpose\":\"urn:purpose:joint-mortgage\"},{\"id\":\"urn:awp:n:1eCwlsOJYcjaqjbFw1zHAVoPw9TvyCBhfJoOBGb3hbs\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:cPgomaFODiXZUrrgkpRmKAJdQgtWBVT-jmJRfiz9W5A\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:joint-mortgage:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:DcIzCDwEiXqp9bcKo1qdYf_7vQNfudHVbsxt9FKO7U0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:oQtSk5MlRzM3Vm1OzckXQxeIrU64F_lJEYdn7LihBog\"}]},{\"id\":\"urn:awp:n:UXCQ3zedTsbzNS9OOvPeT30fEOkRXrDiWXommD41tRM\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:cPgomaFODiXZUrrgkpRmKAJdQgtWBVT-jmJRfiz9W5A\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:ZeBESJMiFAL5v3JRbFmQYB5nYBoUQhlhaMC4PgmMms8\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:joint-mortgage:receiver\",\"proofGraph\":\"urn:awp:n:BxaCbQQSvurRqqE7yRVulUJe122hVana4G-t71Rl7_s\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:oQtSk5MlRzM3Vm1OzckXQxeIrU64F_lJEYdn7LihBog\",\"type\":\"PropertyValue\",\"domainValue\":\"income.payslip\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:ZeBESJMiFAL5v3JRbFmQYB5nYBoUQhlhaMC4PgmMms8\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:BDLQGAxVj4E7sFaauKAtJhS15PoA9De57F3gGhiM3TI\"}},{\"id\":\"urn:awp:n:BDLQGAxVj4E7sFaauKAtJhS15PoA9De57F3gGhiM3TI\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:1a9e2507b88468f610a1c079d2a08cf4e4fb0d865710f1370761fe37f9a3db73\",\"byteLength\":\"9464\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:BxaCbQQSvurRqqE7yRVulUJe122hVana4G-t71Rl7_s\",\"@graph\":[{\"id\":\"urn:awp:n:LXAYa6_rrnLsA8pCMGUiSdO3AUJXIaLQNPCrebFgaHo\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NTE5NmVlNDg2Nzc0MGYzMzU5YWM5ZmE5OTBmNzViMmY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoiME5naHphVzBCcXM1WGhTUEtDTG5XUV9mQWdnS0hKNTNhWGlCVGU2VC1zZyIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOmpvaW50LW1vcnRnYWdlIiwidXJuOm9wOmpvaW50LW1vcnRnYWdlOnJlcXVlc3QiLCJ1cm46b3A6YWdyZWVtZW50Il0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.pATu2_i3c4sb_1JR2r_AWRafoZPolR3w1tjYnMGrdZouyFs9kmmJxvU-CZHQuemQoZfa7xP4HO04rJY0tB-JCg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOkM3WU1aTzNOUTE3ZXJha3VZd2daYURXTG85cUpDelZHenJmMnVHUnZPN2MiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmpvaW50LW1vcnRnYWdlOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46WFE4dUNsYkJyR1ZRelR1bC1fNGVwcC1kb1VHQWp1RnZ1a1JjbzdPYWdOYyIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpvd25lciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46VVhDUTN6ZWRUc2J6TlM5T092UGVUMzBmRU9rUlhyRGlXWG9tbUQ0MXRSTSJ9LCJpZCI6InVybjphd3A6bjplNndySXRBd2gzRElNSEY0ZDg2RmpBQU5WYkY2c0R5SmlrRmNEdGdoRENnIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46RGNJekNEd0VpWHFwOWJjS28xcWRZZl83dlFOZnVkSFZic3h0OUZLTzdVMCJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6am9pbnQtbW9ydGdhZ2U6cmVxdWVzdCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6am9pbnQtbW9ydGdhZ2UiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOmNQZ29tYUZPRGlYWlVycmdrcFJtS0FKZFFndFdCVlQtam1KUmZpejlXNUEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjoxZUN3bHNPSlljamFxamJGdzF6SEFWb1B3OVR2eUNCaGZKb09CR2IzaGJzIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6am9pbnQtbW9ydGdhZ2U6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpEY0l6Q0R3RWlYcXA5YmNLbzFxZFlmXzd2UU5mdWRIVmJzeHQ5RktPN1UwIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpvUXRTazVNbFJ6TTNWbTFPemNrWFF4ZUlyVTY0Rl9sSkVZZG43TGloQm9nIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46VVhDUTN6ZWRUc2J6TlM5T092UGVUMzBmRU9rUlhyRGlXWG9tbUQ0MXRSTSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOlplQkVTSk1pRkFMNXYzSlJiRm1RWUI1bllCb1VRaGxoYU1DNFBnbU1tczgiLCJpZCI6InVybjphd3A6bjpjUGdvbWFGT0RpWFpVcnJna3BSbUtBSmRRZ3RXQlZULWptSlJmaXo5VzVBIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmpvaW50LW1vcnRnYWdlOnJlY2VpdmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpCeGFDYlFRU3Z1clJxcUU3eVJWdWxVSmUxMjJoVmFuYTRHLXQ3MVJsN19zIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiZG9tYWluVmFsdWUiOiJpbmNvbWUucGF5c2xpcCIsImlkIjoidXJuOmF3cDpuOm9RdFNrNU1sUnpNM1ZtMU96Y2tYUXhlSXJVNjRGX2xKRVlkbjdMaWhCb2ciLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOlplQkVTSk1pRkFMNXYzSlJiRm1RWUI1bllCb1VRaGxoYU1DNFBnbU1tczgiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOkJETFFHQXhWajRFN3NGYWF1S0F0SmhTMTVQb0E5RGU1N0YzZ0doaU0zVEkifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjoxYTllMjUwN2I4ODQ2OGY2MTBhMWMwNzlkMmEwOGNmNGU0ZmIwZDg2NTcxMGYxMzcwNzYxZmUzN2Y5YTNkYjczIiwiYnl0ZUxlbmd0aCI6Ijk0NjQiLCJpZCI6InVybjphd3A6bjpCRExRR0F4Vmo0RTdzRmFhdUtBdEpoUzE1UG9BOURlNTdGM2dHaGlNM1RJIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpMWEFZYTZfcnJuTHNBOHBDTUdVaVNkTzNBVUpYSWFMUU5QQ3JlYkZnYUhvIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2TlRFNU5tVmxORGcyTnpjME1HWXpNelU1WVdNNVptRTVPVEJtTnpWaU1tWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBxYjJsdWRDMXRiM0owWjJGblpUcHlaV05sYVhabGNpSXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcWIybHVkQzF0YjNKMFoyRm5aVHB5WldObGFYWmxjaTFoWjJWdWREcGhZM1J2Y2lJc0ltRmpkRzl5UzJsa0lqb2lNRTVuYUhwaFZ6QkNjWE0xV0doVFVFdERURzVYVVY5bVFXZG5TMGhLTlROaFdHbENWR1UyVkMxelp5SXNJbTl3WlhKaGRHbHZibk1pT2xzaWRYSnVPbTl3T21wdmFXNTBMVzF2Y25SbllXZGxJaXdpZFhKdU9tOXdPbXB2YVc1MExXMXZjblJuWVdkbE9uSmxjWFZsYzNRaUxDSjFjbTQ2YjNBNllXZHlaV1Z0Wlc1MElsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkucEFUdTJfaTNjNHNiXzFKUjJyX0FXUmFmb1pQb2xSM3cxdGpZbk1HcmRab3V5RnM5a21tSnh2VS1DWkhRdWVtUW9aZmE3eFA0SE8wNHJKWTB0Qi1KQ2ciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpCeGFDYlFRU3Z1clJxcUU3eVJWdWxVSmUxMjJoVmFuYTRHLXQ3MVJsN19zIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOmU2d3JJdEF3aDNESU1IRjRkODZGakFBTlZiRjZzRHlKaWtGY0R0Z2hEQ2cifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9zaWduZWQtZWQyNTUxOS8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1qb2ludC1tb3J0Z2FnZS1icmFuY2gtMjpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46MWVDd2xzT0pZY2phcWpiRncxekhBVm9QdzlUdnlDQmhmSm9PQkdiM2hicyJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOkM3WU1aTzNOUTE3ZXJha3VZd2daYURXTG85cUpDelZHenJmMnVHUnZPN2MifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1qb2ludC1tb3J0Z2FnZS1icmFuY2gtMjpyZWNlaXZlci1hZ2VudDowMDAyIiwia2luZCI6Imludm9rZSIsInByZXNlbnRGaWVsZHMiOlsiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb250ZW50Il0sInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOlhROHVDbGJCckdWUXpUdWwtXzRlcHAtZG9VR0FqdUZ2dWtSY283T2FnTmMifSwidHlwZSI6WyJNZXNzYWdlIiwiSW52b2tlIl19.P3gYntMFyVAPYhRxO5MzyMXVV3002eyrpAuSZ5EXREjXALonU1P5W5E2VJhONUp2xY3QyuQkQAnUkhabsh3iBQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -600,7 +707,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The lender’s agent sends an invoke message to The first applicant’s agent."
+      "caption": "The lender’s agent sends an invoke message to The first applicant’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 18,
@@ -608,6 +716,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:C7YMZO3NQ17erakuYwgZaDWLo9qJCzVGzrf2uGRvO7c\"},\"to\":{\"id\":\"urn:awp:n:XQ8uClbBrGVQzTul-_4epp-doUGAjuFvukRco7OagNc\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:e6wrItAwh3DIMHF4d86FjAANVbF6sDyJikFcDtghDCg\"},\"evidence\":{\"id\":\"urn:awp:n:1eCwlsOJYcjaqjbFw1zHAVoPw9TvyCBhfJoOBGb3hbs\"},\"@included\":[{\"id\":\"urn:awp:n:C7YMZO3NQ17erakuYwgZaDWLo9qJCzVGzrf2uGRvO7c\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:joint-mortgage:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:joint-mortgage:receiver\"},{\"id\":\"urn:awp:n:XQ8uClbBrGVQzTul-_4epp-doUGAjuFvukRco7OagNc\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:joint-mortgage:owner-agent:actor\",\"party\":\"urn:fictional:joint-mortgage:owner\"},{\"id\":\"urn:awp:n:e6wrItAwh3DIMHF4d86FjAANVbF6sDyJikFcDtghDCg\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:UXCQ3zedTsbzNS9OOvPeT30fEOkRXrDiWXommD41tRM\"},\"input\":{\"id\":\"urn:awp:n:DcIzCDwEiXqp9bcKo1qdYf_7vQNfudHVbsxt9FKO7U0\"},\"operation\":{\"id\":\"urn:op:joint-mortgage:request\"},\"purpose\":\"urn:purpose:joint-mortgage\"},{\"id\":\"urn:awp:n:1eCwlsOJYcjaqjbFw1zHAVoPw9TvyCBhfJoOBGb3hbs\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:cPgomaFODiXZUrrgkpRmKAJdQgtWBVT-jmJRfiz9W5A\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:joint-mortgage:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:DcIzCDwEiXqp9bcKo1qdYf_7vQNfudHVbsxt9FKO7U0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:oQtSk5MlRzM3Vm1OzckXQxeIrU64F_lJEYdn7LihBog\"}]},{\"id\":\"urn:awp:n:UXCQ3zedTsbzNS9OOvPeT30fEOkRXrDiWXommD41tRM\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:cPgomaFODiXZUrrgkpRmKAJdQgtWBVT-jmJRfiz9W5A\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:ZeBESJMiFAL5v3JRbFmQYB5nYBoUQhlhaMC4PgmMms8\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:joint-mortgage:receiver\",\"proofGraph\":\"urn:awp:n:BxaCbQQSvurRqqE7yRVulUJe122hVana4G-t71Rl7_s\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:oQtSk5MlRzM3Vm1OzckXQxeIrU64F_lJEYdn7LihBog\",\"type\":\"PropertyValue\",\"domainValue\":\"income.payslip\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:ZeBESJMiFAL5v3JRbFmQYB5nYBoUQhlhaMC4PgmMms8\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:BDLQGAxVj4E7sFaauKAtJhS15PoA9De57F3gGhiM3TI\"}},{\"id\":\"urn:awp:n:BDLQGAxVj4E7sFaauKAtJhS15PoA9De57F3gGhiM3TI\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:1a9e2507b88468f610a1c079d2a08cf4e4fb0d865710f1370761fe37f9a3db73\",\"byteLength\":\"9464\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:BxaCbQQSvurRqqE7yRVulUJe122hVana4G-t71Rl7_s\",\"@graph\":[{\"id\":\"urn:awp:n:LXAYa6_rrnLsA8pCMGUiSdO3AUJXIaLQNPCrebFgaHo\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246NTE5NmVlNDg2Nzc0MGYzMzU5YWM5ZmE5OTBmNzViMmY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoiME5naHphVzBCcXM1WGhTUEtDTG5XUV9mQWdnS0hKNTNhWGlCVGU2VC1zZyIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOmpvaW50LW1vcnRnYWdlIiwidXJuOm9wOmpvaW50LW1vcnRnYWdlOnJlcXVlc3QiLCJ1cm46b3A6YWdyZWVtZW50Il0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.pATu2_i3c4sb_1JR2r_AWRafoZPolR3w1tjYnMGrdZouyFs9kmmJxvU-CZHQuemQoZfa7xP4HO04rJY0tB-JCg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOkM3WU1aTzNOUTE3ZXJha3VZd2daYURXTG85cUpDelZHenJmMnVHUnZPN2MiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpyZWNlaXZlciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmpvaW50LW1vcnRnYWdlOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46WFE4dUNsYkJyR1ZRelR1bC1fNGVwcC1kb1VHQWp1RnZ1a1JjbzdPYWdOYyIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpqb2ludC1tb3J0Z2FnZTpvd25lciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46VVhDUTN6ZWRUc2J6TlM5T092UGVUMzBmRU9rUlhyRGlXWG9tbUQ0MXRSTSJ9LCJpZCI6InVybjphd3A6bjplNndySXRBd2gzRElNSEY0ZDg2RmpBQU5WYkY2c0R5SmlrRmNEdGdoRENnIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46RGNJekNEd0VpWHFwOWJjS28xcWRZZl83dlFOZnVkSFZic3h0OUZLTzdVMCJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6am9pbnQtbW9ydGdhZ2U6cmVxdWVzdCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6am9pbnQtbW9ydGdhZ2UiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOmNQZ29tYUZPRGlYWlVycmdrcFJtS0FKZFFndFdCVlQtam1KUmZpejlXNUEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjoxZUN3bHNPSlljamFxamJGdzF6SEFWb1B3OVR2eUNCaGZKb09CR2IzaGJzIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6am9pbnQtbW9ydGdhZ2U6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpEY0l6Q0R3RWlYcXA5YmNLbzFxZFlmXzd2UU5mdWRIVmJzeHQ5RktPN1UwIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpvUXRTazVNbFJ6TTNWbTFPemNrWFF4ZUlyVTY0Rl9sSkVZZG43TGloQm9nIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46VVhDUTN6ZWRUc2J6TlM5T092UGVUMzBmRU9rUlhyRGlXWG9tbUQ0MXRSTSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOlplQkVTSk1pRkFMNXYzSlJiRm1RWUI1bllCb1VRaGxoYU1DNFBnbU1tczgiLCJpZCI6InVybjphd3A6bjpjUGdvbWFGT0RpWFpVcnJna3BSbUtBSmRRZ3RXQlZULWptSlJmaXo5VzVBIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmpvaW50LW1vcnRnYWdlOnJlY2VpdmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpCeGFDYlFRU3Z1clJxcUU3eVJWdWxVSmUxMjJoVmFuYTRHLXQ3MVJsN19zIiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiZG9tYWluVmFsdWUiOiJpbmNvbWUucGF5c2xpcCIsImlkIjoidXJuOmF3cDpuOm9RdFNrNU1sUnpNM1ZtMU96Y2tYUXhlSXJVNjRGX2xKRVlkbjdMaWhCb2ciLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOlplQkVTSk1pRkFMNXYzSlJiRm1RWUI1bllCb1VRaGxoYU1DNFBnbU1tczgiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOkJETFFHQXhWajRFN3NGYWF1S0F0SmhTMTVQb0E5RGU1N0YzZ0doaU0zVEkifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjoxYTllMjUwN2I4ODQ2OGY2MTBhMWMwNzlkMmEwOGNmNGU0ZmIwZDg2NTcxMGYxMzcwNzYxZmUzN2Y5YTNkYjczIiwiYnl0ZUxlbmd0aCI6Ijk0NjQiLCJpZCI6InVybjphd3A6bjpCRExRR0F4Vmo0RTdzRmFhdUtBdEpoUzE1UG9BOURlNTdGM2dHaGlNM1RJIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpMWEFZYTZfcnJuTHNBOHBDTUdVaVNkTzNBVUpYSWFMUU5QQ3JlYkZnYUhvIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2TlRFNU5tVmxORGcyTnpjME1HWXpNelU1WVdNNVptRTVPVEJtTnpWaU1tWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBxYjJsdWRDMXRiM0owWjJGblpUcHlaV05sYVhabGNpSXNJbUZqZEc5eUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcWIybHVkQzF0YjNKMFoyRm5aVHB5WldObGFYWmxjaTFoWjJWdWREcGhZM1J2Y2lJc0ltRmpkRzl5UzJsa0lqb2lNRTVuYUhwaFZ6QkNjWE0xV0doVFVFdERURzVYVVY5bVFXZG5TMGhLTlROaFdHbENWR1UyVkMxelp5SXNJbTl3WlhKaGRHbHZibk1pT2xzaWRYSnVPbTl3T21wdmFXNTBMVzF2Y25SbllXZGxJaXdpZFhKdU9tOXdPbXB2YVc1MExXMXZjblJuWVdkbE9uSmxjWFZsYzNRaUxDSjFjbTQ2YjNBNllXZHlaV1Z0Wlc1MElsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkucEFUdTJfaTNjNHNiXzFKUjJyX0FXUmFmb1pQb2xSM3cxdGpZbk1HcmRab3V5RnM5a21tSnh2VS1DWkhRdWVtUW9aZmE3eFA0SE8wNHJKWTB0Qi1KQ2ciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpCeGFDYlFRU3Z1clJxcUU3eVJWdWxVSmUxMjJoVmFuYTRHLXQ3MVJsN19zIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOmU2d3JJdEF3aDNESU1IRjRkODZGakFBTlZiRjZzRHlKaWtGY0R0Z2hEQ2cifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9zaWduZWQtZWQyNTUxOS8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1qb2ludC1tb3J0Z2FnZS1icmFuY2gtMjpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46MWVDd2xzT0pZY2phcWpiRncxekhBVm9QdzlUdnlDQmhmSm9PQkdiM2hicyJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOkM3WU1aTzNOUTE3ZXJha3VZd2daYURXTG85cUpDelZHenJmMnVHUnZPN2MifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1qb2ludC1tb3J0Z2FnZS1icmFuY2gtMjpyZWNlaXZlci1hZ2VudDowMDAyIiwia2luZCI6Imludm9rZSIsInByZXNlbnRGaWVsZHMiOlsiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb250ZW50Il0sInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOlhROHVDbGJCckdWUXpUdWwtXzRlcHAtZG9VR0FqdUZ2dWtSY283T2FnTmMifSwidHlwZSI6WyJNZXNzYWdlIiwiSW52b2tlIl19.P3gYntMFyVAPYhRxO5MzyMXVV3002eyrpAuSZ5EXREjXALonU1P5W5E2VJhONUp2xY3QyuQkQAnUkhabsh3iBQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -740,7 +849,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The lender’s agent reaches the inbound gate."
+      "caption": "An invoke message from The lender’s agent reaches the inbound gate.",
+      "gateRun": 2
     },
     {
       "seq": 19,
@@ -767,7 +877,8 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The lender’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The lender’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
     },
     {
       "seq": 20,
@@ -790,7 +901,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 2
     },
     {
       "seq": 21,
@@ -812,7 +924,8 @@
         "id": "urn:awp:representation:5196ee4867740f3359ac9fa990f75b2f:1794560400000",
         "text": "A representation statement signed with The lender's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The lender signed a statement that The lender’s agent acts for them in this operation."
+      "caption": "The lender signed a statement that The lender’s agent acts for them in this operation.",
+      "gateRun": 2
     },
     {
       "seq": 22,
@@ -835,7 +948,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 2
     },
     {
       "seq": 23,
@@ -853,7 +967,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 2
     },
     {
       "seq": 24,
@@ -863,7 +978,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002",
+      "messageDigest": "sha-256:0bf3ce28aa1e142bffc0b44997efbbe543f229adcb9c8625814d08ed75279b60",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2
     },
     {
       "seq": 25,
@@ -877,6 +995,16 @@
       "seq": 26,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -894,12 +1022,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The first applicant's mandate covers this action."
+      "caption": "The first applicant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -928,12 +1067,23 @@
         "answer": "Accepted, for A joint mortgage for two people only."
       },
       "reason": "recipient-established",
-      "caption": "The lender: Accepted, for A joint mortgage for two people only."
+      "caption": "The lender: Accepted, for A joint mortgage for two people only.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -946,12 +1096,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -964,12 +1125,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -982,12 +1154,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The first applicant's limits."
+      "caption": "Inside what the agent may do on its own, and within The first applicant's limits.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1000,12 +1183,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1022,18 +1216,30 @@
         "id": "urn:terms:joint-mortgage:other-payslip",
         "text": "The issuer's terms: use for Joint mortgage. They go out with the data."
       },
-      "caption": "The second applicant’s employer's income payslip statement: its terms forbid this (use for Joint mortgage)."
+      "caption": "The second applicant’s employer's income payslip statement: its terms forbid this (use for Joint mortgage).",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:c0d5efb74594daa0c1e176315b24ac9cce6ca73ec71a7bda79140fb836b19ecd",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:joint-mortgage",
+        "operation": "urn:op:joint-mortgage",
+        "conversation": "urn:awp:engine-joint-mortgage-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:joint-mortgage:receiver",
+        "purpose": "urn:purpose:joint-mortgage",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "prohibited",
-      "caption": "The actual credential's terms prohibit release."
+      "caption": "The actual credential's terms prohibit release.",
+      "gateRun": 1
     }
   ]
 }

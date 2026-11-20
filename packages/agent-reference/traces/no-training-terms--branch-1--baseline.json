@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -109,7 +109,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The publisher's unstructured content statement is intact and signed with The publisher's pinned key."
+      "caption": "The publisher's unstructured content statement is intact and signed with The publisher's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -147,7 +148,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The publisher's unstructured content statement: The publisher is an accepted source for this kind of claim."
+      "caption": "The publisher's unstructured content statement: The publisher is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -165,7 +167,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The publisher's unstructured content statement asks for nothing, so there is no authority to check."
+      "caption": "The publisher's unstructured content statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -192,7 +195,8 @@
         "id": "urn:terms:no-training-terms:original",
         "text": "An attached term, prohibition or duty has no supported rule."
       },
-      "caption": "The publisher's unstructured content statement: an attached term, prohibition or duty has no supported rule."
+      "caption": "The publisher's unstructured content statement: an attached term, prohibition or duty has no supported rule.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -203,7 +207,8 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "unsupported-term",
-      "caption": "The publisher's unstructured content statement is refused and kept out of memory."
+      "caption": "The publisher's unstructured content statement is refused and kept out of memory.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -217,6 +222,16 @@
       "seq": 7,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9569c16f2ec1d7fac0e04b3d4a1831644ad31c5a0777edc1acbf956797024cf2",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:no-training-terms:decision",
+        "operation": "urn:op:no-training-terms:decision",
+        "conversation": "urn:scenario:no-training-terms:task",
+        "recipient": "urn:fictional:no-training-terms:receiver",
+        "purpose": "urn:purpose:no-training-terms",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -234,12 +249,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The model developer's mandate covers this action."
+      "caption": "The model developer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9569c16f2ec1d7fac0e04b3d4a1831644ad31c5a0777edc1acbf956797024cf2",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:no-training-terms:decision",
+        "operation": "urn:op:no-training-terms:decision",
+        "conversation": "urn:scenario:no-training-terms:task",
+        "recipient": "urn:fictional:no-training-terms:receiver",
+        "purpose": "urn:purpose:no-training-terms",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -257,18 +283,30 @@
         }
       ],
       "reason": "unsupported-term",
-      "caption": "The proposed action relies on a statement that was not admitted."
+      "caption": "The proposed action relies on a statement that was not admitted.",
+      "gateRun": 1
     },
     {
       "seq": 9,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9569c16f2ec1d7fac0e04b3d4a1831644ad31c5a0777edc1acbf956797024cf2",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:no-training-terms:decision",
+        "operation": "urn:op:no-training-terms:decision",
+        "conversation": "urn:scenario:no-training-terms:task",
+        "recipient": "urn:fictional:no-training-terms:receiver",
+        "purpose": "urn:purpose:no-training-terms",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "unsupported-term",
-      "caption": "Unaccepted support cannot authorize an action."
+      "caption": "Unaccepted support cannot authorize an action.",
+      "gateRun": 1
     }
   ]
 }

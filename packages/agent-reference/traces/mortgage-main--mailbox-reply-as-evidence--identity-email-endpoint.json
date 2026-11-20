@@ -4,7 +4,7 @@
   "useCase": "mortgage-in-principle",
   "path": {
     "index": 1,
-    "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose."
+    "what": "The core proposes forwarding the payroll mailbox reply to the lender as unsigned content beside the income request. The evidence check stops the unsigned prose because the income claim requires structured evidence."
   },
   "parties": [
     {
@@ -82,7 +82,7 @@
   ],
   "scenario": {
     "id": "mortgage-main--mailbox-reply-as-evidence",
-    "title": "A mortgage in principle: The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose.",
+    "title": "A mortgage in principle: The core proposes forwarding the payroll mailbox reply to the lender as unsigned content beside the income request. The evidence check stops the unsigned prose because the income claim requires structured evidence.",
     "steps": {
       "1": "Sam signs a mandate.",
       "2": "Sam asks for a mortgage in principle.",
@@ -187,7 +187,7 @@
     }
   ],
   "generated": {
-    "commit": "unknown",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [

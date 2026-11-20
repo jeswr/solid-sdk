@@ -98,7 +98,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -137,7 +137,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "An unverified email sender's bank account owner statement is intact and signed with An unverified email sender's pinned key."
+      "caption": "An unverified email sender's bank account owner statement is intact and signed with An unverified email sender's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -171,7 +172,8 @@
         ],
         "answer": "Not accepted for bank account owner."
       },
-      "caption": "An unverified email sender's bank account owner statement: An unverified email sender is not accepted as a source for this kind of claim."
+      "caption": "An unverified email sender's bank account owner statement: An unverified email sender is not accepted as a source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -189,7 +191,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "An unverified email sender's bank account owner statement asks for nothing, so there is no authority to check."
+      "caption": "An unverified email sender's bank account owner statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -200,7 +203,8 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-not-authoritative",
-      "caption": "An unverified email sender's bank account owner statement is refused and kept out of memory."
+      "caption": "An unverified email sender's bank account owner statement is refused and kept out of memory.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -223,7 +227,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key."
+      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 6,
@@ -261,7 +266,8 @@
         ],
         "answer": "Accepted, for organization role claims only."
       },
-      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 7,
@@ -279,7 +285,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 8,
@@ -306,7 +313,8 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -338,7 +346,8 @@
         "id": "urn:profile:master-data-change:organization.role",
         "text": "Accept organization role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -348,7 +357,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The staff directory's organization role statement is admitted."
+      "caption": "The staff directory's organization role statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -390,7 +400,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key."
+      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 13,
@@ -428,7 +439,8 @@
         ],
         "answer": "Accepted, for organization role claims only."
       },
-      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 14,
@@ -446,7 +458,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 15,
@@ -473,7 +486,8 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -505,7 +519,8 @@
         "id": "urn:profile:master-data-change:organization.role",
         "text": "Accept organization role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -515,7 +530,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The staff directory's organization role statement is admitted."
+      "caption": "The staff directory's organization role statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -557,7 +573,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key."
+      "caption": "The staff directory's organization role statement is intact and signed with The staff directory's pinned key.",
+      "gateRun": 4
     },
     {
       "seq": 20,
@@ -595,7 +612,8 @@
         ],
         "answer": "Accepted, for organization role claims only."
       },
-      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim.",
+      "gateRun": 4
     },
     {
       "seq": 21,
@@ -613,7 +631,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization role statement asks for nothing, so there is no authority to check.",
+      "gateRun": 4
     },
     {
       "seq": 22,
@@ -640,7 +659,8 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
+      "gateRun": 4
     },
     {
       "seq": 23,
@@ -672,7 +692,8 @@
         "id": "urn:profile:master-data-change:organization.role",
         "text": "Accept organization role from The staff directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old.",
+      "gateRun": 4
     },
     {
       "seq": 24,
@@ -682,7 +703,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The staff directory's organization role statement is admitted."
+      "caption": "The staff directory's organization role statement is admitted.",
+      "gateRun": 4
     },
     {
       "seq": 25,
@@ -715,6 +737,16 @@
       "seq": 27,
       "step": 2,
       "agent": "finance-agent",
+      "actionDigest": "sha-256:896524c7550ea37c259f9f1a4fd4330ef5eb63d812a6053cf107f6650ae8fb6f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:master-data-change",
+        "operation": "urn:op:master-data-change",
+        "conversation": "urn:awp:engine-master-data-change-branch-2:finance-agent:0001",
+        "recipient": "urn:fictional:erp",
+        "purpose": "urn:purpose:master-data-change",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -736,12 +768,23 @@
         "text": "The business's mandate lets the agent use master-data-change, on its own."
       },
       "reason": "within-mandate",
-      "caption": "The business's mandate covers this action."
+      "caption": "The business's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 2,
       "agent": "finance-agent",
+      "actionDigest": "sha-256:896524c7550ea37c259f9f1a4fd4330ef5eb63d812a6053cf107f6650ae8fb6f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:master-data-change",
+        "operation": "urn:op:master-data-change",
+        "conversation": "urn:awp:engine-master-data-change-branch-2:finance-agent:0001",
+        "recipient": "urn:fictional:erp",
+        "purpose": "urn:purpose:master-data-change",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -759,18 +802,30 @@
         }
       ],
       "reason": "source-not-authoritative",
-      "caption": "The proposed action relies on a statement that was not admitted."
+      "caption": "The proposed action relies on a statement that was not admitted.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 2,
       "agent": "finance-agent",
+      "actionDigest": "sha-256:896524c7550ea37c259f9f1a4fd4330ef5eb63d812a6053cf107f6650ae8fb6f",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:master-data-change",
+        "operation": "urn:op:master-data-change",
+        "conversation": "urn:awp:engine-master-data-change-branch-2:finance-agent:0001",
+        "recipient": "urn:fictional:erp",
+        "purpose": "urn:purpose:master-data-change",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "source-not-authoritative",
-      "caption": "Unaccepted support cannot authorize an action."
+      "caption": "Unaccepted support cannot authorize an action.",
+      "gateRun": 1
     }
   ]
 }

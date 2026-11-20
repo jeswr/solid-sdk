@@ -1,20 +1,23 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Claude Opus 5.5
 // Writes every reference trace to traces/<scenario>--<configuration>.json (run after build).
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { mkdirSync, writeFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { dirname, join, resolve } from "path";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath } from "url";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { promisify } from "util";
 import { generateTraces } from "../dist/reference/generate.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let commit = "unknown";
 try {
-  commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  commit = (await promisify(execFile)("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
 } catch {}
 const outDir = join(root, "traces");
 mkdirSync(outDir, { recursive: true });

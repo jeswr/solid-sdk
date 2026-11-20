@@ -86,7 +86,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -125,7 +125,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional vehicle register's vehicle keeper statement is intact and signed with The fictional vehicle register's pinned key."
+      "caption": "The fictional vehicle register's vehicle keeper statement is intact and signed with The fictional vehicle register's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -159,7 +160,8 @@
         ],
         "answer": "Not accepted for vehicle keeper."
       },
-      "caption": "The fictional vehicle register's vehicle keeper statement: The fictional vehicle register is not accepted as a source for this kind of claim."
+      "caption": "The fictional vehicle register's vehicle keeper statement: The fictional vehicle register is not accepted as a source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -177,7 +179,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional vehicle register's vehicle keeper statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional vehicle register's vehicle keeper statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -188,7 +191,8 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-not-authoritative",
-      "caption": "The fictional vehicle register's vehicle keeper statement is refused and kept out of memory."
+      "caption": "The fictional vehicle register's vehicle keeper statement is refused and kept out of memory.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -202,6 +206,16 @@
       "seq": 6,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:32ec5a01e4c4733b56bdab7ebf1454919566d459304cd26c9eed14879d84c263",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -219,12 +233,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The seller's mandate covers this action."
+      "caption": "The seller's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 7,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:32ec5a01e4c4733b56bdab7ebf1454919566d459304cd26c9eed14879d84c263",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "fitness",
@@ -237,18 +262,30 @@
         }
       ],
       "reason": "source-not-authoritative",
-      "caption": "Required vehicle keeper was refused: source-not-authoritative."
+      "caption": "Required vehicle keeper was refused: source-not-authoritative.",
+      "gateRun": 1
     },
     {
       "seq": 8,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:32ec5a01e4c4733b56bdab7ebf1454919566d459304cd26c9eed14879d84c263",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "source-not-authoritative",
-      "caption": "A refused source cannot authorize the action."
+      "caption": "A refused source cannot authorize the action.",
+      "gateRun": 1
     }
   ]
 }

@@ -71,13 +71,13 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
     {
       "what": "sparq-zk-result/5",
-      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). No holder, absence or completeness binding or unlinkability guarantee. Unsupported rules stay blocked; no real scenario proof is claimed."
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
     },
     {
       "what": "Outside organizations and data sources",
@@ -110,7 +110,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The foreign bank's funds balance statement is intact and signed with The foreign bank's pinned key."
+      "caption": "The foreign bank's funds balance statement is intact and signed with The foreign bank's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -149,7 +150,8 @@
         ],
         "answer": "No register answers for this source."
       },
-      "caption": "The foreign bank's funds balance statement: The foreign bank is not accepted as a source for this kind of claim."
+      "caption": "The foreign bank's funds balance statement: The foreign bank is not accepted as a source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -167,7 +169,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The foreign bank's funds balance statement asks for nothing, so there is no authority to check."
+      "caption": "The foreign bank's funds balance statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -179,6 +182,7 @@
       "outcome": "ask-more",
       "reason": "source-unknown",
       "caption": "Required claim: funds balance. Accepted sources: The foreign bank. Accepted methods: recorded-by-authority.",
+      "gateRun": 1,
       "refs": [
         {
           "layer": "meaning",

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -19,16 +20,21 @@ export function decisionsOf(trace) {
 
 export function snapshot(root) {
   const manifest = JSON.parse(readFileSync(new URL("scenario-runs.json", root), "utf8"));
-  return Object.fromEntries(
-    manifest.paths
-      // The immutable oracle exercises the canonical/default configuration only.
-      // Transport matrix rows may share its scenario/path and must not overwrite it.
-      .filter((path) => path.status !== "blocked" && !path.configuration)
-      .map((path) => [
-        `${path.scenario}/${path.path}`,
-        decisionsOf(JSON.parse(readFileSync(new URL(`traces/${path.trace}`, root), "utf8"))),
-      ]),
-  );
+  const oracle = {};
+  for (const row of manifest.paths) {
+    // The pre-RDF oracle covers the default configuration and predates the ZK proof methods.
+    if (row.status === "blocked" || row.configuration) continue;
+    const scenario = JSON.parse(
+      readFileSync(new URL(`scenarios/${row.scenario}.json`, root), "utf8"),
+    );
+    const branch = scenario.branches.find((branch) => branch.id === row.path);
+    const methods = branch?.change.requiredMethods ?? scenario.requiredMethods ?? [];
+    if (methods.some((method) => method !== "sparq-aggregate/1")) continue;
+    oracle[`${row.scenario}/${row.path}`] = decisionsOf(
+      JSON.parse(readFileSync(new URL(`traces/${row.trace}`, root), "utf8")),
+    );
+  }
+  return oracle;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

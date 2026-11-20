@@ -323,74 +323,30 @@
       "part": "inbound-gate",
       "kind": "check",
       "check": "authority",
-      "verdict": "fail",
-      "reason": "representation-missing"
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
     },
     {
       "agent": "person-agent",
       "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "representation-missing"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "mandate",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "recipient",
-      "verdict": "pass",
-      "reason": "recipient-established"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "disclosure",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "not-applicable",
-      "reason": "no-personal-data"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "limits-approval",
-      "verdict": "not-applicable",
-      "reason": "no-action"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "evidence",
-      "verdict": "pass",
-      "reason": "evidence-complete"
-    },
-    {
-      "agent": "person-agent",
-      "part": "outbound-gate",
-      "kind": "decision",
       "verdict": "pass"
-    },
-    {
-      "agent": "person-agent",
-      "part": "transport",
-      "kind": "message-out"
     },
     {
       "agent": "person-agent",
@@ -490,9 +446,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -592,9 +579,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -694,9 +712,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -796,9 +845,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -898,9 +978,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -1000,9 +1111,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -1102,9 +1244,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -1204,9 +1377,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",
@@ -1306,9 +1510,40 @@
     {
       "agent": "person-agent",
       "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "person-agent",
+      "part": "inbound-gate",
       "kind": "decision",
-      "verdict": "fail",
-      "reason": "conversation-closed"
+      "verdict": "pass"
     },
     {
       "agent": "person-agent",

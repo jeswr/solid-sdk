@@ -70,13 +70,13 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
     {
       "what": "sparq-zk-result/5",
-      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). No holder, absence or completeness binding or unlinkability guarantee. Unsupported rules stay blocked; no real scenario proof is claimed."
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
     },
     {
       "what": "Outside organizations and data sources",
@@ -109,7 +109,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The identity issuer's identity document statement is intact and signed with The identity issuer's pinned key."
+      "caption": "The identity issuer's identity document statement is intact and signed with The identity issuer's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -147,7 +148,8 @@
         ],
         "answer": "Accepted, for identity document claims only."
       },
-      "caption": "The identity issuer's identity document statement: The identity issuer is an accepted source for this kind of claim."
+      "caption": "The identity issuer's identity document statement: The identity issuer is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -165,7 +167,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The identity issuer's identity document statement asks for nothing, so there is no authority to check."
+      "caption": "The identity issuer's identity document statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -192,7 +195,8 @@
         "id": "urn:terms:age-check:document",
         "text": "Its terms allow this: use for Identity management; share for Identity management."
       },
-      "caption": "The identity issuer's identity document statement: its terms allow this: use for Identity management; share for Identity management."
+      "caption": "The identity issuer's identity document statement: its terms allow this: use for Identity management; share for Identity management.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -224,7 +228,8 @@
         "id": "urn:profile:age-check:identity.document",
         "text": "Accept identity document from The identity issuer by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The identity issuer's identity document statement is fit for Proving age to buy something: recorded-by-authority, 0 days old."
+      "caption": "The identity issuer's identity document statement is fit for Proving age to buy something: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -234,7 +239,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The identity issuer's identity document statement is admitted."
+      "caption": "The identity issuer's identity document statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -271,6 +277,16 @@
       "seq": 9,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -288,12 +304,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The merchant's mandate covers this action."
+      "caption": "The merchant's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -322,12 +349,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The customer: Accepted, for Request the needed information only."
+      "caption": "The customer: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -340,12 +378,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -358,12 +407,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -376,12 +436,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The merchant's limits."
+      "caption": "Inside what the agent may do on its own, and within The merchant's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -394,12 +465,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -421,24 +503,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The merchant’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The merchant’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 16,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The customer’s agent."
+      "messageId": "urn:awp:engine-age-check-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:72b475a3c02771335c99d190d0cad02402782c46ec5ba5c7d343bc7517bafdfa",
+      "caption": "The invoke message goes to The customer’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:998e2f2011dc357deb192af84e929e95bad8f8022ce73cc97726196d497fa0be",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:age-check:request",
+        "operation": "urn:op:age-check:request",
+        "conversation": "urn:awp:engine-age-check-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:age-check:owner",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-age-check-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-age-check-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-age-check-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:H_gve69IcQspBvFDdBznwGNKHXPZOksShxNO0bMEqWc\"},\"to\":{\"id\":\"urn:awp:n:fhjdFO8eBrVrYmxYKl4PyDrlO5Lp3BkWsxGUupQX4pY\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:pcOEGrLXHwsIFnWIe3aOVYI9ovJYyruZi1J-xAD2Um4\"},\"evidence\":{\"id\":\"urn:awp:n:ZLKX676U_isiO8Pzawf2PAht22d2uEZ08EMfrNpGGWc\"},\"@included\":[{\"id\":\"urn:awp:n:H_gve69IcQspBvFDdBznwGNKHXPZOksShxNO0bMEqWc\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:age-check:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:age-check:receiver\"},{\"id\":\"urn:awp:n:fhjdFO8eBrVrYmxYKl4PyDrlO5Lp3BkWsxGUupQX4pY\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:age-check:owner-agent:actor\",\"party\":\"urn:fictional:age-check:owner\"},{\"id\":\"urn:awp:n:pcOEGrLXHwsIFnWIe3aOVYI9ovJYyruZi1J-xAD2Um4\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:RdgQGUGIhkOqfTm8JMVUSAUuoRw_cXPUYlsFj4mlTMU\"},\"input\":{\"id\":\"urn:awp:n:xAfdSkD9IwHQq_XdoNqNQWfUPwZWx7ozOTvuIAm0D9k\"},\"operation\":{\"id\":\"urn:op:age-check:request\"},\"purpose\":\"urn:purpose:age-check\"},{\"id\":\"urn:awp:n:ZLKX676U_isiO8Pzawf2PAht22d2uEZ08EMfrNpGGWc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:JK6iTbJCkttyEJK7m80mcseCIUY1YDrYS-XuvOudknk\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:age-check:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:xAfdSkD9IwHQq_XdoNqNQWfUPwZWx7ozOTvuIAm0D9k\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:0T6-vHyxin_a91_MgIbbdPJbgNsJ5XZ0taJkSEk8_VU\"}]},{\"id\":\"urn:awp:n:RdgQGUGIhkOqfTm8JMVUSAUuoRw_cXPUYlsFj4mlTMU\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:JK6iTbJCkttyEJK7m80mcseCIUY1YDrYS-XuvOudknk\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:pyBirvE1bDQ9tA0xjPdqaDlwdabib2EQK6a31JCSuEM\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:age-check:receiver\",\"proofGraph\":\"urn:awp:n:7uXZhJmiCINCx0POA17dnPc6mPomOmP-7dU_GCOxwFY\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:0T6-vHyxin_a91_MgIbbdPJbgNsJ5XZ0taJkSEk8_VU\",\"type\":\"PropertyValue\",\"domainValue\":\"identity.document\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:pyBirvE1bDQ9tA0xjPdqaDlwdabib2EQK6a31JCSuEM\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:ioP-K-lWlCqgsEr1bxFpy0_MgBsxaW-Rk1ys86oA7s4\"}},{\"id\":\"urn:awp:n:ioP-K-lWlCqgsEr1bxFpy0_MgBsxaW-Rk1ys86oA7s4\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:815e8cf3ab1a539c241e319bd9f9a07e44aace36842343559b8e0aebcc2c8145\",\"byteLength\":\"10208\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:7uXZhJmiCINCx0POA17dnPc6mPomOmP-7dU_GCOxwFY\",\"@graph\":[{\"id\":\"urn:awp:n:bfKi9HmtjOxAZtXjxMa1C7tMGjAUUOdUVI_gzCOmDNA\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MGViYTJkNTFhNDcyZDVkNTk5NjJkNWUxMmY0YzQ1MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6cmVjZWl2ZXIiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6YWdlLWNoZWNrOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiYWN0b3JLaWQiOiIwTmdoemFXMEJxczVYaFNQS0NMbldRX2ZBZ2dLSEo1M2FYaUJUZTZULXNnIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6YWdlLWNoZWNrIiwidXJuOm9wOmFnZS1jaGVjazpyZXF1ZXN0IiwidXJuOm9wOmFnZS1jaGVjazpwcm9vZi1yZXF1ZXN0IiwidXJuOm9wOmFnZS1jaGVjazpwcm9vZi1hbnN3ZXIiXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.ZlGZwps9JRZyZo1hyAaiPts2irmI4MDX9s3Gsw0ES-rH1d5gFEkkrKyloeDY4nA7_hK4RCXQ0CwgIdSM0j5PCg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjpIX2d2ZTY5SWNRc3BCdkZEZEJ6bndHTktIWFBaT2tzU2h4Tk8wYk1FcVdjIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6YWdlLWNoZWNrOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6YWdlLWNoZWNrOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZmhqZEZPOGVCclZyWW14WUtsNFB5RHJsTzVMcDNCa1dzeEdVdXBRWDRwWSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6b3duZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImJhc2lzIjp7ImlkIjoidXJuOmF3cDpuOlJkZ1FHVUdJaGtPcWZUbThKTVZVU0FVdW9Sd19jWFBVWWxzRmo0bWxUTVUifSwiaWQiOiJ1cm46YXdwOm46cGNPRUdyTFhId3NJRm5XSWUzYU9WWUk5b3ZKWXlydVppMUoteEFEMlVtNCIsImlucHV0Ijp7ImlkIjoidXJuOmF3cDpuOnhBZmRTa0Q5SXdIUXFfWGRvTnFOUVdmVVB3Wld4N296T1R2dUlBbTBEOWsifSwib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOmFnZS1jaGVjazpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTphZ2UtY2hlY2siLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkpLNmlUYkpDa3R0eUVKSzdtODBtY3NlQ0lVWTFZRHJZUy1YdXZPdWRrbmsifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpaTEtYNjc2VV9pc2lPOFB6YXdmMlBBaHQyMmQydUVaMDhFTWZyTnBHR1djIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YWdlLWNoZWNrOnJlcXVlc3QiLCJ0eXBlIjoiT3BlcmF0aW9uUmVmIiwidmVyc2lvbiI6IjAuMSJ9LHsiaWQiOiJ1cm46YXdwOm46eEFmZFNrRDlJd0hRcV9YZG9OcU5RV2ZVUHdaV3g3b3pPVHZ1SUFtMEQ5ayIsIml0ZW1MaXN0RWxlbWVudCI6W3siaWQiOiJ1cm46YXdwOm46MFQ2LXZIeXhpbl9hOTFfTWdJYmJkUEpiZ05zSjVYWjB0YUprU0VrOF9WVSJ9XSwidHlwZSI6Ik5hbWVkVmFsdWVDb2xsZWN0aW9uIn0seyJiYXNpc0tpbmQiOiJyZXByZXNlbnRlZCIsImlkIjoidXJuOmF3cDpuOlJkZ1FHVUdJaGtPcWZUbThKTVZVU0FVdW9Sd19jWFBVWWxzRmo0bWxUTVUiLCJ0eXBlIjoiUmVxdWVzdEJhc2lzIn0seyJjcmVkZW50aWFsU3ViamVjdCI6InVybjphd3A6bjpweUJpcnZFMWJEUTl0QTB4alBkcWFEbHdkYWJpYjJFUUs2YTMxSkNTdUVNIiwiaWQiOiJ1cm46YXdwOm46Sks2aVRiSkNrdHR5RUpLN204MG1jc2VDSVVZMVlEcllTLVh1dk91ZGtuayIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOjd1WFpoSm1pQ0lOQ3gwUE9BMTdkblBjNm1Qb21PbVAtN2RVX0dDT3h3RlkiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6ImlkZW50aXR5LmRvY3VtZW50IiwiaWQiOiJ1cm46YXdwOm46MFQ2LXZIeXhpbl9hOTFfTWdJYmJkUEpiZ05zSjVYWjB0YUprU0VrOF9WVSIsIm5hbWUiOiJyZXF1ZXN0IiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnJlcXVlc3QiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46cHlCaXJ2RTFiRFE5dEEweGpQZHFhRGx3ZGFiaWIyRVFLNmEzMUpDU3VFTSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46aW9QLUstbFdsQ3Fnc0VyMWJ4RnB5MF9NZ0JzeGFXLVJrMXlzODZvQTdzNCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjgxNWU4Y2YzYWIxYTUzOWMyNDFlMzE5YmQ5ZjlhMDdlNDRhYWNlMzY4NDIzNDM1NTliOGUwYWViY2MyYzgxNDUiLCJieXRlTGVuZ3RoIjoiMTAyMDgiLCJpZCI6InVybjphd3A6bjppb1AtSy1sV2xDcWdzRXIxYnhGcHkwX01nQnN4YVctUmsxeXM4Nm9BN3M0IiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpiZktpOUhtdGpPeEFadFhqeE1hMUM3dE1HakFVVU9kVVZJX2d6Q09tRE5BIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2TUdWaVlUSmtOVEZoTkRjeVpEVmtOVGs1TmpKa05XVXhNbVkwWXpRMU1XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBoWjJVdFkyaGxZMnM2Y21WalpXbDJaWElpTENKaFkzUnZjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZZV2RsTFdOb1pXTnJPbkpsWTJWcGRtVnlMV0ZuWlc1ME9tRmpkRzl5SWl3aVlXTjBiM0pMYVdRaU9pSXdUbWRvZW1GWE1FSnhjelZZYUZOUVMwTk1ibGRSWDJaQloyZExTRW8xTTJGWWFVSlVaVFpVTFhObklpd2liM0JsY21GMGFXOXVjeUk2V3lKMWNtNDZiM0E2WVdkbExXTm9aV05ySWl3aWRYSnVPbTl3T21GblpTMWphR1ZqYXpweVpYRjFaWE4wSWl3aWRYSnVPbTl3T21GblpTMWphR1ZqYXpwd2NtOXZaaTF5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbUZuWlMxamFHVmphenB3Y205dlppMWhibk4zWlhJaVhTd2lkbUZzYVdSR2NtOXRJam9pTWpBeU5pMHhNUzB4TTFRd09EbzFPVG93TUM0d01EQmFJaXdpZG1Gc2FXUlZiblJwYkNJNklqSXdNamN0TURFdE1USlVNRGs2TURBNk1EQXVNREF3V2lJc0ltbHpjM1ZsWkVGMElqb2lNakF5TmkweE1TMHhNMVF3T1Rvd01Eb3dNQzR3TURCYUluMC5abEdad3BzOUpSWnlabzFoeUFhaVB0czJpcm1JNE1EWDlzM0dzdzBFUy1ySDFkNWdGRWtrckt5bG9lRFk0bkE3X2hLNFJDWFEwQ3dnSWRTTTBqNVBDZyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOjd1WFpoSm1pQ0lOQ3gwUE9BMTdkblBjNm1Qb21PbVAtN2RVX0dDT3h3RlkifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46cGNPRUdyTFhId3NJRm5XSWUzYU9WWUk5b3ZKWXlydVppMUoteEFEMlVtNCJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3NpZ25lZC1lZDI1NTE5LzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLWFnZS1jaGVjay1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46WkxLWDY3NlVfaXNpTzhQemF3ZjJQQWh0MjJkMnVFWjA4RU1mck5wR0dXYyJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOkhfZ3ZlNjlJY1FzcEJ2RkRkQnpud0dOS0hYUFpPa3NTaHhOTzBiTUVxV2MifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1hZ2UtY2hlY2stYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpmaGpkRk84ZUJyVnJZbXhZS2w0UHlEcmxPNUxwM0JrV3N4R1V1cFFYNHBZIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.9U1hguPbyhHaqf4mtHHNqwuzSht_hUEV3QgUf2ZedCTn5i9em9E8eCent9cb_HBT1yrlj_gMoVvbUMvxtWUaCA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -562,7 +669,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The merchant’s agent sends an invoke message to The customer’s agent."
+      "caption": "The merchant’s agent sends an invoke message to The customer’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 18,
@@ -570,6 +678,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-age-check-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-age-check-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-age-check-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:H_gve69IcQspBvFDdBznwGNKHXPZOksShxNO0bMEqWc\"},\"to\":{\"id\":\"urn:awp:n:fhjdFO8eBrVrYmxYKl4PyDrlO5Lp3BkWsxGUupQX4pY\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:pcOEGrLXHwsIFnWIe3aOVYI9ovJYyruZi1J-xAD2Um4\"},\"evidence\":{\"id\":\"urn:awp:n:ZLKX676U_isiO8Pzawf2PAht22d2uEZ08EMfrNpGGWc\"},\"@included\":[{\"id\":\"urn:awp:n:H_gve69IcQspBvFDdBznwGNKHXPZOksShxNO0bMEqWc\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:age-check:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:age-check:receiver\"},{\"id\":\"urn:awp:n:fhjdFO8eBrVrYmxYKl4PyDrlO5Lp3BkWsxGUupQX4pY\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:age-check:owner-agent:actor\",\"party\":\"urn:fictional:age-check:owner\"},{\"id\":\"urn:awp:n:pcOEGrLXHwsIFnWIe3aOVYI9ovJYyruZi1J-xAD2Um4\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:RdgQGUGIhkOqfTm8JMVUSAUuoRw_cXPUYlsFj4mlTMU\"},\"input\":{\"id\":\"urn:awp:n:xAfdSkD9IwHQq_XdoNqNQWfUPwZWx7ozOTvuIAm0D9k\"},\"operation\":{\"id\":\"urn:op:age-check:request\"},\"purpose\":\"urn:purpose:age-check\"},{\"id\":\"urn:awp:n:ZLKX676U_isiO8Pzawf2PAht22d2uEZ08EMfrNpGGWc\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:JK6iTbJCkttyEJK7m80mcseCIUY1YDrYS-XuvOudknk\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:age-check:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:xAfdSkD9IwHQq_XdoNqNQWfUPwZWx7ozOTvuIAm0D9k\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:0T6-vHyxin_a91_MgIbbdPJbgNsJ5XZ0taJkSEk8_VU\"}]},{\"id\":\"urn:awp:n:RdgQGUGIhkOqfTm8JMVUSAUuoRw_cXPUYlsFj4mlTMU\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:JK6iTbJCkttyEJK7m80mcseCIUY1YDrYS-XuvOudknk\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:pyBirvE1bDQ9tA0xjPdqaDlwdabib2EQK6a31JCSuEM\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:age-check:receiver\",\"proofGraph\":\"urn:awp:n:7uXZhJmiCINCx0POA17dnPc6mPomOmP-7dU_GCOxwFY\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:0T6-vHyxin_a91_MgIbbdPJbgNsJ5XZ0taJkSEk8_VU\",\"type\":\"PropertyValue\",\"domainValue\":\"identity.document\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:pyBirvE1bDQ9tA0xjPdqaDlwdabib2EQK6a31JCSuEM\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:ioP-K-lWlCqgsEr1bxFpy0_MgBsxaW-Rk1ys86oA7s4\"}},{\"id\":\"urn:awp:n:ioP-K-lWlCqgsEr1bxFpy0_MgBsxaW-Rk1ys86oA7s4\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:815e8cf3ab1a539c241e319bd9f9a07e44aace36842343559b8e0aebcc2c8145\",\"byteLength\":\"10208\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:7uXZhJmiCINCx0POA17dnPc6mPomOmP-7dU_GCOxwFY\",\"@graph\":[{\"id\":\"urn:awp:n:bfKi9HmtjOxAZtXjxMa1C7tMGjAUUOdUVI_gzCOmDNA\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MGViYTJkNTFhNDcyZDVkNTk5NjJkNWUxMmY0YzQ1MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6cmVjZWl2ZXIiLCJhY3RvciI6InVybjpmaWN0aW9uYWw6YWdlLWNoZWNrOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiYWN0b3JLaWQiOiIwTmdoemFXMEJxczVYaFNQS0NMbldRX2ZBZ2dLSEo1M2FYaUJUZTZULXNnIiwib3BlcmF0aW9ucyI6WyJ1cm46b3A6YWdlLWNoZWNrIiwidXJuOm9wOmFnZS1jaGVjazpyZXF1ZXN0IiwidXJuOm9wOmFnZS1jaGVjazpwcm9vZi1yZXF1ZXN0IiwidXJuOm9wOmFnZS1jaGVjazpwcm9vZi1hbnN3ZXIiXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.ZlGZwps9JRZyZo1hyAaiPts2irmI4MDX9s3Gsw0ES-rH1d5gFEkkrKyloeDY4nA7_hK4RCXQ0CwgIdSM0j5PCg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJpZCI6InVybjphd3A6bjpIX2d2ZTY5SWNRc3BCdkZEZEJ6bndHTktIWFBaT2tzU2h4Tk8wYk1FcVdjIiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6YWdlLWNoZWNrOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0seyJhY3RvciI6InVybjpmaWN0aW9uYWw6YWdlLWNoZWNrOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46ZmhqZEZPOGVCclZyWW14WUtsNFB5RHJsTzVMcDNCa1dzeEdVdXBRWDRwWSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6b3duZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImJhc2lzIjp7ImlkIjoidXJuOmF3cDpuOlJkZ1FHVUdJaGtPcWZUbThKTVZVU0FVdW9Sd19jWFBVWWxzRmo0bWxUTVUifSwiaWQiOiJ1cm46YXdwOm46cGNPRUdyTFhId3NJRm5XSWUzYU9WWUk5b3ZKWXlydVppMUoteEFEMlVtNCIsImlucHV0Ijp7ImlkIjoidXJuOmF3cDpuOnhBZmRTa0Q5SXdIUXFfWGRvTnFOUVdmVVB3Wld4N296T1R2dUlBbTBEOWsifSwib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOmFnZS1jaGVjazpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTphZ2UtY2hlY2siLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkpLNmlUYkpDa3R0eUVKSzdtODBtY3NlQ0lVWTFZRHJZUy1YdXZPdWRrbmsifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpaTEtYNjc2VV9pc2lPOFB6YXdmMlBBaHQyMmQydUVaMDhFTWZyTnBHR1djIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6YWdlLWNoZWNrOnJlcXVlc3QiLCJ0eXBlIjoiT3BlcmF0aW9uUmVmIiwidmVyc2lvbiI6IjAuMSJ9LHsiaWQiOiJ1cm46YXdwOm46eEFmZFNrRDlJd0hRcV9YZG9OcU5RV2ZVUHdaV3g3b3pPVHZ1SUFtMEQ5ayIsIml0ZW1MaXN0RWxlbWVudCI6W3siaWQiOiJ1cm46YXdwOm46MFQ2LXZIeXhpbl9hOTFfTWdJYmJkUEpiZ05zSjVYWjB0YUprU0VrOF9WVSJ9XSwidHlwZSI6Ik5hbWVkVmFsdWVDb2xsZWN0aW9uIn0seyJiYXNpc0tpbmQiOiJyZXByZXNlbnRlZCIsImlkIjoidXJuOmF3cDpuOlJkZ1FHVUdJaGtPcWZUbThKTVZVU0FVdW9Sd19jWFBVWWxzRmo0bWxUTVUiLCJ0eXBlIjoiUmVxdWVzdEJhc2lzIn0seyJjcmVkZW50aWFsU3ViamVjdCI6InVybjphd3A6bjpweUJpcnZFMWJEUTl0QTB4alBkcWFEbHdkYWJpYjJFUUs2YTMxSkNTdUVNIiwiaWQiOiJ1cm46YXdwOm46Sks2aVRiSkNrdHR5RUpLN204MG1jc2VDSVVZMVlEcllTLVh1dk91ZGtuayIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDphZ2UtY2hlY2s6cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOjd1WFpoSm1pQ0lOQ3gwUE9BMTdkblBjNm1Qb21PbVAtN2RVX0dDT3h3RlkiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6ImlkZW50aXR5LmRvY3VtZW50IiwiaWQiOiJ1cm46YXdwOm46MFQ2LXZIeXhpbl9hOTFfTWdJYmJkUEpiZ05zSjVYWjB0YUprU0VrOF9WVSIsIm5hbWUiOiJyZXF1ZXN0IiwicG9zaXRpb24iOiIwIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOnJlcXVlc3QiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46cHlCaXJ2RTFiRFE5dEEweGpQZHFhRGx3ZGFiaWIyRVFLNmEzMUpDU3VFTSIsInN0YXRlbWVudFBheWxvYWQiOnsiaWQiOiJ1cm46YXdwOm46aW9QLUstbFdsQ3Fnc0VyMWJ4RnB5MF9NZ0JzeGFXLVJrMXlzODZvQTdzNCJ9LCJ0eXBlIjoiTGVnYWN5Q3JlZGVudGlhbFN1YmplY3QifSx7ImF0dGFjaG1lbnREaWdlc3QiOiJzaGEtMjU2OjgxNWU4Y2YzYWIxYTUzOWMyNDFlMzE5YmQ5ZjlhMDdlNDRhYWNlMzY4NDIzNDM1NTliOGUwYWViY2MyYzgxNDUiLCJieXRlTGVuZ3RoIjoiMTAyMDgiLCJpZCI6InVybjphd3A6bjppb1AtSy1sV2xDcWdzRXIxYnhGcHkwX01nQnN4YVctUmsxeXM4Nm9BN3M0IiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpiZktpOUhtdGpPeEFadFhqeE1hMUM3dE1HakFVVU9kVVZJX2d6Q09tRE5BIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2TUdWaVlUSmtOVEZoTkRjeVpEVmtOVGs1TmpKa05XVXhNbVkwWXpRMU1XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBoWjJVdFkyaGxZMnM2Y21WalpXbDJaWElpTENKaFkzUnZjaUk2SW5WeWJqcG1hV04wYVc5dVlXdzZZV2RsTFdOb1pXTnJPbkpsWTJWcGRtVnlMV0ZuWlc1ME9tRmpkRzl5SWl3aVlXTjBiM0pMYVdRaU9pSXdUbWRvZW1GWE1FSnhjelZZYUZOUVMwTk1ibGRSWDJaQloyZExTRW8xTTJGWWFVSlVaVFpVTFhObklpd2liM0JsY21GMGFXOXVjeUk2V3lKMWNtNDZiM0E2WVdkbExXTm9aV05ySWl3aWRYSnVPbTl3T21GblpTMWphR1ZqYXpweVpYRjFaWE4wSWl3aWRYSnVPbTl3T21GblpTMWphR1ZqYXpwd2NtOXZaaTF5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbUZuWlMxamFHVmphenB3Y205dlppMWhibk4zWlhJaVhTd2lkbUZzYVdSR2NtOXRJam9pTWpBeU5pMHhNUzB4TTFRd09EbzFPVG93TUM0d01EQmFJaXdpZG1Gc2FXUlZiblJwYkNJNklqSXdNamN0TURFdE1USlVNRGs2TURBNk1EQXVNREF3V2lJc0ltbHpjM1ZsWkVGMElqb2lNakF5TmkweE1TMHhNMVF3T1Rvd01Eb3dNQzR3TURCYUluMC5abEdad3BzOUpSWnlabzFoeUFhaVB0czJpcm1JNE1EWDlzM0dzdzBFUy1ySDFkNWdGRWtrckt5bG9lRFk0bkE3X2hLNFJDWFEwQ3dnSWRTTTBqNVBDZyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOjd1WFpoSm1pQ0lOQ3gwUE9BMTdkblBjNm1Qb21PbVAtN2RVX0dDT3h3RlkifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46cGNPRUdyTFhId3NJRm5XSWUzYU9WWUk5b3ZKWXlydVppMUoteEFEMlVtNCJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3NpZ25lZC1lZDI1NTE5LzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjphd3A6ZW5naW5lLWFnZS1jaGVjay1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46WkxLWDY3NlVfaXNpTzhQemF3ZjJQQWh0MjJkMnVFWjA4RU1mck5wR0dXYyJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOkhfZ3ZlNjlJY1FzcEJ2RkRkQnpud0dOS0hYUFpPa3NTaHhOTzBiTUVxV2MifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1hZ2UtY2hlY2stYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpmaGpkRk84ZUJyVnJZbXhZS2w0UHlEcmxPNUxwM0JrV3N4R1V1cFFYNHBZIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.9U1hguPbyhHaqf4mtHHNqwuzSht_hUEV3QgUf2ZedCTn5i9em9E8eCent9cb_HBT1yrlj_gMoVvbUMvxtWUaCA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -703,7 +812,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The merchant’s agent reaches the inbound gate."
+      "caption": "An invoke message from The merchant’s agent reaches the inbound gate.",
+      "gateRun": 2
     },
     {
       "seq": 19,
@@ -730,7 +840,8 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The merchant’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The merchant’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
     },
     {
       "seq": 20,
@@ -753,7 +864,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 2
     },
     {
       "seq": 21,
@@ -775,7 +887,8 @@
         "id": "urn:awp:representation:0eba2d51a472d5d59962d5e12f4c451f:1794560400000",
         "text": "A representation statement signed with The merchant's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The merchant signed a statement that The merchant’s agent acts for them in this operation."
+      "caption": "The merchant signed a statement that The merchant’s agent acts for them in this operation.",
+      "gateRun": 2
     },
     {
       "seq": 22,
@@ -798,7 +911,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 2
     },
     {
       "seq": 23,
@@ -816,7 +930,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 2
     },
     {
       "seq": 24,
@@ -826,7 +941,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-age-check-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:72b475a3c02771335c99d190d0cad02402782c46ec5ba5c7d343bc7517bafdfa",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2
     },
     {
       "seq": 25,
@@ -840,6 +958,16 @@
       "seq": 26,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -857,12 +985,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The customer's mandate covers this action."
+      "caption": "The customer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -891,12 +1030,23 @@
         "answer": "Accepted, for Proving age to buy something only."
       },
       "reason": "recipient-established",
-      "caption": "The merchant: Accepted, for Proving age to buy something only."
+      "caption": "The merchant: Accepted, for Proving age to buy something only.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -909,12 +1059,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -927,12 +1088,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -945,12 +1117,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The customer's limits."
+      "caption": "Inside what the agent may do on its own, and within The customer's limits.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -963,18 +1146,30 @@
         }
       ],
       "reason": "excessive-scope",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:aec8247dc7100f025522170f978e38eef966c477ca56629a721e67287197eac4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:age-check",
+        "operation": "urn:op:age-check",
+        "conversation": "urn:awp:engine-age-check-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:age-check:receiver",
+        "purpose": "urn:purpose:age-check",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "excessive-scope",
-      "caption": "The credential is not necessary for this purpose."
+      "caption": "The credential is not necessary for this purpose.",
+      "gateRun": 1
     }
   ]
 }

@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -122,7 +122,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The fictional vehicle register's vehicle keeper statement is intact and signed with The fictional vehicle register's pinned key."
+      "caption": "The fictional vehicle register's vehicle keeper statement is intact and signed with The fictional vehicle register's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -160,7 +161,8 @@
         ],
         "answer": "Accepted, for vehicle keeper claims only."
       },
-      "caption": "The fictional vehicle register's vehicle keeper statement: The fictional vehicle register is an accepted source for this kind of claim."
+      "caption": "The fictional vehicle register's vehicle keeper statement: The fictional vehicle register is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -178,7 +180,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The fictional vehicle register's vehicle keeper statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional vehicle register's vehicle keeper statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -205,7 +208,8 @@
         "id": "urn:terms:sell-a-car:keeper",
         "text": "Its terms allow this: use for Sell a car; share for Sell a car."
       },
-      "caption": "The fictional vehicle register's vehicle keeper statement: its terms allow this: use for Sell a car; share for Sell a car."
+      "caption": "The fictional vehicle register's vehicle keeper statement: its terms allow this: use for Sell a car; share for Sell a car.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -237,7 +241,8 @@
         "id": "urn:profile:sell-a-car:vehicle.keeper",
         "text": "Accept vehicle keeper from The fictional vehicle register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The fictional vehicle register's vehicle keeper statement is fit for Selling a used car to a stranger: recorded-by-authority, 0 days old."
+      "caption": "The fictional vehicle register's vehicle keeper statement is fit for Selling a used car to a stranger: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -247,7 +252,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The fictional vehicle register's vehicle keeper statement is admitted."
+      "caption": "The fictional vehicle register's vehicle keeper statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -284,6 +290,16 @@
       "seq": 9,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -301,12 +317,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The seller's mandate covers this action."
+      "caption": "The seller's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -335,12 +362,23 @@
         "answer": "Accepted, for Selling a used car to a stranger only."
       },
       "reason": "recipient-established",
-      "caption": "The seller: Accepted, for Selling a used car to a stranger only."
+      "caption": "The seller: Accepted, for Selling a used car to a stranger only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -353,12 +391,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -371,12 +420,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -389,7 +449,8 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The seller's limits."
+      "caption": "Inside what the agent may do on its own, and within The seller's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
@@ -397,6 +458,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "integrity",
       "verdict": "pass",
       "reason": "intact",
@@ -408,6 +470,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "source",
       "verdict": "pass",
       "reason": "source-accepted",
@@ -419,6 +482,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "terms",
       "verdict": "pass",
       "reason": "terms-acceptable",
@@ -430,6 +494,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "fitness",
       "verdict": "pass",
       "reason": "fit-for-use",
@@ -441,6 +506,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 1,
       "check": "authority",
       "verdict": "pass",
       "reason": "authority-valid",
@@ -452,6 +518,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "decision",
+      "gateRun": 1,
       "outcome": "admit",
       "reason": "authority-valid",
       "caption": "The register records status before releasing its signed answer."
@@ -462,6 +529,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "integrity",
       "verdict": "pass",
       "reason": "intact",
@@ -473,6 +541,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "source",
       "verdict": "pass",
       "reason": "source-accepted",
@@ -484,6 +553,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "terms",
       "verdict": "pass",
       "reason": "terms-acceptable",
@@ -495,6 +565,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "fitness",
       "verdict": "pass",
       "reason": "fit-for-use",
@@ -506,6 +577,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "check",
+      "gateRun": 2,
       "check": "authority",
       "verdict": "pass",
       "reason": "authority-valid",
@@ -517,6 +589,7 @@
       "agent": "escrow",
       "part": "inbound-gate",
       "kind": "decision",
+      "gateRun": 2,
       "outcome": "admit",
       "reason": "authority-valid",
       "caption": "The register records release before releasing its signed answer."
@@ -525,6 +598,16 @@
       "seq": 26,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -546,17 +629,30 @@
         "text": "Write-ahead: the intended activity is recorded first."
       },
       "reason": "evidence-complete",
-      "caption": "The activity is written to the record before it runs."
+      "caption": "The activity is written to the record before it runs.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:2d5b30a9cfb195a84c762a652020c11b65de1e05f142b9d9b2f11d5c2757756f",
+      "actionScope": {
+        "action": "read",
+        "target": "urn:op:sell-a-car",
+        "operation": "urn:op:sell-a-car",
+        "conversation": "urn:scenario:sell-a-car:task",
+        "recipient": "urn:fictional:sell-a-car:owner",
+        "purpose": "urn:purpose:sell-a-car",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: take the next step in Selling a used car to a stranger with The seller."
+      "effectRelease": true,
+      "caption": "The action goes: take the next step in Selling a used car to a stranger with The seller.",
+      "gateRun": 1
     }
   ]
 }

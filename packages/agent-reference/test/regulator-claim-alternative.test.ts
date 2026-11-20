@@ -68,7 +68,9 @@ it("files the fee claim with the ombudsman the admitted register answer names an
   );
   expect(admitted.slice(-2).map((event) => event.outcome)).toEqual(["admit", "admit"]);
 
-  // Entry withheld: the gap in the lender's range is measured at fitness, not as registered.
+  // The lender's range fails the fitness check across the gap.
+  expect(withheld.disagrees).toBe(false);
+  expect(withheld.note).toBeUndefined();
   expect(withheld.actual).toMatchObject({
     outcome: "refuse",
     reason: "record-unavailable",
@@ -77,7 +79,22 @@ it("files the fee claim with the ombudsman the admitted register answer names an
   const refusal = withheld.trace.events.find(
     (event) => event.agent === "forum" && event.kind === "decision",
   );
-  expect(refusal).toMatchObject({ outcome: "refuse", reason: "record-unavailable" });
+  expect(refusal).toMatchObject({
+    outcome: "refuse",
+    reason: "record-unavailable",
+    gateRun: expect.any(Number),
+  });
+  expect(withheld.trace.events).toContainEqual(
+    expect.objectContaining({
+      agent: "forum",
+      part: "inbound-gate",
+      gateRun: refusal?.gateRun,
+      kind: "check",
+      check: "fitness",
+      verdict: "fail",
+      reason: "record-unavailable",
+    }),
+  );
 }, 900_000);
 
 it("sends no claim when the admitted register answer names a forum this world does not host", async () => {

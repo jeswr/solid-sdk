@@ -1336,7 +1336,22 @@ export class OutboundGate {
             decision: { ...decision, outcome: "deny", reason: refusal },
           };
         }
-        if (!reading && !taskItems.some((i) => i.kind === "content")) {
+        const letter = taskItems.find(
+          (item) =>
+            item.kind === "statement" &&
+            item.accepted &&
+            item.claimType === "unstructured-content" &&
+            this.deps.memory.facts.get(item.id)?.digest === item.digest &&
+            ctx.claimSources?.[claimType]?.includes(item.source) &&
+            (ctx.resolver?.resolveSource({
+              evaluator: this.deps.identity.actor,
+              source: item.source,
+              claimType,
+              subject: item.subject,
+              at: this.deps.now(),
+            }).outcome ?? "accepted") === "accepted",
+        );
+        if (!reading && !letter && !taskItems.some((i) => i.kind === "content")) {
           this.verdict(verdicts, subject, "fitness", "fail", claimRequest(ctx, claimType), {
             reason: "evidence-missing",
           });
@@ -1358,15 +1373,13 @@ export class OutboundGate {
               at: this.deps.now(),
             }).outcome ?? "accepted") === "accepted",
         );
-        const requestSource = acceptedSources[0] ?? original?.source ?? "unknown";
-        this.verdict(
-          verdicts,
-          subject,
-          "fitness",
-          "ask-more",
-          `Structured form required: ${claimType}; request source ${requestSource}; original ${reading?.statement?.originalDigest}. ${claimRequest(ctx, claimType, acceptedSources)}`,
-          { reason: "structured-form-required" },
-        );
+        const requestSource = letter?.source ?? acceptedSources[0] ?? original?.source ?? "unknown";
+        const request = letter
+          ? `Ask ${requestSource} for structured evidence. ${claimRequest(ctx, claimType, [requestSource])}`
+          : `Structured form required: ${claimType}; request source ${requestSource}; original ${reading?.statement?.originalDigest}. ${claimRequest(ctx, claimType, acceptedSources)}`;
+        this.verdict(verdicts, subject, "fitness", "ask-more", request, {
+          reason: "structured-form-required",
+        });
         this.decide(
           "ask-more",
           `Ask source ${requestSource} for ${claimType}.`,

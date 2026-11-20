@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -111,7 +111,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The policyholder's unstructured content statement is intact and signed with The policyholder's pinned key."
+      "caption": "The policyholder's unstructured content statement is intact and signed with The policyholder's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -149,7 +150,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -167,7 +169,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The policyholder's unstructured content statement asks for nothing, so there is no authority to check."
+      "caption": "The policyholder's unstructured content statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -194,7 +197,8 @@
         "id": "urn:terms:insurance-claim-photos:original",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -219,14 +223,25 @@
           "layer": "meaning",
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:insurance-claim-photos:owner"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder, The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -236,7 +251,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The policyholder's unstructured content statement is admitted."
+      "caption": "The policyholder's unstructured content statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -282,7 +298,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The policyholder's unstructured content statement is intact and signed with The policyholder's pinned key."
+      "caption": "The policyholder's unstructured content statement is intact and signed with The policyholder's pinned key.",
+      "gateRun": 2
     },
     {
       "seq": 9,
@@ -320,7 +337,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
+      "gateRun": 2
     },
     {
       "seq": 10,
@@ -338,7 +356,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The policyholder's unstructured content statement asks for nothing, so there is no authority to check."
+      "caption": "The policyholder's unstructured content statement asks for nothing, so there is no authority to check.",
+      "gateRun": 2
     },
     {
       "seq": 11,
@@ -365,7 +384,8 @@
         "id": "urn:terms:insurance-claim-photos:photo",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 12,
@@ -390,14 +410,25 @@
           "layer": "meaning",
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:insurance-claim-photos:owner"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder, The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old.",
+      "gateRun": 2
     },
     {
       "seq": 13,
@@ -407,7 +438,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The policyholder's unstructured content statement is admitted."
+      "caption": "The policyholder's unstructured content statement is admitted.",
+      "gateRun": 2
     },
     {
       "seq": 14,
@@ -453,7 +485,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The accepted repair garage's repair estimate statement is intact and signed with The accepted repair garage's pinned key."
+      "caption": "The accepted repair garage's repair estimate statement is intact and signed with The accepted repair garage's pinned key.",
+      "gateRun": 3
     },
     {
       "seq": 16,
@@ -491,7 +524,8 @@
         ],
         "answer": "Accepted, for repair estimate claims only."
       },
-      "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim."
+      "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim.",
+      "gateRun": 3
     },
     {
       "seq": 17,
@@ -509,7 +543,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The accepted repair garage's repair estimate statement asks for nothing, so there is no authority to check."
+      "caption": "The accepted repair garage's repair estimate statement asks for nothing, so there is no authority to check.",
+      "gateRun": 3
     },
     {
       "seq": 18,
@@ -536,7 +571,8 @@
         "id": "urn:terms:insurance-claim-photos:estimate",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 3
     },
     {
       "seq": 19,
@@ -573,7 +609,8 @@
         "id": "urn:profile:insurance-claim-photos:repair.estimate",
         "text": "Accept repair estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The accepted repair garage's repair estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The accepted repair garage's repair estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old.",
+      "gateRun": 3
     },
     {
       "seq": 20,
@@ -583,7 +620,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The accepted repair garage's repair estimate statement is admitted."
+      "caption": "The accepted repair garage's repair estimate statement is admitted.",
+      "gateRun": 3
     },
     {
       "seq": 21,
@@ -620,6 +658,16 @@
       "seq": 23,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -637,12 +685,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The insurer's mandate covers this action."
+      "caption": "The insurer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 24,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -671,12 +730,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The policyholder: Accepted, for Request the needed information only."
+      "caption": "The policyholder: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -689,12 +759,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -707,12 +788,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -725,12 +817,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The insurer's limits."
+      "caption": "Inside what the agent may do on its own, and within The insurer's limits.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -743,12 +846,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -770,24 +884,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The insurer’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The insurer’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The policyholder’s agent."
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
+      "messageDigest": "sha-256:732291fe460e44633094d7c463e20adb0201996c4131cf92abb0d8585f137296",
+      "caption": "The invoke message goes to The policyholder’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:58dfe87a66473d5829eca4d62b53b0b90f56465fac469982a213752cce778952",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:insurance-claim-photos:request",
+        "operation": "urn:op:insurance-claim-photos:request",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:owner",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\"},\"to\":{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\"},\"evidence\":{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\"},\"@included\":[{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\"},\"input\":{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos:request\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:insurance-claim-photos:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\"}]},{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:receiver\",\"proofGraph\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\",\"type\":\"PropertyValue\",\"domainValue\":\"unstructured-content\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\"}},{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db\",\"byteLength\":\"9518\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"@graph\":[{\"id\":\"urn:awp:n:OAUldQodYh9yF6SUcUJxYte2NTUJF5aHNMpgU7bs1UM\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MWU4MGY1MjM3M2YyZDEwOGRlYWY2NDQxMWE5NDY4ZDg6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.IDbbOw31aGYM0vKlJ4jqDuixG_IEsBZvzdAspfZuJuZAC19pP6hgGmyf5mmz8tVNhvZqZx5bp4wOr4E7V4y5Dw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z1VMMnJsNll3bndhMTV0UUFxT1VOYmJiaG1CQ0hCNHFCQ1dCSm1JSG1YMCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0In0sImlkIjoidXJuOmF3cDpuOnA2ODZhTzV2N2NabDJZcDVCV1NsQXJnNUktbERBSDY1cURaY1RPaE9UUjAiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpLTmlHdlpTblU3ZllLdzlRUUE5V2diNUp2elNiNU1nd3RVUjFETWtsTmswIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp0X21WcHJRX3BfQVdabUJlaHNYV0kwaFNFM3R5d3JKb0diU0RJdV84YjBFIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOktOaUd2WlNuVTdmWUt3OVFRQTlXZ2I1SnZ6U2I1TWd3dFVSMURNa2xOazAiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlpUNFQ2UmR1WlV6ZF9fVUxEUFVQSGpzQ0FaRHBReGg5eWFFbUEyYmhTRjAifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0IiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46N3pnNjktUzBLaEhPZXdIZlNieFJqaUV5Q251RGJnS3JoVlQzQXVkMXZJbyIsImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoidW5zdHJ1Y3R1cmVkLWNvbnRlbnQiLCJpZCI6InVybjphd3A6bjpaVDRUNlJkdVpVemRfX1VMRFBVUEhqc0NBWkRwUXhoOXlhRW1BMmJoU0YwIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjo3emc2OS1TMEtoSE9ld0hmU2J4UmppRXlDbnVEYmdLcmhWVDNBdWQxdklvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjo4a3ZhSjBPRFlfYWstVVpJU0F3N0tUSy1oYmY4bGNqSzlfU3FHbHE3RG9rIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6MzE1OTc2NmRhNTRlMzE4ZjhkZTU1MjI0ZjE5ZmFmMDBiZmUxNTQwMWJhM2RkYzhiOTAzMjg1ZGMyNjE4MzNkYiIsImJ5dGVMZW5ndGgiOiI5NTE4IiwiaWQiOiJ1cm46YXdwOm46OGt2YUowT0RZX2FrLVVaSVNBdzdLVEstaGJmOGxjaks5X1NxR2xxN0RvayIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46T0FVbGRRb2RZaDl5RjZTVWNVSnhZdGUyTlRVSkY1YUhOTXBnVTdiczFVTSIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk1XVTRNR1kxTWpNM00yWXlaREV3T0dSbFlXWTJORFF4TVdFNU5EWTRaRGc2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tbHVjM1Z5WVc1alpTMWpiR0ZwYlMxd2FHOTBiM002Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpJaXdpZFhKdU9tOXdPbWx1YzNWeVlXNWpaUzFqYkdGcGJTMXdhRzkwYjNNNmNtVnhkV1Z6ZENJc0luVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbVJsWTJsemFXOXVJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LklEYmJPdzMxYUdZTTB2S2xKNGpxRHVpeEdfSUVzQlp2emRBc3BmWnVKdVpBQzE5cFA2aGdHbXlmNW1tejh0Vk5odlpxWng1YnA0d09yNEU3VjR5NUR3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpwNjg2YU81djdjWmwyWXA1QldTbEFyZzVJLWxEQUg2NXFEWmNUT2hPVFIwIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLW1haW46cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnRfbVZwclFfcF9BV1ptQmVoc1hXSTBoU0UzdHl3ckpvR2JTREl1XzhiMEUifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpnVUwycmw2WXdud2ExNXRRQXFPVU5iYmJobUJDSEI0cUJDV0JKbUlIbVgwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1tYWluOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.7k6SJlkcMSHVxqaSVuVDaycK_7xz0l8TG1ALDNFQfkNpwAam8_OmUkkdR6LKBvmufXvqHIEodp-p0MD93AAcAw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -910,7 +1049,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "The insurer’s agent sends an invoke message to The policyholder’s agent."
+      "caption": "The insurer’s agent sends an invoke message to The policyholder’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 32,
@@ -918,6 +1058,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\"},\"to\":{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\"},\"evidence\":{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\"},\"@included\":[{\"id\":\"urn:awp:n:gUL2rl6Ywnwa15tQAqOUNbbbhmBCHB4qBCWBJmIHmX0\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:-q1n3mVoHN1NNkqCUyLkf18_ws8wad5oKXtiuUuEFLA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:p686aO5v7cZl2Yp5BWSlArg5I-lDAH65qDZcTOhOTR0\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\"},\"input\":{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos:request\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:t_mVprQ_p_AWZmBehsXWI0hSE3tywrJoGbSDIu_8b0E\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:insurance-claim-photos:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:KNiGvZSnU7fYKw9QQA9Wgb5JvzSb5MgwtUR1DMklNk0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\"}]},{\"id\":\"urn:awp:n:LixR3wTqklDTnBZUlZ-lF-6mCdHH0O36GuDqQmSM464\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:6Qu00NZaoHihLql3gMWSq4HqThbOODab-B8y2eWESXA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:receiver\",\"proofGraph\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:ZT4T6RduZUzd__ULDPUPHjsCAZDpQxh9yaEmA2bhSF0\",\"type\":\"PropertyValue\",\"domainValue\":\"unstructured-content\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:7zg69-S0KhHOewHfSbxRjiEyCnuDbgKrhVT3Aud1vIo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\"}},{\"id\":\"urn:awp:n:8kvaJ0ODY_ak-UZISAw7KTK-hbf8lcjK9_SqGlq7Dok\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:3159766da54e318f8de55224f19faf00bfe15401ba3ddc8b903285dc261833db\",\"byteLength\":\"9518\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:2bACzk9xxTDhqtWScjIRLgGDIch1Fe4gFTNgClSQZ2A\",\"@graph\":[{\"id\":\"urn:awp:n:OAUldQodYh9yF6SUcUJxYte2NTUJF5aHNMpgU7bs1UM\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MWU4MGY1MjM3M2YyZDEwOGRlYWY2NDQxMWE5NDY4ZDg6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.IDbbOw31aGYM0vKlJ4jqDuixG_IEsBZvzdAspfZuJuZAC19pP6hgGmyf5mmz8tVNhvZqZx5bp4wOr4E7V4y5Dw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z1VMMnJsNll3bndhMTV0UUFxT1VOYmJiaG1CQ0hCNHFCQ1dCSm1JSG1YMCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0In0sImlkIjoidXJuOmF3cDpuOnA2ODZhTzV2N2NabDJZcDVCV1NsQXJnNUktbERBSDY1cURaY1RPaE9UUjAiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpLTmlHdlpTblU3ZllLdzlRUUE5V2diNUp2elNiNU1nd3RVUjFETWtsTmswIn0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjp0X21WcHJRX3BfQVdabUJlaHNYV0kwaFNFM3R5d3JKb0diU0RJdV84YjBFIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOktOaUd2WlNuVTdmWUt3OVFRQTlXZ2I1SnZ6U2I1TWd3dFVSMURNa2xOazAiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOlpUNFQ2UmR1WlV6ZF9fVUxEUFVQSGpzQ0FaRHBReGg5eWFFbUEyYmhTRjAifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpMaXhSM3dUcWtsRFRuQlpVbFotbEYtNm1DZEhIME8zNkd1RHFRbVNNNDY0IiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46N3pnNjktUzBLaEhPZXdIZlNieFJqaUV5Q251RGJnS3JoVlQzQXVkMXZJbyIsImlkIjoidXJuOmF3cDpuOjZRdTAwTlphb0hpaExxbDNnTVdTcTRIcVRoYk9PRGFiLUI4eTJlV0VTWEEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoidW5zdHJ1Y3R1cmVkLWNvbnRlbnQiLCJpZCI6InVybjphd3A6bjpaVDRUNlJkdVpVemRfX1VMRFBVUEhqc0NBWkRwUXhoOXlhRW1BMmJoU0YwIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjo3emc2OS1TMEtoSE9ld0hmU2J4UmppRXlDbnVEYmdLcmhWVDNBdWQxdklvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjo4a3ZhSjBPRFlfYWstVVpJU0F3N0tUSy1oYmY4bGNqSzlfU3FHbHE3RG9rIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6MzE1OTc2NmRhNTRlMzE4ZjhkZTU1MjI0ZjE5ZmFmMDBiZmUxNTQwMWJhM2RkYzhiOTAzMjg1ZGMyNjE4MzNkYiIsImJ5dGVMZW5ndGgiOiI5NTE4IiwiaWQiOiJ1cm46YXdwOm46OGt2YUowT0RZX2FrLVVaSVNBdzdLVEstaGJmOGxjaks5X1NxR2xxN0RvayIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46T0FVbGRRb2RZaDl5RjZTVWNVSnhZdGUyTlRVSkY1YUhOTXBnVTdiczFVTSIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk1XVTRNR1kxTWpNM00yWXlaREV3T0dSbFlXWTJORFF4TVdFNU5EWTRaRGc2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tbHVjM1Z5WVc1alpTMWpiR0ZwYlMxd2FHOTBiM002Y21WalpXbDJaWEl0WVdkbGJuUTZZV04wYjNJaUxDSmhZM1J2Y2t0cFpDSTZJakJPWjJoNllWY3dRbkZ6TlZob1UxQkxRMHh1VjFGZlprRm5aMHRJU2pVellWaHBRbFJsTmxRdGMyY2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpJaXdpZFhKdU9tOXdPbWx1YzNWeVlXNWpaUzFqYkdGcGJTMXdhRzkwYjNNNmNtVnhkV1Z6ZENJc0luVnlianB2Y0RwcGJuTjFjbUZ1WTJVdFkyeGhhVzB0Y0dodmRHOXpPbVJsWTJsemFXOXVJbDBzSW5aaGJHbGtSbkp2YlNJNklqSXdNall0TVRFdE1UTlVNRGc2TlRrNk1EQXVNREF3V2lJc0luWmhiR2xrVlc1MGFXd2lPaUl5TURJM0xUQXhMVEV5VkRBNU9qQXdPakF3TGpBd01Gb2lMQ0pwYzNOMVpXUkJkQ0k2SWpJd01qWXRNVEV0TVROVU1EazZNREE2TURBdU1EQXdXaUo5LklEYmJPdzMxYUdZTTB2S2xKNGpxRHVpeEdfSUVzQlp2emRBc3BmWnVKdVpBQzE5cFA2aGdHbXlmNW1tejh0Vk5odlpxWng1YnA0d09yNEU3VjR5NUR3IiwidHlwZSI6IkNvbXBhY3RKd3NQcm9vZiJ9XSwiaWQiOiJ1cm46YXdwOm46MmJBQ3prOXh4VERocXRXU2NqSVJMZ0dESWNoMUZlNGdGVE5nQ2xTUVoyQSJ9XSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpwNjg2YU81djdjWmwyWXA1QldTbEFyZzVJLWxEQUg2NXFEWmNUT2hPVFIwIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1pbnN1cmFuY2UtY2xhaW0tcGhvdG9zLW1haW46cmVjZWl2ZXItYWdlbnQ6MDAwMSIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV2aWRlbmNlIjp7ImlkIjoidXJuOmF3cDpuOnRfbVZwclFfcF9BV1ptQmVoc1hXSTBoU0UzdHl3ckpvR2JTREl1XzhiMEUifSwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJpZCI6InVybjphd3A6bjpnVUwycmw2WXdud2ExNXRRQXFPVU5iYmJobUJDSEI0cUJDV0JKbUlIbVgwIn0sImlkIjoidXJuOmF3cDplbmdpbmUtaW5zdXJhbmNlLWNsYWltLXBob3Rvcy1tYWluOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46LXExbjNtVm9ITjFOTmtxQ1V5TGtmMThfd3M4d2FkNW9LWHRpdVV1RUZMQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.7k6SJlkcMSHVxqaSVuVDaycK_7xz0l8TG1ALDNFQfkNpwAam8_OmUkkdR6LKBvmufXvqHIEodp-p0MD93AAcAw\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1050,7 +1191,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "An invoke message from The insurer’s agent reaches the inbound gate."
+      "caption": "An invoke message from The insurer’s agent reaches the inbound gate.",
+      "gateRun": 4
     },
     {
       "seq": 33,
@@ -1077,7 +1219,8 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The insurer’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The insurer’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 4
     },
     {
       "seq": 34,
@@ -1100,7 +1243,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 4
     },
     {
       "seq": 35,
@@ -1122,7 +1266,8 @@
         "id": "urn:awp:representation:1e80f52373f2d108deaf64411a9468d8:1794560400000",
         "text": "A representation statement signed with The insurer's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The insurer signed a statement that The insurer’s agent acts for them in this operation."
+      "caption": "The insurer signed a statement that The insurer’s agent acts for them in this operation.",
+      "gateRun": 4
     },
     {
       "seq": 36,
@@ -1145,7 +1290,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 4
     },
     {
       "seq": 37,
@@ -1163,7 +1309,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 4
     },
     {
       "seq": 38,
@@ -1173,7 +1320,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
+      "messageDigest": "sha-256:732291fe460e44633094d7c463e20adb0201996c4131cf92abb0d8585f137296",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 4
     },
     {
       "seq": 39,
@@ -1187,6 +1337,16 @@
       "seq": 40,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1204,12 +1364,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The policyholder's mandate covers this action."
+      "caption": "The policyholder's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 41,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1238,12 +1409,23 @@
         "answer": "Accepted, for An insurance claim with photographs only."
       },
       "reason": "recipient-established",
-      "caption": "The insurer: Accepted, for An insurance claim with photographs only."
+      "caption": "The insurer: Accepted, for An insurance claim with photographs only.",
+      "gateRun": 1
     },
     {
       "seq": 42,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1256,12 +1438,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 43,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1274,12 +1467,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 44,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1292,12 +1496,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The policyholder's limits."
+      "caption": "Inside what the agent may do on its own, and within The policyholder's limits.",
+      "gateRun": 1
     },
     {
       "seq": 45,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1310,12 +1525,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 46,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1332,12 +1558,23 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 47,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1350,12 +1587,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 48,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1372,12 +1620,23 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 49,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1390,12 +1649,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 50,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1412,12 +1682,23 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 51,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1430,12 +1711,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 52,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1453,12 +1745,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 53,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1471,12 +1774,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 54,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1494,12 +1808,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 55,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1512,12 +1837,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 56,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1535,12 +1871,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The accepted repair garage's repair estimate statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The accepted repair garage's repair estimate statement (The policyholder) is needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 57,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1553,12 +1900,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 58,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1581,12 +1939,23 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from The insurer’s agent (The insurer) is not established as needed for this purpose."
+      "caption": "Context item invoke from The insurer’s agent (The insurer) is not established as needed for this purpose.",
+      "gateRun": 1
     },
     {
       "seq": 59,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:ea5175385ca5c46da9fbc12b1999825502f433396900e0991a4bf03f786b73e4",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1604,18 +1973,30 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from The insurer’s agent: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The insurer’s agent: Default terms permit this interaction only and prohibit onward sharing.",
+      "gateRun": 1
     },
     {
       "seq": 60,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "context-not-clear",
-      "caption": "The task context is not clear for this text, recipient and purpose."
+      "caption": "The task context is not clear for this text, recipient and purpose.",
+      "gateRun": 1
     },
     {
       "seq": 61,
@@ -1636,6 +2017,8 @@
       "agent": "owner-agent",
       "part": "principal",
       "kind": "principal-reply",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "approvalDecision": "approve",
       "chat": {
         "who": "principal",
         "text": "Send this exact claim account and original image with the garage estimate."
@@ -1646,6 +2029,16 @@
       "seq": 63,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1663,12 +2056,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The policyholder's mandate covers this action."
+      "caption": "The policyholder's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 64,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1697,12 +2101,23 @@
         "answer": "Accepted, for An insurance claim with photographs only."
       },
       "reason": "recipient-established",
-      "caption": "The insurer: Accepted, for An insurance claim with photographs only."
+      "caption": "The insurer: Accepted, for An insurance claim with photographs only.",
+      "gateRun": 2
     },
     {
       "seq": 65,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1715,12 +2130,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 66,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1733,12 +2159,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 67,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1751,12 +2188,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The policyholder's limits."
+      "caption": "Inside what the agent may do on its own, and within The policyholder's limits.",
+      "gateRun": 2
     },
     {
       "seq": 68,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1769,12 +2217,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 69,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1791,12 +2250,23 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 70,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1809,12 +2279,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 71,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1831,12 +2312,23 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 72,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1849,12 +2341,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 2
     },
     {
       "seq": 73,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1871,12 +2374,23 @@
         "text": "The issuer's terms: use for Insurance claim photos; share for Insurance claim photos. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 74,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1889,12 +2403,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 2
     },
     {
       "seq": 75,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1912,12 +2437,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 76,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1930,12 +2466,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 77,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1953,12 +2500,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The policyholder's unstructured content statement (The policyholder) is needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 78,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1971,12 +2529,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 79,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1994,12 +2563,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item The accepted repair garage's repair estimate statement (The policyholder) is needed for this purpose."
+      "caption": "Context item The accepted repair garage's repair estimate statement (The policyholder) is needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 80,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2012,12 +2592,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The accepted repair garage's repair estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: Its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 2
     },
     {
       "seq": 81,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2040,12 +2631,23 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "Context item invoke from The insurer’s agent (The insurer) is not established as needed for this purpose."
+      "caption": "Context item invoke from The insurer’s agent (The insurer) is not established as needed for this purpose.",
+      "gateRun": 2
     },
     {
       "seq": 82,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2063,12 +2665,23 @@
         }
       ],
       "reason": "context-not-clear",
-      "caption": "invoke from The insurer’s agent: Default terms permit this interaction only and prohibit onward sharing."
+      "caption": "invoke from The insurer’s agent: Default terms permit this interaction only and prohibit onward sharing.",
+      "gateRun": 2
     },
     {
       "seq": 83,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -2081,12 +2694,23 @@
         }
       ],
       "reason": "approval-given",
-      "caption": "The principal approved these exact bytes for this recipient and purpose."
+      "caption": "The principal approved these exact bytes for this recipient and purpose.",
+      "gateRun": 2
     },
     {
       "seq": 84,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -2099,12 +2723,23 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "The context rule permits this text."
+      "caption": "The context rule permits this text.",
+      "gateRun": 2
     },
     {
       "seq": 85,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -2126,24 +2761,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The policyholder’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The policyholder’s agent's pinned key, and written to the record.",
+      "gateRun": 2
     },
     {
       "seq": 86,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The insurer’s agent."
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
+      "messageDigest": "sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54",
+      "caption": "The invoke message goes to The insurer’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 87,
       "step": 5,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:9da255271a1acc6776419fefdf2e433c90f44baa419c7ec3aa23b73731e84683",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:insurance-claim-photos",
+        "operation": "urn:op:insurance-claim-photos",
+        "conversation": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0001",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\"},\"to\":{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\"},\"evidence\":[{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\"}],\"content\":[{\"id\":\"urn:content:insurance-claim-photos:original\"},{\"id\":\"urn:content:insurance-claim-photos:photo\"}],\"@included\":[{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\"},\"input\":{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\"},\"format\":\"jws-compact\",\"position\":\"3\",\"role\":\"credential\"},{\"id\":\"urn:content:insurance-claim-photos:original\",\"type\":\"ContentPart\",\"bytes\":\"I found damage to the vehicle after a fictional accident. The garage has inspected it.\",\"digest\":\"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\",\"mediaType\":\"text/plain\",\"position\":\"0\"},{\"id\":\"urn:content:insurance-claim-photos:photo\",\"type\":\"ContentPart\",\"bytes\":{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\"},\"digest\":\"sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\",\"mediaType\":\"image/png\",\"position\":\"1\"},{\"id\":\"urn:op:insurance-claim-photos\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\"}]},{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\"},{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\"},{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"issuer\":\"urn:fictional:insurance-claim-photos:garage\",\"proofGraph\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\"},{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\",\"type\":[\"ItemList\",\"Attachment\"],\"attachmentDigest\":\"sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc\",\"byteLength\":\"52451\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\"}]},{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:scenario:insurance-claim-photos:original\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\"}},{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2\",\"byteLength\":\"9512\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\"}},{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7\",\"byteLength\":\"23743\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\"}},{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01\",\"byteLength\":\"23731\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\"}},{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64\",\"byteLength\":\"25181\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"@graph\":[{\"id\":\"urn:awp:n:ZNqkvDD-wrlB7NgcQwvblOZHckB4hn7vIwT7sl_-F0I\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Yjk3MDMwNWFmMDc2Mjg2ZDU1N2VjMmY3ZDE0NzE1NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Qe_zAMw5qmmvfTGxKj2bn_mW62GyCdFYiAhIcBLqVEKZVJ0Zu0KUHlc_IQAySz4KoSA9Ck4TBGwskPyHN12qBg\"}]},{\"id\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\",\"@graph\":[{\"id\":\"urn:awp:n:i8ugH6fXk3TdutO0GScUekR5TlyPk6z1deyfBqgLW6c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjpmZWQzY2UzNjQ1N2ExZTkyMjg3N2NiMjdlNWMzZjY1MmMzODZkNzEwZTVkNjIwZGNlMmExMzYyMzQxZGJkYTE0IiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.nLp6t4-bHtc1eonuxQmf1z77tbSncCtKb5d9iG11-kkRds7Qx-8sFWIJYRD8zLXKjxVVlVwjuHlMsmjBFe-PDQ\"}]},{\"id\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\",\"@graph\":[{\"id\":\"urn:awp:n:s3pRGW66gtMNknvfP9fx1fPTvkrr2aXfCewVS1iP7lo\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1Njo3ZjAxNTgzZTI0ZTY0ZWNhY2I2OTBjYTZiZWU5NThmYjVkNjc3ZTc0YzkxZTY1M2UyZDNmZmRjMjcxODBkY2UyIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.XiDZr8vOZCPRQ3OlkV-QLE_hOG1OF_p9-tH6nKY0M4B97-GHF0cC7xpoxmac37N47NzWfewLyYhTrfDbIiMAAg\"}]},{\"id\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\",\"@graph\":[{\"id\":\"urn:awp:n:xqM4ArKxWhb_4ETzXyXoE1-QGo-rD2VjfzK4O9QlKVk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ4QjJYZlowejlTMkV3VzVYdjNlQmh5NFRRY1ozZjVZUjl2QjBNRU5WOHciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhbW91bnQiOjEyMDAsImN1cnJlbmN5IjoiR0JQIiwic2V2ZXJpdHkiOiJzZXJpb3VzIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3Rvczplc3RpbWF0ZSIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiY2xhaW1UeXBlIjoicmVwYWlyLmVzdGltYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmVzdGltYXRlIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19XX19fQ.-ezvPtnhV1UNOHzN680MI_HCOu6O9unsYF366iWpW1a2aBdUkG51Y4kATHhK7OTBKjEiIOyHwVyiba4bpvL5Cw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..8RkAudFxzRAAv50xI8ooEwYIfSBdHw_DQOGGsr9IUR38shilEWwc-y6Y3cnsvu-4aEf1lr2adAztKnzqU1XhCg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2528,7 +3188,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "The policyholder’s agent sends an invoke message to The insurer’s agent."
+      "caption": "The policyholder’s agent sends an invoke message to The insurer’s agent.",
+      "gateRun": 2
     },
     {
       "seq": 88,
@@ -2536,6 +3197,7 @@
       "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-insurance-claim-photos-main:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\"},\"to\":{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\"},\"evidence\":[{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\"}],\"content\":[{\"id\":\"urn:content:insurance-claim-photos:original\"},{\"id\":\"urn:content:insurance-claim-photos:photo\"}],\"@included\":[{\"id\":\"urn:awp:n:TaKS1xiTnWQp-h8DLmuUvaGd8-ketfCwX_Dkqy1r_WU\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:insurance-claim-photos:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:QllzwwCp82TtzwFoe983Mu_v8tQmSK8RU3M5DmQT2Tw\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:insurance-claim-photos:receiver-agent:actor\",\"party\":\"urn:fictional:insurance-claim-photos:receiver\"},{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:insurance-claim-photos:owner\"},{\"id\":\"urn:awp:n:yMg7C9pA-ZtI5THNpVlP8I8iVlE35mNySsHHriYeejI\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\"},\"input\":{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\"},\"operation\":{\"id\":\"urn:op:insurance-claim-photos\"},\"purpose\":\"urn:purpose:insurance-claim-photos\"},{\"id\":\"urn:awp:n:E-1RKRWhSYUV9gDZHELL_BePv793pWlDT3FKVtrwLKw\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:awp:n:VALmvDzTRMMxFB1vMbb86GeSM4EgoMiNgEpeCvxdwHU\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:kbbnLfCASJTUm-FGl4M_dYb_P6sQbXjk-5Px19onC9g\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\"},\"format\":\"jws-compact\",\"position\":\"2\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:YLrDKPZd_F43GAGFDk8ImEcN6XTHaaXjtNKlwlmRrSk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\"},\"format\":\"jws-compact\",\"position\":\"3\",\"role\":\"credential\"},{\"id\":\"urn:content:insurance-claim-photos:original\",\"type\":\"ContentPart\",\"bytes\":\"I found damage to the vehicle after a fictional accident. The garage has inspected it.\",\"digest\":\"sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14\",\"mediaType\":\"text/plain\",\"position\":\"0\"},{\"id\":\"urn:content:insurance-claim-photos:photo\",\"type\":\"ContentPart\",\"bytes\":{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\"},\"digest\":\"sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\",\"mediaType\":\"image/png\",\"position\":\"1\"},{\"id\":\"urn:op:insurance-claim-photos\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:k5TqPKMwFIO9I9GiOVBJOLg2qL_Le6Bxynf5PVHi0L8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\"}]},{\"id\":\"urn:awp:n:2uHcYnM_8SSx0sODaqwL2s_bvkqZavQlCp3KB7RnY6A\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:z4KIHx_exkPr7bXJz58eOgbbKiK1EA2ojLlxMEYPZIU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:5Hj1lHnjVGDkSFBPIcyrfpDk09w7HSyOMq3MHGjaCXU\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\"},{\"id\":\"urn:awp:n:ITptimwc95f5krOIT8qJk_5Qw3kyx42tYx3WuOVqOwA\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"issuer\":\"urn:fictional:insurance-claim-photos:owner\",\"proofGraph\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\"},{\"id\":\"urn:awp:n:uWn1uM54MN9webqavT3QQLiYvP-gNERjyq2dieU3FUg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"issuer\":\"urn:fictional:insurance-claim-photos:garage\",\"proofGraph\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\"},{\"id\":\"urn:awp:n:3hb6DKIXw27pzgJCCZ-zJduoO8V_LF3LY9EVgFGU334\",\"type\":[\"ItemList\",\"Attachment\"],\"attachmentDigest\":\"sha-256:ca3b00e7aa3a74d57ef88ca5d63a06d60a18bcdb83ad345c934fd1ce0f8d7ecc\",\"byteLength\":\"52451\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Efg44zvpyGkKscxAIwPHlC3R9fZOcDp4WIEor4IHwvU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\"},\"name\":\"items\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:items\"},{\"id\":\"urn:awp:n:FNhX1H2KL-UZrnfR0q44bkSFoinAdDGg_XTWnaKn0cg\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\"}]},{\"id\":\"urn:awp:n:_lPVEvonavOGx9yMIK_Yh5S7lknFjoXJ3wCticHCyxc\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:scenario:insurance-claim-photos:original\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:IPemUAAP1bM0II17ssD5iEsEG882etZODVVYUP8hCKo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\"}},{\"id\":\"urn:awp:n:80HquZYuSRmFp97DUj0ixAmEuuMHu3Q9X4yAnZApkj4\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:95894fc5116f93b08d5ea4b6c058b5212740c1261879387b87f4f18a96b12ff2\",\"byteLength\":\"9512\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:Z-lFx46DMgraQ5BgbzyX8DvGKqtCbkRw4YM4AyNlxTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\"}},{\"id\":\"urn:awp:n:Hr1X_irlmnkv4_JNrr6IdI7rRRft-FVadqbafkca7Jk\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:879740ceea28fa7d64ec091f50382a5ef81ed790bb25d1008db467970f0794b7\",\"byteLength\":\"23743\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:PdTNDC5gbx9Xf_vLNa-qBwmOLN5cuFbkBxe4a7HsS0E\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\"}},{\"id\":\"urn:awp:n:Hm3rIIB1RxvkL3lRB__bPBhrzJCYB2aB89onL1sIloE\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:79e83c28d965702b52d001a8e916a1b1b65ed45cec9bb42200b15f4b0477ed01\",\"byteLength\":\"23731\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:cUdiMnv6Q2a0NubhokvV6jn-LHGsKIFmRZYzG4jSGMo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\"}},{\"id\":\"urn:awp:n:DwYPIVu2oWFrR4lufZKPW1_KZMS6JgA2f42ugE08cuc\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:d6196314ea97ed2f7eac9f881d456bfca78de9a0411b455d91067f08b5786d64\",\"byteLength\":\"25181\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:qB540d4zNtIlE-j4InJ2Hn1oBpkAcAeW0s-J0A9Dg1M\",\"@graph\":[{\"id\":\"urn:awp:n:ZNqkvDD-wrlB7NgcQwvblOZHckB4hn7vIwT7sl_-F0I\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246Yjk3MDMwNWFmMDc2Mjg2ZDU1N2VjMmY3ZDE0NzE1NTQ6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJvcGVyYXRpb25zIjpbInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIiwidXJuOm9wOmluc3VyYW5jZS1jbGFpbS1waG90b3M6cmVxdWVzdCIsInVybjpvcDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Qe_zAMw5qmmvfTGxKj2bn_mW62GyCdFYiAhIcBLqVEKZVJ0Zu0KUHlc_IQAySz4KoSA9Ck4TBGwskPyHN12qBg\"}]},{\"id\":\"urn:awp:n:eegRxcTT9bf2H2yeqJbN9wr4Xny2zoKMePJ3JtMEL9Q\",\"@graph\":[{\"id\":\"urn:awp:n:i8ugH6fXk3TdutO0GScUekR5TlyPk6z1deyfBqgLW6c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1NjpmZWQzY2UzNjQ1N2ExZTkyMjg3N2NiMjdlNWMzZjY1MmMzODZkNzEwZTVkNjIwZGNlMmExMzYyMzQxZGJkYTE0IiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpvcmlnaW5hbCIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm9yaWdpbmFsIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.nLp6t4-bHtc1eonuxQmf1z77tbSncCtKb5d9iG11-kkRds7Qx-8sFWIJYRD8zLXKjxVVlVwjuHlMsmjBFe-PDQ\"}]},{\"id\":\"urn:awp:n:RmuEi9t3bafsOLrZR5GLvC_tcgfC1HqSXWAV8sD6eBI\",\"@graph\":[{\"id\":\"urn:awp:n:s3pRGW66gtMNknvfP9fx1fPTvkrr2aXfCewVS1iP7lo\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJjb250ZW50RGlnZXN0Ijoic2hhLTI1Njo3ZjAxNTgzZTI0ZTY0ZWNhY2I2OTBjYTZiZWU5NThmYjVkNjc3ZTc0YzkxZTY1M2UyZDNmZmRjMjcxODBkY2UyIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3Rvczpvd25lciIsInN1YmplY3QiOiJ1cm46ZmljdGlvbmFsOmluc3VyYW5jZS1jbGFpbS1waG90b3M6b3duZXIiLCJjbGFpbVR5cGUiOiJ1bnN0cnVjdHVyZWQtY29udGVudCIsIm1ldGhvZCI6InJlY29yZGVkLWJ5LWF1dGhvcml0eSIsImFzT2YiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ0ZXJtcyI6eyJwb2xpY3kiOnsiaWQiOiJ1cm46dGVybXM6aW5zdXJhbmNlLWNsYWltLXBob3RvczpwaG90byIsInBlcm1pc3Npb25zIjpbeyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfSx7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoiZGlzdHJpYnV0ZSIsInRhcmdldCI6InVybjpzY2VuYXJpbzppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOnBob3RvIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTppbnN1cmFuY2UtY2xhaW0tcGhvdG9zIn1dfV19fX0.XiDZr8vOZCPRQ3OlkV-QLE_hOG1OF_p9-tH6nKY0M4B97-GHF0cC7xpoxmac37N47NzWfewLyYhTrfDbIiMAAg\"}]},{\"id\":\"urn:awp:n:BAUITTsD_3x8LIBvCGj-Cb9aHVUrY1fXrYMpVe4ZWJI\",\"@graph\":[{\"id\":\"urn:awp:n:xqM4ArKxWhb_4ETzXyXoE1-QGo-rD2VjfzK4O9QlKVk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ4QjJYZlowejlTMkV3VzVYdjNlQmh5NFRRY1ozZjVZUjl2QjBNRU5WOHciLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhbW91bnQiOjEyMDAsImN1cnJlbmN5IjoiR0JQIiwic2V2ZXJpdHkiOiJzZXJpb3VzIiwiaWQiOiJ1cm46c2NlbmFyaW86aW5zdXJhbmNlLWNsYWltLXBob3Rvczplc3RpbWF0ZSIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aW5zdXJhbmNlLWNsYWltLXBob3RvczpnYXJhZ2UiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOm93bmVyIiwiY2xhaW1UeXBlIjoicmVwYWlyLmVzdGltYXRlIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczppbnN1cmFuY2UtY2xhaW0tcGhvdG9zOmVzdGltYXRlIiwicGVybWlzc2lvbnMiOlt7InR5cGUiOiJwZXJtaXNzaW9uIiwiYWN0aW9uIjoidXNlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19LHsidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJkaXN0cmlidXRlIiwidGFyZ2V0IjoidXJuOnNjZW5hcmlvOmluc3VyYW5jZS1jbGFpbS1waG90b3M6ZXN0aW1hdGUiLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJlcSIsInJpZ2h0T3BlcmFuZCI6InVybjpwdXJwb3NlOmluc3VyYW5jZS1jbGFpbS1waG90b3MifV19XX19fQ.-ezvPtnhV1UNOHzN680MI_HCOu6O9unsYF366iWpW1a2aBdUkG51Y4kATHhK7OTBKjEiIOyHwVyiba4bpvL5Cw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:7bgDd02pLBWNp3NYD4wCOXGouMN-AZamQvB7LXAxAdo\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..8RkAudFxzRAAv50xI8ooEwYIfSBdHw_DQOGGsr9IUR38shilEWwc-y6Y3cnsvu-4aEf1lr2adAztKnzqU1XhCg\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -2932,7 +3594,8 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "An invoke message from The policyholder’s agent reaches the inbound gate."
+      "caption": "An invoke message from The policyholder’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 89,
@@ -2959,7 +3622,8 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The policyholder’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The policyholder’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 90,
@@ -2997,7 +3661,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 91,
@@ -3035,7 +3700,8 @@
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim."
+      "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 92,
@@ -3073,7 +3739,8 @@
         ],
         "answer": "Accepted, for repair estimate claims only."
       },
-      "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim."
+      "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 93,
@@ -3095,7 +3762,8 @@
         "id": "urn:awp:representation:b970305af076286d557ec2f7d1471554:1794560400000",
         "text": "A representation statement signed with The policyholder's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The policyholder signed a statement that The policyholder’s agent acts for them in this operation."
+      "caption": "The policyholder signed a statement that The policyholder’s agent acts for them in this operation.",
+      "gateRun": 1
     },
     {
       "seq": 94,
@@ -3122,7 +3790,8 @@
         "id": "urn:terms:insurance-claim-photos:original",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 95,
@@ -3149,7 +3818,8 @@
         "id": "urn:terms:insurance-claim-photos:photo",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 96,
@@ -3176,7 +3846,8 @@
         "id": "urn:terms:insurance-claim-photos:estimate",
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
-      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
+      "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
+      "gateRun": 1
     },
     {
       "seq": 97,
@@ -3196,14 +3867,25 @@
           "layer": "meaning",
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:insurance-claim-photos:owner"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder, The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 98,
@@ -3223,14 +3905,25 @@
           "layer": "meaning",
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:insurance-claim-photos:owner"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:garage"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:insurance-claim-photos:other-garage"
         }
       ],
       "reason": "fit-for-use",
       "rule": {
         "id": "urn:profile:insurance-claim-photos:unstructured-content",
-        "text": "Accept unstructured-content from The policyholder by recorded-by-authority, at most 30 days old."
+        "text": "Accept unstructured-content from The policyholder, The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The policyholder's unstructured content statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 99,
@@ -3262,7 +3955,8 @@
         "id": "urn:profile:insurance-claim-photos:repair.estimate",
         "text": "Accept repair estimate from The accepted repair garage, The unaccepted repair garage by recorded-by-authority, at most 7 days old."
       },
-      "caption": "The accepted repair garage's repair estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old."
+      "caption": "The accepted repair garage's repair estimate statement is fit for An insurance claim with photographs: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 100,
@@ -3278,7 +3972,8 @@
         "id": "CORE-IN-21",
         "text": "Each required claim kind must be covered for the same task and subject."
       },
-      "caption": "Every kind of claim required by this operation is covered by admitted, fit evidence."
+      "caption": "Every kind of claim required by this operation is covered by admitted, fit evidence.",
+      "gateRun": 1
     },
     {
       "seq": 101,
@@ -3288,7 +3983,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
+      "messageDigest": "sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 1
     },
     {
       "seq": 102,
@@ -3417,6 +4115,16 @@
       "seq": 110,
       "step": 9,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:insurance-claim-photos:decision",
+        "operation": "urn:op:insurance-claim-photos:decision",
+        "conversation": "urn:scenario:insurance-claim-photos:task",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -3434,12 +4142,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The insurer's mandate covers this action."
+      "caption": "The insurer's mandate covers this action.",
+      "gateRun": 2
     },
     {
       "seq": 111,
       "step": 9,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:insurance-claim-photos:decision",
+        "operation": "urn:op:insurance-claim-photos:decision",
+        "conversation": "urn:scenario:insurance-claim-photos:task",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -3468,12 +4187,23 @@
         "answer": "Accepted, for A person decides on the original content only."
       },
       "reason": "recipient-established",
-      "caption": "The insurer: Accepted, for A person decides on the original content only."
+      "caption": "The insurer: Accepted, for A person decides on the original content only.",
+      "gateRun": 2
     },
     {
       "seq": 112,
       "step": 9,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:insurance-claim-photos:decision",
+        "operation": "urn:op:insurance-claim-photos:decision",
+        "conversation": "urn:scenario:insurance-claim-photos:task",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -3486,12 +4216,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 113,
       "step": 9,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:insurance-claim-photos:decision",
+        "operation": "urn:op:insurance-claim-photos:decision",
+        "conversation": "urn:scenario:insurance-claim-photos:task",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -3504,12 +4245,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 2
     },
     {
       "seq": 114,
       "step": 9,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:insurance-claim-photos:decision",
+        "operation": "urn:op:insurance-claim-photos:decision",
+        "conversation": "urn:scenario:insurance-claim-photos:task",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -3526,18 +4278,30 @@
         "id": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
         "text": "Requires 1 approval(s) from the principal."
       },
-      "caption": "The required people must decide this exact action."
+      "caption": "The required people must decide this exact action.",
+      "gateRun": 2
     },
     {
       "seq": 115,
       "step": 9,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:9b14752f763014673f930eddb9cb8cbbfc15c9801b6ca729fd5dd91a48c093b7",
+      "actionScope": {
+        "action": "transfer",
+        "target": "urn:op:insurance-claim-photos:decision",
+        "operation": "urn:op:insurance-claim-photos:decision",
+        "conversation": "urn:scenario:insurance-claim-photos:task",
+        "recipient": "urn:fictional:insurance-claim-photos:receiver",
+        "purpose": "urn:purpose:insurance-claim-photos",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "approval-required",
-      "caption": "The action is held for the named decision makers."
+      "caption": "The action is held for the named decision makers.",
+      "gateRun": 2
     },
     {
       "seq": 116,

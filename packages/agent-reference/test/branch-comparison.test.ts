@@ -1,10 +1,11 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import {
   compareBranch,
   continuedReleaseProblem,
   describeStep,
-  firstBranchDivergence,
+  witnessedDecision,
 } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
@@ -25,27 +26,14 @@ function decision(reason = "approval-required", seq = 1): TraceEvent {
     caption: "Decision.",
   };
 }
-it("skips shared approval and judges the first different decision", () => {
+it("uses the first unmatched bar with ordered, consuming matches", () => {
+  const shared = decision();
   const changed = decision("not-authorised", 2);
-  expect(firstBranchDivergence([decision()], [decision(), changed])).toEqual(changed);
-});
-it("does not skip a different reason at the same check", () => {
-  const changed = decision("context-not-clear");
-  expect(firstBranchDivergence([decision()], [changed])).toEqual(changed);
-});
-it("consumes matches so an additional repetition diverges", () => {
-  expect(
-    firstBranchDivergence([decision()], [decision(), decision("approval-required", 2)]),
-  ).toMatchObject({ seq: 2 });
-});
-it("reports no divergence when every non-pass decision matches", () => {
-  expect(firstBranchDivergence([decision()], [decision()])).toBeUndefined();
-});
-
-it("detects an earlier successful decision changed before the expected stop", () => {
-  const first = { ...decision("within-mandate"), outcome: "go" as const };
-  const changed = { ...first, agent: "another-agent" };
-  expect(firstBranchDivergence([first, decision()], [changed, decision()])).toEqual(changed);
+  const main = { events: [shared] };
+  expect(compareBranch(main, { events: [shared, changed] }).judged).toEqual(changed);
+  expect(compareBranch(main, { events: [changed] }).judged).toEqual(changed);
+  expect(compareBranch(main, { events: [shared, decision(undefined, 2)] }).judged?.seq).toBe(2);
+  expect(compareBranch(main, main).diverges).toBe(false);
 });
 
 it("rejects the same stopped proposal even when expect.continues is set", () => {
@@ -95,16 +83,21 @@ it("rejects the same stopped proposal even when expect.continues is set", () => 
   ).toBe(false);
 });
 
-it("detects a branch that ends after an identical prefix", () => {
-  expect(firstBranchDivergence([decision(), decision("later", 2)], [decision()])).toBe(
-    "missing-decision",
-  );
+it("reports a strict prefix without a divergence", () => {
+  expect(
+    compareBranch(
+      { events: [decision(), decision("later", 2)] },
+      { events: [decision()] },
+      { changedSteps: new Set() },
+    ).diverges,
+  ).toBe(false);
 });
 
 const accepted = (seq: number, outcome: "go" | "admit" = "go"): TraceEvent => ({
   ...decision(undefined, seq),
   part: outcome === "go" ? "outbound-gate" : "inbound-gate",
   check: undefined,
+  gateRun: 1,
   reason: undefined,
   outcome,
 });
@@ -115,6 +108,7 @@ const checked = (seq: number, extra: Partial<TraceEvent> = {}): TraceEvent => ({
   agent: "agent",
   part: "inbound-gate",
   check: "source",
+  gateRun: 1,
   verdict: "pass",
   reason: "source-accepted",
   caption: "",
@@ -173,7 +167,11 @@ it("judges a statement failure in an admitted inbound run and consumes main matc
   expect(compareBranch(branch, branch).diverges).toBe(false);
   expect(
     compareBranch(branch, {
-      events: [...branch.events, { ...fail, seq: 3 }, accepted(4, "admit")],
+      events: [
+        ...branch.events,
+        { ...fail, seq: 3, gateRun: 2 },
+        { ...accepted(4, "admit"), gateRun: 2 },
+      ],
     }).judged?.seq,
   ).toBe(4);
   expect(
@@ -194,10 +192,65 @@ it("judges a statement failure in an admitted inbound run and consumes main matc
   ).toBe(false);
 });
 
+it("does not consume a failure from a refusing run or a check without a run identity", () => {
+  const fail = checked(1, { verdict: "fail", reason: "source-unknown" });
+  const admit = accepted(2, "admit");
+  const refusal = { ...admit, outcome: "refuse" as const, reason: "source-unknown" };
+  const branch = { events: [fail, admit] };
+  expect(compareBranch({ events: [fail, refusal] }, branch).judged).toMatchObject({
+    outcome: "admit",
+    reason: "source-unknown",
+    check: "source",
+  });
+  expect(compareBranch({ events: [fail, admit] }, branch).diverges).toBe(false);
+  expect(
+    compareBranch({ events: [] }, { events: [{ ...fail, gateRun: undefined }, admit] }).diverges,
+  ).toBe(false);
+});
+
+it("keeps interleaved inbound checks with the decisions of their own runs", () => {
+  const refused = checked(1, { gateRun: 2, verdict: "fail", reason: "evidence-invalid" });
+  const withheld = checked(2, { verdict: "indeterminate", reason: "lookup-failed" });
+  const admit = accepted(4, "admit");
+  const refusal = {
+    ...admit,
+    seq: 3,
+    gateRun: 2,
+    outcome: "refuse" as const,
+    reason: "evidence-invalid",
+  };
+  expect(
+    compareBranch(
+      { events: [{ ...refused, seq: 2 }, refusal, admit] },
+      { events: [refused, withheld, refusal, admit] },
+    ).judged,
+  ).toMatchObject({ seq: 4, outcome: "admit", reason: "lookup-failed" });
+});
+
 it("reports statement precedence after the standalone admission and keeps the verdict", () => {
   const admit = accepted(1, "admit");
-  const superseded = checked(2, { check: "fitness", reason: "superseded-by-better-source" });
-  expect(compareBranch({ events: [admit] }, { events: [admit, superseded] }).judged).toMatchObject({
+  const superseded = checked(2, {
+    gateRun: 2,
+    check: "fitness",
+    reason: "superseded-by-better-source",
+  });
+  const step = {
+    id: "admit",
+    descriptor: describeStep({
+      type: "admit",
+      id: "admit",
+      agent: "agent",
+      purpose: "urn:purpose:test",
+      statements: [],
+    }),
+  };
+  const steps = new Map([
+    [1, step],
+    [2, step],
+  ]);
+  expect(
+    compareBranch({ events: [admit], steps }, { events: [admit, superseded], steps }).judged,
+  ).toMatchObject({
     outcome: "admit",
     check: "fitness",
     reason: "superseded-by-better-source",
@@ -220,22 +273,108 @@ it("requires a fault-bearing transport record that is absent from main", () => {
   ).toBe(false);
 });
 
-it("keeps a changed or missing ordered decision ahead of a new transport fault", () => {
-  const options = { ordered: true };
+it("judges a bar before a transport fault and reaches A3 on a strict prefix", () => {
+  const options = { changedSteps: new Set<string>() };
   const go = accepted(1);
   const fault = checked(2, { kind: "record", part: "transport", fault: "fault-in-test" });
   const stop = { ...decision("not-authorised", 3), outcome: "stop" } as const;
-  const changed = { ...go, agent: "other" };
+  const steps = new Map([[go.seq, { id: "go", descriptor: { type: "start", items: [] } }]]);
+  const main = { events: [go], steps };
+  expect(compareBranch(main, { events: [go, fault, stop], steps }, options)).toMatchObject({
+    judged: stop,
+    diverges: true,
+    setup: [],
+  });
+  const prefix = compareBranch(
+    { events: [go, stop], steps },
+    { events: [go, fault], steps },
+    options,
+  );
+  expect(prefix).toMatchObject({ diverges: true, setup: [] });
+  expect(prefix.judged).toBeUndefined();
+  expect(prefix.failure).toBeUndefined();
+});
+
+it("fails the guard when a main bar disappears before a shared release", () => {
+  const go = accepted(2);
+  const stop = { ...decision("not-authorised", 3), outcome: "stop" } as const;
+  const steps = new Map([[go.seq, { id: "go", descriptor: { type: "start", items: [] } }]]);
   expect(
-    compareBranch({ events: [go] }, { events: [changed, fault, stop] }, options).judged,
-  ).toEqual(changed);
-  expect(compareBranch({ events: [go, stop] }, { events: [go, fault] }, options)).toMatchObject({
-    diverges: true,
-    missingDecision: true,
+    compareBranch(
+      { events: [decision(), go], steps },
+      { events: [go, stop], steps },
+      { changedSteps: new Set() },
+    ),
+  ).toMatchObject({ judged: stop, failure: go, setup: [] });
+});
+
+it.each([false, true])("requires the extra go to come from a changed step (%s)", (changed) => {
+  const go = accepted(1);
+  const extra = accepted(2);
+  const stop = { ...decision("not-authorised", 3), outcome: "stop" } as const;
+  const step = { id: "share", descriptor: { type: "start", items: [] } };
+  const extraStep = { ...step, id: "extra" };
+  const comparison = compareBranch(
+    { events: [go], steps: new Map([[1, step]]) },
+    {
+      events: [extra, { ...go, seq: 4 }, { ...stop, seq: 5 }],
+      steps: new Map([
+        [2, extraStep],
+        [4, step],
+      ]),
+    },
+    { changedSteps: new Set(changed ? [extraStep.id] : []) },
+  );
+  expect(comparison).toMatchObject({ judged: { seq: 5 }, setup: [extra] });
+  expect(comparison.failure).toEqual(changed ? undefined : extra);
+});
+
+it.each([
+  ["accept", "approval-denied", true],
+  ["review", "approval-denied", false],
+  ["accept", "not-authorised", false],
+] as const)("judges the denied question only when its descriptor changed (%s, %s)", (action, reason, judgesAsk) => {
+  const ask = { ...decision(), actionDigest: "proposal" };
+  const reply = checked(2, {
+    part: "principal",
+    kind: "principal-reply",
+    approvalDecision: "deny",
+    actionDigest: "proposal",
   });
-  expect(compareBranch({ events: [go] }, { events: [go, fault] }, options)).toMatchObject({
-    diverges: true,
+  const stop = { ...decision(reason, 3), actionDigest: "proposal", outcome: "stop" } as const;
+  const step = (decision: string) => ({
+    id: "effect",
+    descriptor: { type: "effect", items: [], decision },
   });
+  const result = compareBranch(
+    { events: [ask], steps: new Map([[1, step("review")]]) },
+    { events: [ask, reply, stop], steps: new Map([[1, step(action)]]) },
+  );
+  expect(result.judged).toEqual(judgesAsk ? ask : stop);
+  expect(result.denial).toEqual(judgesAsk ? stop : undefined);
+});
+
+it("binds witnesses to a single gate run and requires a release for inbound go", () => {
+  const witness = { outcome: "go", check: "source", reason: "source-accepted" };
+  const check = checked(1);
+  const admit = accepted(2, "admit");
+  const go = { ...accepted(3), messageId: "answer" };
+  const out = checked(4, { part: "transport", kind: "message-out", messageId: "answer" });
+  expect(witnessedDecision({ events: [check, admit, go, out] }, witness)).toBe(admit);
+  expect(witnessedDecision({ events: [check, admit] }, witness)).toBeUndefined();
+  expect(
+    witnessedDecision({ events: [check, admit, go, out] }, { ...witness, outcome: "admit" }),
+  ).toBe(admit);
+  expect(
+    witnessedDecision({ events: [check, { ...admit, gateRun: 2 }, go, out] }, witness),
+  ).toBeUndefined();
+  expect(
+    witnessedDecision({ events: [{ ...check, verdict: "fail" }, admit, go, out] }, witness),
+  ).toBeUndefined();
+  const refused = { ...admit, outcome: "refuse" as const };
+  expect(witnessedDecision({ events: [check, refused] }, { ...witness, outcome: "stop" })).toBe(
+    refused,
+  );
 });
 
 it("judges a matched answer about a different action and ignores ordering and run data", () => {
@@ -252,7 +391,7 @@ it("judges a matched answer about a different action and ignores ordering and ru
   };
   const run = (step: typeof proposal) => ({
     events: [decision()],
-    steps: new Map([[1, describeStep(step)]]),
+    steps: new Map([[1, { id: step.id, descriptor: describeStep(step) }]]),
   });
   const main = run(proposal);
   expect(compareBranch(main, main).diverges).toBe(false);

@@ -57,6 +57,7 @@ it("publishes Sam's statement and the forum decision; the reader checks each hos
   // Measured: the disclosure check runs before the bank's terms are reached.
   const evidence = paths.find((path) => path.path === "evidence-not-publishable");
   expect(evidence?.disagrees).toBe(false);
+  expect(evidence?.note).toBeUndefined();
   expect(evidence?.actual).toMatchObject({
     outcome: "stop",
     reason: "excessive-scope",

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
@@ -218,7 +219,8 @@ it("asks the garage for a structured estimate when its assessment arrived as a l
   const events = branch?.trace?.events ?? [];
   const request = events.find(
     (e) =>
-      e.agent === "receiver-agent" &&
+      e.agent === "owner-agent" &&
+      e.part === "outbound-gate" &&
       e.check === "fitness" &&
       e.verdict === "ask-more" &&
       e.reason === "structured-form-required",
@@ -226,13 +228,13 @@ it("asks the garage for a structured estimate when its assessment arrived as a l
   if (!request) throw new Error("missing structured estimate request");
   expect(request.caption).toContain("The accepted repair garage");
   expect(
-    request.refs?.some((ref) => ref.id === "urn:scenario:insurance-claim-photos:garage-letter"),
+    request.refs?.some((ref) => ref.id === "urn:fictional:insurance-claim-photos:garage"),
   ).toBe(true);
   expect(request.caption).toContain("repair estimate");
   expect(
     events
       .slice(events.indexOf(request))
-      .some((e) => e.agent === "receiver-agent" && e.part === "core"),
+      .some((e) => e.agent === "receiver-agent" || e.kind === "message-out"),
   ).toBe(false);
   expect(
     events.some(

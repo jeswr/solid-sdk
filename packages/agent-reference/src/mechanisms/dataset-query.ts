@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 /** A source answers an approved closed rule. The reader never receives dataset rows. */
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
@@ -57,6 +58,7 @@ interface QueryState {
   nonce: string;
 }
 export class LocalDatasetHolder {
+  private gateRun = 0;
   readonly gate: ServiceGate;
   private readonly rows: DatasetRow[];
   constructor(
@@ -78,6 +80,7 @@ export class LocalDatasetHolder {
     );
   }
   private release(
+    gateRun: number,
     check: "data-terms" | "limits-approval" | "disclosure" | "evidence",
     reason?: ReasonCode,
   ) {
@@ -101,7 +104,7 @@ export class LocalDatasetHolder {
         : "The holder checks the approved answer before release.",
     };
     this.gate.record("query-release-check", event);
-    this.options.sink?.(event);
+    this.options.sink?.({ ...event, gateRun });
     if (reason) {
       const decision = {
         part: "outbound-gate" as const,
@@ -111,12 +114,13 @@ export class LocalDatasetHolder {
         caption: `The holder stops: ${reason}.`,
       };
       this.gate.record("query-release-decision", decision);
-      this.options.sink?.(decision);
+      this.options.sink?.({ ...decision, gateRun });
       return { ok: false as const, reason };
     }
     return undefined;
   }
   async query(jws: string) {
+    const gateRun = ++this.gateRun;
     const checked = await this.gate.request(
       jws,
       "awp-dataset-query+jws",
@@ -146,11 +150,11 @@ export class LocalDatasetHolder {
     this.gate.check("fitness");
     this.gate.decision();
     if (Date.parse(g.validUntil) <= Date.parse(this.options.now()))
-      return required(this.release("data-terms", "expired"));
+      return required(this.release(gateRun, "data-terms", "expired"));
     const protocol = g.protocol.find((p) => digestOf(p) === digestOf(r.protocol));
     if (r.purpose !== g.purpose || !protocol)
-      return required(this.release("data-terms", "purpose-not-permitted"));
-    this.release("data-terms");
+      return required(this.release(gateRun, "data-terms", "purpose-not-permitted"));
+    this.release(gateRun, "data-terms");
     validateRules(protocol.rules);
     if (
       !protocol.rules.some((rule) => rule.id === protocol.rule) ||
@@ -160,14 +164,14 @@ export class LocalDatasetHolder {
           !rule.assurances.includes("by-source"),
       )
     )
-      return required(this.release("data-terms", "purpose-not-permitted"));
+      return required(this.release(gateRun, "data-terms", "purpose-not-permitted"));
     // Count ALL approved queries against this grant, independent of request IDs and cohorts.
     // No await from load through save. A crash after this save consumes the query safely.
     const state = this.options.store.load(),
       key = `query:${g.id}`;
     const prior = state.domain[key] as unknown as QueryState | undefined;
     if (prior && prior.grantDigest !== digestOf(g))
-      return required(this.release("data-terms", "purpose-not-permitted"));
+      return required(this.release(gateRun, "data-terms", "purpose-not-permitted"));
     const stored: QueryState = structuredClone(
       prior ?? {
         grantDigest: digestOf(g),
@@ -177,14 +181,15 @@ export class LocalDatasetHolder {
       },
     );
     if (stored.count >= g.relatedQueryCap)
-      return required(this.release("limits-approval", "limit-exceeded"));
-    if (stored.requests[r.id]) return required(this.release("limits-approval", "limit-exceeded"));
+      return required(this.release(gateRun, "limits-approval", "limit-exceeded"));
+    if (stored.requests[r.id])
+      return required(this.release(gateRun, "limits-approval", "limit-exceeded"));
     stored.count++;
     stored.requests[r.id] = digestOf(r);
     state.domain[key] = stored as unknown as Json;
     this.options.store.save(state);
     this.gate.record("query-counted", { grant: g.id, count: stored.count, request: digestOf(r) });
-    this.release("limits-approval");
+    this.release(gateRun, "limits-approval");
     const selected = this.rows.filter(
       (row) => row.labels[protocol.cohort.field] === protocol.cohort.equals,
     );
@@ -229,8 +234,8 @@ export class LocalDatasetHolder {
         ).size,
     );
     if (!covering.length || covering.some((n) => n < g.minimumPeople))
-      return required(this.release("disclosure", "prohibited"));
-    this.release("disclosure");
+      return required(this.release(gateRun, "disclosure", "prohibited"));
+    this.release(gateRun, "disclosure");
     const memory = new GateMemory(),
       task = `urn:query:${digestOf(r).slice(8)}`,
       at = this.options.now();
@@ -315,7 +320,7 @@ export class LocalDatasetHolder {
       purpose: g.purpose,
       assurance: "by-source",
     });
-    if (!evaluated.ok) return required(this.release("evidence", evaluated.reason));
+    if (!evaluated.ok) return required(this.release(gateRun, "evidence", evaluated.reason));
     // One source-private snapshot commitment, never per-person rows or identifiers.
     const statement = evaluated.statement,
       derivation = statement.derivation as JsonObject;
@@ -341,7 +346,7 @@ export class LocalDatasetHolder {
     derivation.queryGrant = digestOf(g);
     derivation.query = stored.count;
     statement.terms = inputTerms as unknown as JsonObject;
-    this.release("evidence");
+    this.release(gateRun, "evidence");
     const answer = await signStatement(this.options.key, TYP.statement, statement);
     const decision = {
       part: "outbound-gate" as const,
@@ -351,7 +356,7 @@ export class LocalDatasetHolder {
       caption: "The holder releases only the signed derived answer after saving its counter.",
     };
     this.gate.record("query-answer", { grant: g.id, answerDigest: digestOf(statement) });
-    this.options.sink?.(decision);
+    this.options.sink?.({ ...decision, gateRun });
     return { ok: true as const, jws: answer };
   }
 }

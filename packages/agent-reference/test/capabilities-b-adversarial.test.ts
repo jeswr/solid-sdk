@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { mkdtempSync, rmSync } from "fs";
@@ -81,6 +82,7 @@ it("checks the actual signed emergency request and actual output, including futu
     scenario.branches = [];
     scenario.script = scenario.script.slice(0, 5);
     scenario.stress = ["mandate"];
+    scenario.result = undefined;
     const release = scenario.script[4],
       request = scenario.script[2],
       role = scenario.statements.find((s) => s.id === "role");

@@ -51,15 +51,14 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   }
   const baseline = manifest.paths.filter((path) => !path.configuration);
   const alternatives = manifest.paths.filter((path) => path.configuration);
-  expect(traces).toBe(279);
-  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(156);
-  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(13);
+  expect(manifest.paths).toHaveLength(283);
+  expect(traces).toBe(278);
+  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(164);
+  expect(baseline.filter((path) => path.status === "disagrees")).toHaveLength(4);
   expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(5);
-  // The five Solid configurations now have traces. The regulator gap and the reputation
-  // disclosure stop match their declared outcomes under the ordered comparator.
   expect(alternatives).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(103);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(7);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(110);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(0);
   const blocked = manifest.paths.filter((path) => path.status === "blocked");
   expect(blocked).toHaveLength(5);
   expect(blocked.every((path) => !path.trace)).toBe(true);

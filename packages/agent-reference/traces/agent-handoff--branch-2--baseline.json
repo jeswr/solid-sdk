@@ -77,7 +77,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -108,7 +108,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "A taxpayer's delivery address statement is intact and signed with A taxpayer's pinned key."
+      "caption": "A taxpayer's delivery address statement is intact and signed with A taxpayer's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -146,7 +147,8 @@
         ],
         "answer": "Accepted, for delivery address claims only."
       },
-      "caption": "A taxpayer's delivery address statement: A taxpayer is an accepted source for this kind of claim."
+      "caption": "A taxpayer's delivery address statement: A taxpayer is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -164,7 +166,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "A taxpayer's delivery address statement asks for nothing, so there is no authority to check."
+      "caption": "A taxpayer's delivery address statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -191,7 +194,8 @@
         "id": "urn:terms:agent-handoff:address",
         "text": "Its terms allow this: use for Delivery; share for Delivery; never for Marketing."
       },
-      "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing."
+      "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -223,7 +227,8 @@
         "id": "urn:profile:agent-handoff:delivery.address",
         "text": "Accept delivery address from A taxpayer by recorded-by-authority, at most 1 days old."
       },
-      "caption": "A taxpayer's delivery address statement is fit for A service agent hands a customer to a partner's agent: recorded-by-authority, 0 days old."
+      "caption": "A taxpayer's delivery address statement is fit for A service agent hands a customer to a partner's agent: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -233,7 +238,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "A taxpayer's delivery address statement is admitted."
+      "caption": "A taxpayer's delivery address statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -270,6 +276,16 @@
       "seq": 9,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -287,12 +303,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "A taxpayer's mandate covers this action."
+      "caption": "A taxpayer's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -321,12 +348,23 @@
         "answer": "Accepted, for A service agent hands a customer to a partner's agent only."
       },
       "reason": "recipient-established",
-      "caption": "The tax authority: Accepted, for A service agent hands a customer to a partner's agent only."
+      "caption": "The tax authority: Accepted, for A service agent hands a customer to a partner's agent only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -339,12 +377,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -357,12 +406,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -375,12 +435,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within A taxpayer's limits."
+      "caption": "Inside what the agent may do on its own, and within A taxpayer's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -393,12 +464,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -415,12 +497,23 @@
         "text": "The issuer's terms: use for Delivery; share for Delivery; never for Marketing. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing."
+      "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing.",
+      "gateRun": 1
     },
     {
       "seq": 16,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -433,12 +526,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -460,24 +564,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The delivery partner’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The delivery partner’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 18,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The receiving agent."
+      "messageId": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
+      "messageDigest": "sha-256:f704bda39e18323a658ff465f5870f0b566b3b5245a7e0fffc884f02d24fe1df",
+      "caption": "The invoke message goes to The receiving agent.",
+      "gateRun": 1
     },
     {
       "seq": 19,
       "step": 2,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:96019293e26e401fc27fb55c22c5a0b18f886b478528f0981c14a7ac019c0d51",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:receiver",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:LyjFe33i6akgdmhV__mWbcie-YAf3OmDKWFpYg2uQqg\"},\"to\":{\"id\":\"urn:awp:n:g5cnwbvt2GBZnLV3VGhJc2LsXaHoUbqfsSoYHLN1SMQ\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:xpjQa4B4PxTlygaBOwepNEBvp0fwA5wJVXPDAvmLotM\"},\"evidence\":[{\"id\":\"urn:awp:n:j1eNMg8xTrgx0TnmrRE1N32LiLXVYLP_GAj1aeuJptE\"},{\"id\":\"urn:awp:n:bJ2RuglaXki1Wgvr00oeraJs1kGKRnm6C8NSj0qYX94\"}],\"@included\":[{\"id\":\"urn:awp:n:LyjFe33i6akgdmhV__mWbcie-YAf3OmDKWFpYg2uQqg\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:agent-handoff:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:agent-handoff:subject\"},{\"id\":\"urn:awp:n:g5cnwbvt2GBZnLV3VGhJc2LsXaHoUbqfsSoYHLN1SMQ\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:agent-handoff:receiver-agent:actor\",\"party\":\"urn:fictional:agent-handoff:receiver\"},{\"id\":\"urn:awp:n:xpjQa4B4PxTlygaBOwepNEBvp0fwA5wJVXPDAvmLotM\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:3b0eZxqMXhJX9eEqTYp9AAUt5KkvtIbvX07Z_sDbzzI\"},\"input\":{\"id\":\"urn:awp:n:CNIz29o17iboXr4YzSJH0LF2wlHUWRHH2pUiCzP3_44\"},\"operation\":{\"id\":\"urn:op:agent-handoff\"},\"purpose\":\"urn:purpose:delivery\"},{\"id\":\"urn:awp:n:j1eNMg8xTrgx0TnmrRE1N32LiLXVYLP_GAj1aeuJptE\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:1Ul_8vFh06ZIsAhjy8bQnmeLO2MYPqlILBs1Q0BH80Q\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:bJ2RuglaXki1Wgvr00oeraJs1kGKRnm6C8NSj0qYX94\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:KEAZ0Wao0vf199M-uXOV4q2ZsOJMbuNLcBWxmm-LV8k\"},\"format\":\"mandate-chain+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:agent-handoff\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:CNIz29o17iboXr4YzSJH0LF2wlHUWRHH2pUiCzP3_44\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:oAtxbzEY9EpGildrOX23Y01oizihYZWDp-YadhrkRqU\"},{\"id\":\"urn:awp:n:T1G-lZBT1KL7Zri_8cmx1aKT5ZvK8HlUD7Yrh3GyUYA\"}]},{\"id\":\"urn:awp:n:3b0eZxqMXhJX9eEqTYp9AAUt5KkvtIbvX07Z_sDbzzI\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:1Ul_8vFh06ZIsAhjy8bQnmeLO2MYPqlILBs1Q0BH80Q\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:vWYZdpxuEBXLbKy63571pTiIKusK1TjiRqtV6p9wRyk\",\"issuer\":\"urn:fictional:agent-handoff:subject\",\"proofGraph\":\"urn:awp:n:byxPBWO5XGwDWra8B65zq-HDWaT1s-m5utPf8IpHXkc\"},{\"id\":\"urn:awp:n:KEAZ0Wao0vf199M-uXOV4q2ZsOJMbuNLcBWxmm-LV8k\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:d-m04hcPDqG95pynY9nDHiOuDgutMrx-TP0YicJKQ34\"},{\"id\":\"urn:awp:n:-ii4RCJuyLV7P_GbhLtd5-w71Oa12La2mnwLkgT0kqg\"}],\"envelopeBytes\":\"[[\\\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpwb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmFnZW50LWhhbmRvZmYiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6ZGVsaXZlcnkiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlZ2lzdGVyLXN0YXR1cyIsImlkIjoicG93ZXIifSwibWF5RGVsZWdhdGUiOnsiZGVwdGgiOjJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiNDUzNng0NzVPdEV1cU1DSHQwMUJ5U1hHNi16N1lWOVBvblNha1R6VmplbyJ9.q6uEcoRreZrefnKEBMS8dWYuApoMizq-6CzZWDOuf3Cw4-gwT7nSmpMW4bvS5aIHdeGgqvzEPgI6yLohzEosAQ\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjphZ2VudC1wb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6cG93ZXIiLCJhY3Rpb25zIjpbImludm9rZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDphZ2VudC1oYW5kb2ZmIl0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0IiwidXJuOmZpY3Rpb25hbDpvdGhlci1jdXN0b21lciJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpkZWxpdmVyeSJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6aG9sZGVyLXN0YXR1cyIsImlkIjoiYWdlbnQifSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkifQ.ZqlMJhgH6yO98t3pYQwHBIBS8V2-bRZHF_42hLHL_G8nJBvZtctIIYDeFYQmypovR53TsB0p1XNzqJeQsih6Bg\\\"]]\",\"statementPayload\":{\"id\":\"urn:awp:n:SazfzMKjrxyZZbBGyuPD5RXwgqUO2RAc4n5l2VstMHQ\"}},{\"id\":\"urn:awp:n:oAtxbzEY9EpGildrOX23Y01oizihYZWDp-YadhrkRqU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:agent-handoff:subject\"},\"name\":\"subject\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:T1G-lZBT1KL7Zri_8cmx1aKT5ZvK8HlUD7Yrh3GyUYA\",\"type\":\"PropertyValue\",\"domainValue\":\"deliver\",\"name\":\"request\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:vWYZdpxuEBXLbKy63571pTiIKusK1TjiRqtV6p9wRyk\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Mvkf53JWqlvrgD3HRxjJchgVnBZ79S00E5NbxlkXMbg\"}},{\"id\":\"urn:awp:n:Mvkf53JWqlvrgD3HRxjJchgVnBZ79S00E5NbxlkXMbg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:a6abfea22e8eaf9bdda9a1d5b4b3f82acd399a9b9f3c62e86c700f9bade1723a\",\"byteLength\":\"31826\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:d-m04hcPDqG95pynY9nDHiOuDgutMrx-TP0YicJKQ34\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:OckPVBQhzMMoH5JJ5S243r_B0ll1JUgMWjFSGWiY7I4\",\"issuer\":\"urn:fictional:agent-handoff:subject\",\"proofGraph\":\"urn:awp:n:Uavg1BmsWGYqWRWYQwllFiPM0_dgMZKQqxoT1zrUELk\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:-ii4RCJuyLV7P_GbhLtd5-w71Oa12La2mnwLkgT0kqg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:6yA-mSJTuBe6Q9jXwoJT0jnOAN0MdyhWp_XeoemEd7A\",\"issuer\":\"urn:fictional:agent-handoff:holder\",\"proofGraph\":\"urn:awp:n:rI1jlNJfjOCMX9cAjM34MA-9tCpmZ58W6Z_9tz2lobU\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:SazfzMKjrxyZZbBGyuPD5RXwgqUO2RAc4n5l2VstMHQ\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:WaAhZ61w35YcagDPt7MDHP6yTZOsclTRyKbI7Gst9n0\"}]},{\"id\":\"urn:awp:n:WaAhZ61w35YcagDPt7MDHP6yTZOsclTRyKbI7Gst9n0\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:09JWSEgLHgMrp0vokS4ps4cYfRmDNEVsshkrw2Ivj-g\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:OckPVBQhzMMoH5JJ5S243r_B0ll1JUgMWjFSGWiY7I4\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:pBdvKYwP3FkyZBJRTdaWE3w6KHHL7iuxakr8BpvdsLw\"}},{\"id\":\"urn:awp:n:6yA-mSJTuBe6Q9jXwoJT0jnOAN0MdyhWp_XeoemEd7A\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:OIAvaYlSkhcKMeJm-YFNii4LW4nm2KHlysE3x525S2Y\"}},{\"id\":\"urn:awp:n:09JWSEgLHgMrp0vokS4ps4cYfRmDNEVsshkrw2Ivj-g\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:3d8pFF-oBYYPUBnz6FilZleuKgFm-OiONVDpL_ayvmU\"},{\"id\":\"urn:awp:n:ajcdSJknIMVV43cVK4_dfwxwQJsRP74w8TIQvwvko5Y\"}]},{\"id\":\"urn:awp:n:3d8pFF-oBYYPUBnz6FilZleuKgFm-OiONVDpL_ayvmU\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpwb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmFnZW50LWhhbmRvZmYiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6ZGVsaXZlcnkiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlZ2lzdGVyLXN0YXR1cyIsImlkIjoicG93ZXIifSwibWF5RGVsZWdhdGUiOnsiZGVwdGgiOjJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiNDUzNng0NzVPdEV1cU1DSHQwMUJ5U1hHNi16N1lWOVBvblNha1R6VmplbyJ9.q6uEcoRreZrefnKEBMS8dWYuApoMizq-6CzZWDOuf3Cw4-gwT7nSmpMW4bvS5aIHdeGgqvzEPgI6yLohzEosAQ\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:ajcdSJknIMVV43cVK4_dfwxwQJsRP74w8TIQvwvko5Y\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjphZ2VudC1wb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6cG93ZXIiLCJhY3Rpb25zIjpbImludm9rZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDphZ2VudC1oYW5kb2ZmIl0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0IiwidXJuOmZpY3Rpb25hbDpvdGhlci1jdXN0b21lciJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpkZWxpdmVyeSJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6aG9sZGVyLXN0YXR1cyIsImlkIjoiYWdlbnQifSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkifQ.ZqlMJhgH6yO98t3pYQwHBIBS8V2-bRZHF_42hLHL_G8nJBvZtctIIYDeFYQmypovR53TsB0p1XNzqJeQsih6Bg\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:pBdvKYwP3FkyZBJRTdaWE3w6KHHL7iuxakr8BpvdsLw\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:8f733441c4aae0ceb7bf7a8efdaa91f76a0b16cd86bedd5ff9b1229826776d70\",\"byteLength\":\"18034\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:OIAvaYlSkhcKMeJm-YFNii4LW4nm2KHlysE3x525S2Y\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:2c714f51fb453bfc2a8437e766e79aa70e249779afbae56f6b78f80368713ea9\",\"byteLength\":\"17835\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:byxPBWO5XGwDWra8B65zq-HDWaT1s-m5utPf8IpHXkc\",\"@graph\":[{\"id\":\"urn:awp:n:NXDXv3VMt-zBBM1fMZkyHcsu4oI71wFsa0HhlOFebfc\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhZGRyZXNzIjoidXJuOmZpY3Rpb25hbDpkZWxpdmVyeS1hZGRyZXNzIiwiaWQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJjbGFpbVR5cGUiOiJkZWxpdmVyeS5hZGRyZXNzIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczphZ2VudC1oYW5kb2ZmOmFkZHJlc3MiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpkZWxpdmVyeSJ9XX0seyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpkZWxpdmVyeSJ9XX1dLCJwcm9oaWJpdGlvbnMiOlt7InR5cGUiOiJwcm9oaWJpdGlvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTptYXJrZXRpbmcifV19XX19fQ._XC_HdiDwN4NDntC1OdGU4C7sug5g_xSTuLCJWQImVLaY9KWdzd0UV6xjm5qLdm9OP5PfzNeeKkT_kdT4D6JAw\"}]},{\"id\":\"urn:awp:n:Uavg1BmsWGYqWRWYQwllFiPM0_dgMZKQqxoT1zrUELk\",\"@graph\":[{\"id\":\"urn:awp:n:zjbsAUJDO2ZRt-_cE1W8E853lb3nYuJ8ZfCu6hEPFM8\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpwb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmFnZW50LWhhbmRvZmYiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6ZGVsaXZlcnkiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlZ2lzdGVyLXN0YXR1cyIsImlkIjoicG93ZXIifSwibWF5RGVsZWdhdGUiOnsiZGVwdGgiOjJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiNDUzNng0NzVPdEV1cU1DSHQwMUJ5U1hHNi16N1lWOVBvblNha1R6VmplbyJ9.q6uEcoRreZrefnKEBMS8dWYuApoMizq-6CzZWDOuf3Cw4-gwT7nSmpMW4bvS5aIHdeGgqvzEPgI6yLohzEosAQ\"}]},{\"id\":\"urn:awp:n:rI1jlNJfjOCMX9cAjM34MA-9tCpmZ58W6Z_9tz2lobU\",\"@graph\":[{\"id\":\"urn:awp:n:t97kfwLH01WhwCNsaRHcHNbZqQJqufzyopqJEmg5HZ0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjphZ2VudC1wb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6cG93ZXIiLCJhY3Rpb25zIjpbImludm9rZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDphZ2VudC1oYW5kb2ZmIl0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0IiwidXJuOmZpY3Rpb25hbDpvdGhlci1jdXN0b21lciJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpkZWxpdmVyeSJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6aG9sZGVyLXN0YXR1cyIsImlkIjoiYWdlbnQifSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkifQ.ZqlMJhgH6yO98t3pYQwHBIBS8V2-bRZHF_42hLHL_G8nJBvZtctIIYDeFYQmypovR53TsB0p1XNzqJeQsih6Bg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..rywrkFainvGZhOnjFwZGEHz-ygzNOSCSVz4vdI4R4NmIg_L0ZSSl8OVrBlr6xlDXUIpjqXtPDPsjlRt0uLUpBA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -692,7 +821,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The delivery partner’s agent sends an invoke message to The receiving agent."
+      "caption": "The delivery partner’s agent sends an invoke message to The receiving agent.",
+      "gateRun": 1
     },
     {
       "seq": 20,
@@ -700,6 +830,7 @@
       "agent": "receiver-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:LyjFe33i6akgdmhV__mWbcie-YAf3OmDKWFpYg2uQqg\"},\"to\":{\"id\":\"urn:awp:n:g5cnwbvt2GBZnLV3VGhJc2LsXaHoUbqfsSoYHLN1SMQ\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:xpjQa4B4PxTlygaBOwepNEBvp0fwA5wJVXPDAvmLotM\"},\"evidence\":[{\"id\":\"urn:awp:n:j1eNMg8xTrgx0TnmrRE1N32LiLXVYLP_GAj1aeuJptE\"},{\"id\":\"urn:awp:n:bJ2RuglaXki1Wgvr00oeraJs1kGKRnm6C8NSj0qYX94\"}],\"@included\":[{\"id\":\"urn:awp:n:LyjFe33i6akgdmhV__mWbcie-YAf3OmDKWFpYg2uQqg\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:agent-handoff:owner-agent:actor\",\"onBehalfOf\":\"urn:fictional:agent-handoff:subject\"},{\"id\":\"urn:awp:n:g5cnwbvt2GBZnLV3VGhJc2LsXaHoUbqfsSoYHLN1SMQ\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:agent-handoff:receiver-agent:actor\",\"party\":\"urn:fictional:agent-handoff:receiver\"},{\"id\":\"urn:awp:n:xpjQa4B4PxTlygaBOwepNEBvp0fwA5wJVXPDAvmLotM\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:3b0eZxqMXhJX9eEqTYp9AAUt5KkvtIbvX07Z_sDbzzI\"},\"input\":{\"id\":\"urn:awp:n:CNIz29o17iboXr4YzSJH0LF2wlHUWRHH2pUiCzP3_44\"},\"operation\":{\"id\":\"urn:op:agent-handoff\"},\"purpose\":\"urn:purpose:delivery\"},{\"id\":\"urn:awp:n:j1eNMg8xTrgx0TnmrRE1N32LiLXVYLP_GAj1aeuJptE\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:1Ul_8vFh06ZIsAhjy8bQnmeLO2MYPqlILBs1Q0BH80Q\"},\"format\":\"jws-compact\",\"position\":\"1\",\"role\":\"credential\"},{\"id\":\"urn:awp:n:bJ2RuglaXki1Wgvr00oeraJs1kGKRnm6C8NSj0qYX94\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:KEAZ0Wao0vf199M-uXOV4q2ZsOJMbuNLcBWxmm-LV8k\"},\"format\":\"mandate-chain+jws\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:agent-handoff\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:CNIz29o17iboXr4YzSJH0LF2wlHUWRHH2pUiCzP3_44\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:oAtxbzEY9EpGildrOX23Y01oizihYZWDp-YadhrkRqU\"},{\"id\":\"urn:awp:n:T1G-lZBT1KL7Zri_8cmx1aKT5ZvK8HlUD7Yrh3GyUYA\"}]},{\"id\":\"urn:awp:n:3b0eZxqMXhJX9eEqTYp9AAUt5KkvtIbvX07Z_sDbzzI\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:1Ul_8vFh06ZIsAhjy8bQnmeLO2MYPqlILBs1Q0BH80Q\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:vWYZdpxuEBXLbKy63571pTiIKusK1TjiRqtV6p9wRyk\",\"issuer\":\"urn:fictional:agent-handoff:subject\",\"proofGraph\":\"urn:awp:n:byxPBWO5XGwDWra8B65zq-HDWaT1s-m5utPf8IpHXkc\"},{\"id\":\"urn:awp:n:KEAZ0Wao0vf199M-uXOV4q2ZsOJMbuNLcBWxmm-LV8k\",\"type\":\"VerifiablePresentation\",\"embeddedCredential\":[{\"id\":\"urn:awp:n:d-m04hcPDqG95pynY9nDHiOuDgutMrx-TP0YicJKQ34\"},{\"id\":\"urn:awp:n:-ii4RCJuyLV7P_GbhLtd5-w71Oa12La2mnwLkgT0kqg\"}],\"envelopeBytes\":\"[[\\\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpwb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmFnZW50LWhhbmRvZmYiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6ZGVsaXZlcnkiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlZ2lzdGVyLXN0YXR1cyIsImlkIjoicG93ZXIifSwibWF5RGVsZWdhdGUiOnsiZGVwdGgiOjJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiNDUzNng0NzVPdEV1cU1DSHQwMUJ5U1hHNi16N1lWOVBvblNha1R6VmplbyJ9.q6uEcoRreZrefnKEBMS8dWYuApoMizq-6CzZWDOuf3Cw4-gwT7nSmpMW4bvS5aIHdeGgqvzEPgI6yLohzEosAQ\\\",\\\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjphZ2VudC1wb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6cG93ZXIiLCJhY3Rpb25zIjpbImludm9rZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDphZ2VudC1oYW5kb2ZmIl0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0IiwidXJuOmZpY3Rpb25hbDpvdGhlci1jdXN0b21lciJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpkZWxpdmVyeSJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6aG9sZGVyLXN0YXR1cyIsImlkIjoiYWdlbnQifSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkifQ.ZqlMJhgH6yO98t3pYQwHBIBS8V2-bRZHF_42hLHL_G8nJBvZtctIIYDeFYQmypovR53TsB0p1XNzqJeQsih6Bg\\\"]]\",\"statementPayload\":{\"id\":\"urn:awp:n:SazfzMKjrxyZZbBGyuPD5RXwgqUO2RAc4n5l2VstMHQ\"}},{\"id\":\"urn:awp:n:oAtxbzEY9EpGildrOX23Y01oizihYZWDp-YadhrkRqU\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:agent-handoff:subject\"},\"name\":\"subject\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:subject\"},{\"id\":\"urn:awp:n:T1G-lZBT1KL7Zri_8cmx1aKT5ZvK8HlUD7Yrh3GyUYA\",\"type\":\"PropertyValue\",\"domainValue\":\"deliver\",\"name\":\"request\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:vWYZdpxuEBXLbKy63571pTiIKusK1TjiRqtV6p9wRyk\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:Mvkf53JWqlvrgD3HRxjJchgVnBZ79S00E5NbxlkXMbg\"}},{\"id\":\"urn:awp:n:Mvkf53JWqlvrgD3HRxjJchgVnBZ79S00E5NbxlkXMbg\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:a6abfea22e8eaf9bdda9a1d5b4b3f82acd399a9b9f3c62e86c700f9bade1723a\",\"byteLength\":\"31826\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:d-m04hcPDqG95pynY9nDHiOuDgutMrx-TP0YicJKQ34\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:OckPVBQhzMMoH5JJ5S243r_B0ll1JUgMWjFSGWiY7I4\",\"issuer\":\"urn:fictional:agent-handoff:subject\",\"proofGraph\":\"urn:awp:n:Uavg1BmsWGYqWRWYQwllFiPM0_dgMZKQqxoT1zrUELk\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:-ii4RCJuyLV7P_GbhLtd5-w71Oa12La2mnwLkgT0kqg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:6yA-mSJTuBe6Q9jXwoJT0jnOAN0MdyhWp_XeoemEd7A\",\"issuer\":\"urn:fictional:agent-handoff:holder\",\"proofGraph\":\"urn:awp:n:rI1jlNJfjOCMX9cAjM34MA-9tCpmZ58W6Z_9tz2lobU\",\"validFrom\":\"2026-11-01T00:00:00.000Z\",\"validUntil\":\"2026-12-01T00:00:00.000Z\"},{\"id\":\"urn:awp:n:SazfzMKjrxyZZbBGyuPD5RXwgqUO2RAc4n5l2VstMHQ\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:WaAhZ61w35YcagDPt7MDHP6yTZOsclTRyKbI7Gst9n0\"}]},{\"id\":\"urn:awp:n:WaAhZ61w35YcagDPt7MDHP6yTZOsclTRyKbI7Gst9n0\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:09JWSEgLHgMrp0vokS4ps4cYfRmDNEVsshkrw2Ivj-g\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:OckPVBQhzMMoH5JJ5S243r_B0ll1JUgMWjFSGWiY7I4\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:pBdvKYwP3FkyZBJRTdaWE3w6KHHL7iuxakr8BpvdsLw\"}},{\"id\":\"urn:awp:n:6yA-mSJTuBe6Q9jXwoJT0jnOAN0MdyhWp_XeoemEd7A\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:OIAvaYlSkhcKMeJm-YFNii4LW4nm2KHlysE3x525S2Y\"}},{\"id\":\"urn:awp:n:09JWSEgLHgMrp0vokS4ps4cYfRmDNEVsshkrw2Ivj-g\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:3d8pFF-oBYYPUBnz6FilZleuKgFm-OiONVDpL_ayvmU\"},{\"id\":\"urn:awp:n:ajcdSJknIMVV43cVK4_dfwxwQJsRP74w8TIQvwvko5Y\"}]},{\"id\":\"urn:awp:n:3d8pFF-oBYYPUBnz6FilZleuKgFm-OiONVDpL_ayvmU\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpwb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmFnZW50LWhhbmRvZmYiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6ZGVsaXZlcnkiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlZ2lzdGVyLXN0YXR1cyIsImlkIjoicG93ZXIifSwibWF5RGVsZWdhdGUiOnsiZGVwdGgiOjJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiNDUzNng0NzVPdEV1cU1DSHQwMUJ5U1hHNi16N1lWOVBvblNha1R6VmplbyJ9.q6uEcoRreZrefnKEBMS8dWYuApoMizq-6CzZWDOuf3Cw4-gwT7nSmpMW4bvS5aIHdeGgqvzEPgI6yLohzEosAQ\",\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:ajcdSJknIMVV43cVK4_dfwxwQJsRP74w8TIQvwvko5Y\",\"type\":\"PropertyValue\",\"domainValue\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjphZ2VudC1wb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6cG93ZXIiLCJhY3Rpb25zIjpbImludm9rZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDphZ2VudC1oYW5kb2ZmIl0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0IiwidXJuOmZpY3Rpb25hbDpvdGhlci1jdXN0b21lciJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpkZWxpdmVyeSJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6aG9sZGVyLXN0YXR1cyIsImlkIjoiYWdlbnQifSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkifQ.ZqlMJhgH6yO98t3pYQwHBIBS8V2-bRZHF_42hLHL_G8nJBvZtctIIYDeFYQmypovR53TsB0p1XNzqJeQsih6Bg\",\"name\":\"1\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:1\"},{\"id\":\"urn:awp:n:pBdvKYwP3FkyZBJRTdaWE3w6KHHL7iuxakr8BpvdsLw\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:8f733441c4aae0ceb7bf7a8efdaa91f76a0b16cd86bedd5ff9b1229826776d70\",\"byteLength\":\"18034\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:OIAvaYlSkhcKMeJm-YFNii4LW4nm2KHlysE3x525S2Y\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:2c714f51fb453bfc2a8437e766e79aa70e249779afbae56f6b78f80368713ea9\",\"byteLength\":\"17835\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:byxPBWO5XGwDWra8B65zq-HDWaT1s-m5utPf8IpHXkc\",\"@graph\":[{\"id\":\"urn:awp:n:NXDXv3VMt-zBBM1fMZkyHcsu4oI71wFsa0HhlOFebfc\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3Atc3RhdGVtZW50K2p3cyJ9.eyJhZGRyZXNzIjoidXJuOmZpY3Rpb25hbDpkZWxpdmVyeS1hZGRyZXNzIiwiaWQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiaXNzdWVyIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJjbGFpbVR5cGUiOiJkZWxpdmVyeS5hZGRyZXNzIiwibWV0aG9kIjoicmVjb3JkZWQtYnktYXV0aG9yaXR5IiwiYXNPZiI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInRlcm1zIjp7InBvbGljeSI6eyJpZCI6InVybjp0ZXJtczphZ2VudC1oYW5kb2ZmOmFkZHJlc3MiLCJwZXJtaXNzaW9ucyI6W3sidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpkZWxpdmVyeSJ9XX0seyJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTpkZWxpdmVyeSJ9XX1dLCJwcm9oaWJpdGlvbnMiOlt7InR5cGUiOiJwcm9oaWJpdGlvbiIsImFjdGlvbiI6ImRpc3RyaWJ1dGUiLCJ0YXJnZXQiOiJ1cm46c2NlbmFyaW86YWdlbnQtaGFuZG9mZjphZGRyZXNzIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiZXEiLCJyaWdodE9wZXJhbmQiOiJ1cm46cHVycG9zZTptYXJrZXRpbmcifV19XX19fQ._XC_HdiDwN4NDntC1OdGU4C7sug5g_xSTuLCJWQImVLaY9KWdzd0UV6xjm5qLdm9OP5PfzNeeKkT_kdT4D6JAw\"}]},{\"id\":\"urn:awp:n:Uavg1BmsWGYqWRWYQwllFiPM0_dgMZKQqxoT1zrUELk\",\"@graph\":[{\"id\":\"urn:awp:n:zjbsAUJDO2ZRt-_cE1W8E853lb3nYuJ8ZfCu6hEPFM8\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ikw2ekNDUjIzT0dfZmNDUEtDV3VlRUx0N1dST1hUOXRzc3JCaEw0OWs4bXMiLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpwb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0Iiwic3ViamVjdCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJlbnRpdHkiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6c3ViamVjdCIsImFjdGlvbnMiOlsiaW52b2tlIl0sInNjb3BlIjp7Im9wZXJhdGlvbnMiOlsidXJuOm9wOmFnZW50LWhhbmRvZmYiXSwic3ViamVjdHMiOlsidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiXSwicHVycG9zZXMiOlsidXJuOnB1cnBvc2U6ZGVsaXZlcnkiXX0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMDFUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTEyLTAxVDAwOjAwOjAwLjAwMFoiLCJzdGF0dXMiOnsicmVmIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlZ2lzdGVyLXN0YXR1cyIsImlkIjoicG93ZXIifSwibWF5RGVsZWdhdGUiOnsiZGVwdGgiOjJ9LCJ0eXBlIjoiTWFuZGF0ZUxpbmsiLCJzdWJqZWN0S2V5IjoiNDUzNng0NzVPdEV1cU1DSHQwMUJ5U1hHNi16N1lWOVBvblNha1R6VmplbyJ9.q6uEcoRreZrefnKEBMS8dWYuApoMizq-6CzZWDOuf3Cw4-gwT7nSmpMW4bvS5aIHdeGgqvzEPgI6yLohzEosAQ\"}]},{\"id\":\"urn:awp:n:rI1jlNJfjOCMX9cAjM34MA-9tCpmZ58W6Z_9tz2lobU\",\"@graph\":[{\"id\":\"urn:awp:n:t97kfwLH01WhwCNsaRHcHNbZqQJqufzyopqJEmg5HZ0\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjQ1MzZ4NDc1T3RFdXFNQ0h0MDFCeVNYRzYtejdZVjlQb25TYWtUelZqZW8iLCJ0eXAiOiJhd3AtbWFuZGF0ZS1saW5rK2p3cyJ9.eyJpZCI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjphZ2VudC1wb3dlciIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpob2xkZXIiLCJzdWJqZWN0IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiZW50aXR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJwYXJlbnQiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6cG93ZXIiLCJhY3Rpb25zIjpbImludm9rZSJdLCJzY29wZSI6eyJvcGVyYXRpb25zIjpbInVybjpvcDphZ2VudC1oYW5kb2ZmIl0sInN1YmplY3RzIjpbInVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpzdWJqZWN0IiwidXJuOmZpY3Rpb25hbDpvdGhlci1jdXN0b21lciJdLCJwdXJwb3NlcyI6WyJ1cm46cHVycG9zZTpkZWxpdmVyeSJdfSwidmFsaWRGcm9tIjoiMjAyNi0xMS0wMVQwMDowMDowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjYtMTItMDFUMDA6MDA6MDAuMDAwWiIsInN0YXR1cyI6eyJyZWYiOiJ1cm46ZmljdGlvbmFsOmFnZW50LWhhbmRvZmY6aG9sZGVyLXN0YXR1cyIsImlkIjoiYWdlbnQifSwidHlwZSI6Ik1hbmRhdGVMaW5rIiwic3ViamVjdEtleSI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkifQ.ZqlMJhgH6yO98t3pYQwHBIBS8V2-bRZHF_42hLHL_G8nJBvZtctIIYDeFYQmypovR53TsB0p1XNzqJeQsih6Bg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijgzc3FSSGYzOFN6MmZCOENiVnM3MXRubmZiQ25rLThzM2FiY2V5QVY1UlkiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9..rywrkFainvGZhOnjFwZGEHz-ygzNOSCSVz4vdI4R4NmIg_L0ZSSl8OVrBlr6xlDXUIpjqXtPDPsjlRt0uLUpBA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -928,7 +1059,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The delivery partner’s agent reaches the inbound gate."
+      "caption": "An invoke message from The delivery partner’s agent reaches the inbound gate.",
+      "gateRun": 1
     },
     {
       "seq": 21,
@@ -955,7 +1087,8 @@
         "id": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The delivery partner’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The delivery partner’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 1
     },
     {
       "seq": 22,
@@ -993,7 +1126,8 @@
         ],
         "answer": "Accepted, for delivery address claims only."
       },
-      "caption": "A taxpayer's delivery address statement: A taxpayer is an accepted source for this kind of claim."
+      "caption": "A taxpayer's delivery address statement: A taxpayer is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 23,
@@ -1015,7 +1149,8 @@
         "id": "urn:op:agent-handoff",
         "text": "A representation statement signed with A taxpayer's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The sender has not shown that it acts for A taxpayer here."
+      "caption": "The sender has not shown that it acts for A taxpayer here.",
+      "gateRun": 1
     },
     {
       "seq": 24,
@@ -1025,13 +1160,25 @@
       "kind": "decision",
       "verdict": "fail",
       "outcome": "refuse",
+      "messageId": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0002",
       "reason": "representation-out-of-scope",
-      "caption": "The message is refused (representation-out-of-scope: representation not accepted); the core never sees it."
+      "caption": "The message is refused (representation-out-of-scope: representation not accepted); the core never sees it.",
+      "gateRun": 1
     },
     {
       "seq": 25,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -1049,12 +1196,23 @@
         }
       ],
       "reason": "no-action",
-      "caption": "This protocol message proposes no additional action."
+      "caption": "This protocol message proposes no additional action.",
+      "gateRun": 1
     },
     {
       "seq": 26,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -1083,12 +1241,23 @@
         "answer": "Accepted, for A service agent hands a customer to a partner's agent only."
       },
       "reason": "recipient-established",
-      "caption": "A taxpayer: Accepted, for A service agent hands a customer to a partner's agent only."
+      "caption": "A taxpayer: Accepted, for A service agent hands a customer to a partner's agent only.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1101,12 +1270,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate finds no personal data in this protocol message."
+      "caption": "The gate finds no personal data in this protocol message.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1119,12 +1299,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate finds no data terms to apply."
+      "caption": "The gate finds no data terms to apply.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -1137,12 +1328,23 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The message release check is complete."
+      "caption": "The message release check is complete.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -1164,24 +1366,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The receiving agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The receiving agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The refuse message goes to The delivery partner’s agent."
+      "messageId": "urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001",
+      "messageDigest": "sha-256:bea8a4e92fd322469fec65602361fe58f4658bc9fe2fb9254934d56c6d82ecbe",
+      "caption": "The refuse message goes to The delivery partner’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 3,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:d374687c55a7fd4930b84aa3ed7020aeff55fc609b95edb784359348e3c3f091",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:agent-handoff",
+        "operation": "urn:op:agent-handoff",
+        "conversation": "urn:awp:engine-agent-handoff-branch-2:owner-agent:0001",
+        "recipient": "urn:fictional:agent-handoff:subject",
+        "purpose": "urn:purpose:delivery",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-agent-handoff-branch-2:receiver-agent:0001\",\"type\":[\"Message\",\"Refuse\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\",\"kind\":\"refuse\",\"conversation\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0001\",\"from\":{\"id\":\"urn:awp:n:0gE0xcPjUTquX6K7hBCDabJBiw-PrxJaidAcHCx3o4E\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:agent-handoff:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:agent-handoff:receiver\"},\"to\":{\"id\":\"urn:awp:n:gLUaGZHngPIEINrJR426LboSryz8BQDwxPIrcWS8NPE\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:agent-handoff:owner-agent:actor\",\"party\":\"urn:fictional:agent-handoff:subject\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"inReplyTo\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0002\",\"body\":{\"id\":\"urn:awp:n:U7hoGbpluug7PUJeXsgplIjRO4UpiV-KR6cZ-VK4btc\",\"type\":\"RefuseBody\",\"reason\":\"representation-out-of-scope\",\"ref\":\"urn:awp:engine-agent-handoff-branch-2:owner-agent:0002\"},\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOlU3aG9HYnBsdXVnN1BVSmVYc2dwbElqUk80VXBpVi1LUjZjWi1WSzRidGMiLCJyZWFzb24iOiJyZXByZXNlbnRhdGlvbi1vdXQtb2Ytc2NvcGUiLCJyZWYiOiJ1cm46YXdwOmVuZ2luZS1hZ2VudC1oYW5kb2ZmLWJyYW5jaC0yOm93bmVyLWFnZW50OjAwMDIiLCJ0eXBlIjoiUmVmdXNlQm9keSJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL29yZ2FuaXphdGlvbnMtbG9jYWwtcmVzb2x2ZXIvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtYWdlbnQtaGFuZG9mZi1icmFuY2gtMjpvd25lci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXhwaXJlc0F0IjoiMjAyNi0xMS0xM1QxNTowMDowMC4wMDBaIiwiZnJvbSI6eyJhY3RvciI6InVybjpmaWN0aW9uYWw6YWdlbnQtaGFuZG9mZjpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOjBnRTB4Y1BqVVRxdVg2SzdoQkNEYWJKQml3LVByeEphaWRBY0hDeDNvNEUiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnJlY2VpdmVyIiwidHlwZSI6IlBhcnRpY2lwYW50UmVmIn0sImlkIjoidXJuOmF3cDplbmdpbmUtYWdlbnQtaGFuZG9mZi1icmFuY2gtMjpyZWNlaXZlci1hZ2VudDowMDAxIiwiaW5SZXBseVRvIjoidXJuOmF3cDplbmdpbmUtYWdlbnQtaGFuZG9mZi1icmFuY2gtMjpvd25lci1hZ2VudDowMDAyIiwia2luZCI6InJlZnVzZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46Z0xVYUdaSG5nUElFSU5ySlI0MjZMYm9Tcnl6OEJRRHd4UElyY1dTOE5QRSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphZ2VudC1oYW5kb2ZmOnN1YmplY3QiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSwidHlwZSI6WyJNZXNzYWdlIiwiUmVmdXNlIl19.7IFVDhOX4WIuKMhNC0LKDkMDMFHqeJIW9ZatvE_DyE4k6NCa1zTOJ9_RLXz9qZrKJsOuE_MjhlIOvJL5jju5BA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -1269,7 +1496,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The receiving agent sends a refuse message to The delivery partner’s agent."
+      "caption": "The receiving agent sends a refuse message to The delivery partner’s agent.",
+      "gateRun": 1
     }
   ]
 }

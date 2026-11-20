@@ -426,6 +426,7 @@ export class AgentRuntime {
   private mandate: LoadedMandate | undefined;
   private mandateFailure: string | undefined;
   private decisions: AuthorisationDecision[] = [];
+  private auditGateRun = 0;
   private readonly retention: RetentionPolicy;
   /** Serial executor: every state-changing entrypoint runs one at a time, in call order. */
   private queue: Promise<void> = Promise.resolve();
@@ -3855,10 +3856,12 @@ export class AgentRuntime {
       const component = [...this.gateMemory.facts.values()].find(
         (fact) => fact.claimType === "agent.components" && fact.subject === this.identity.actor,
       )?.digest;
+      const gateRun = ++this.auditGateRun;
       if (audit.chain === "broken") {
         sink?.emit({
           part: "record",
           kind: "check",
+          gateRun,
           check: "evidence",
           verdict: "fail",
           reason: "record-unavailable",
@@ -3867,6 +3870,7 @@ export class AgentRuntime {
         sink?.emit({
           part: "record",
           kind: "decision",
+          gateRun,
           outcome: "stop",
           reason: "record-unavailable",
           caption: "The audit stops: the record is not intact.",
@@ -3877,6 +3881,7 @@ export class AgentRuntime {
         sink?.emit({
           part: "record",
           kind: "check",
+          gateRun,
           check: "evidence",
           verdict:
             release.verdict === "inside"
@@ -3903,6 +3908,7 @@ export class AgentRuntime {
       sink?.emit({
         part: "record",
         kind: "decision",
+        gateRun,
         outcome: outside.length ? "ask-principal" : indeterminate ? "indeterminate" : "go",
         ...(outside.length
           ? { reason: "not-authorised" as const }
@@ -4384,8 +4390,9 @@ export class AgentRuntime {
       if (!conv.agreement) throw new Error("conversation has no agreement");
       const handler = this.handlers.get(operationKey(input.operation));
       const intent = handler?.intentForInvoke?.(this.context(conv), input.input);
+      const evidence = [...this.ownEvidence(), ...(input.evidence ?? [])];
       if (intent) {
-        const decision = this.authorise(intent);
+        const decision = this.authorise(intent, false, evidence);
         if (decision.outcome !== "permit") {
           this.persist();
           return this.result("local", {
@@ -4403,7 +4410,7 @@ export class AgentRuntime {
         ...(input.purpose ? { purpose: input.purpose } : {}),
       };
       const out = await this.emit(conv.id, "invoke", body, {
-        evidence: [...this.ownEvidence(), ...(input.evidence ?? [])],
+        evidence,
         ...(intent ? { intent } : {}),
       });
       this.persist();

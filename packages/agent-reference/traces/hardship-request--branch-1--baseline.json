@@ -32,7 +32,7 @@
       "2": "The lender’s agent sends the signed request.",
       "3": "The borrower’s agent checks the message and prepares a response.",
       "4": "The borrower’s agent sends the signed request.",
-      "5": "The borrower’s agent completes the approve step.",
+      "5": "The borrower declines to send the diagnosis.",
       "6": "The borrower’s agent completes the approve step.",
       "7": "The lender’s agent checks the message and prepares a response.",
       "8": "The lender’s agent completes the read content step.",
@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
     "core": "scripted"
   },
   "standIns": [
@@ -102,7 +102,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The borrower's health diagnosis statement is intact and signed with The borrower's pinned key."
+      "caption": "The borrower's health diagnosis statement is intact and signed with The borrower's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -140,7 +141,8 @@
         ],
         "answer": "Accepted, for health diagnosis claims only."
       },
-      "caption": "The borrower's health diagnosis statement: The borrower is an accepted source for this kind of claim."
+      "caption": "The borrower's health diagnosis statement: The borrower is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -158,7 +160,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The borrower's health diagnosis statement asks for nothing, so there is no authority to check."
+      "caption": "The borrower's health diagnosis statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -185,7 +188,8 @@
         "id": "urn:terms:hardship-request:diagnosis",
         "text": "Its terms allow this: use for Hardship request; share for Hardship request."
       },
-      "caption": "The borrower's health diagnosis statement: its terms allow this: use for Hardship request; share for Hardship request."
+      "caption": "The borrower's health diagnosis statement: its terms allow this: use for Hardship request; share for Hardship request.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -217,7 +221,8 @@
         "id": "urn:profile:hardship-request:health.diagnosis",
         "text": "Accept health diagnosis from The borrower by self-reported, at most 30 days old."
       },
-      "caption": "The borrower's health diagnosis statement is fit for Asking a lender for breathing space: self-reported, 0 days old."
+      "caption": "The borrower's health diagnosis statement is fit for Asking a lender for breathing space: self-reported, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -227,7 +232,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The borrower's health diagnosis statement is admitted."
+      "caption": "The borrower's health diagnosis statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -264,6 +270,16 @@
       "seq": 9,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -281,12 +297,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -315,12 +342,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The borrower: Accepted, for Request the needed information only."
+      "caption": "The borrower: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -333,12 +371,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -351,12 +400,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -369,16 +429,27 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
-      "verdict": "pass",
+      "verdict": "not-applicable",
       "refs": [
         {
           "layer": "data-access",
@@ -386,31 +457,24 @@
           "clause": "CORE-OUT-4"
         }
       ],
-      "reason": "minimal-disclosure",
-      "caption": "No restricted item entered this task's context."
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "receiver-agent",
-      "part": "outbound-gate",
-      "kind": "check",
-      "check": "data-terms",
-      "verdict": "pass",
-      "refs": [
-        {
-          "layer": "usage-control",
-          "suite": "odrl-rules",
-          "clause": "CORE-OUT-5"
-        }
-      ],
-      "reason": "terms-allow",
-      "caption": "The context rule permits this text."
-    },
-    {
-      "seq": 16,
-      "step": 2,
-      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -432,28 +496,53 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record.",
+      "gateRun": 1
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06",
+      "caption": "The invoke message goes to The borrower’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
-      "part": "outbound-gate",
-      "kind": "decision",
-      "verdict": "pass",
-      "outcome": "go",
-      "caption": "The invoke message goes to The borrower’s agent."
-    },
-    {
-      "seq": 18,
-      "step": 2,
-      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
       "packet": {
-        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\"},\"to\":{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\"},\"evidence\":{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\"},\"@included\":[{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:hardship-request:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:hardship-request:owner-agent:actor\",\"party\":\"urn:fictional:hardship-request:owner\"},{\"id\":\"urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\"},\"input\":{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\"},\"operation\":{\"id\":\"urn:op:hardship-request:request\"},\"purpose\":\"urn:purpose:hardship-request\"},{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:hardship-request:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\"}]},{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:hardship-request:receiver\",\"proofGraph\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\",\"type\":\"PropertyValue\",\"domainValue\":\"health.diagnosis\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\"}},{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\",\"byteLength\":\"9488\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"@graph\":[{\"id\":\"urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJpZCI6InVybjphd3A6bjpfcTY5NXdmbFFaMlN2MFdTT1ROUlhzWnhBNkl5SnVaUW5QSVZEWVVvWUhzIiwibWV0aG9kIjoibW9kZWwtb3V0cHV0Iiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInR5cGUiOiJNZXNzYWdlQXV0aG9yc2hpcCJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSJ9LCJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46VGx1em5uVW5zSklrMHVhZlFNUTN5SnNrQ05SOGVkS2QzX0RUNTN0WmdmOCJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpoYXJkc2hpcC1yZXF1ZXN0IiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIn0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayIsInBvc2l0aW9uIjoiMCIsInJvbGUiOiJyZXByZXNlbnRhdGlvbiIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4IiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6ImhlYWx0aC5kaWFnbm9zaXMiLCJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpfYUNvdXhPVTNwR2gzemx0bHJON2xjSE9qSi1kRmZuZi1SVlFJb3l1bVRZIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6Yzk0MGE1ZmZhYzZmYzg4NGI3ZGIxZmFiMTI5MzJkMjExZjA2YjlkMWFhODcyZTg0ZDgxYWI4YTUxZGRhZDk0OSIsImJ5dGVMZW5ndGgiOiI5NDg4IiwiaWQiOiJ1cm46YXdwOm46M0JObXJJNzJHVElXWldpU2l0U3NWcGUxX0Y5SzVKWEJ0N0tmTDhrOE1iQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46UndrQTNPbXBjNU1aRWYwUFJsZndDeW12SlJlRUdBbWRwUGQ0d3E2eVhfYyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NlpXWTFOekJtTURnME1qVTRaams1T0RNNU5UbGhOV0ppTmpaa1pESTNNV1k2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT25KbFkyVnBkbVZ5SWl3aVlXTjBiM0lpT2lKMWNtNDZabWxqZEdsdmJtRnNPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZqWldsMlpYSXRZV2RsYm5RNllXTjBiM0lpTENKaFkzUnZja3RwWkNJNklqQk9aMmg2WVZjd1FuRnpOVmhvVTFCTFEweHVWMUZmWmtGblowdElTalV6WVZocFFsUmxObFF0YzJjaUxDSnZjR1Z5WVhScGIyNXpJanBiSW5WeWJqcHZjRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOME9tUmxZMmx6YVc5dUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkublVzdVNuekRZUy1rYzk0WDA1dDFTSkRKbW1ndThZX0RFSFJLR0E2elE2Um8tN0hYdzdoLUdoOXNaWTBEbnNjek40WTdvbWNqNndBS3ZlNG1oa0dhRHciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpyZ2d5Z3F4YktDTDdRTDNsNjhTc3VNOVhETUd6Y0pYaDg5enVZSDFPQlRVIn1dLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOl9xNjk1d2ZsUVoyU3YwV1NPVE5SWHNaeEE2SXlKdVpRblBJVkRZVW9ZSHMifSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6eyJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIn0sImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCJ9LCJpZCI6InVybjphd3A6ZW5naW5lLWhhcmRzaGlwLXJlcXVlc3QtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpNaUZ2cnUwMXVlTWtUcUVRcmRqRzNRSkRFZVprUUN1elVsT2VYakp2NVlBIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.Y4kFUQHJun5rRvMHho8G2-eSSCdkV7COLE8Tti01jcZZcKjCe13BtvsZvsTO9-L_zasFbiuoOsy50c9zWAX5Dg\"}}",
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\"},\"to\":{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\"},\"evidence\":{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\"},\"@included\":[{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:hardship-request:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:hardship-request:owner-agent:actor\",\"party\":\"urn:fictional:hardship-request:owner\"},{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\"},\"input\":{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\"},\"operation\":{\"id\":\"urn:op:hardship-request:request\"},\"purpose\":\"urn:purpose:hardship-request\"},{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:hardship-request:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\"}]},{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:hardship-request:receiver\",\"proofGraph\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\",\"type\":\"PropertyValue\",\"domainValue\":\"health.diagnosis\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\"}},{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\",\"byteLength\":\"9488\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"@graph\":[{\"id\":\"urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
-        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-hardship-request-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:authorship <urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs>;\n    awp:body <urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-hardship-request-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA>;\n    sec:proof _:awp0.\n<urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs> a awp:MessageAuthorship;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:method \"model-output\".\n<urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:hardship-request>;\n    awp:basis <urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ>;\n    awp:input <urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8>;\n    awp:operation <urn:op:hardship-request:request>.\n<urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0>.\n<urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:actor <urn:fictional:hardship-request:receiver-agent:actor>.\n<urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA> a awp:AudienceRef;\n    awp:actor <urn:fictional:hardship-request:owner-agent:actor>;\n    awp:party <urn:fictional:hardship-request:owner>.\n<urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo>.\n<urn:op:hardship-request:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY>;\n    vc:issuer <urn:fictional:hardship-request:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\";\n    awp:byteLength 9488.\n<urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA>.\n<urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"health.diagnosis\".\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJpZCI6InVybjphd3A6bjpfcTY5NXdmbFFaMlN2MFdTT1ROUlhzWnhBNkl5SnVaUW5QSVZEWVVvWUhzIiwibWV0aG9kIjoibW9kZWwtb3V0cHV0Iiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInR5cGUiOiJNZXNzYWdlQXV0aG9yc2hpcCJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSJ9LCJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46VGx1em5uVW5zSklrMHVhZlFNUTN5SnNrQ05SOGVkS2QzX0RUNTN0WmdmOCJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpoYXJkc2hpcC1yZXF1ZXN0IiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIn0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayIsInBvc2l0aW9uIjoiMCIsInJvbGUiOiJyZXByZXNlbnRhdGlvbiIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4IiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6ImhlYWx0aC5kaWFnbm9zaXMiLCJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpfYUNvdXhPVTNwR2gzemx0bHJON2xjSE9qSi1kRmZuZi1SVlFJb3l1bVRZIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6Yzk0MGE1ZmZhYzZmYzg4NGI3ZGIxZmFiMTI5MzJkMjExZjA2YjlkMWFhODcyZTg0ZDgxYWI4YTUxZGRhZDk0OSIsImJ5dGVMZW5ndGgiOiI5NDg4IiwiaWQiOiJ1cm46YXdwOm46M0JObXJJNzJHVElXWldpU2l0U3NWcGUxX0Y5SzVKWEJ0N0tmTDhrOE1iQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46UndrQTNPbXBjNU1aRWYwUFJsZndDeW12SlJlRUdBbWRwUGQ0d3E2eVhfYyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NlpXWTFOekJtTURnME1qVTRaams1T0RNNU5UbGhOV0ppTmpaa1pESTNNV1k2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT25KbFkyVnBkbVZ5SWl3aVlXTjBiM0lpT2lKMWNtNDZabWxqZEdsdmJtRnNPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZqWldsMlpYSXRZV2RsYm5RNllXTjBiM0lpTENKaFkzUnZja3RwWkNJNklqQk9aMmg2WVZjd1FuRnpOVmhvVTFCTFEweHVWMUZmWmtGblowdElTalV6WVZocFFsUmxObFF0YzJjaUxDSnZjR1Z5WVhScGIyNXpJanBiSW5WeWJqcHZjRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOME9tUmxZMmx6YVc5dUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkublVzdVNuekRZUy1rYzk0WDA1dDFTSkRKbW1ndThZX0RFSFJLR0E2elE2Um8tN0hYdzdoLUdoOXNaWTBEbnNjek40WTdvbWNqNndBS3ZlNG1oa0dhRHciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpyZ2d5Z3F4YktDTDdRTDNsNjhTc3VNOVhETUd6Y0pYaDg5enVZSDFPQlRVIn1dLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOl9xNjk1d2ZsUVoyU3YwV1NPVE5SWHNaeEE2SXlKdVpRblBJVkRZVW9ZSHMifSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6eyJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIn0sImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCJ9LCJpZCI6InVybjphd3A6ZW5naW5lLWhhcmRzaGlwLXJlcXVlc3QtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpNaUZ2cnUwMXVlTWtUcUVRcmRqRzNRSkRFZVprUUN1elVsT2VYakp2NVlBIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.Y4kFUQHJun5rRvMHho8G2-eSSCdkV7COLE8Tti01jcZZcKjCe13BtvsZvsTO9-L_zasFbiuoOsy50c9zWAX5Dg\"\n}\n<urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU> {\n<urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"\n}\n",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-hardship-request-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-hardship-request-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA>;\n    sec:proof _:awp0.\n<urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:hardship-request>;\n    awp:basis <urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ>;\n    awp:input <urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8>;\n    awp:operation <urn:op:hardship-request:request>.\n<urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0>.\n<urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:actor <urn:fictional:hardship-request:receiver-agent:actor>.\n<urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA> a awp:AudienceRef;\n    awp:actor <urn:fictional:hardship-request:owner-agent:actor>;\n    awp:party <urn:fictional:hardship-request:owner>.\n<urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo>.\n<urn:op:hardship-request:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY>;\n    vc:issuer <urn:fictional:hardship-request:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\";\n    awp:byteLength 9488.\n<urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA>.\n<urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"health.diagnosis\".\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"\n}\n<urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU> {\n<urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"\n}\n",
         "attachments": [
           {
             "digest": "sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949",
@@ -495,7 +584,7 @@
                 "alg": "EdDSA"
               }
             },
-            "digest": "sha-256:965e5ea9f33d96aec9661207bbd814b595829f4ca7ac16f1ce75fe2900cd4464"
+            "digest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06"
           },
           "authority": {
             "present": true,
@@ -521,7 +610,7 @@
           },
           "content": {
             "present": true,
-            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
+            "summary": "Invokes an operation.",
             "raw": {
               "operation": {
                 "id": "urn:op:hardship-request:request",
@@ -535,13 +624,7 @@
               },
               "purpose": "urn:purpose:hardship-request"
             },
-            "digest": "sha-256:c409fc795d54416eb8e974c9662f234d5a5318dad354d11b1106439e71847f11",
-            "untrusted": [
-              {
-                "path": "input.request",
-                "text": "health.diagnosis"
-              }
-            ]
+            "digest": "sha-256:c409fc795d54416eb8e974c9662f234d5a5318dad354d11b1106439e71847f11"
           },
           "evidence": {
             "present": false,
@@ -578,18 +661,20 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "The lender’s agent sends an invoke message to The borrower’s agent."
+      "caption": "The lender’s agent sends an invoke message to The borrower’s agent.",
+      "gateRun": 1
     },
     {
-      "seq": 19,
+      "seq": 18,
       "step": 3,
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
       "packet": {
-        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\"},\"to\":{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\"},\"evidence\":{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\"},\"@included\":[{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:hardship-request:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:hardship-request:owner-agent:actor\",\"party\":\"urn:fictional:hardship-request:owner\"},{\"id\":\"urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs\",\"type\":\"MessageAuthorship\",\"method\":\"model-output\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\"},\"input\":{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\"},\"operation\":{\"id\":\"urn:op:hardship-request:request\"},\"purpose\":\"urn:purpose:hardship-request\"},{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:hardship-request:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\"}]},{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:hardship-request:receiver\",\"proofGraph\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\",\"type\":\"PropertyValue\",\"domainValue\":\"health.diagnosis\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\"}},{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\",\"byteLength\":\"9488\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"@graph\":[{\"id\":\"urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"}]}],\"authorship\":{\"id\":\"urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs\"},\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJpZCI6InVybjphd3A6bjpfcTY5NXdmbFFaMlN2MFdTT1ROUlhzWnhBNkl5SnVaUW5QSVZEWVVvWUhzIiwibWV0aG9kIjoibW9kZWwtb3V0cHV0Iiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInR5cGUiOiJNZXNzYWdlQXV0aG9yc2hpcCJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSJ9LCJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46VGx1em5uVW5zSklrMHVhZlFNUTN5SnNrQ05SOGVkS2QzX0RUNTN0WmdmOCJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpoYXJkc2hpcC1yZXF1ZXN0IiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIn0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayIsInBvc2l0aW9uIjoiMCIsInJvbGUiOiJyZXByZXNlbnRhdGlvbiIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4IiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6ImhlYWx0aC5kaWFnbm9zaXMiLCJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpfYUNvdXhPVTNwR2gzemx0bHJON2xjSE9qSi1kRmZuZi1SVlFJb3l1bVRZIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6Yzk0MGE1ZmZhYzZmYzg4NGI3ZGIxZmFiMTI5MzJkMjExZjA2YjlkMWFhODcyZTg0ZDgxYWI4YTUxZGRhZDk0OSIsImJ5dGVMZW5ndGgiOiI5NDg4IiwiaWQiOiJ1cm46YXdwOm46M0JObXJJNzJHVElXWldpU2l0U3NWcGUxX0Y5SzVKWEJ0N0tmTDhrOE1iQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46UndrQTNPbXBjNU1aRWYwUFJsZndDeW12SlJlRUdBbWRwUGQ0d3E2eVhfYyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NlpXWTFOekJtTURnME1qVTRaams1T0RNNU5UbGhOV0ppTmpaa1pESTNNV1k2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT25KbFkyVnBkbVZ5SWl3aVlXTjBiM0lpT2lKMWNtNDZabWxqZEdsdmJtRnNPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZqWldsMlpYSXRZV2RsYm5RNllXTjBiM0lpTENKaFkzUnZja3RwWkNJNklqQk9aMmg2WVZjd1FuRnpOVmhvVTFCTFEweHVWMUZmWmtGblowdElTalV6WVZocFFsUmxObFF0YzJjaUxDSnZjR1Z5WVhScGIyNXpJanBiSW5WeWJqcHZjRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOME9tUmxZMmx6YVc5dUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkublVzdVNuekRZUy1rYzk0WDA1dDFTSkRKbW1ndThZX0RFSFJLR0E2elE2Um8tN0hYdzdoLUdoOXNaWTBEbnNjek40WTdvbWNqNndBS3ZlNG1oa0dhRHciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpyZ2d5Z3F4YktDTDdRTDNsNjhTc3VNOVhETUd6Y0pYaDg5enVZSDFPQlRVIn1dLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOl9xNjk1d2ZsUVoyU3YwV1NPVE5SWHNaeEE2SXlKdVpRblBJVkRZVW9ZSHMifSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6eyJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIn0sImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCJ9LCJpZCI6InVybjphd3A6ZW5naW5lLWhhcmRzaGlwLXJlcXVlc3QtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpNaUZ2cnUwMXVlTWtUcUVRcmRqRzNRSkRFZVprUUN1elVsT2VYakp2NVlBIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.Y4kFUQHJun5rRvMHho8G2-eSSCdkV7COLE8Tti01jcZZcKjCe13BtvsZvsTO9-L_zasFbiuoOsy50c9zWAX5Dg\"}}",
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\"},\"to\":{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\"},\"evidence\":{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\"},\"@included\":[{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:hardship-request:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:hardship-request:owner-agent:actor\",\"party\":\"urn:fictional:hardship-request:owner\"},{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\"},\"input\":{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\"},\"operation\":{\"id\":\"urn:op:hardship-request:request\"},\"purpose\":\"urn:purpose:hardship-request\"},{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:hardship-request:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\"}]},{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:hardship-request:receiver\",\"proofGraph\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\",\"type\":\"PropertyValue\",\"domainValue\":\"health.diagnosis\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\"}},{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\",\"byteLength\":\"9488\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"@graph\":[{\"id\":\"urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
-        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-hardship-request-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:authorship <urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs>;\n    awp:body <urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-hardship-request-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA>;\n    sec:proof _:awp0.\n<urn:awp:n:_q695wflQZ2Sv0WSOTNRXsZxA6IyJuZQnPIVDYUoYHs> a awp:MessageAuthorship;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:method \"model-output\".\n<urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:hardship-request>;\n    awp:basis <urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ>;\n    awp:input <urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8>;\n    awp:operation <urn:op:hardship-request:request>.\n<urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0>.\n<urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:actor <urn:fictional:hardship-request:receiver-agent:actor>.\n<urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA> a awp:AudienceRef;\n    awp:actor <urn:fictional:hardship-request:owner-agent:actor>;\n    awp:party <urn:fictional:hardship-request:owner>.\n<urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo>.\n<urn:op:hardship-request:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY>;\n    vc:issuer <urn:fictional:hardship-request:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"health.diagnosis\".\n<urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA>.\n<urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\";\n    awp:byteLength 9488.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJpZCI6InVybjphd3A6bjpfcTY5NXdmbFFaMlN2MFdTT1ROUlhzWnhBNkl5SnVaUW5QSVZEWVVvWUhzIiwibWV0aG9kIjoibW9kZWwtb3V0cHV0Iiwib25CZWhhbGZPZiI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInR5cGUiOiJNZXNzYWdlQXV0aG9yc2hpcCJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSJ9LCJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46VGx1em5uVW5zSklrMHVhZlFNUTN5SnNrQ05SOGVkS2QzX0RUNTN0WmdmOCJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0In0sInB1cnBvc2UiOiJ1cm46cHVycG9zZTpoYXJkc2hpcC1yZXF1ZXN0IiwidHlwZSI6Ikludm9rZUJvZHkifSx7ImVtYmVkZGVkQ3JlZGVudGlhbCI6eyJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIn0sImZvcm1hdCI6Imp3cy1jb21wYWN0IiwiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayIsInBvc2l0aW9uIjoiMCIsInJvbGUiOiJyZXByZXNlbnRhdGlvbiIsInR5cGUiOiJFdmlkZW5jZUl0ZW0ifSx7ImlkIjoidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4IiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46Zi15a3NiekxkRzlQSVkteUE2UGtNclY3YW53cE55R05jRThYc0ttTmtGUSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJpZCI6InVybjphd3A6bjpBRlAzWDQ1S2lWb0p0ZUg3ZXZQVXN5MFZodl9RenVOQ1YtRjVMRG9jWWQwIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJwcm9vZkdyYXBoIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUiLCJ0eXBlIjoiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIn0seyJkb21haW5WYWx1ZSI6ImhlYWx0aC5kaWFnbm9zaXMiLCJpZCI6InVybjphd3A6bjpENXYzQ2dZRGlPQTE2M0NGZkJSV1l5Nlc2YVFScWQ2Xy1ZWmY5NzRfREVvIiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpfYUNvdXhPVTNwR2gzemx0bHJON2xjSE9qSi1kRmZuZi1SVlFJb3l1bVRZIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6Yzk0MGE1ZmZhYzZmYzg4NGI3ZGIxZmFiMTI5MzJkMjExZjA2YjlkMWFhODcyZTg0ZDgxYWI4YTUxZGRhZDk0OSIsImJ5dGVMZW5ndGgiOiI5NDg4IiwiaWQiOiJ1cm46YXdwOm46M0JObXJJNzJHVElXWldpU2l0U3NWcGUxX0Y5SzVKWEJ0N0tmTDhrOE1iQSIsIm1lZGlhVHlwZSI6ImFwcGxpY2F0aW9uL24tcXVhZHMiLCJ0eXBlIjpbIk5hbWVkVmFsdWVDb2xsZWN0aW9uIiwiQXR0YWNobWVudCJdfSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46UndrQTNPbXBjNU1aRWYwUFJsZndDeW12SlJlRUdBbWRwUGQ0d3E2eVhfYyIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbEo1TWpjM1lXOXVWbVZ4Vm5OVVpscENSVzltTlU1aWNVWlpiWGwwZGtwRGJuRkRPR3BLYlZBdGRsVWlMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0NlpXWTFOekJtTURnME1qVTRaams1T0RNNU5UbGhOV0ppTmpaa1pESTNNV1k2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT25KbFkyVnBkbVZ5SWl3aVlXTjBiM0lpT2lKMWNtNDZabWxqZEdsdmJtRnNPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZqWldsMlpYSXRZV2RsYm5RNllXTjBiM0lpTENKaFkzUnZja3RwWkNJNklqQk9aMmg2WVZjd1FuRnpOVmhvVTFCTFEweHVWMUZmWmtGblowdElTalV6WVZocFFsUmxObFF0YzJjaUxDSnZjR1Z5WVhScGIyNXpJanBiSW5WeWJqcHZjRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBJaXdpZFhKdU9tOXdPbWhoY21SemFHbHdMWEpsY1hWbGMzUTZjbVZ4ZFdWemRDSXNJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOME9tUmxZMmx6YVc5dUlsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkublVzdVNuekRZUy1rYzk0WDA1dDFTSkRKbW1ndThZX0RFSFJLR0E2elE2Um8tN0hYdzdoLUdoOXNaWTBEbnNjek40WTdvbWNqNndBS3ZlNG1oa0dhRHciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpyZ2d5Z3F4YktDTDdRTDNsNjhTc3VNOVhETUd6Y0pYaDg5enVZSDFPQlRVIn1dLCJhdXRob3JzaGlwIjp7ImlkIjoidXJuOmF3cDpuOl9xNjk1d2ZsUVoyU3YwV1NPVE5SWHNaeEE2SXlKdVpRblBJVkRZVW9ZSHMifSwiYm9keSI6eyJpZCI6InVybjphd3A6bjpXeW9fVWRpVTU0aTNKR1lqWkVENGFXWXlSUHpNU0tXLXl5VmFMdk9RTjdjIn0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvcGxhaW4tbGFuZ3VhZ2UtdXBncmFkZS1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDEiLCJjcmVhdGVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJldmlkZW5jZSI6eyJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIn0sImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCJ9LCJpZCI6InVybjphd3A6ZW5naW5lLWhhcmRzaGlwLXJlcXVlc3QtYnJhbmNoLTE6cmVjZWl2ZXItYWdlbnQ6MDAwMiIsImtpbmQiOiJpbnZva2UiLCJwcmVzZW50RmllbGRzIjpbImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2V2aWRlbmNlIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29udGVudCJdLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjpNaUZ2cnUwMXVlTWtUcUVRcmRqRzNRSkRFZVprUUN1elVsT2VYakp2NVlBIn0sInR5cGUiOlsiTWVzc2FnZSIsIkludm9rZSJdfQ.Y4kFUQHJun5rRvMHho8G2-eSSCdkV7COLE8Tti01jcZZcKjCe13BtvsZvsTO9-L_zasFbiuoOsy50c9zWAX5Dg\"\n}\n<urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU> {\n<urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"\n}\n",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-hardship-request-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-hardship-request-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA>;\n    sec:proof _:awp0.\n<urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:hardship-request>;\n    awp:basis <urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ>;\n    awp:input <urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8>;\n    awp:operation <urn:op:hardship-request:request>.\n<urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0>.\n<urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:actor <urn:fictional:hardship-request:receiver-agent:actor>.\n<urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA> a awp:AudienceRef;\n    awp:actor <urn:fictional:hardship-request:owner-agent:actor>;\n    awp:party <urn:fictional:hardship-request:owner>.\n<urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo>.\n<urn:op:hardship-request:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY>;\n    vc:issuer <urn:fictional:hardship-request:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"health.diagnosis\".\n<urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA>.\n<urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\";\n    awp:byteLength 9488.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"\n}\n<urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU> {\n<urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"\n}\n",
         "attachments": [
           {
             "digest": "sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949",
@@ -631,7 +716,7 @@
                 "alg": "EdDSA"
               }
             },
-            "digest": "sha-256:965e5ea9f33d96aec9661207bbd814b595829f4ca7ac16f1ce75fe2900cd4464"
+            "digest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06"
           },
           "authority": {
             "present": true,
@@ -678,10 +763,6 @@
                 "text": "urn:op:hardship-request:request"
               },
               {
-                "path": "input.request",
-                "text": "health.diagnosis"
-              },
-              {
                 "path": "purpose",
                 "text": "urn:purpose:hardship-request"
               }
@@ -722,10 +803,11 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "An invoke message from The lender’s agent reaches the inbound gate."
+      "caption": "An invoke message from The lender’s agent reaches the inbound gate.",
+      "gateRun": 2
     },
     {
-      "seq": 20,
+      "seq": 19,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -749,10 +831,11 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The lender’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The lender’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
     },
     {
-      "seq": 21,
+      "seq": 20,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -772,10 +855,11 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 2
     },
     {
-      "seq": 22,
+      "seq": 21,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -794,10 +878,11 @@
         "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
         "text": "A representation statement signed with The lender's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The lender signed a statement that The lender’s agent acts for them in this operation."
+      "caption": "The lender signed a statement that The lender’s agent acts for them in this operation.",
+      "gateRun": 2
     },
     {
-      "seq": 23,
+      "seq": 22,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -817,10 +902,11 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 2
     },
     {
-      "seq": 24,
+      "seq": 23,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
@@ -835,20 +921,24 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 2
     },
     {
-      "seq": 25,
+      "seq": 24,
       "step": 3,
       "agent": "owner-agent",
       "part": "inbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2
     },
     {
-      "seq": 26,
+      "seq": 25,
       "step": 4,
       "agent": "owner-agent",
       "part": "core",
@@ -856,9 +946,19 @@
       "caption": "The core proposes to share Asking a lender for breathing space with The lender."
     },
     {
-      "seq": 27,
+      "seq": 26,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -876,12 +976,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The borrower's mandate covers this action."
+      "caption": "The borrower's mandate covers this action.",
+      "gateRun": 1
     },
     {
-      "seq": 28,
+      "seq": 27,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -910,12 +1021,23 @@
         "answer": "Accepted, for Asking a lender for breathing space only."
       },
       "reason": "recipient-established",
-      "caption": "The lender: Accepted, for Asking a lender for breathing space only."
+      "caption": "The lender: Accepted, for Asking a lender for breathing space only.",
+      "gateRun": 1
     },
     {
-      "seq": 29,
+      "seq": 28,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -928,12 +1050,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
-      "seq": 30,
+      "seq": 29,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -946,12 +1079,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
-      "seq": 31,
+      "seq": 30,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -968,21 +1112,33 @@
         "id": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
         "text": "Requires 1 approval(s) from the principal."
       },
-      "caption": "The required people must decide this exact action."
+      "caption": "The required people must decide this exact action.",
+      "gateRun": 1
     },
     {
-      "seq": 32,
+      "seq": 31,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "ask-principal",
       "outcome": "ask-principal",
       "reason": "approval-required",
-      "caption": "The action is held for the named decision makers."
+      "caption": "The action is held for the named decision makers.",
+      "gateRun": 1
     },
     {
-      "seq": 33,
+      "seq": 32,
       "step": 4,
       "agent": "owner-agent",
       "part": "principal",
@@ -990,9 +1146,45 @@
       "reason": "approval-required",
       "chat": {
         "who": "agent",
-        "text": "The lender asks for 0 of your statements: nothing. They would use them for Hardship request. May I share them? Action digest: sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9. Parameters: {}"
+        "text": "The lender asks for one of your statements: The borrower's health diagnosis statement (health.diagnosis). They would use them for Hardship request. May I share them? Action digest: sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9. Parameters: {}"
       },
       "caption": "The gate built this request from the action and the approval rule."
+    },
+    {
+      "seq": 33,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "approvalDecision": "deny",
+      "chat": {
+        "who": "principal",
+        "text": "Do not send my diagnosis."
+      },
+      "caption": "Declines by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 34,
+      "step": 5,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "approval-denied",
+      "caption": "The borrower declined; the action is stopped.",
+      "gateRun": 2
     }
   ]
 }

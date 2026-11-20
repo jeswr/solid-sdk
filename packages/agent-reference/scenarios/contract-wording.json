@@ -965,6 +965,13 @@
           "part": "principal",
           "kind": "ask-principal",
           "reason": "approval-required"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "approval-denied"
         }
       ]
     }

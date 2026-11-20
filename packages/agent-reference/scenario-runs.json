@@ -530,7 +530,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "An agent accepts a clause its principal's policy does not cover",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "ask-principal",
         "reason": "approval-required",
@@ -540,8 +540,14 @@
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
+      "consequences": [
+        {
+          "seq": 77,
+          "agent": "receiver-agent",
+          "outcome": "stop",
+          "reason": "approval-denied"
+        }
+      ],
       "trace": "contract-wording--branch-1--baseline.json"
     },
     {
@@ -736,28 +742,13 @@
       "path": "main",
       "settlement": "rdf-order",
       "status": "runs",
-      "consequences": [],
-      "trace": "emergency-access--baseline.json"
-    },
-    {
-      "scenario": "emergency-access",
-      "useCase": "emergency-access",
-      "path": "branch-1",
-      "settlement": "rdf-order",
-      "what": "The request comes from a registered clinician with an emergency flag",
-      "status": "disagrees",
       "actual": {
         "outcome": "go",
         "reason": "source-accepted",
         "check": "source"
       },
-      "expected": {
-        "outcome": "go",
-        "reason": "source-accepted"
-      },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
-      "trace": "emergency-access--branch-1--baseline.json"
+      "trace": "emergency-access--baseline.json"
     },
     {
       "scenario": "emergency-access",
@@ -765,7 +756,7 @@
       "path": "branch-2",
       "settlement": "rdf-order",
       "what": "The same flag is used by someone not on the register",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "stop",
         "reason": "source-unknown",
@@ -776,6 +767,7 @@
         "reason": "source-unknown"
       },
       "consequences": [],
+      "note": "expected source/source-unknown -> stop",
       "trace": "emergency-access--branch-2--baseline.json"
     },
     {
@@ -815,18 +807,17 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "An agent scores the reference and rejects the candidate on the score",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
+        "outcome": "stop",
+        "reason": "method-not-accepted",
+        "check": "fitness"
       },
       "expected": {
-        "outcome": "ask-principal",
-        "reason": "approval-required"
+        "outcome": "stop",
+        "reason": "method-not-accepted"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "trace": "employment-reference--branch-1--baseline.json"
     },
     {
@@ -955,7 +946,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "Nothing fails",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "go",
         "reason": "source-accepted",
@@ -966,7 +957,6 @@
         "reason": "source-accepted"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "trace": "false-but-signed--branch-1--baseline.json"
     },
     {
@@ -1137,19 +1127,18 @@
       "useCase": "flat-share",
       "path": "branch-1",
       "settlement": "rdf-order",
-      "what": "One side's identity cannot be tied to any source the other accepts",
-      "status": "disagrees",
+      "what": "The person declines to trust the stranger",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
+        "outcome": "refuse",
         "reason": "source-unknown",
         "check": "source"
       },
       "expected": {
-        "outcome": "ask-principal",
+        "outcome": "refuse",
         "reason": "source-unknown"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "trace": "flat-share--branch-1--baseline.json"
     },
     {
@@ -1195,7 +1184,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "The agent would send a diagnosis to explain the request",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "ask-principal",
         "reason": "approval-required",
@@ -1205,8 +1194,14 @@
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
+      "consequences": [
+        {
+          "seq": 34,
+          "agent": "owner-agent",
+          "outcome": "stop",
+          "reason": "approval-denied"
+        }
+      ],
       "trace": "hardship-request--branch-1--baseline.json"
     },
     {
@@ -1245,7 +1240,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "The clinic asks for the full record",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "ask-principal",
         "reason": "approval-required",
@@ -1256,7 +1251,6 @@
         "reason": "approval-required"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "trace": "health-referral--branch-1--baseline.json"
     },
     {
@@ -1293,8 +1287,7 @@
       "status": "runs",
       "actual": {
         "outcome": "admit",
-        "reason": "authority-valid",
-        "check": "authority"
+        "reason": "authority-valid"
       },
       "consequences": [],
       "trace": "home-purchase--baseline.json"
@@ -1415,24 +1408,18 @@
       "useCase": "insurance-claim-photos",
       "path": "branch-1",
       "settlement": "rdf-order",
-      "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-      "status": "disagrees",
+      "what": "The garage has only written a letter; nobody holds its estimate in structured form",
+      "status": "runs",
       "actual": {
         "outcome": "ask-more",
-        "reason": "evidence-missing",
+        "reason": "structured-form-required",
         "check": "fitness"
       },
       "expected": {
         "outcome": "ask-more",
         "reason": "structured-form-required"
       },
-      "consequences": [
-        {
-          "seq": 94,
-          "agent": "receiver-agent",
-          "outcome": "go"
-        }
-      ],
+      "consequences": [],
       "trace": "insurance-claim-photos--branch-1--baseline.json"
     },
     {
@@ -1633,8 +1620,7 @@
       "status": "runs",
       "actual": {
         "outcome": "admit",
-        "reason": "authority-valid",
-        "check": "authority"
+        "reason": "authority-valid"
       },
       "consequences": [],
       "trace": "joint-mortgage--baseline.json"
@@ -1753,7 +1739,7 @@
       "path": "branch-2",
       "settlement": "rdf-order",
       "what": "The new details come from an email",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -1786,6 +1772,7 @@
           "reason": "source-not-authoritative"
         }
       ],
+      "note": "an effect followed a stop",
       "trace": "master-data-change--branch-2--baseline.json"
     },
     {
@@ -2971,7 +2958,6 @@
         "reason": "evidence-complete"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--a2a-text-part-instruction--transport-a2a.json"
     },
@@ -2993,7 +2979,6 @@
         "reason": "intact"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--a2a-task-state-lies--transport-a2a.json"
     },
@@ -3281,7 +3266,6 @@
         "reason": "evidence-complete"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--mcp-tool-description-poisoned--transport-mcp.json"
     },
@@ -3615,20 +3599,22 @@
       "settlement": "rdf-order",
       "configuration": "data-access-by-reference-solid",
       "what": "The lender reads again after Sam withdraws access; the source refuses and the permitted copy remains recorded.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "go"
+        "outcome": "refuse",
+        "reason": "not-authorised",
+        "check": "source"
       },
       "expected": {
         "outcome": "refuse",
         "reason": "not-authorised"
       },
-      "consequences": [
+      "consequences": [],
+      "setup": [
         {
-          "seq": 606,
-          "agent": "lender",
-          "outcome": "refuse",
-          "reason": "not-authorised"
+          "seq": 603,
+          "agent": "sams-agent",
+          "outcome": "go"
         }
       ],
       "addedExchanges": 1,
@@ -5675,312 +5661,17 @@
       "settlement": "rdf-order",
       "configuration": "meaning-plain-language-upgrade",
       "what": "The lender's reply arrives without its signed description. Sam's agent reads the prose as a description of the lender's agent and tries to rely on that reading; the outbound gate asks for the structured form from the source.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "go"
+        "outcome": "ask-more",
+        "reason": "structured-form-required",
+        "check": "fitness"
       },
       "expected": {
         "outcome": "ask-more",
         "reason": "structured-form-required"
       },
-      "consequences": [
-        {
-          "seq": 125,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 132,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 140,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 149,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 157,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 166,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 176,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 182,
-          "agent": "bank",
-          "outcome": "ask-more",
-          "reason": "assurance-insufficient"
-        },
-        {
-          "seq": 189,
-          "agent": "bank",
-          "outcome": "go"
-        },
-        {
-          "seq": 197,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 204,
-          "agent": "sams-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 211,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 223,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 231,
-          "agent": "bank",
-          "outcome": "admit"
-        },
-        {
-          "seq": 241,
-          "agent": "bank",
-          "outcome": "go"
-        },
-        {
-          "seq": 249,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 256,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 264,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 272,
-          "agent": "sams-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 282,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 296,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 304,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 314,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 323,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 331,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 340,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 348,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 357,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 365,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 373,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 381,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 391,
-          "agent": "valuer-register-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 401,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 409,
-          "agent": "valuer-register-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 418,
-          "agent": "valuer-register-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 426,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 433,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 440,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 450,
-          "agent": "valuer-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 458,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 465,
-          "agent": "sams-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 474,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 482,
-          "agent": "valuer-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 489,
-          "agent": "valuer-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 497,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 507,
-          "agent": "valuer-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 515,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 524,
-          "agent": "sams-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
-        },
-        {
-          "seq": 556,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 564,
-          "agent": "payment-provider-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 572,
-          "agent": "payment-provider-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 580,
-          "agent": "payment-provider-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 589,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 599,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 608,
-          "agent": "valuer-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 616,
-          "agent": "valuer-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 624,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 629,
-          "agent": "sams-agent",
-          "outcome": "ask-more",
-          "reason": "structured-form-required"
-        }
-      ],
+      "consequences": [],
       "addedExchanges": 0,
       "trace": "mortgage-main--prose-as-evidence--meaning-plain-language-upgrade.json"
     },
@@ -7157,7 +6848,6 @@
         "reason": "stale-data"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--certificate-does-not-cover--reliance-quality-certificate.json"
     },
@@ -9792,7 +9482,7 @@
       "path": "mailbox-reply-as-evidence",
       "settlement": "rdf-order",
       "configuration": "identity-email-endpoint",
-      "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose.",
+      "what": "The core proposes forwarding the payroll mailbox reply to the lender as unsigned content beside the income request. The evidence check stops the unsigned prose because the income claim requires structured evidence.",
       "status": "runs",
       "actual": {
         "outcome": "stop",
@@ -10080,9 +9770,11 @@
       "settlement": "rdf-order",
       "configuration": "identity-anonymous",
       "what": "An unnamed requester asks the index for an operation restricted to named parties.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "go"
+        "outcome": "refuse",
+        "reason": "not-authorised",
+        "check": "authority"
       },
       "expected": {
         "outcome": "refuse",
@@ -10090,14 +9782,15 @@
       },
       "consequences": [
         {
-          "seq": 642,
-          "agent": "index",
-          "outcome": "refuse",
-          "reason": "not-authorised"
-        },
-        {
           "seq": 649,
           "agent": "index",
+          "outcome": "go"
+        }
+      ],
+      "setup": [
+        {
+          "seq": 637,
+          "agent": "sams-agent",
           "outcome": "go"
         }
       ],
@@ -11026,33 +10719,21 @@
       "settlement": "rdf-order",
       "configuration": "trust-pinned-list",
       "what": "The product index returns a lender outside Sam’s own list; its record is refused and Sam is asked whether to add the source.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "admit"
+        "outcome": "admit",
+        "reason": "source-unknown",
+        "check": "source"
       },
       "expected": {
         "outcome": "admit",
         "reason": "source-unknown"
       },
-      "consequences": [
+      "consequences": [],
+      "setup": [
         {
-          "seq": 32,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 40,
+          "seq": 22,
           "agent": "index",
-          "outcome": "admit"
-        },
-        {
-          "seq": 55,
-          "agent": "index",
-          "outcome": "go"
-        },
-        {
-          "seq": 68,
-          "agent": "sams-agent",
           "outcome": "admit"
         }
       ],
@@ -11610,6 +11291,13 @@
           "outcome": "admit"
         }
       ],
+      "setup": [
+        {
+          "seq": 211,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
       "addedExchanges": 0,
       "trace": "mortgage-main--withheld-claim-asked-for--authenticity-selective-disclosure.json"
     },
@@ -11981,7 +11669,6 @@
         "reason": "source-accepted"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--address-from-the-message--authenticity-origin-hosted.json"
     },
@@ -11991,8 +11678,8 @@
       "path": "origin-record-forwarded",
       "settlement": "rdf-order",
       "configuration": "authenticity-origin-hosted",
-      "what": "The core proposes forwarding its unsigned source observation to the valuer as evidence.",
-      "status": "disagrees",
+      "what": "The core proposes forwarding its unsigned source observation to the valuer as evidence. The mandate does not cover it, so the mandate check stops it first; the evidence check would stop it next.",
+      "status": "runs",
       "actual": {
         "outcome": "stop",
         "reason": "not-authorised",
@@ -12000,7 +11687,7 @@
       },
       "expected": {
         "outcome": "stop",
-        "reason": "evidence-invalid"
+        "reason": "not-authorised"
       },
       "consequences": [],
       "addedExchanges": 0,
@@ -12353,7 +12040,6 @@
         "reason": "evidence-invalid"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--index-shows-two-histories--trust-trusted-index.json"
     },
@@ -12704,7 +12390,6 @@
         "reason": "lookup-failed"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--chain-with-a-gap--trust-federation.json"
     },
@@ -12726,7 +12411,6 @@
         "reason": "source-not-authoritative"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "addedExchanges": 0,
       "trace": "mortgage-main--federation-business-only--trust-federation.json"
     },
@@ -13077,7 +12761,13 @@
         "reason": "source-unknown"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
+      "setup": [
+        {
+          "seq": 22,
+          "agent": "index",
+          "outcome": "admit"
+        }
+      ],
       "addedExchanges": 0,
       "trace": "mortgage-main--high-score-not-registered--trust-reputation.json"
     },
@@ -13385,25 +13075,27 @@
       "settlement": "rdf-order",
       "configuration": "usage-control-human-approval",
       "what": "After Sam approved release of the property access details to the valuer, a different valuation party asks for the same statement; the approval does not carry over and Sam is asked again.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "go"
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "data-terms"
       },
       "expected": {
         "outcome": "ask-principal",
         "reason": "approval-required"
       },
-      "consequences": [
+      "consequences": [],
+      "setup": [
+        {
+          "seq": 630,
+          "agent": "other-valuer-agent",
+          "outcome": "go"
+        },
         {
           "seq": 638,
           "agent": "sams-agent",
           "outcome": "admit"
-        },
-        {
-          "seq": 643,
-          "agent": "sams-agent",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
         }
       ],
       "addedExchanges": 2,
@@ -13415,26 +13107,28 @@
       "path": "supplier-terms-hold",
       "settlement": "rdf-order",
       "configuration": "usage-control-human-approval",
-      "what": "The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose.",
-      "status": "disagrees",
+      "what": "The valuer asks Sam for the bank balance statement. A balance is not needed for a valuation, so the disclosure check stops it and Sam is never asked. Harbour's signed terms are a second bar that Sam's approval could not lift.",
+      "status": "runs",
       "actual": {
-        "outcome": "go"
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
       },
       "expected": {
         "outcome": "stop",
-        "reason": "prohibited"
+        "reason": "excessive-scope"
       },
-      "consequences": [
+      "consequences": [],
+      "setup": [
+        {
+          "seq": 630,
+          "agent": "valuer-agent",
+          "outcome": "go"
+        },
         {
           "seq": 638,
           "agent": "sams-agent",
           "outcome": "admit"
-        },
-        {
-          "seq": 642,
-          "agent": "sams-agent",
-          "outcome": "stop",
-          "reason": "excessive-scope"
         }
       ],
       "addedExchanges": 2,
@@ -15398,7 +15092,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "A message gives new bank details for a known supplier",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -15461,6 +15155,7 @@
           "reason": "source-not-authoritative"
         }
       ],
+      "note": "an effect followed a stop",
       "trace": "pay-an-invoice--branch-1--baseline.json"
     },
     {
@@ -15675,11 +15370,11 @@
       "path": "tenth-request",
       "settlement": "rdf-order",
       "what": "The tenth request, like the first, is outside the mandate",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "refuse",
-        "reason": "representation-missing",
-        "check": "authority"
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
       },
       "expected": {
         "outcome": "stop",
@@ -15687,165 +15382,145 @@
       },
       "consequences": [
         {
-          "seq": 55,
-          "agent": "person-agent",
+          "seq": 62,
+          "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 59,
+          "seq": 70,
+          "agent": "person-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 73,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 68,
+          "seq": 82,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 72,
+          "seq": 90,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 75,
+          "seq": 93,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 84,
+          "seq": 102,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 88,
+          "seq": 110,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 91,
+          "seq": 113,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 100,
+          "seq": 122,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 104,
+          "seq": 130,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 107,
+          "seq": 133,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 116,
+          "seq": 142,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 120,
+          "seq": 150,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 123,
+          "seq": 153,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 132,
+          "seq": 162,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 136,
+          "seq": 170,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 139,
+          "seq": 173,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 148,
+          "seq": 182,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 152,
+          "seq": 190,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 155,
+          "seq": 193,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 164,
+          "seq": 202,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 168,
+          "seq": 210,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 171,
+          "seq": 213,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
         },
         {
-          "seq": 180,
+          "seq": 222,
           "agent": "service-agent",
           "outcome": "go"
         },
         {
-          "seq": 184,
+          "seq": 230,
           "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
+          "outcome": "admit"
         },
         {
-          "seq": 187,
-          "agent": "person-agent",
-          "outcome": "stop",
-          "reason": "not-authorised"
-        },
-        {
-          "seq": 196,
-          "agent": "service-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 200,
-          "agent": "person-agent",
-          "outcome": "refuse",
-          "reason": "conversation-closed"
-        },
-        {
-          "seq": 203,
+          "seq": 233,
           "agent": "person-agent",
           "outcome": "stop",
           "reason": "not-authorised"
@@ -15995,18 +15670,17 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "The patient's note of an allergy differs from the clinical entry",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "admit",
         "reason": "superseded-by-better-source",
         "check": "fitness"
       },
       "expected": {
-        "outcome": "ask-more",
+        "outcome": "go",
         "reason": "superseded-by-better-source"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "trace": "records-to-new-practice--branch-1--baseline.json"
     },
     {
@@ -16035,6 +15709,15 @@
       },
       "consequences": [],
       "trace": "recycled-content--branch-1--baseline.json"
+    },
+    {
+      "scenario": "recycled-content",
+      "useCase": "recycled-content",
+      "path": "supplier-below-threshold",
+      "settlement": "rdf-order",
+      "what": "One supplier reports 0.29 and the verified minimum condition releases false.",
+      "status": "blocked",
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
     },
     {
       "scenario": "repair-request",
@@ -16277,18 +15960,17 @@
       "path": "hidden-validity-proof",
       "settlement": "rdf-order",
       "what": "Show valid until at least a date while hiding the actual date",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "admit",
         "reason": "fit-for-use",
         "check": "fitness"
       },
       "expected": {
-        "outcome": "ask-more",
-        "reason": "assurance-insufficient"
+        "outcome": "admit",
+        "reason": "fit-for-use"
       },
       "consequences": [],
-      "note": "branch does not diverge from the main path",
       "trace": "right-to-work--hidden-validity-proof--baseline.json"
     },
     {
@@ -16390,20 +16072,26 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "Only two employers contribute",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
       },
       "expected": {
         "outcome": "stop",
         "reason": "prohibited"
       },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
+      "consequences": [
+        {
+          "seq": 139,
+          "agent": "contributor-2-agent",
+          "outcome": "stop",
+          "reason": "prohibited"
+        }
+      ],
       "trace": "salary-benchmark--branch-1--baseline.json",
-      "traceSha256": "c5862e4dfed4cdb59d37d2b8239242330c63052e170f06ee7b32ca1b5e5ac397",
+      "traceSha256": "2d03855c3aeb73614b02a33a9fa3a14f827e5abd309728885daf6b26935a0f60",
       "recordedWith": {
         "method": "sparq-aggregate/1",
         "package": "sparq-verifiable-aggregate",
@@ -16744,7 +16432,7 @@
       "path": "branch-2",
       "settlement": "rdf-order",
       "what": "The account belongs to a different legal entity",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -16767,6 +16455,7 @@
           "reason": "source-not-authoritative"
         }
       ],
+      "note": "an effect followed a stop",
       "trace": "supplier-onboarding--branch-2--baseline.json"
     },
     {
@@ -16935,32 +16624,38 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "A hotel listing contains text telling the agent to book a different, dearer hotel",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "context-not-clear",
-        "check": "data-terms"
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
       },
       "expected": {
         "outcome": "stop",
         "reason": "not-authorised"
       },
-      "consequences": [
+      "consequences": [],
+      "setup": [
+        {
+          "seq": 6,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 24,
+          "agent": "owner-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 38,
+          "agent": "owner-agent",
+          "outcome": "ask-principal",
+          "reason": "context-not-clear"
+        },
         {
           "seq": 56,
           "agent": "owner-agent",
           "outcome": "go"
-        },
-        {
-          "seq": 64,
-          "agent": "receiver-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 70,
-          "agent": "receiver-agent",
-          "outcome": "stop",
-          "reason": "not-authorised"
         }
       ],
       "trace": "trip-booking--branch-1--baseline.json"
@@ -17055,15 +16750,6 @@
         }
       ],
       "trace": "wearable-data--branch-1--baseline.json"
-    },
-    {
-      "scenario": "recycled-content",
-      "useCase": "recycled-content",
-      "path": "supplier-below-threshold",
-      "settlement": "rdf-order",
-      "what": "One supplier reports 0.29 and the verified minimum condition releases false.",
-      "status": "blocked",
-      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
     }
   ]
 }
