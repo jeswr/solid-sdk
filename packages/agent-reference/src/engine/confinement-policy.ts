@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { canonicalJson } from "../core/canonical.js";
+import { didWebUrl } from "../standins/did.js";
 import type { ScenarioConfiguration } from "./matrix.js";
 import type { DomainProfile, Scenario } from "./schema.js";
 
@@ -62,7 +63,7 @@ export function ownedReplacement(
 
 const worldFields: Readonly<Record<string, readonly string[]>> = {
   transport: ["carriage"],
-  identity: ["mailboxes", "identityNames"],
+  identity: ["mailboxes"],
   meaning: ["mailboxes", "registryMeaning", "mappingTables", "documents", "negotiatedMeaning"],
   reliance: ["relianceCorroboration", "statedConfidence", "qualityCertificate", "documents"],
   authenticity: ["handlerImplementations", "selectiveCredentials", "originHosted"],
@@ -75,6 +76,63 @@ const policyClaims: Readonly<Record<string, readonly string[]>> = {
   authenticity: ["source.address"],
   trust: ["index.transparency", "agent.reputation"],
 };
+
+/** DID aliases may re-key declared identities but must preserve which parties they name. */
+export function identityNameDifferences(
+  reference: Scenario,
+  world: Scenario,
+  profile: DomainProfile,
+): string[] {
+  const problems: string[] = [];
+  const identities = (party: Scenario["parties"][number]) =>
+    [party.identity, party.actor, party.operator].filter((id) => id !== undefined);
+  const prior = new Set(reference.parties.flatMap(identities));
+  const declared = new Set(world.parties.flatMap(identities));
+  const reserved = new Set([
+    profile.id,
+    ...profile.operations.map(({ id }) => id),
+    ...profile.purposes.map(({ id }) => id),
+    ...profile.claims.map(({ kind }) => kind),
+  ]);
+  const documentUrl = (name: string) => {
+    try {
+      return new URL(didWebUrl(name)).href;
+    } catch {
+      return undefined;
+    }
+  };
+  const declaredDocuments = new Set([...declared].map(documentUrl).filter(Boolean));
+  const sourcesByDocument = new Map<string, { source: string; target: string }>();
+  const policy = canonicalJson({
+    mandates: reference.mandates,
+    trust: reference.trust,
+    script: reference.script,
+    statements: reference.statements,
+    profile,
+  });
+  for (const [source, target] of Object.entries(world.identityNames)) {
+    if (!prior.has(source) || reserved.has(source))
+      problems.push(`identityNames:${source} is not a declared baseline identity`);
+    const document = documentUrl(target);
+    if (!document || policy.includes(JSON.stringify(target)) || declaredDocuments.has(document)) {
+      problems.push(`identityNames:${source} must map to a fresh did:web identity`);
+      continue;
+    }
+    const previous = sourcesByDocument.get(document);
+    if (
+      previous &&
+      (previous.target !== target ||
+        !reference.parties.some(
+          ({ identity, actor }) =>
+            (source === identity && previous.source === actor) ||
+            (source === actor && previous.source === identity),
+        ))
+    )
+      problems.push(`identityNames:${source} aliases a different party`);
+    sourcesByDocument.set(document, { source, target });
+  }
+  return problems;
+}
 
 export function configurationPolicyDifferences(
   reference: Scenario,
@@ -94,9 +152,14 @@ export function configurationPolicyDifferences(
     "standIns",
     "branches",
   ];
-  for (const key of changes(reference, world))
+  for (const key of changes(reference, world)) {
+    if (key === "identityNames" && layer === "identity" && suite === "did") {
+      problems.push(...identityNameDifferences(reference, world, baseline));
+      continue;
+    }
     if (!worldCommon.includes(key) && !worldFields[layer]?.includes(key))
       problems.push(`world.${key} is outside the ${layer} layer`);
+  }
 
   const baselineOperations = new Set(baseline.operations.map(({ id }) => id));
   const operations = new Set(

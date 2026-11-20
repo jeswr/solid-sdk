@@ -9198,11 +9198,11 @@
       "path": "mailbox-reply-as-evidence",
       "settlement": "rdf-order",
       "configuration": "identity-email-endpoint",
-      "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. Prose from a mailbox is not signed evidence, so the evidence check stops it as evidence-invalid; the registered reason was structured-form-required.",
-      "status": "disagrees",
+      "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose.",
+      "status": "runs",
       "actual": {
         "outcome": "stop",
-        "reason": "evidence-invalid",
+        "reason": "structured-form-required",
         "check": "evidence"
       },
       "expected": {
@@ -10432,18 +10432,36 @@
       "settlement": "rdf-order",
       "configuration": "trust-pinned-list",
       "what": "The product index returns a lender outside Sam’s own list; its record is refused and Sam is asked whether to add the source.",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
-        "outcome": "admit",
-        "reason": "source-unknown",
-        "check": "source"
+        "outcome": "admit"
       },
       "expected": {
         "outcome": "admit",
         "reason": "source-unknown"
       },
-      "consequences": [],
-      "note": "branch does not diverge from the main path",
+      "consequences": [
+        {
+          "seq": 32,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 40,
+          "agent": "index",
+          "outcome": "admit"
+        },
+        {
+          "seq": 55,
+          "agent": "index",
+          "outcome": "go"
+        },
+        {
+          "seq": 68,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
       "addedExchanges": 0,
       "trace": "mortgage-main--stranger--trust-pinned-list.json"
     },
@@ -13424,40 +13442,40 @@
           "outcome": "admit"
         },
         {
-          "seq": 704,
+          "seq": 708,
           "agent": "sams-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 713,
+          "seq": 721,
           "agent": "sams-agent",
           "outcome": "go"
-        },
-        {
-          "seq": 726,
-          "agent": "lender",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
         },
         {
           "seq": 735,
           "agent": "lender",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 745,
+          "agent": "lender",
           "outcome": "go"
         },
         {
-          "seq": 741,
+          "seq": 751,
           "agent": "forum",
           "outcome": "admit",
           "reason": "not-authorised"
         },
         {
-          "seq": 747,
+          "seq": 757,
           "agent": "sams-agent",
           "outcome": "admit"
         },
         {
-          "seq": 754,
+          "seq": 764,
           "agent": "lender",
           "outcome": "admit"
         }
@@ -14104,24 +14122,17 @@
       "settlement": "rdf-order",
       "configuration": "accountability-vendor-fault",
       "what": "The action was inside the mandate; no supported claim against the gate vendor is produced.",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
+        "outcome": "stop",
+        "reason": "evidence-invalid",
+        "check": "evidence"
       },
       "expected": {
         "outcome": "stop",
         "reason": "evidence-invalid"
       },
-      "consequences": [
-        {
-          "seq": 609,
-          "agent": "sams-agent",
-          "outcome": "stop",
-          "reason": "evidence-invalid"
-        }
-      ],
+      "consequences": [],
       "addedExchanges": 0,
       "trace": "mortgage-main--fault-was-the-principals--accountability-vendor-fault.json"
     },
@@ -14428,81 +14439,81 @@
           "outcome": "admit"
         },
         {
-          "seq": 704,
+          "seq": 708,
           "agent": "sams-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 713,
+          "seq": 721,
           "agent": "sams-agent",
           "outcome": "go"
-        },
-        {
-          "seq": 726,
-          "agent": "lender",
-          "outcome": "ask-principal",
-          "reason": "approval-required"
         },
         {
           "seq": 735,
           "agent": "lender",
+          "outcome": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "seq": 745,
+          "agent": "lender",
           "outcome": "go"
         },
         {
-          "seq": 741,
+          "seq": 751,
           "agent": "forum",
           "outcome": "admit",
           "reason": "not-authorised"
         },
         {
-          "seq": 747,
+          "seq": 757,
           "agent": "sams-agent",
           "outcome": "admit"
         },
         {
-          "seq": 754,
+          "seq": 764,
           "agent": "lender",
           "outcome": "admit"
         },
         {
-          "seq": 761,
+          "seq": 771,
           "agent": "sams-agent",
           "outcome": "admit"
         },
         {
-          "seq": 770,
+          "seq": 780,
           "agent": "sams-agent",
           "outcome": "ask-principal",
           "reason": "approval-required"
         },
         {
-          "seq": 780,
+          "seq": 790,
           "agent": "sams-agent",
           "outcome": "go"
         },
         {
-          "seq": 786,
+          "seq": 796,
           "agent": "lender",
           "outcome": "admit"
         },
         {
-          "seq": 795,
+          "seq": 805,
           "agent": "lender",
           "outcome": "go"
         },
         {
-          "seq": 801,
+          "seq": 811,
           "agent": "post-reader-agent",
           "outcome": "admit"
         },
         {
-          "seq": 808,
+          "seq": 818,
           "agent": "post-reader-agent",
           "outcome": "admit"
         },
         {
-          "seq": 815,
+          "seq": 825,
           "agent": "post-reader-agent",
           "outcome": "admit"
         }

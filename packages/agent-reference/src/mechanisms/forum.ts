@@ -7,9 +7,9 @@ import type { AnyMessage, JsonObject, ReasonCode } from "../core/types.js";
 import { claimSchema as domainClaimSchema } from "../gates/inbound.js";
 import {
   type EvidenceLedger,
+  LEDGER_GENESIS,
   type LedgerEntry,
   type LedgerRangeEntry,
-  verifyLedger,
   verifyLedgerRange,
 } from "../store/ledger.js";
 import type { StateStore } from "../store/state.js";
@@ -67,7 +67,24 @@ export const anchorReceiptSchema = z.strictObject({
   seq: z.number().int().positive(),
   hash: z.string(),
   at: iso,
-  interval: z.strictObject({ conversation: id, from: recordPoint }).optional(),
+  interval: z
+    .strictObject({
+      conversation: id,
+      from: z.union([
+        recordPoint,
+        z.strictObject({ seq: z.literal(0), hash: z.literal(LEDGER_GENESIS.hash) }),
+      ]),
+    })
+    .optional(),
+});
+export const RECORD_PROOF_GRANT_TYP = "awp-record-proof-grant+jws";
+export const recordProofGrantSchema = z.strictObject({
+  issuer: id,
+  holder: id,
+  recipient: id,
+  purpose: id,
+  digest: chainDigest,
+  validUntil: iso,
 });
 export const forumClaimSchema = z.strictObject({
   type: z.literal("ForumClaim"),
@@ -117,7 +134,6 @@ interface Verified {
   entries: LedgerEntry[];
   messages: AnyMessage[];
   directions: Map<string, "in" | "out">;
-  ranged: boolean;
   redacted: boolean;
 }
 export class LocalForum {
@@ -256,7 +272,17 @@ export class LocalForum {
     peer: string,
     interval?: { conversation: string; from: { seq: number; hash: string } },
   ): Promise<boolean> {
-    const checked = await verifyStatement(anchor.receipt, {
+    const receipt = await this.readWitnessedPoint(anchor, peer);
+    return (
+      !!receipt &&
+      receipt.subject === segment.actor &&
+      receipt.subjectParty === segment.party &&
+      digestOf(receipt.interval ?? null) === digestOf(interval ?? null)
+    );
+  }
+
+  private async readWitnessedPoint(point: z.infer<typeof witnessedPoint>, peer: string) {
+    const checked = await verifyStatement(point.receipt, {
       trust: this.options.trust,
       typ: "awp-record-anchor+jws",
       role: "actor",
@@ -265,20 +291,18 @@ export class LocalForum {
       at: this.options.now(),
       verifier: this.identity,
     });
-    this.record(checked.verification as unknown as { type: string; [key: string]: unknown });
+    this.record({ ...checked.verification });
     const receipt = checked.payload;
-    return (
-      !!receipt &&
+    return receipt &&
       checked.signer?.subject === receipt.actor &&
       checked.signer.party === receipt.party &&
       receipt.party === peer &&
-      receipt.subject === segment.actor &&
-      receipt.subjectParty === segment.party &&
-      receipt.seq === anchor.seq &&
-      receipt.hash === anchor.hash &&
-      digestOf(receipt.interval ?? null) === digestOf(interval ?? null)
-    );
+      receipt.seq === point.seq &&
+      receipt.hash === point.hash
+      ? receipt
+      : undefined;
   }
+
   private async segment(
     jws: string,
     party: string,
@@ -320,22 +344,20 @@ export class LocalForum {
     if (
       (expectedTerminal &&
         (!segment.terminal || digestOf(segment.terminal) !== digestOf(expectedTerminal))) ||
-      (segment.anchor &&
-        (!segment.terminal ||
-          !(await this.anchorAttested(segment.terminal, segment, peer, {
-            conversation,
-            from: { seq: segment.anchor.seq, hash: segment.anchor.hash },
-          })))) ||
-      (!segment.anchor && (segment.terminal || range.length !== entries.length))
+      !segment.terminal ||
+      !(await this.anchorAttested(segment.terminal, segment, peer, {
+        conversation,
+        from: segment.anchor
+          ? { seq: segment.anchor.seq, hash: segment.anchor.hash }
+          : LEDGER_GENESIS,
+      }))
     )
       return {
         ok: false,
         reason: "record-unavailable",
         point: { problem: "terminal-not-attested" },
       };
-    const chain = segment.anchor
-      ? verifyLedgerRange(range, segment.anchor, segment.terminal)
-      : verifyLedger(entries);
+    const chain = verifyLedgerRange(range, segment.anchor ?? LEDGER_GENESIS, segment.terminal);
     if (!chain.ok)
       return {
         ok: false,
@@ -491,7 +513,6 @@ export class LocalForum {
         entries,
         messages,
         directions,
-        ranged: !!segment.anchor,
         redacted: range.length !== entries.length,
       },
     };
@@ -537,7 +558,13 @@ export class LocalForum {
       await this.decision(c, segment.reason, claim.party, segment.point);
       return { ok: false, reason: segment.reason };
     }
-    if (segment.value.ranged && !claim.answerThrough) {
+    const responseTerminal =
+      claim.answerThrough && (await this.readWitnessedPoint(claim.answerThrough, claim.party));
+    if (
+      responseTerminal?.subjectParty !== claim.respondent ||
+      responseTerminal.interval?.conversation !== claim.conversation ||
+      responseTerminal.seq <= responseTerminal.interval.from.seq
+    ) {
       this.check("fitness", "record-unavailable");
       await this.decision(c, "record-unavailable", claim.party, {
         problem: "response-terminal-missing",

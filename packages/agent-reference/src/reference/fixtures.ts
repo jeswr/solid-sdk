@@ -69,7 +69,7 @@ export function issuerTerms(issuer: Iri, statement: Iri, label: string): ItemTer
   };
   return {
     policy,
-    recipientMustBe: { task: "mortgage lending", label: "a regulated lender" },
+    recipientMustBe: { task: "urn:role:mortgage-lending", label: "a regulated lender" },
   };
 }
 

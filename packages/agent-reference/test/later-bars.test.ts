@@ -85,18 +85,25 @@ describe("supplier terms after disclosure passes", () => {
     entry.profileChange = patch(entry.profileChange, {
       operations: { "urn:op:balance-copy": { purposes: [credit] } },
     });
-    // Use the run's existing evidence-complete witness so the scenario runner hands the
-    // trace to the gate assertions below even when the supplier bar fails.
-    branch.expect = { outcome: "go", check: "evidence", reason: "evidence-complete" };
+    branch.expect = { outcome: "stop", check: "data-terms", reason: "not-authorised" };
     world.branches = [branch];
     scenario.branches = [];
     const [, failure] = await runScenario(profile, scenario, { configuration, compare: false });
-    const events = failure!.trace!.events.filter((e) => e.addedBy === configuration);
+    const events = failure!.trace!.events;
     const disclosure = events.findLast(
-      (e) => e.check === "disclosure" && e.agent === "sams-agent",
+      (e) =>
+        e.check === "disclosure" &&
+        e.agent === "sams-agent" &&
+        e.actionScope?.operation === "urn:op:balance-copy",
     )!;
     expect(disclosure).toMatchObject({ verdict: "pass" });
-    held = events.filter((e) => e.agent === "sams-agent" && e.seq > disclosure.seq);
+    held = events.filter(
+      (e) =>
+        e.agent === disclosure.agent &&
+        e.gateRun === disclosure.gateRun &&
+        (e.part === "outbound-gate" || e.kind === "message-out") &&
+        e.seq > disclosure.seq,
+    );
   }, 120_000);
 
   it("reaches the terms check and never asks approval to override a supplier's terms", () => {
@@ -104,8 +111,7 @@ describe("supplier terms after disclosure passes", () => {
     expect(held.some((e) => e.kind === "ask-principal")).toBe(false);
   });
 
-  // The recipient check currently treats the valuer's own-list entry as proof of lender status.
-  it.fails("stops a balance release to a valuer under the supplier's lender-only terms", () => {
+  it("stops a balance release to a valuer under the supplier's lender-only terms", () => {
     expect(held).toContainEqual(
       expect.objectContaining({
         check: "data-terms",

@@ -67,6 +67,8 @@ import {
   forumAnswerSchema,
   forumClaimSchema,
   RECORD_LIMITS,
+  RECORD_PROOF_GRANT_TYP,
+  recordProofGrantSchema,
   recordSegmentSchema,
 } from "../mechanisms/forum.js";
 import { jointPayloadSchema } from "../mechanisms/joint.js";
@@ -98,6 +100,7 @@ import { representationSchema, TYP, verifyStatement } from "../mechanisms/statem
 import { TrustStore } from "../mechanisms/trust.js";
 import { copyData } from "../model/copy.js";
 import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
+import type { NamedValuesNode } from "../model/named-values.js";
 import { PaymentAgreementNode, PaymentFacts, type PaymentOfferNode } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
 import {
@@ -129,15 +132,18 @@ import { SettlementError } from "../settlement/adapter.js";
 import { readCarried } from "../settlement/carried.js";
 import {
   type EvidenceLedger,
+  LEDGER_GENESIS,
   type LedgerEntry,
   type LedgerHead,
   type LedgerRangeEntry,
   type LedgerRecord,
   verifyLedger,
   verifyLedgerAtHead,
+  verifyLedgerRange,
 } from "../store/ledger.js";
 import type {
   EffectState,
+  EmailChallenge,
   OutboxEntry,
   PendingAction,
   RuntimeState,
@@ -528,13 +534,29 @@ export class AgentRuntime {
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
+    this.state.auditApprovalProofs ??= {};
+    this.state.emailChallenges ??= {};
     const head = this.ledger.head?.();
+    const checkpoint = this.state.ledgerAuditHead;
     this.ledgerAuditTrusted =
       !!head &&
       (!this.ledger.requiresTrustedCheckpoint ||
-        (head.seq === 0 && !this.state.ledgerAuditHead) ||
-        (head.seq === this.state.ledgerAuditHead?.seq &&
-          head.hash === this.state.ledgerAuditHead.hash));
+        (head.seq === 0 && !checkpoint) ||
+        (!!checkpoint &&
+          ((head.seq === checkpoint.seq && head.hash === checkpoint.hash) ||
+            (head.seq > checkpoint.seq &&
+              verifyLedgerRange(
+                this.ledger.entries().filter(({ seq }) => seq > checkpoint.seq),
+                checkpoint,
+                head,
+              ).ok &&
+              verifyLedgerAtHead(this.ledger.entries(), head).ok))));
+    if (
+      this.ledger.requiresTrustedCheckpoint &&
+      this.ledgerAuditTrusted &&
+      (checkpoint?.seq !== head?.seq || checkpoint?.hash !== head?.hash)
+    )
+      this.persist();
     this.state.domain.derivedRequests ??= {};
     this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;
@@ -1690,37 +1712,29 @@ export class AgentRuntime {
       text: `${input.text}${nonce ? `\n\nChallenge: ${nonce}` : ""}\n\n${this.emailFooter()}`,
       purpose: input.purpose,
     };
-    if (nonce)
-      this.pendingEmailChallenges.set(digestOf(params), {
-        nonce,
-        to: input.to,
-        purpose: input.purpose,
-      });
-    return this.runTask({
-      taskId: input.taskId,
-      kind: "email",
-      plan: {
-        adapter: input.adapter,
-        key: input.taskId,
-        params,
-        activityType: "urn:activity:email-send",
-        intent: {
-          action: "distribute",
-          target: "urn:op:email",
-          operation: "urn:op:email",
-          recipient: input.to,
-          purpose: input.purpose,
-          conversation: input.taskId,
-          parameters: params,
+    return this.runLocalTask(
+      {
+        taskId: input.taskId,
+        kind: "email",
+        plan: {
+          adapter: input.adapter,
+          key: input.taskId,
+          params,
+          activityType: "urn:activity:email-send",
+          intent: {
+            action: "distribute",
+            target: "urn:op:email",
+            operation: "urn:op:email",
+            recipient: input.to,
+            purpose: input.purpose,
+            conversation: input.taskId,
+            parameters: params,
+          },
         },
       },
-    });
+      nonce ? { nonce, to: input.to, purpose: input.purpose } : undefined,
+    );
   }
-  private readonly pendingEmailChallenges = new Map<
-    string,
-    { nonce: string; to: string; purpose: string }
-  >();
-  private readonly emailChallenges = new Map<string, string>();
 
   private namedMailbox(from: string, purpose: string): boolean {
     return [...this.gateMemory.facts.values()].some(
@@ -1736,11 +1750,11 @@ export class AgentRuntime {
     if (
       !nonce ||
       !this.namedMailbox(from, purpose) ||
-      this.emailChallenges.get(scope) !== nonce ||
+      this.state.emailChallenges[scope] !== nonce ||
       !text.split(/[^A-Za-z0-9-]+/).includes(nonce)
     )
       return false;
-    this.emailChallenges.delete(scope);
+    delete this.state.emailChallenges[scope];
     return true;
   }
 
@@ -2763,7 +2777,9 @@ export class AgentRuntime {
   }
   /** Legacy whole-record release scope. Ranges are inspected from their signed payload. */
   recordDisclosures() {
-    return [...this.gateMemory.facts.keys()];
+    return [...this.gateMemory.facts.values()]
+      .filter(({ claimType }) => claimType !== "record.proof")
+      .map(({ id }) => id);
   }
 
   /**
@@ -2837,31 +2853,41 @@ export class AgentRuntime {
       if (!key || !this.identity.party) throw Error("record signing key unavailable");
       if (anchor && !terminal) throw Error("a range needs a witnessed terminal");
       const all = this.ledger.entries();
-      const bounds = anchor && terminal && { from: anchor.seq, through: terminal.seq };
-      const entries = copyData(
-        bounds
-          ? all.filter((entry) => entry.seq > bounds.from && entry.seq <= bounds.through)
-          : all,
+      const entries = all.filter(
+        (entry) => entry.seq > (anchor?.seq ?? 0) && (!terminal || entry.seq <= terminal.seq),
       );
-      const messages = [];
+      if (terminal && !verifyLedgerRange(entries, anchor ?? LEDGER_GENESIS, terminal).ok)
+        throw Error("the retained record does not match the witnessed interval");
+      const messages: { direction: "in" | "out"; digest: string; jws: string }[] = [];
       for (const { direction, digest, jws, conversation: recorded } of Object.values(
         this.state.recordMessages,
       )) {
         if (recorded !== conversation) continue;
         if (
-          bounds &&
-          (!entries.some(
-            ({ record }) => record.type === `message-${direction}` && record.digest === digest,
-          ) ||
-            !(await this.rangeMessage(jws, conversation, digest)))
+          !entries.some(
+            ({ record }) =>
+              record.type === `message-${direction}` &&
+              record.digest === digest &&
+              (!anchor || this.rangeMessageRecord(record, conversation)),
+          )
         )
           continue;
+        if (anchor && !(await this.rangeMessage(jws, conversation, digest))) continue;
         messages.push({ direction, digest, jws });
       }
       const signed = await Promise.all(
         entries.map(async (entry) => {
           let disclosed: LedgerRangeEntry = entry;
-          if (bounds && !this.rangeMessageRecord(entry.record, conversation)) {
+          if (
+            (entry.record.type === "approval" && "jws" in entry.record) ||
+            (anchor &&
+              !messages.some(
+                ({ direction, digest }) =>
+                  this.rangeMessageRecord(entry.record, conversation) &&
+                  entry.record.type === `message-${direction}` &&
+                  entry.record.digest === digest,
+              ))
+          ) {
             if (!entry.recordDigest) throw Error("record has no commitment for redaction");
             disclosed = { ...entry, record: null, recordDigest: entry.recordDigest };
           }
@@ -2876,7 +2902,8 @@ export class AgentRuntime {
         actor: this.identity.actor,
         party: this.identity.party,
         conversation,
-        ...(anchor ? { anchor, terminal } : {}),
+        ...(anchor ? { anchor } : {}),
+        ...(terminal ? { terminal } : {}),
         entries: signed,
         messages,
       };
@@ -2917,19 +2944,7 @@ export class AgentRuntime {
     conversation: string,
     digest: string,
   ): Promise<string | undefined> {
-    const verified = await verifyRecordedMessage(jws, this.trust, (kid) => {
-      const key = [...this.keysByAlg.values()].find((value) => value.kid === kid);
-      return key && this.identity.party
-        ? {
-            kid,
-            alg: key.alg,
-            publicJwk: key.publicJwk,
-            role: "actor",
-            subject: this.identity.actor,
-            party: this.identity.party,
-          }
-        : undefined;
-    });
+    const verified = await this.readRecordMessage(jws);
     const message = verified?.message;
     if (
       !message ||
@@ -2972,7 +2987,23 @@ export class AgentRuntime {
     return item;
   }
 
-  private async rangeCredential(jws: string): Promise<string | undefined> {
+  private readRecordMessage(jws: string) {
+    return verifyRecordedMessage(jws, this.trust, (kid) => {
+      const key = [...this.keysByAlg.values()].find((value) => value.kid === kid);
+      return key && this.identity.party
+        ? {
+            kid,
+            alg: key.alg,
+            publicJwk: key.publicJwk,
+            role: "actor",
+            subject: this.identity.actor,
+            party: this.identity.party,
+          }
+        : undefined;
+    });
+  }
+
+  private async rangeCredential(jws: string, feeOnly = true): Promise<string | undefined> {
     const verify = (role: "issuer" | "party") =>
       verifyStatement(jws, {
         trust: this.trust,
@@ -2988,18 +3019,20 @@ export class AgentRuntime {
     const claim = checked.payload;
     if (
       !claim ||
-      claim.claimType !== "fee.charged" ||
+      (feeOnly && claim.claimType !== "fee.charged") ||
       checked.signer?.subject !== claim.issuer ||
       !claim.id ||
-      this.gateMemory.facts.get(claim.id)?.digest !== digestOf(claim)
+      this.gateMemory.facts.get(claim.id)?.digest !== digestOf(decodeCompactPayload(jws))
     )
       return undefined;
     return claim.id;
   }
 
-  private isRangeRequest(params: JsonObject): boolean {
+  private isRangeRequest(parameters: NamedValuesNode): boolean {
     try {
-      const request = decodeCompactPayload(String(params.request)) as { segment: string };
+      const params = parameters.live;
+      if (Array.isArray(params) || typeof params.request !== "string") return false;
+      const request = decodeCompactPayload(params.request) as { segment: string };
       return !!(decodeCompactPayload(request.segment) as { anchor?: unknown }).anchor;
     } catch {
       return false;
@@ -3016,15 +3049,152 @@ export class AgentRuntime {
     return checked.outcome === "valid" ? checked.payload : undefined;
   }
 
-  /** Derive the terms-check input from the actual signed request and nested range. */
-  private async rangeDisclosures(
-    params: JsonObject,
+  /** Inventory signed companion payloads by their exact proof bytes and authenticated owner. */
+  async recordReleaseProofs(
+    segment: import("zod").infer<typeof recordSegmentSchema>,
+    agreement?: { offer: string; acceptance: string },
+  ) {
+    const proofs = new Map<string, { digest: string; issuer: string; label: string }>();
+    const credentials = new Set<string>();
+    const add = (proof: string, issuer: string, label: string) => {
+      const digest = digestOf(proof);
+      proofs.set(digest, { digest, issuer, label });
+    };
+    for (const [proof, kind] of [
+      ...segment.messages.map(({ jws }) => [jws, "invoke"] as const),
+      ...(agreement
+        ? ([
+            [agreement.offer, "propose"],
+            [agreement.acceptance, "accept"],
+          ] as const)
+        : []),
+    ]) {
+      const verified = await this.readRecordMessage(proof);
+      const message = verified?.message;
+      if (
+        !message ||
+        message.kind !== kind ||
+        message.from.actor !== verified.pinned.subject ||
+        !message.from.onBehalfOf ||
+        message.from.onBehalfOf !== verified.pinned.party
+      )
+        return undefined;
+      if (kind !== "invoke")
+        add(
+          proof,
+          message.from.onBehalfOf,
+          kind === "propose" ? "Signed agreement offer" : "Signed agreement acceptance",
+        );
+      for (const item of message.evidence ?? []) {
+        if (item.format !== "jws-compact") return undefined;
+        if (item.role === "credential") {
+          const id = await this.rangeCredential(item.value, false);
+          if (!id) return undefined;
+          credentials.add(id);
+          continue;
+        }
+        if (item.role !== "representation") return undefined;
+        const signed = await verifyStatement(item.value, {
+          trust: this.trust,
+          typ: TYP.representation,
+          role: "party",
+          schema: representationSchema,
+          limits: this.limits,
+          verifier: this.identity.actor,
+          at: this.now(),
+        });
+        if (
+          signed.signer?.subject !== message.from.onBehalfOf ||
+          signed.payload?.party !== message.from.onBehalfOf ||
+          signed.payload.actor !== message.from.actor
+        )
+          return undefined;
+        add(item.value, signed.payload.party, "Signed representation");
+      }
+    }
+    return { proofs: [...proofs.values()], credentials: [...credentials] };
+  }
+
+  private async recordProofItems(
+    inventory: NonNullable<Awaited<ReturnType<AgentRuntime["recordReleaseProofs"]>>>,
+    grants: readonly unknown[],
     intent: ActionIntent,
   ): Promise<string[] | undefined> {
+    const available = new Map(inventory.proofs.map((proof) => [proof.digest, proof]));
+    const facts: import("../gates/common.js").AdmittedFact[] = [];
+    for (const jws of grants) {
+      if (typeof jws !== "string") return undefined;
+      const { payload, signer } = await verifyStatement(jws, {
+        trust: this.trust,
+        typ: RECORD_PROOF_GRANT_TYP,
+        role: "party",
+        schema: recordProofGrantSchema,
+        limits: this.limits,
+        at: this.now(),
+        verifier: this.identity.actor,
+      });
+      if (!payload) return undefined;
+      const proof = available.get(payload.digest);
+      if (
+        !proof ||
+        payload.issuer !== proof.issuer ||
+        signer?.subject !== proof.issuer ||
+        payload.holder !== this.identity.actor ||
+        payload.recipient !== intent.recipient ||
+        payload.purpose !== intent.purpose ||
+        Date.parse(payload.validUntil) <= Date.parse(this.now())
+      )
+        return undefined;
+      available.delete(payload.digest);
+      const id = derivedUrn("record-proof", payload);
+      facts.push({
+        id,
+        label: proof.label,
+        source: proof.issuer,
+        claimType: "record.proof",
+        digest: proof.digest,
+        terms: {
+          policy: {
+            id: derivedUrn("record-proof-grant", jws),
+            permissions: [
+              {
+                type: "permission",
+                action: "distribute",
+                target: id,
+                constraints: [
+                  { leftOperand: "recipient", operator: "eq", rightOperand: payload.recipient },
+                  { leftOperand: "purpose", operator: "eq", rightOperand: payload.purpose },
+                ],
+              },
+            ],
+          },
+        },
+      });
+    }
     if (
+      available.size ||
+      facts.some(
+        ({ id }) =>
+          this.gateMemory.facts.has(id) &&
+          this.gateMemory.facts.get(id)?.claimType !== "record.proof",
+      )
+    )
+      return undefined;
+    for (const fact of facts) this.gateMemory.facts.set(fact.id, fact);
+    return [...inventory.credentials, ...facts.map(({ id }) => id)];
+  }
+
+  /** Derive the terms-check input from the actual signed request and nested range. */
+  private async rangeDisclosures(
+    parameters: NamedValuesNode,
+    intent: ActionIntent,
+  ): Promise<string[] | undefined> {
+    const params = parameters.live;
+    if (
+      Array.isArray(params) ||
       typeof params.request !== "string" ||
       Object.keys(params).some(
-        (key) => !["operation", "recordFrom", "evidence", "request"].includes(key),
+        (key) => !["operation", "recordFrom", "evidence", "request", "proofGrants"].includes(key),
       )
     )
       return undefined;
@@ -3071,17 +3241,26 @@ export class AgentRuntime {
           );
         if (receipt.seq !== point.seq || receipt.hash !== point.hash) return undefined;
       }
+      const entries = segment.entries.map(({ entry }) => entry) as LedgerRangeEntry[];
+      const hasMessage = (entry: LedgerRangeEntry, digest: string, direction: string) =>
+        entry.record?.digest === digest && entry.record.type === `message-${direction}`;
       const items = new Set<string>();
       for (const { entry, proof } of segment.entries) {
         const payload = await this.readOwnRecordProof(proof, "awp-record-entry+jws");
         if (
           !payload ||
           digestOf(payload) !== digestOf(entry) ||
-          (entry.record && !this.rangeMessageRecord(entry.record, segment.conversation))
+          (entry.record &&
+            (!this.rangeMessageRecord(entry.record, segment.conversation) ||
+              !segment.messages.some(({ digest, direction }) =>
+                hasMessage(entry, digest, direction),
+              )))
         )
           return undefined;
       }
       for (const message of segment.messages) {
+        if (!entries.some((entry) => hasMessage(entry, message.digest, message.direction)))
+          return undefined;
         const item = await this.rangeMessage(message.jws, segment.conversation, message.digest);
         if (!item) return undefined;
         items.add(item);
@@ -3108,7 +3287,15 @@ export class AgentRuntime {
             return undefined;
         }
       } else if ("agreement" in request && request.agreement) return undefined;
-      return [...items];
+      const inventory = await this.recordReleaseProofs(
+        segment,
+        "agreement" in request ? request.agreement : undefined,
+      );
+      const grants = params.proofGrants ?? [];
+      if (!inventory || !Array.isArray(grants)) return undefined;
+      const proofs = await this.recordProofItems(inventory, grants, intent);
+      if (!proofs) return undefined;
+      return [...new Set([...items, ...proofs])];
     } catch {
       return undefined;
     }
@@ -3140,17 +3327,29 @@ export class AgentRuntime {
         {
           head: this.trustedAuditHead(),
           verifyApproval: async (entry, release) => {
-            const jws = entry.record.jws;
-            if (typeof jws !== "string") return undefined;
+            const id = entry.record.id;
+            if (typeof id !== "string") return undefined;
+            const jws =
+              typeof entry.record.jws === "string"
+                ? entry.record.jws
+                : typeof entry.record.proofDigest === "string"
+                  ? this.state.auditApprovalProofs[entry.record.proofDigest]
+                  : undefined;
+            if (
+              !jws ||
+              (entry.record.jws === undefined && digestOf(jws) !== entry.record.proofDigest)
+            )
+              return undefined;
             const checked = await verifyApproval(jws, {
               trust: this.trust,
               actor: this.identity.actor,
               limits: this.limits,
               at: release.at,
             });
+            if (!checked.ok && checked.verification.outcome === "unknown-key") return undefined;
             return (
               checked.ok &&
-              checked.approval.id === entry.record.id &&
+              checked.approval.id === id &&
               checked.approval.decision === "approve" &&
               checked.approval.actionDigest === release.digest &&
               checked.approval.conversation === release.action.conversation
@@ -3278,9 +3477,12 @@ export class AgentRuntime {
   private recordBacks(claim: Readonly<Record<string, unknown>>, recipient: string): boolean {
     const entries = this.ledger.entries();
     if (!verifyLedgerAtHead(entries, this.trustedAuditHead()).ok) return false;
-    const audit = entries.find((entry) => entry.hash === claim.audit)?.record;
+    const auditEntry = entries.find((entry) => entry.hash === claim.audit);
+    const audit = auditEntry?.record;
     if (
+      !auditEntry ||
       audit?.type !== "record-audit" ||
+      audit.producer === "core" ||
       audit.actor !== this.identity.actor ||
       claim.subject !== recipient ||
       typeof claim.action !== "string" ||
@@ -3290,12 +3492,50 @@ export class AgentRuntime {
       !claim.mandate ||
       canonicalJson(audit.mandate) !== canonicalJson(claim.mandate) ||
       !Array.isArray(audit.outside) ||
-      !audit.outside.some(
-        ({ actionDigest, decision, release }) =>
-          actionDigest === claim.action &&
-          claim.range &&
-          canonicalJson(claim.range) === canonicalJson({ decision, release }),
-      )
+      !audit.outside.some((finding) => {
+        if (!finding || finding.actionDigest !== claim.action || !claim.range) return false;
+        const { decision, release } = finding;
+        if (
+          !decision ||
+          !release ||
+          canonicalJson(claim.range) !== canonicalJson({ decision, release })
+        )
+          return false;
+        const authored = entries.find(
+          (entry) => entry.seq === decision.seq && entry.hash === decision.hash,
+        );
+        const released = entries.find(
+          (entry) => entry.seq === release.seq && entry.hash === release.hash,
+        );
+        const policy = authored?.record.policy as AuthorisationDecision["policy"] | undefined;
+        return (
+          !!authored &&
+          !!released &&
+          authored.seq < released.seq &&
+          released.seq < auditEntry.seq &&
+          authored.record.type === "authorisation-decision" &&
+          authored.record.producer !== "core" &&
+          authored.record.decider === this.identity.actor &&
+          authored.record.actionDigest === claim.action &&
+          !!authored.record.action &&
+          actionDigest(authored.record.action as ActionIntent) === claim.action &&
+          canonicalJson({ id: policy?.id ?? null, digest: policy?.digest ?? null }) ===
+            canonicalJson(claim.mandate) &&
+          released.record.type === "gate-decision" &&
+          released.record.producer !== "core" &&
+          released.record.agent === this.identity.actor &&
+          released.record.gate === "outbound-gate" &&
+          released.record.outcome === "go" &&
+          !entries.some(
+            ({ seq, record }) =>
+              seq > authored.seq &&
+              seq < released.seq &&
+              record.producer !== "core" &&
+              (record.type === "authorisation-decision" ||
+                (record.type === "gate-decision" && record.gate === "outbound-gate")),
+          )
+        );
+      })
     )
       return false;
     return [...this.gateMemory.facts.values()].some(
@@ -5615,7 +5855,12 @@ export class AgentRuntime {
   }
 
   /** Record an effect as `planned` (definitely not attempted) if not already known. */
-  private planEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): EffectState {
+  private planEffect(
+    ownerId: Iri,
+    plan: EffectPlan,
+    basis: Iri,
+    emailChallenge?: EmailChallenge,
+  ): EffectState {
     const existing = this.state.effects[plan.key];
     if (existing) return existing;
     const planned: EffectState = {
@@ -5630,6 +5875,7 @@ export class AgentRuntime {
       status: "planned",
       attempts: 0,
       receiptSent: !plan.receipt,
+      ...(emailChallenge ? { emailChallenge } : {}),
       startedAt: this.now(),
     };
     this.state.effects[plan.key] = planned;
@@ -5756,7 +6002,7 @@ export class AgentRuntime {
   private async publicationMatches(adapter: EffectAdapter, plan: EffectPlan): Promise<boolean> {
     if (!adapter.publicationRecipient) return true;
     if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) return false;
-    const recipient = adapter.publicationRecipient(plan.params);
+    const recipient = adapter.publicationRecipient(ActionIntentNode.toNode(plan.intent).parameters);
     const { evidence, items } = plan.params;
     if (
       plan.intent.action !== "distribute" ||
@@ -5791,7 +6037,7 @@ export class AgentRuntime {
         !claim ||
         checked.signer?.subject !== claim.issuer ||
         claim.id !== id ||
-        digestOf(claim) !== fact.digest
+        digestOf(decodeCompactPayload(jws)) !== fact.digest
       )
         return false;
     }
@@ -5799,14 +6045,27 @@ export class AgentRuntime {
   }
 
   private recordEvidenceFor(adapter: EffectAdapter, plan: EffectPlan) {
+    if (plan.intent.action !== "distribute") return undefined;
+    const parameters = ActionIntentNode.toNode(plan.intent).parameters;
     return adapter.recordRangeOnly ||
-      this.isRangeRequest(plan.params) ||
+      this.isRangeRequest(parameters) ||
       typeof plan.params.recordFrom === "number"
-      ? this.rangeDisclosures(plan.params, plan.intent)
+      ? this.rangeDisclosures(parameters, plan.intent)
       : this.recordDisclosures();
   }
 
-  private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
+  private async runEffect(
+    ownerId: Iri,
+    plan: EffectPlan,
+    basis: Iri,
+    newChallenge?: EmailChallenge,
+  ): Promise<OutboundMessage[]> {
+    const existingChallenge = this.state.effects[plan.key]?.emailChallenge;
+    if (
+      existingChallenge &&
+      digestOf(this.state.effects[plan.key]?.params) !== digestOf(plan.params)
+    )
+      return [];
     const boundary = this.effectAdapters.get(plan.adapter);
     if (boundary?.bindsParameters || boundary?.plainTextEmail || boundary?.publicationRecipient) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
@@ -5845,10 +6104,7 @@ export class AgentRuntime {
       // Brief 31 §2.4: while a mailbox challenge is active, the context checks run inside
       // the release, in the ordered position of disclosure and data terms. Every other email
       // keeps the baseline order: context checks before the gate decides.
-      if (
-        this.pendingEmailChallenges.has(digestOf(plan.params)) ||
-        this.namedMailbox(email.data.to, email.data.purpose)
-      )
+      if (existingChallenge || newChallenge || this.namedMailbox(email.data.to, email.data.purpose))
         emailContext = { text: email.data.text, approved };
       else {
         const contextVerdicts = this.outbound.checkEmailContext(
@@ -5887,7 +6143,12 @@ export class AgentRuntime {
     const existing = this.state.effects[plan.key];
     if (existing?.status === "concluded") return []; // idempotent: already done
     if (existing?.status === "attempting") return this.reconcileOne(existing);
-    const planned = this.planEffect(ownerId, plan, basis);
+    const planned = this.planEffect(
+      ownerId,
+      plan,
+      basis,
+      boundary?.plainTextEmail ? newChallenge : undefined,
+    );
     const scoped = this.effectAdapters.get(plan.adapter);
     this.recordReleaseDigest =
       scoped?.releasesRecord || scoped?.purposeScoped ? actionDigest(plan.intent) : undefined;
@@ -5976,13 +6237,10 @@ export class AgentRuntime {
       method,
       at,
     });
-    const challengeKey = digestOf(effect.params);
-    const challenge = this.pendingEmailChallenges.get(challengeKey);
-    if (challenge && result.conclusion !== "uncertain") {
-      this.pendingEmailChallenges.delete(challengeKey);
-      if (result.conclusion === "completed")
-        this.emailChallenges.set(canonicalJson([challenge.to, challenge.purpose]), challenge.nonce);
-    }
+    const challenge = effect.emailChallenge;
+    if (challenge && result.conclusion === "completed")
+      this.state.emailChallenges[canonicalJson([challenge.to, challenge.purpose])] =
+        challenge.nonce;
     const status = result.conclusion === "uncertain" ? "attempting" : "concluded";
     let updated: EffectState = {
       ...effect,
@@ -6641,7 +6899,20 @@ export class AgentRuntime {
     plan: EffectPlan;
     /** Where the core took this task from, when it came from a received message. */
     origin?: ProposalOrigin;
-  }): Promise<{
+  }) {
+    return this.runLocalTask(input);
+  }
+
+  private runLocalTask(
+    input: {
+      taskId: Iri;
+      kind: string;
+      plan: EffectPlan;
+      /** Where the core took this task from, when it came from a received message. */
+      origin?: ProposalOrigin;
+    },
+    challenge?: EmailChallenge,
+  ): Promise<{
     task: TaskState;
     effect?: EffectState;
     decisions: readonly AuthorisationDecision[];
@@ -6669,7 +6940,7 @@ export class AgentRuntime {
       if (task.status !== "concluded" && !(effect?.status === "concluded")) {
         this.proposalOrigin = input.origin;
         try {
-          await this.runEffect(task.id, input.plan, task.id);
+          await this.runEffect(task.id, input.plan, task.id, challenge);
         } finally {
           this.proposalOrigin = undefined;
         }
@@ -6883,13 +7154,15 @@ export class AgentRuntime {
         ? { releaseBinding: copyData(this.state.pending[a.actionDigest]!.releaseBinding) }
         : {}),
     };
+    const proofDigest = digestOf(jws);
+    this.state.auditApprovalProofs[proofDigest] = jws;
     this.record({
       type: "approval",
       id: a.id,
       actionDigest: a.actionDigest,
       decision: a.decision,
       issuer: a.issuer,
-      jws,
+      proofDigest,
       at: this.now(),
     });
     const pending = this.state.pending[a.actionDigest];

@@ -1,15 +1,24 @@
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { tmpdir } from "os";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
 import { ScriptedMailbox } from "../src/bindings/email.js";
+import { digestOf } from "../src/core/canonical.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
-import { signStatement } from "../src/mechanisms/statements.js";
+import { actionDigest } from "../src/mechanisms/mandate.js";
+import { signStatement, TYP } from "../src/mechanisms/statements.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { CONFIG_EMAIL } from "../src/profile/configurations.js";
+import { testKey } from "../src/reference/keys.js";
+import { AgentRuntime, type AgentRuntimeOptions } from "../src/runtime/agent.js";
 import { Cast, mandateOf } from "../src/scenarios/common.js";
-import { MemoryStateStore } from "../src/store/state.js";
+import { FileLedger, MemoryLedger } from "../src/store/ledger.js";
+import { FileStateStore, MemoryStateStore } from "../src/store/state.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
 import { TrustResolver } from "../src/trust/resolver.js";
 import { decodeCompactPayload } from "../src/wire/inspect.js";
@@ -19,7 +28,17 @@ const address = "mailto:shop@fictional.example",
   op = "urn:op:email";
 const publication = "urn:op:publication";
 const host = "urn:test:host";
-async function fixture({ mailTrust = true } = {}) {
+async function fixture({
+  mailTrust = true,
+  uncertainDelivery = false,
+  stateDir,
+  emailApprovalOnly = false,
+}: {
+  mailTrust?: boolean;
+  uncertainDelivery?: boolean;
+  stateDir?: string;
+  emailApprovalOnly?: boolean;
+} = {}) {
   let at = new Date("2026-11-13T09:00:00.000Z");
   const cast = new Cast(() => at);
   await cast.add(
@@ -27,8 +46,11 @@ async function fixture({ mailTrust = true } = {}) {
     mandateOf(
       "mail",
       [
-        { type: "permission", action: "distribute", target: op },
+        ...(!emailApprovalOnly
+          ? [{ type: "permission", action: "distribute", target: op } as const]
+          : []),
         { type: "permission", action: "distribute", target: publication },
+        { type: "permission", action: "use", target: publication },
       ],
       [
         { type: "permission", action: "distribute", target: op },
@@ -53,28 +75,62 @@ async function fixture({ mailTrust = true } = {}) {
       validUntil: "2026-12-01T00:00:00.000Z",
     });
   const published: unknown[] = [];
+  const exported: unknown[] = [];
   const mailbox = new ScriptedMailbox(address, new MemoryStateStore(), []),
     recorder = new TraceRecorder();
-  const { runtime, ledger } = await cast.runtime(
-    "a",
-    [],
-    [
+  const memoryStore = new MemoryStateStore();
+  const statePath = stateDir && join(stateDir, "state.json");
+  const ledgerPath = stateDir && join(stateDir, "record.jsonl");
+  let ledger = ledgerPath ? new FileLedger(ledgerPath) : new MemoryLedger();
+  const approvalKey = await testKey("email/old-approval");
+  const trust = required(cast.trust.get("a"));
+  const oldKey = {
+    role: "party" as const,
+    subject: a.identity.party,
+    kid: approvalKey.kid,
+    alg: approvalKey.alg,
+    publicJwk: approvalKey.publicJwk,
+  };
+  const options = {
+    identity: a.identity,
+    actorKeys: [a.actorKey],
+    mandateJws: a.mandateJws,
+    representationJws: a.representationJws,
+    now: () => at,
+    ledger,
+    handlers: [],
+    effects: [
       {
         id: "urn:mail",
         plainTextEmail: true,
-        execute: async (key, params) => ({
-          conclusion: "completed",
-          observed: mailbox.deliver(key, params),
-        }),
-        reconcile: async () => ({ conclusion: "uncertain", reason: "not queried" }),
+        execute: async (key, params) => {
+          const observed = mailbox.deliver(key, params);
+          return uncertainDelivery
+            ? { conclusion: "uncertain", reason: "delivery response lost" }
+            : { conclusion: "completed", observed };
+        },
+        reconcile: async () =>
+          mailbox.inbox().length
+            ? { conclusion: "completed", observed: {} }
+            : { conclusion: "uncertain", reason: "not queried" },
       },
       {
         id: "urn:publication",
         bindsParameters: true,
         purposeScoped: true,
-        publicationRecipient: (params) => String(params.host),
+        publicationRecipient: (params) => String(params.toObject().host),
         execute: async (_key, params) => {
           published.push(params);
+          return { conclusion: "completed", observed: {} };
+        },
+        reconcile: async () => ({ conclusion: "not-executed", reason: "none" }),
+      },
+      {
+        id: "urn:record",
+        releasesRecord: true,
+        recordRecipient: host,
+        execute: async (_key, params) => {
+          exported.push(params);
           return { conclusion: "completed", observed: {} };
         },
         reconcile: async () => ({ conclusion: "not-executed", reason: "none" }),
@@ -87,59 +143,68 @@ async function fixture({ mailTrust = true } = {}) {
         reconcile: async () => ({ conclusion: "not-executed", reason: "none" }),
       },
     ],
-    [CONFIG_EMAIL],
-    {
-      gates: {
-        taskId: "urn:task",
-        reliance: {
-          id: "urn:private-reliance",
-          rules: [
-            {
-              id: "urn:mailbox-quality",
-              claimType: "contact.mailbox",
-              methods: ["recorded-by-authority"],
-              maxAgeDays: 1,
-              text: "Source-signed mailbox.",
-            },
-            {
-              id: "urn:private-quality",
-              claimType: "private.secret",
-              methods: ["recorded-by-authority"],
-              maxAgeDays: 1,
-              text: "Source-signed private context.",
-            },
-          ],
-        },
-        ...(mailTrust
-          ? { trust: { levels: ["own-list" as const], onUnknown: "ask-principal" as const } }
-          : {}),
-        resolver: new TrustResolver({
-          principal: "owner",
-          trust: await TrustStore.load(cast.trust.get("a")),
-          name: (iri) => iri ?? "unknown",
-          ownList: [
-            { party: address, tasks: [op, "urn:op:email-bind"] },
-            { party: host, tasks: [publication] },
-          ],
-        }),
-        sink: recorder.sink("a"),
-        email: {
-          pins: [pin],
-          from: "mailto:agent@fictional.example",
-          structuredReply: "https://fictional.example/form",
-        },
-        purposes: { [purpose]: ["private.secret"] },
-        readings: [
+    accepted: [CONFIG_EMAIL],
+    gates: {
+      taskId: "urn:task",
+      reliance: {
+        id: "urn:private-reliance",
+        rules: [
           {
-            claimType: "email.reading",
-            type: "code",
-            values: ["claims-acceptance", "instruction"],
+            id: "urn:mailbox-quality",
+            claimType: "contact.mailbox",
+            methods: ["recorded-by-authority"],
+            maxAgeDays: 1,
+            text: "Source-signed mailbox.",
+          },
+          {
+            id: "urn:private-quality",
+            claimType: "private.secret",
+            methods: ["recorded-by-authority"],
+            maxAgeDays: 1,
+            text: "Source-signed private context.",
           },
         ],
       },
-      core: { id: "urn:scripted-reader", version: "1", kind: "scripted" },
+      ...(mailTrust
+        ? { trust: { levels: ["own-list" as const], onUnknown: "ask-principal" as const } }
+        : {}),
+      resolver: new TrustResolver({
+        principal: "owner",
+        trust: await TrustStore.load(cast.trust.get("a")),
+        name: (iri) => iri ?? "unknown",
+        ownList: [
+          { party: address, tasks: [op, "urn:op:email-bind"] },
+          { party: host, tasks: [publication] },
+        ],
+      }),
+      sink: recorder.sink("a"),
+      email: {
+        pins: [pin],
+        from: "mailto:agent@fictional.example",
+        structuredReply: "https://fictional.example/form",
+      },
+      purposes: { [purpose]: ["private.secret"] },
+      readings: [
+        {
+          claimType: "email.reading",
+          type: "code",
+          values: ["claims-acceptance", "instruction"],
+        },
+      ],
     },
-  );
+    core: { id: "urn:scripted-reader", version: "1", kind: "scripted" },
+  } satisfies Omit<AgentRuntimeOptions, "store" | "trust">;
+  const open = async (includeHistoricalKey = true) =>
+    AgentRuntime.create({
+      ...options,
+      trust: await TrustStore.load({
+        ...trust,
+        keys: [...trust.keys, ...(includeHistoricalKey ? [oldKey] : [])],
+      }),
+      store: statePath ? new FileStateStore(statePath) : memoryStore,
+      ledger,
+    });
+  let runtime = await open();
   const send = (id = "urn:send", text = "Is the item available?") =>
     runtime.sendEmail({ taskId: id, adapter: "urn:mail", to: address, text, purpose });
   const approve = async (decision: "approve" | "deny" = "approve") => {
@@ -149,11 +214,23 @@ async function fixture({ mailTrust = true } = {}) {
     );
   };
   return {
-    runtime,
-    ledger,
+    get runtime() {
+      return runtime;
+    },
+    get ledger() {
+      return ledger;
+    },
+    approvalKey,
+    reopen: async (includeHistoricalKey = true) => {
+      runtime.close();
+      if (ledgerPath) ledger = new FileLedger(ledgerPath);
+      runtime = await open(includeHistoricalKey);
+    },
     recorder,
     mailbox,
     published,
+    exported,
+    memoryStore,
     send,
     approve,
     cast,
@@ -422,6 +499,7 @@ it("binds publication to the admitted fact digest and the host's resolved identi
     asOf: "2026-11-13T09:00:00.000Z",
     method: "recorded-by-authority",
     value: "admitted",
+    period: { start: "2026-11-01", end: "2026-11-13" },
     terms: {
       policy: {
         id: "urn:terms",
@@ -460,9 +538,293 @@ it("binds publication to the admitted fact digest and the host's resolved identi
       },
     });
   };
+  const extra = await signStatement(f.cast.get("a").ownerKey, "awp-statement+jws", {
+    ...original,
+    period: { ...original.period, privateNote: "not admitted" },
+  });
+  await publish("urn:publish:hidden-period", host, extra);
   await publish("urn:publish:replacement", host, await sign("unchecked"));
   await publish("urn:publish:redirect", "urn:other:host", held);
   expect(f.published).toEqual([]);
   await publish("urn:publish:exact", host, held);
   expect(f.published).toHaveLength(1);
+});
+
+it("keeps approval notes and their original signatures out of whole-record exports", async () => {
+  const f = await fixture();
+  await f.send();
+  const pending = required(f.runtime.pendingApprovals()[0]);
+  const note = "PRIVATE OWNER APPROVAL";
+  const jws = await f.cast.approval(
+    "a",
+    pending.actionDigest,
+    pending.conversation,
+    "approve",
+    note,
+  );
+  await f.runtime.submitApproval(jws);
+  const snapshot = await f.runtime.exportRecord("urn:unrelated");
+  const segment = decodeCompactPayload(snapshot.jws);
+  for (const { entry, proof } of segment.entries as {
+    entry: { record: unknown };
+    proof: string;
+  }[]) {
+    expect(JSON.stringify(entry)).not.toContain(jws);
+    expect(JSON.stringify(decodeCompactPayload(proof))).not.toContain(jws);
+  }
+  expect(f.ledger.entries().find(({ record }) => record.type === "approval")?.record).toMatchObject(
+    { proofDigest: digestOf(jws) },
+  );
+});
+
+it("recovers delivery and persists mailbox challenge activation and consumption across restarts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-email-"));
+  const f = await fixture({ stateDir: dir, uncertainDelivery: true });
+  try {
+    const jws = await signStatement(f.cast.get("a").ownerKey, "awp-statement+jws", {
+      id: "urn:contact:durable",
+      issuer: "urn:owner",
+      subject: "urn:owner",
+      claimType: "contact.mailbox",
+      mailbox: address,
+      asOf: "2026-11-13T09:00:00.000Z",
+      method: "recorded-by-authority",
+    });
+    await f.runtime.admitStatements([{ jws }], { task: "urn:task", purpose });
+    await f.runtime.sendEmail({
+      taskId: "urn:challenge:durable",
+      adapter: "urn:mail",
+      to: address,
+      text: "Confirm?",
+      purpose,
+      challenge: true,
+    });
+    const pending = required(f.runtime.pendingApprovals()[0]);
+    const nonce = required(
+      /Challenge: ([a-z0-9]+)/.exec(String(pending.intent.parameters.text))?.[1],
+    );
+    const reply = { from: address, purpose, text: `I received ${nonce}.`, challenge: nonce };
+    await f.reopen();
+    await f.approve();
+    expect(f.mailbox.inbox()).toHaveLength(1);
+    expect(await f.runtime.receiveEmail(reply)).toMatchObject({ ok: false });
+    await f.reopen();
+    await f.runtime.recover();
+    await f.reopen();
+    expect(await f.runtime.receiveEmail(reply)).toMatchObject({ ok: true });
+    await f.reopen();
+    expect(await f.runtime.receiveEmail(reply)).toMatchObject({ ok: false });
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("recovers the file ledger checkpoint and treats a missing historical approval key as indeterminate", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-audit-"));
+  const f = await fixture({ stateDir: dir, emailApprovalOnly: true });
+  try {
+    await f.send();
+    const pending = required(f.runtime.pendingApprovals()[0]);
+    const approval = decodeCompactPayload(
+      await f.cast.approval("a", pending.actionDigest, pending.conversation),
+    );
+    await f.runtime.submitApproval(
+      await signStatement(f.approvalKey, "awp-approval+jws", approval),
+    );
+    expect((await f.runtime.auditRecord()).released).toContainEqual(
+      expect.objectContaining({ verdict: "inside" }),
+    );
+    const suffix = new FileLedger(join(dir, "record.jsonl"));
+    const entry = suffix.append(
+      { type: "crash-before-state-checkpoint" },
+      "2026-11-13T09:00:00.000Z",
+    );
+    await f.reopen(false);
+    expect(f.runtime.recordHead().seq).toBeGreaterThanOrEqual(entry.seq);
+    const report = await f.runtime.auditRecord();
+    expect(report.outside).toEqual([]);
+    expect(report.released).toContainEqual(expect.objectContaining({ verdict: "indeterminate" }));
+    f.runtime.close();
+    const state = new FileStateStore(join(dir, "state.json"));
+    try {
+      expect(state.load().ledgerAuditHead?.seq).toBeGreaterThanOrEqual(entry.seq);
+    } finally {
+      state.close();
+    }
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("stops a record adapter before execution when invoked with a non-distribution action", async () => {
+  const f = await fixture({ mailTrust: false });
+  const key = "urn:record:use";
+  const params = { operation: "submit", request: "record", evidence: [] };
+  await f.runtime.runTask({
+    taskId: key,
+    kind: "record-release",
+    plan: {
+      key,
+      adapter: "urn:record",
+      activityType: "urn:activity:record-release",
+      params,
+      intent: {
+        action: "use",
+        operation: publication,
+        target: publication,
+        recipient: host,
+        purpose,
+        conversation: key,
+        parameters: params,
+      },
+    },
+  });
+  expect(f.exported).toEqual([]);
+  expect(f.recorder.events().findLast((event) => event.kind === "decision")).toMatchObject({
+    outcome: "stop",
+    reason: "evidence-invalid",
+  });
+});
+
+it("withholds an unrelated invoke row when its archived message is excluded", async () => {
+  const f = await fixture();
+  const anchor = { ...f.runtime.recordHead(), receipt: "test-anchor" };
+  const conversation = "urn:test:range";
+  const at = "2026-11-13T09:00:00.000Z";
+  const message = {
+    id: "urn:test:unrelated-invoke",
+    kind: "invoke",
+    conversation,
+    profile: "urn:profile",
+    configuration: "urn:configuration",
+    from: { actor: "urn:a", onBehalfOf: "urn:owner" },
+    to: { actor: "urn:peer:agent", party: "urn:peer" },
+    createdAt: at,
+    expiresAt: "2026-11-14T09:00:00.000Z",
+    body: {
+      operation: { id: "urn:op:unrelated", version: "1" },
+      basis: { kind: "represented" },
+      input: {},
+    },
+  };
+  const digest = digestOf(message);
+  const jws = await signStatement(f.cast.get("a").actorKey, TYP.message, message);
+  const state = f.memoryStore.load();
+  state.recordMessages[message.id] = { direction: "out", conversation, digest, jws };
+  f.memoryStore.save(state);
+  const row = f.ledger.append(
+    { type: "message-out", kind: "invoke", id: message.id, conversation, digest, at },
+    at,
+  );
+  await f.reopen();
+  const terminal = { seq: row.seq, hash: row.hash, receipt: "test-terminal" };
+  const result = await f.runtime.exportRecord(conversation, anchor, terminal);
+  const segment = decodeCompactPayload(result.jws);
+  expect(segment.messages).toEqual([]);
+  expect(segment.entries).toEqual([
+    expect.objectContaining({
+      entry: expect.objectContaining({ seq: row.seq, hash: row.hash, record: null }),
+    }),
+  ]);
+});
+
+it("requires gate-authored audit evidence and real points in the trusted ledger", async () => {
+  const f = await fixture();
+  const at = "2026-11-13T09:00:00.000Z";
+  const components = "sha-256:components";
+  const state = f.memoryStore.load();
+  state.contextItems["*"] = [
+    {
+      id: "urn:components",
+      kind: "statement",
+      accepted: true,
+      digest: components,
+      label: "Components",
+      claimType: "agent.components",
+      source: "urn:owner",
+      subject: "urn:a",
+      statement: { agent: "urn:a", gate: { operatedBy: host } },
+    },
+  ];
+  f.memoryStore.save(state);
+  await f.reopen();
+  const action = {
+    action: "use" as const,
+    target: publication,
+    operation: publication,
+    conversation: "urn:claim:related",
+    purpose,
+    recipient: host,
+    parameters: {},
+  };
+  const digest = actionDigest(action);
+  const mandate = { id: "urn:mandate", digest: "sha-256:mandate" };
+  const decision = f.ledger.append(
+    {
+      type: "authorisation-decision",
+      decider: "urn:a",
+      actionDigest: digest,
+      action,
+      policy: mandate,
+    },
+    at,
+  );
+  const release = f.ledger.append(
+    { type: "gate-decision", gate: "outbound-gate", agent: "urn:a", outcome: "go" },
+    at,
+  );
+  const points = {
+    decision: { seq: decision.seq, hash: decision.hash },
+    release: { seq: release.seq, hash: release.hash },
+  };
+  const audit = (range: typeof points, producer?: string) => {
+    const entry = f.ledger.append(
+      {
+        type: "record-audit",
+        actor: "urn:a",
+        statement: components,
+        mandate,
+        ...(producer ? { producer } : {}),
+        outside: [{ actionDigest: digest, ...range }],
+      },
+      at,
+    );
+    return { action: digest, subject: host, audit: entry.hash, components, mandate, range };
+  };
+  const check = (claim: ReturnType<typeof audit>) => {
+    // biome-ignore lint/complexity/useLiteralKeys: exercise the claim verifier without exporting a gate-internal method
+    return f.runtime["recordBacks"](claim, host);
+  };
+  expect(check(audit(points))).toBe(true);
+  expect(check(audit(points, "core"))).toBe(false);
+  expect(check(audit({ ...points, release: { ...points.release, hash: decision.hash } }))).toBe(
+    false,
+  );
+});
+
+it("fails closed when a file ledger suffix does not verify against the durable checkpoint", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-corrupt-audit-"));
+  const f = await fixture({ stateDir: dir });
+  try {
+    const path = join(dir, "record.jsonl");
+    const ledger = new FileLedger(path);
+    const suffix = ledger.append(
+      { type: "crash-before-state-checkpoint", value: "original" },
+      "2026-11-13T09:00:00.000Z",
+    );
+    writeFileSync(
+      path,
+      readFileSync(path, "utf8").replace(
+        JSON.stringify(suffix),
+        JSON.stringify({ ...suffix, record: { ...suffix.record, value: "changed" } }),
+      ),
+    );
+    await f.reopen();
+    expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

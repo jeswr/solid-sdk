@@ -29,7 +29,8 @@ const sameDecision = (candidate: TraceEvent | undefined, decision: TraceEvent): 
 
 /** Compare a suite branch's common prefix without skipping changed or missing decisions. */
 export function firstBranchDivergence(main: readonly TraceEvent[], branch: readonly TraceEvent[]) {
-  return branch.find((decision, index) => !sameDecision(main[index], decision));
+  const changed = branch.find((decision, index) => !sameDecision(main[index], decision));
+  return changed ?? (main[branch.length] ? "missing-decision" : undefined);
 }
 
 /** Keep the existing failure classification for catalogue paths outside C6. */
@@ -57,7 +58,10 @@ export function continuedReleaseProblem(stop: TraceEvent, later: readonly TraceE
       action.conversation === rejected.conversation &&
       action.action === rejected.action &&
       action.operation === rejected.operation &&
-      (action.recipient !== rejected.recipient ||
+      (action.target !== rejected.target ||
+        !action.otherParametersDigest ||
+        action.otherParametersDigest !== rejected.otherParametersDigest ||
+        action.recipient !== rejected.recipient ||
         action.purpose !== rejected.purpose ||
         new Set(action.evidence).size >= new Set(rejected.evidence).size ||
         action.evidence.some((item) => !rejected.evidence.includes(item)))
@@ -89,6 +93,8 @@ export function continuedReleaseProblem(stop: TraceEvent, later: readonly TraceE
       !release ||
       release.seq >= event.seq ||
       release.messageId !== event.messageId ||
+      !release.messageDigest ||
+      release.messageDigest !== event.packet?.layers.header.digest ||
       release.actionDigest !== event.actionDigest
     );
   });

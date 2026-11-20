@@ -26,8 +26,8 @@ it("does not skip a different reason at the same check", () => {
 });
 it("consumes matches so an additional repetition diverges", () => {
   expect(
-    firstBranchDivergence([decision()], [decision(), decision("approval-required", 2)])?.seq,
-  ).toBe(2);
+    firstBranchDivergence([decision()], [decision(), decision("approval-required", 2)]),
+  ).toMatchObject({ seq: 2 });
 });
 it("reports no divergence when every non-pass decision matches", () => {
   expect(firstBranchDivergence([decision()], [decision()])).toBeUndefined();
@@ -48,6 +48,7 @@ it("rejects the same stopped proposal even when expect.continues is set", () => 
     recipient: "urn:recipient",
     purpose: "urn:purpose",
     evidence: ["urn:one", "urn:two"],
+    otherParametersDigest: "unchanged",
   };
   const stop = {
     ...decision("prohibited"),
@@ -63,6 +64,15 @@ it("rejects the same stopped proposal even when expect.continues is set", () => 
     actionDigest: "stopped",
   };
   expect(continuedReleaseProblem(stop, [release])).toBe(true);
+  expect(
+    continuedReleaseProblem(stop, [
+      {
+        ...release,
+        actionDigest: "broadened-retention",
+        actionScope: { ...actionScope, evidence: ["urn:one"], otherParametersDigest: "broader" },
+      },
+    ]),
+  ).toBe(true);
   const store = { ...release, part: "memory" as const, kind: "store" as const };
   expect(continuedReleaseProblem(stop, [store])).toBe(true);
   expect(
@@ -74,4 +84,10 @@ it("rejects the same stopped proposal even when expect.continues is set", () => 
       },
     ]),
   ).toBe(false);
+});
+
+it("detects a branch that ends after an identical prefix", () => {
+  expect(firstBranchDivergence([decision(), decision("later", 2)], [decision()])).toBe(
+    "missing-decision",
+  );
 });

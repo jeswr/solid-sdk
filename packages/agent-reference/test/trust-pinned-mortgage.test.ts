@@ -98,3 +98,38 @@ it("never consults a configured register when the own list is missing, expired, 
     ).not.toBe("accepted");
   }
 });
+
+it("requires an unexpired cached registration for an offline regulated-role restriction", async () => {
+  const { TrustResolver } = await import("../src/trust/resolver.js");
+  const { TrustStore } = await import("../src/mechanisms/trust.js");
+  const task = "urn:role:lender";
+  const party = "urn:lender";
+  const at = "2026-11-13T09:00:00Z";
+  const expiresAt = "2026-11-14T09:00:00Z";
+  const options = {
+    principal: "Sam",
+    trust: TrustStore.empty("urn:sam"),
+    name: String,
+    ownListOnly: true,
+    ownList: [{ party, tasks: [task] }],
+  };
+  const input = { party, task, taskLabel: "lender", at, registeredRole: true };
+  expect(new TrustResolver(options).resolveRecipient(input).outcome).toBe("no-route");
+  const resolver = new TrustResolver({
+    ...options,
+    pinnedRegistrations: [
+      {
+        id: "urn:entry",
+        party,
+        authorizedFor: [task],
+        status: "authorized",
+        expiresAt,
+      },
+    ],
+  });
+  expect(resolver.resolveRecipient(input)).toMatchObject({
+    outcome: "accepted",
+    expires: expiresAt,
+  });
+  expect(resolver.resolveRecipient({ ...input, at: expiresAt }).outcome).toBe("not-accepted");
+});

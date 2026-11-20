@@ -1,4 +1,3 @@
-import { decodeCompactPayload } from "../wire/inspect.js";
 // AUTHORED-BY Codex GPT-6
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
 
@@ -31,7 +30,12 @@ import {
 import { FictionalAuthorizationServer } from "../mechanisms/authorization-server.js";
 import { issueMappingAttestation } from "../mechanisms/code-mapping.js";
 import { LocalDatasetHolder } from "../mechanisms/dataset-query.js";
-import { LocalForum, RECORD_LIMITS } from "../mechanisms/forum.js";
+import {
+  LocalForum,
+  RECORD_LIMITS,
+  RECORD_PROOF_GRANT_TYP,
+  recordSegmentSchema,
+} from "../mechanisms/forum.js";
 import { JOINT_OPERATIONS, JointParty } from "../mechanisms/joint.js";
 import type { SigningKey } from "../mechanisms/jws.js";
 import { mandateSchema, type OwnerMandate, signMandate } from "../mechanisms/mandate.js";
@@ -96,7 +100,7 @@ import { FictionalSolidStorage } from "../standins/storage.js";
 import { buildIndexLog, withIndexReceipts } from "../standins/trusted-index.js";
 import { FixedUsageModel } from "../standins/usage-model.js";
 import { FictionalWebIdDirectory } from "../standins/webid.js";
-import { MemoryLedger } from "../store/ledger.js";
+import { LEDGER_GENESIS, MemoryLedger } from "../store/ledger.js";
 import { MemoryStateStore } from "../store/state.js";
 import { OriginHostedVerifier } from "../suites/authenticity-origin.js";
 import { BASELINE } from "../suites/baseline.js";
@@ -111,6 +115,7 @@ import { type OutlineEntry, outlineOf, TRACE_SCHEMA, type TraceFile } from "../t
 import { TrustResolver } from "../trust/resolver.js";
 import { AgreementCredentialProtocol } from "../wire/agreement-credential.js";
 import { alterDocumentForTest, changeSelectiveSalt } from "../wire/document-faults.js";
+import { decodeCompactPayload } from "../wire/inspect.js";
 import { writeMessagePacket } from "../wire/message-packet.js";
 import { paymentObjects, paymentTrace } from "../wire/payment.js";
 import { ScenarioCarriage } from "./carriage.js";
@@ -121,6 +126,7 @@ import {
   firstCatalogueFailure,
 } from "./compare.js";
 import { patchDifferences } from "./confinement.js";
+import { identityNameDifferences } from "./confinement-policy.js";
 import {
   FAULTY_GATE_CAPTION,
   FAULTY_GATE_STAND_IN,
@@ -415,6 +421,9 @@ export async function runScenario(
     if (alternative?.change.settlement)
       settlementWorld(world, pathProfile, alternative.change.settlement);
     if (alternative?.change.identity === "did") {
+      const differences = identityNameDifferences(scenario, world, pathProfile);
+      if (differences.length)
+        throw new Error(`${alternative.id}: C3 refused: ${differences.join("; ")}`);
       Object.assign(pathProfile, renameIdentities(pathProfile, world.identityNames));
       Object.assign(world, renameIdentities(world, world.identityNames));
     }
@@ -546,15 +555,17 @@ export async function runScenario(
     const orderedBranch = path.kind === "branch" && (!!path.onlyUnder || !!path.expect?.continues);
     const decisions = decisionsOf(trace.events, orderedBranch);
     const mainTrace = results.find((r) => r.pathKind === "main")?.trace;
-    const firstFailure =
+    const divergence =
       path.kind === "branch" && mainTrace
         ? (orderedBranch ? firstBranchDivergence : firstCatalogueFailure)(
             decisionsOf(mainTrace.events, orderedBranch),
             decisions,
           )
         : decisions.find((e) => !["pass", "admit", "go"].includes(e.outcome ?? ""));
-    const noDivergence = path.kind === "branch" && !!mainTrace && !firstFailure;
-    const judged = firstFailure ?? decisions.at(-1);
+    const missingDecision = divergence === "missing-decision";
+    const firstFailure = missingDecision ? undefined : divergence;
+    const noDivergence = path.kind === "branch" && !!mainTrace && !divergence;
+    const judged = missingDecision ? undefined : (firstFailure ?? decisions.at(-1));
     const judgedReason =
       judged?.reason ??
       (world.requiredMethods.length && judged
@@ -570,7 +581,7 @@ export async function runScenario(
           (e) => e.agent === judged.agent && e.kind === "check" && e.reason === judgedReason,
         )?.check;
     const actual =
-      !firstFailure && path.expect && !world.requiredMethods.length
+      !divergence && path.expect && !world.requiredMethods.length
         ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
         : judged?.outcome && ((orderedBranch && firstFailure) || judgedReason)
           ? {
@@ -604,8 +615,10 @@ export async function runScenario(
       actual,
       expected,
       consequences,
+      ...(missingDecision ? { note: "branch ended before the next main-path decision" } : {}),
       ...(noDivergence ? { note: "branch does not diverge from the main path" } : {}),
       disagrees:
+        missingDecision ||
         (noDivergence && !("onlyUnder" in path && path.onlyUnder)) ||
         (!!expected &&
           ((actual?.outcome === "refuse" ? "stop" : actual?.outcome) !==
@@ -1694,6 +1707,27 @@ async function runPath(
           ),
         )
       : [];
+    const ownList = scenario.trust.ownLists[agent.id];
+    const pinnedOnly = configuration.id === "trust-pinned-list";
+    // Provision the fictional offline agent with an expiring snapshot of its pinned parties'
+    // register entries. The pins and the registers supply different facts.
+    const pinnedRegistrations = pinnedOnly
+      ? scenario.trust.root?.delegates.flatMap(({ entries, answerTtlMs }) =>
+          entries.flatMap((entry) => {
+            const pin = ownList?.find(({ party }) => party === entry.party);
+            return pin?.expiresAt && !pin.block
+              ? [
+                  {
+                    ...entry,
+                    expiresAt: new Date(
+                      Math.min(Date.parse(pin.expiresAt), now().getTime() + answerTtlMs),
+                    ).toISOString(),
+                  },
+                ]
+              : [];
+          }),
+        )
+      : undefined;
     const gate: GateContext = {
       ...(agentRegistry
         ? {
@@ -2117,9 +2151,10 @@ async function runPath(
       resolver: new TrustResolver({
         principal: name(cast.get(agent.id).identity.party),
         trust,
-        ownList: scenario.trust.ownLists[agent.id],
+        ownList,
         root: scenario.trust.root,
-        ownListOnly: configuration.id === "trust-pinned-list",
+        ownListOnly: pinnedOnly,
+        pinnedRegistrations,
         name,
         ...(scenario.trust.answeredRegisters?.[agent.id]
           ? { answeredRegisters: scenario.trust.answeredRegisters[agent.id] }
@@ -2489,7 +2524,7 @@ async function runPath(
           id: "urn:scenario:host",
           bindsParameters: true,
           purposeScoped: true,
-          publicationRecipient: (params) => parties.get(String(params.host))?.identity,
+          publicationRecipient: (params) => parties.get(String(params.toObject().host))?.identity,
           execute: async (key: string, params: JsonObject) => {
             const items = Array.isArray(params.items) ? params.items.map(String) : [];
             const shelf = hosted.get(String(params.host)) ?? new Map<string, string[]>();
@@ -3112,14 +3147,29 @@ async function runPath(
         break;
       }
       case "record-segment": {
+        const conversation = template<string>(step.conversation);
+        let terminal = step.terminal
+          ? template<{ seq: number; hash: string; receipt: string }>(step.terminal)
+          : undefined;
+        if (step.witness) {
+          if (terminal || step.anchor)
+            throw Error(`step ${step.id}: expected a whole record witness`);
+          const head = runtime.recordHead();
+          const actor = cast.get(step.agent).identity;
+          const receipt = await required(runtimes.get(step.witness)).witnessRecordHead({
+            ...head,
+            actor: actor.actor,
+            party: required(actor.party),
+            interval: { conversation, from: LEDGER_GENESIS },
+          });
+          terminal = { ...head, receipt: receipt.jws };
+        }
         const segment = await runtime.exportRecord(
-          template<string>(step.conversation),
+          conversation,
           step.anchor
             ? template<{ seq: number; hash: string; receipt: string }>(step.anchor)
             : undefined,
-          step.terminal
-            ? template<{ seq: number; hash: string; receipt: string }>(step.terminal)
-            : undefined,
+          terminal,
         );
         if (step.attack) {
           const payload = decodeCompactPayload(segment.jws) as unknown as {
@@ -3133,7 +3183,7 @@ async function runPath(
             payload,
           );
         }
-        result = segment;
+        result = { ...segment, ...(terminal ? { terminal } : {}) };
         break;
       }
       case "offgate-copy": {
@@ -3198,16 +3248,6 @@ async function runPath(
           decodeCompactPayload(template<string>(step.segment)) as { anchor?: { seq?: unknown } }
         ).anchor?.seq;
         const recordFrom = typeof anchored === "number" ? anchored : undefined;
-        const params = {
-          ...(recordFrom !== undefined ? { recordFrom } : {}),
-          evidence: recordFrom === undefined ? runtime.recordDisclosures() : [],
-          operation: step.type === "forum-claim" ? "submit" : "answer",
-          request: await signStatement(
-            actor.actorKey,
-            step.type === "forum-claim" ? "awp-forum-claim+jws" : "awp-forum-answer+jws",
-            request,
-          ),
-        };
         const operation =
           step.type === "forum-claim" ? "urn:op:forum-claim" : "urn:op:forum-answer";
         const recipient =
@@ -3218,6 +3258,41 @@ async function runPath(
                 service,
               )
             : service.identity;
+        const purpose = "urn:purpose:redress";
+        const proofGrants = [];
+        if (step.proofOwners?.length && recordFrom !== undefined) {
+          const inventory = await runtime.recordReleaseProofs(
+            recordSegmentSchema.parse(decodeCompactPayload(request.segment)),
+            "agreement" in request ? request.agreement : undefined,
+          );
+          for (const { digest, issuer } of inventory?.proofs ?? []) {
+            const owner = step.proofOwners
+              .map((name) => cast.get(name))
+              .find((party) => party.identity.party === issuer);
+            if (owner)
+              proofGrants.push(
+                await signStatement(owner.ownerKey, RECORD_PROOF_GRANT_TYP, {
+                  issuer,
+                  digest,
+                  holder: actor.identity.actor,
+                  recipient,
+                  purpose,
+                  validUntil: new Date(now().getTime() + 3_600_000).toISOString(),
+                }),
+              );
+          }
+        }
+        const params = {
+          ...(proofGrants.length ? { proofGrants } : {}),
+          ...(recordFrom !== undefined ? { recordFrom } : {}),
+          evidence: recordFrom === undefined ? runtime.recordDisclosures() : [],
+          operation: step.type === "forum-claim" ? "submit" : "answer",
+          request: await signStatement(
+            actor.actorKey,
+            step.type === "forum-claim" ? "awp-forum-claim+jws" : "awp-forum-answer+jws",
+            request,
+          ),
+        };
         result = await runtime.runTask({
           taskId: `urn:scenario:${scenario.id}:${step.id}`,
           kind: "record-release",

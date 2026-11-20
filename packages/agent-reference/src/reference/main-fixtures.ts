@@ -174,7 +174,7 @@ export function mainTrustRoot(at: string): TrustRoot {
   const lender = (party: Iri, slug: string, authorizedFor: Iri[], claimTypes: string[]) =>
     ({
       party,
-      authorizedFor,
+      authorizedFor: [...authorizedFor, "urn:role:mortgage-lending"],
       claimTypes,
       status: "authorized",
       id: `${AWP}fixture/sector-register/${slug}#${day}`,

@@ -451,6 +451,7 @@ const step = z.discriminatedUnion("type", [
     // Brief 31 item 4: export only the entries after a witnessed anchor (a record-anchor step).
     anchor: json.optional(),
     terminal: json.optional(),
+    witness: slug.optional(),
   }),
   z.strictObject({
     ...base,
@@ -474,10 +475,17 @@ const step = z.discriminatedUnion("type", [
     // The conversation whose recorded agreement the claim names by digest.
     agreement: json.optional(),
     answerThrough: json.optional(),
+    proofOwners: z.array(slug).optional(),
     // Brief 31 §2.9: natural persons the claim names besides the claimant.
     persons: z.array(iri).min(1).optional(),
   }),
-  z.strictObject({ ...base, type: z.literal("forum-answer"), case: iri, segment: json }),
+  z.strictObject({
+    ...base,
+    type: z.literal("forum-answer"),
+    case: iri,
+    segment: json,
+    proofOwners: z.array(slug).optional(),
+  }),
   z.strictObject({ ...base, type: z.literal("forum-audit") }),
   z.strictObject({ ...base, type: z.literal("forum-decision"), case: iri }),
   // Brief 31 §2.9: an agent's outbound gate distributes signed items it holds to a host with

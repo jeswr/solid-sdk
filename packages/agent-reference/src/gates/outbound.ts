@@ -193,6 +193,7 @@ export class OutboundGate {
 
   private setAction(intent: ActionIntent): void {
     const { action, target, operation, conversation, recipient, purpose, parameters } = intent;
+    const { evidence, ...otherParameters } = parameters;
     this.activeAction = {
       actionDigest: actionDigest(intent),
       actionScope: {
@@ -202,7 +203,10 @@ export class OutboundGate {
         conversation,
         recipient,
         purpose,
-        evidence: Array.isArray(parameters.evidence) ? parameters.evidence.map(String) : [],
+        evidence: Array.isArray(evidence) ? evidence.map(String) : [],
+        ...(Array.isArray(evidence)
+          ? { otherParametersDigest: digestOf({ ...intent, parameters: otherParameters }) }
+          : {}),
       },
     };
   }
@@ -314,7 +318,7 @@ export class OutboundGate {
     outcome: OutboundOutcome,
     caption: string,
     reason?: string,
-    release?: Pick<TraceEventInput, "messageId" | "effectRelease">,
+    release?: Pick<TraceEventInput, "messageId" | "messageDigest" | "effectRelease">,
   ): void {
     this.emit({
       part: "outbound-gate",
@@ -879,7 +883,7 @@ export class OutboundGate {
             ctx.taskId ?? scope.conversation,
             this.deps.now(),
             this.deps.identity.actor,
-            (label) => this.recipientAllows(scope.recipient, scope.operation, label),
+            (label) => this.recipientAllows(scope.recipient, label),
           ),
         mandate: () =>
           decision.outcome === "deny" || decision.outcome === "indeterminate"
@@ -1223,17 +1227,18 @@ export class OutboundGate {
       const context = this.checkEmailContext(intent, email.text, email.approved);
       verdicts.push(...context);
       this.emailContextVerdicts = context;
-      if (context.some((verdict) => verdict.verdict === "fail"))
+      const failed = context.find((verdict) => verdict.verdict === "fail");
+      if (failed)
         return {
           outcome: "stop",
           verdicts,
-          decision: { ...decision, outcome: "deny", reason: "prohibited" },
+          decision: { ...decision, outcome: "deny", reason: failed.reason ?? "prohibited" },
         };
     }
-    // Without a configuration (the pilot's own callers) the gate adds no checks of its own.
-    const blocked = ctx.configuration
-      ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
-      : undefined;
+    const blocked =
+      ctx.configuration || this.deps.recordRelease?.(intent)
+        ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
+        : undefined;
     if (blocked) {
       this.decide("stop", "The action is stopped; nothing leaves.", blocked);
       return {
@@ -1758,13 +1763,14 @@ export class OutboundGate {
     );
   }
 
-  private recipientAllows(party: string | undefined, operation: string, label: string): boolean {
+  private recipientAllows(party: string | undefined, role: string): boolean {
     return (
       !!party &&
       this.deps.gate.resolver?.resolveRecipient({
         party,
-        task: operation,
-        taskLabel: label,
+        task: role,
+        taskLabel: idWords(role, this.name),
+        registeredRole: true,
         at: this.deps.now(),
       }).outcome === "accepted"
     );
@@ -1978,7 +1984,7 @@ export class OutboundGate {
         ...(scope.recipient ? { recipient: scope.recipient } : {}),
         ...(typeof p.retentionDays === "number" ? { retentionDays: p.retentionDays } : {}),
         at: this.deps.now(),
-        recipientAllowed: (label) => this.recipientAllows(scope.recipient, scope.operation, label),
+        recipientAllowed: (label) => this.recipientAllows(scope.recipient, label),
       });
       return { id: String(id), fact, terms, t };
     });
@@ -1991,13 +1997,7 @@ export class OutboundGate {
       let text = t.text;
       let reason = t.reason;
       if (verdict === "pass" && terms?.recipientMustBe && scope.recipient) {
-        const r = this.deps.gate.resolver?.resolveRecipient({
-          party: scope.recipient,
-          task: scope.operation,
-          taskLabel: terms.recipientMustBe.task,
-          at: this.deps.now(),
-        });
-        if (r?.outcome !== "accepted") {
+        if (!this.recipientAllows(scope.recipient, terms.recipientMustBe.task)) {
           verdict = "fail";
           reason = "not-authorised";
           text = `Its terms allow sharing only with ${terms.recipientMustBe.label}; ${this.name(scope.recipient)} is not shown to be one.`;
@@ -2738,8 +2738,7 @@ export class OutboundGate {
           recipient: intent.recipient,
           ...(retentionDays === undefined ? {} : { retentionDays }),
           at: this.deps.now(),
-          recipientAllowed: (label) =>
-            this.recipientAllows(intent.recipient, intent.operation, label),
+          recipientAllowed: (label) => this.recipientAllows(intent.recipient, label),
         });
         this.verdict(
           verdicts,
@@ -2816,18 +2815,9 @@ export class OutboundGate {
           recipient: intent.recipient,
           ...(retentionDays === undefined ? {} : { retentionDays }),
           at: this.deps.now(),
-          recipientAllowed: (label) =>
-            this.recipientAllows(intent.recipient, intent.operation, label),
+          recipientAllowed: (label) => this.recipientAllows(intent.recipient, label),
         });
-        let termsOK = terms.verdict === "pass";
-        if (termsOK && item.terms?.recipientMustBe)
-          termsOK =
-            this.deps.gate.resolver?.resolveRecipient({
-              party: intent.recipient ?? "",
-              task: intent.operation,
-              taskLabel: item.terms.recipientMustBe.task,
-              at: this.deps.now(),
-            }).outcome === "accepted";
+        const termsOK = terms.verdict === "pass";
         this.verdict(
           verdicts,
           digest,
@@ -3020,6 +3010,7 @@ export class OutboundGate {
         purpose: scope.purpose,
         recipient: scope.recipient,
         at: this.deps.now(),
+        recipientAllowed: (role) => this.recipientAllows(scope.recipient, role),
       });
       const explicitlyProhibits = (source: ItemTerms | undefined, target: string): boolean => {
         if (!source) return false;
@@ -3045,12 +3036,26 @@ export class OutboundGate {
       const value = item.statement?.value;
       const literal =
         value === undefined ? undefined : typeof value === "string" ? value : canonicalJson(value);
-      const prohibited =
-        approved &&
+      const repeatsItem =
         literal !== undefined &&
         literal.length >= 4 &&
-        text.toLowerCase().includes(literal.toLowerCase()) &&
-        explicitlyProhibits(item.terms, item.id);
+        text.toLowerCase().includes(literal.toLowerCase());
+      const missingRole =
+        !!item.terms?.recipientMustBe &&
+        !this.recipientAllows(scope.recipient, item.terms.recipientMustBe.task);
+      const prohibited = approved && repeatsItem && explicitlyProhibits(item.terms, item.id);
+      if (repeatsItem && missingRole) {
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "fail",
+          `The email repeats ${item.label}'s value and the recipient lacks the registration its terms require.`,
+          { reason: "not-authorised" },
+        );
+        this.decide("stop", "The required recipient registration is missing.", "not-authorised");
+        return verdicts;
+      }
       if (prohibited) {
         this.verdict(
           verdicts,
@@ -3190,7 +3195,7 @@ export class OutboundGate {
       "go",
       `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
       undefined,
-      { messageId: envelope.id },
+      { messageId: envelope.id, messageDigest: digestOf(message) },
     );
     if (opts.intent) this.deps.consumeApproval?.(opts.intent);
     this.emit({

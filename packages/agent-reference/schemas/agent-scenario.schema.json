@@ -9368,6 +9368,10 @@
               },
               "terminal": {
                 "$ref": "#/$defs/__schema0"
+              },
+              "witness": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
               }
             },
             "required": [
@@ -9504,6 +9508,13 @@
               "answerThrough": {
                 "$ref": "#/$defs/__schema0"
               },
+              "proofOwners": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]*$"
+                }
+              },
               "persons": {
                 "minItems": 1,
                 "type": "array",
@@ -9558,6 +9569,13 @@
               "case": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "proofOwners": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]*$"
+                }
               }
             },
             "required": [

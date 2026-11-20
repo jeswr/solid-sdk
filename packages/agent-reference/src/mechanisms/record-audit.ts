@@ -88,6 +88,7 @@ export async function auditReleases(
   let checks: string[] = [];
   for (const entry of entries) {
     const record = entry.record as Record<string, unknown>;
+    if (record.producer === "core") continue;
     if (record.type === "approval" && typeof record.id === "string")
       approvals.set(record.id, entry);
     if (record.type === "approval-consumed" && typeof record.id === "string") spent.add(record.id);

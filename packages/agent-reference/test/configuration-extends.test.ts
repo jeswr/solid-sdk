@@ -119,3 +119,29 @@ it("refuses C3 configurations that rewrite a baseline operation or add a blanket
     ).rejects.toThrow("C3 refused");
   }
 });
+
+it("refuses DID aliases for policy identifiers and refuses two parties sharing one DID", async () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const id = "identity-did";
+  const original = scenario.configurations.find((entry) => entry.id === id)!;
+  expect(patchDifferences(scenario, original, profile)).toEqual([]);
+  for (const [from, to] of [
+    [profile.operations[0]!.id, "did:web:forged-operation.example"],
+    [scenario.trust.root!.id, "did:web:forged-register.example"],
+    ["https://northbank.example/#org", "did:web:sam.identity.example"],
+    ["https://northbank.example/#org", "did:web:sam.identity.example:.well-known"],
+  ] as const) {
+    const changed = withEntry(scenario, id, {
+      world: {
+        ...original.world,
+        identityNames: {
+          ...(original.world.identityNames as Record<string, string>),
+          [from]: to,
+        },
+      },
+    });
+    await expect(runScenario(profile, changed.scenario, { configuration: id })).rejects.toThrow(
+      /C3 refused.*identityNames/,
+    );
+  }
+});

@@ -47,7 +47,7 @@ export interface OwnListEntry {
 
 export interface RegisterEntry {
   readonly party: Iri;
-  /** What the register says the party is authorized for (operation ids). */
+  /** Operation or regulated-role IDs authorized by the register. */
   readonly authorizedFor: readonly Iri[];
   /** Kinds of claim the register says the party is an authority for (`x.*` prefixes allowed). */
   readonly claimTypes?: readonly string[];
@@ -80,6 +80,8 @@ export interface TrustResolverOptions {
   readonly root?: TrustRoot;
   readonly name: (iri: string | undefined) => string;
   readonly ownListOnly?: boolean;
+  /** Previously accepted register entries available offline, with a fixed expiry. */
+  readonly pinnedRegistrations?: readonly (RegisterEntry & { readonly expiresAt: string })[];
   /**
    * Brief 31 §2.2: registers the root delegates to whose entries this agent takes only from
    * signed register answers it has admitted, never from a local table.
@@ -282,7 +284,13 @@ export class TrustResolver {
   }
 
   /** May `party` receive this for `task` (an operation id)? Own list, then root, then register. */
-  resolveRecipient(input: { party: Iri; task: Iri; taskLabel: string; at: string }): Resolution {
+  resolveRecipient(input: {
+    party: Iri;
+    task: Iri;
+    taskLabel: string;
+    at: string;
+    registeredRole?: boolean;
+  }): Resolution {
     const { name } = this.opts;
     const question = `Is ${name(input.party)} a party I can send ${input.taskLabel} to?`;
     const path: PathStep[] = [];
@@ -296,6 +304,7 @@ export class TrustResolver {
       return { question, path, answer: "Blocked.", outcome: "blocked", checkedAt: input.at };
     }
     if (
+      !input.registeredRole &&
       own?.tasks.includes(input.task) &&
       (!this.pinnedOnly || !own.expiresAt || Date.parse(input.at) < Date.parse(own.expiresAt))
     ) {
@@ -319,6 +328,36 @@ export class TrustResolver {
         ? `${name(input.party)} is listed, but not for ${input.taskLabel}.`
         : `No entry for ${name(input.party)}.`,
     });
+    if (input.registeredRole && this.pinnedOnly) {
+      const registration = this.opts.pinnedRegistrations?.find(
+        (entry) => entry.party === input.party && entry.authorizedFor.includes(input.task),
+      );
+      if (!registration)
+        return {
+          question,
+          path,
+          answer: "There is no pinned registration for this role.",
+          outcome: "no-route",
+          checkedAt: input.at,
+        };
+      const valid =
+        registration.status === "authorized" &&
+        Date.parse(input.at) < Date.parse(registration.expiresAt);
+      path.push({
+        at: this.ownListName,
+        kind: "own-list",
+        says: `The retained registration for ${input.taskLabel} is ${valid ? "current" : "unavailable"}.`,
+      });
+      return {
+        question,
+        path,
+        answer: valid ? `Accepted, for ${input.taskLabel} only.` : "Registration unavailable.",
+        outcome: valid ? "accepted" : "not-accepted",
+        checkedAt: input.at,
+        expires: registration.expiresAt,
+        rule: { id: registration.id },
+      };
+    }
     const root = this.pinnedOnly ? undefined : this.opts.root;
     if (!root) {
       return {
@@ -330,7 +369,11 @@ export class TrustResolver {
       };
     }
     const register = this.delegates(root, input.at).find((r) =>
-      r.entries.some((e) => e.party === input.party),
+      r.entries.some(
+        (e) =>
+          e.party === input.party &&
+          (!input.registeredRole || e.authorizedFor.includes(input.task)),
+      ),
     );
     if (!register) {
       path.push({
@@ -354,7 +397,10 @@ export class TrustResolver {
     const entry = register.entries.find((e) => e.party === input.party) as RegisterEntry;
     const expires =
       entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString();
-    const ok = entry.status === "authorized" && entry.authorizedFor.includes(input.task);
+    const ok =
+      entry.status === "authorized" &&
+      (!entry.expiresAt || Date.parse(input.at) < Date.parse(entry.expiresAt)) &&
+      entry.authorizedFor.includes(input.task);
     path.push({
       at: register.name,
       kind: "register",

@@ -10,7 +10,7 @@ import { LocalForum, RECORD_LIMITS } from "../src/mechanisms/forum.js";
 import { signStatement, TYP, verifyStatement } from "../src/mechanisms/statements.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
-import { MemoryLedger } from "../src/store/ledger.js";
+import { LEDGER_GENESIS, MemoryLedger } from "../src/store/ledger.js";
 import { MemoryStateStore } from "../src/store/state.js";
 
 const AT = "2026-11-13T09:00:00.000Z";
@@ -125,16 +125,36 @@ async function fixture(attack = "none") {
         required(entries[0]).entry,
       );
     if (attack === "gap" && actor === 2) entries.splice(1, 1);
+    if (attack === "truncated" && actor === 2) entries.pop();
     if (attack === "tamper" && actor === 2)
       Object.assign(required(entries[0]).entry.record, { digest: "sha-256:tampered" });
-    return signStatement(required(keys[actor]), "awp-record-segment+jws", {
-      type: "RecordSegment",
-      actor: `urn:actor:${actor}`,
-      party: `urn:party:${actor}`,
-      conversation: common.conversation,
-      entries,
-      messages: archived,
-    });
+    const peer = actor === 1 ? 2 : 1;
+    const head = ledger.head();
+    const terminal = {
+      ...head,
+      receipt: await signStatement(required(keys[peer]), "awp-record-anchor+jws", {
+        type: "RecordAnchorReceipt",
+        actor: `urn:actor:${peer}`,
+        party: `urn:party:${peer}`,
+        subject: `urn:actor:${actor}`,
+        subjectParty: `urn:party:${actor}`,
+        ...head,
+        at: AT,
+        interval: { conversation: common.conversation, from: LEDGER_GENESIS },
+      }),
+    };
+    return {
+      terminal,
+      jws: await signStatement(required(keys[actor]), "awp-record-segment+jws", {
+        type: "RecordSegment",
+        actor: `urn:actor:${actor}`,
+        party: `urn:party:${actor}`,
+        conversation: common.conversation,
+        ...(attack === "missing-terminal" ? {} : { terminal }),
+        entries,
+        messages: archived,
+      }),
+    };
   }
   const a = await segment(1),
     b = await segment(2);
@@ -145,7 +165,8 @@ async function fixture(attack = "none") {
     party: "urn:party:1",
     respondent: "urn:party:2",
     conversation: common.conversation,
-    segment: a,
+    segment: a.jws,
+    ...(attack === "missing-answer-terminal" ? {} : { answerThrough: b.terminal }),
     allegation: "records-differ",
     at: AT,
   });
@@ -157,7 +178,7 @@ async function fixture(attack = "none") {
         actor: "urn:actor:2",
         party: "urn:party:2",
         request: forum.requestFor("urn:case"),
-        segment: b,
+        segment: b.jws,
         at,
       }),
     );
@@ -192,6 +213,7 @@ it("verifies each segment independently and identifies tampering, sequence gaps,
   for (const attack of [
     "none",
     "gap",
+    "truncated",
     "tamper",
     "one-side",
     "citation",
@@ -207,6 +229,7 @@ it("verifies each segment independently and identifies tampering, sequence gaps,
       {
         none: "evidence-missing",
         gap: "record-unavailable",
+        truncated: "record-unavailable",
         tamper: "record-unavailable",
         "one-side": "record-unavailable",
         citation: "record-unavailable",
@@ -257,3 +280,12 @@ function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("missing test fixture");
   return value;
 }
+
+it.each([
+  "missing-terminal",
+  "missing-answer-terminal",
+])("requires whole-record terminal commitments (%s)", async (attack) => {
+  const f = await fixture(attack);
+  expect(await f.forum.submit(f.claim)).toMatchObject({ ok: false, reason: "record-unavailable" });
+  expect(f.forum.requestFor("urn:case")).toBeFalsy();
+});

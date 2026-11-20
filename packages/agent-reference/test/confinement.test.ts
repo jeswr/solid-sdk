@@ -265,7 +265,7 @@ it("judges agent gate runs only: a mechanism's events are skipped, an agent's mi
     sam,
     { id: "forum", runs: "agent" as const },
   ]).join("\n");
-  expect(asAgent).toMatch(/forum\|outbound-gate records checks without a decision/);
+  expect(asAgent).toMatch(/forum\|outbound-gate\|unbound records checks without a decision/);
 });
 
 it("rejects an approval for a different digest and a message with no gate run", () => {
@@ -282,6 +282,7 @@ it("rejects an approval for a different digest and a message with no gate run", 
       verdict: "pass" as const,
       check,
       gateRun: 2,
+      actionDigest: digest,
     })),
     {
       ...shared,
@@ -290,6 +291,7 @@ it("rejects an approval for a different digest and a message with no gate run", 
       kind: "decision",
       outcome: "go",
       messageId: "urn:message",
+      messageDigest: "sha-256:message",
       actionDigest: digest,
       gateRun: 2,
     },
@@ -299,7 +301,9 @@ it("rejects an approval for a different digest and a message with no gate run", 
       part: "transport",
       kind: "message-out",
       messageId: "urn:message",
+      actionDigest: digest,
       gateRun: 2,
+      packet: { layers: { header: { digest: "sha-256:message" } } } as TraceEvent["packet"],
     },
   ];
   expect(
@@ -348,6 +352,28 @@ it("rejects an approval for a different digest and a message with no gate run", 
     addedSegmentDifferences(
       {
         events: [...prefix, { ...approval, actionDigest: "sha-256:unrelated" }, ...complete],
+      },
+      entry,
+    ),
+  ).toContainEqual(expect.stringContaining("without a later approved pass"));
+  const copied = {
+    ...complete.at(-1)!,
+    packet: {
+      layers: { header: { digest: "sha-256:different-payload" } },
+    } as TraceEvent["packet"],
+  };
+  expect(
+    addedSegmentDifferences(
+      { events: [...prefix, approval, ...complete.slice(0, -1), copied] },
+      entry,
+    ),
+  ).toContainEqual(expect.stringContaining("message-out has no matching gate run"));
+
+  const earlier = complete.find(({ check }) => check === "limits-approval")!;
+  expect(
+    addedSegmentDifferences(
+      {
+        events: [...prefix, earlier, approval, ...complete.filter((e) => e !== earlier)],
       },
       entry,
     ),

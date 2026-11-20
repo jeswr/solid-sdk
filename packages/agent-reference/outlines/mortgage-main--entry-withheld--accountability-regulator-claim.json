@@ -4809,6 +4809,38 @@
       "agent": "sams-agent",
       "part": "outbound-gate",
       "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
       "check": "limits-approval",
       "verdict": "ask-principal",
       "reason": "approval-required"
@@ -4848,6 +4880,38 @@
       "check": "disclosure",
       "verdict": "pass",
       "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "sams-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
     },
     {
       "agent": "sams-agent",
@@ -4963,6 +5027,14 @@
       "agent": "lender",
       "part": "outbound-gate",
       "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
       "check": "limits-approval",
       "verdict": "ask-principal",
       "reason": "approval-required"
@@ -5002,6 +5074,14 @@
       "check": "disclosure",
       "verdict": "pass",
       "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "lender",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
     },
     {
       "agent": "lender",

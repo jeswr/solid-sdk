@@ -523,6 +523,7 @@
       "id": "claimant-record",
       "agent": "person-agent",
       "type": "record-segment",
+      "witness": "owner-agent",
       "conversation": {
         "$ref": "steps.restricted-offer.conversation"
       }
@@ -531,6 +532,7 @@
       "id": "respondent-record",
       "agent": "owner-agent",
       "type": "record-segment",
+      "witness": "person-agent",
       "conversation": {
         "$ref": "steps.restricted-offer.conversation"
       }
@@ -546,6 +548,9 @@
       "respondent": "owner",
       "segment": {
         "$ref": "steps.claimant-record.jws"
+      },
+      "answerThrough": {
+        "$ref": "steps.respondent-record.terminal"
       },
       "allegation": "onward-leak",
       "observation": {

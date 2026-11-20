@@ -137,6 +137,7 @@
             {
               "party": "https://northbank.example/#org",
               "authorizedFor": [
+                "urn:role:mortgage-lending",
                 "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                 "https://w3id.org/jeswr/awp#op/valuation-order"
               ],
@@ -292,7 +293,7 @@
           ]
         },
         "recipientMustBe": {
-          "task": "mortgage lending",
+          "task": "urn:role:mortgage-lending",
           "label": "a regulated lender"
         }
       },
@@ -390,7 +391,7 @@
           ]
         },
         "recipientMustBe": {
-          "task": "mortgage lending",
+          "task": "urn:role:mortgage-lending",
           "label": "a regulated lender"
         }
       },

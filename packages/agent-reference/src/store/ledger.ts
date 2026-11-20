@@ -59,6 +59,8 @@ export interface LedgerHead {
   readonly hash: string;
 }
 
+export const LEDGER_GENESIS: LedgerHead = Object.freeze({ seq: 0, hash: GENESIS });
+
 export interface EvidenceLedger {
   /** The writer's head, maintained independently of entries supplied to a reader. */
   head?(): LedgerHead;
@@ -179,6 +181,7 @@ export class FileLedger implements EvidenceLedger {
   }
 
   private writeLine(entry: LedgerEntry): void {
+    const existed = existsSync(this.path);
     appendFileSync(this.path, `${JSON.stringify(entry)}\n`, { encoding: "utf8" });
     const fd = openSync(this.path, "r");
     try {
@@ -186,6 +189,7 @@ export class FileLedger implements EvidenceLedger {
     } finally {
       closeSync(fd);
     }
+    if (!existed) fsyncDir(dirname(this.path));
     this.last = entry;
     this.currentCount++;
   }

@@ -38,6 +38,18 @@ it("files the fee claim with the ombudsman the admitted register answer names an
     [],
   );
 
+  const terms = main.trace.events.filter(
+    (event) => event.addedBy === id && event.check === "data-terms",
+  );
+  for (const label of [
+    "Signed representation",
+    "Signed agreement offer",
+    "Signed agreement acceptance",
+  ])
+    expect(terms.some((event) => event.verdict === "pass" && event.caption.startsWith(label))).toBe(
+      true,
+    );
+
   // The forum decides on the lender-signed fee statement against the agreed terms.
   const decision = main.trace.events.find(
     (event) => event.agent === "forum" && event.kind === "decision",
@@ -74,3 +86,44 @@ it("sends no claim when the admitted register answer names a forum this world do
     /dispute route urn:fictional:elsewhere is not a forum this world hosts/,
   );
 }, 900_000);
+
+it("stops records missing consent for the signed agreement acceptance or representation proof", async () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const entry = scenario.configurations.find((candidate) => candidate.id === id)!;
+  scenario.branches = [];
+  entry.world.branches = [
+    {
+      id: "ungranted-acceptance",
+      what: "The claimant lacks permission to release the agreement acceptance.",
+      onlyUnder: id,
+      change: {
+        stopAfter: "file-claim",
+        script: { "file-claim": { proofOwners: ["north-agent"] } },
+      },
+      expect: { outcome: "stop", check: "evidence", reason: "evidence-invalid" },
+      outline: [],
+    },
+    {
+      id: "ungranted-representation",
+      what: "The respondent lacks permission to release the representation proof.",
+      onlyUnder: id,
+      change: { stopAfter: "answer", script: { answer: { proofOwners: [] } } },
+      expect: { outcome: "stop", check: "evidence", reason: "evidence-invalid" },
+      outline: [],
+    },
+  ];
+  const [, claimant, respondent] = await runScenario(profile, scenario, { configuration: id });
+  for (const [path, agent] of [
+    [claimant, "sams-agent"],
+    [respondent, "lender"],
+  ] as const) {
+    const stop = path?.trace?.events.findLast(
+      (event) => event.kind === "decision" && event.agent === agent,
+    );
+    expect(stop).toMatchObject({
+      part: "outbound-gate",
+      outcome: "stop",
+      reason: "evidence-invalid",
+    });
+  }
+}, 300_000);

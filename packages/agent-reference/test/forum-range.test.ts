@@ -8,7 +8,7 @@ import { LocalForum, RECORD_LIMITS } from "../src/mechanisms/forum.js";
 import { signStatement, TYP, verifyStatement } from "../src/mechanisms/statements.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
-import { MemoryLedger, verifyLedgerRange } from "../src/store/ledger.js";
+import { LEDGER_GENESIS, MemoryLedger, verifyLedgerRange } from "../src/store/ledger.js";
 import { MemoryStateStore } from "../src/store/state.js";
 
 const AT = "2026-11-13T09:00:00.000Z";
@@ -191,7 +191,7 @@ async function fixture(attack: Attack) {
         at: AT,
         interval: {
           conversation: common.conversation,
-          from: { seq: anchor.seq, hash: anchor.hash },
+          from: ranged ? { seq: anchor.seq, hash: anchor.hash } : LEDGER_GENESIS,
         },
       }),
     };
@@ -202,7 +202,8 @@ async function fixture(attack: Attack) {
         actor: `urn:actor:${actor}`,
         party: `urn:party:${actor}`,
         conversation: common.conversation,
-        ...(ranged ? { anchor, terminal } : {}),
+        ...(ranged ? { anchor } : {}),
+        terminal,
         entries,
         messages: archived,
       }),
@@ -218,7 +219,7 @@ async function fixture(attack: Attack) {
     respondent: "urn:party:2",
     conversation: common.conversation,
     segment: claimant.signed,
-    ...(attack === "whole" ? {} : { answerThrough: respondent.terminal }),
+    answerThrough: respondent.terminal,
     ...(fee ? { observation, agreement } : {}),
     allegation: fee ? "fee-not-in-terms" : "records-differ",
     at: AT,

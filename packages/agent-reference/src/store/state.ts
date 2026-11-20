@@ -99,6 +99,12 @@ export type WireMessage =
  * A concluded effect whose receipt is owed has `receiptSent: false` until the receipt is
  * in the outbox — both are persisted in the same snapshot.
  */
+export interface EmailChallenge {
+  readonly nonce: string;
+  readonly to: string;
+  readonly purpose: Iri;
+}
+
 export interface EffectState {
   readonly key: string;
   readonly adapter: string;
@@ -115,6 +121,7 @@ export interface EffectState {
   readonly attempts: number;
   readonly receiptSent: boolean;
   readonly uncertainReported?: boolean;
+  readonly emailChallenge?: EmailChallenge;
   readonly startedAt: string;
   readonly endedAt?: string;
 }
@@ -149,6 +156,8 @@ export interface MandateRevocation {
 
 export interface RuntimeState {
   ledgerAuditHead?: import("./ledger.js").LedgerHead;
+  auditApprovalProofs: Record<Iri, string>;
+  emailChallenges: Record<string, string>;
   duties: import("../runtime/duties.js").DutyState;
   recordMessages: Record<
     string,
@@ -249,6 +258,8 @@ export function emptyState(): RuntimeState {
     duties: { transfers: [], incoming: [], work: {} },
     precedenceHolds: {},
     recordMessages: {},
+    auditApprovalProofs: {},
+    emailChallenges: {},
     conversations: {},
     seen: {},
     outbox: {},

@@ -399,6 +399,7 @@
             {
               "party": "https://northbank.example/#org",
               "authorizedFor": [
+                "urn:role:mortgage-lending",
                 "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                 "https://w3id.org/jeswr/awp#op/valuation-order"
               ],
@@ -412,6 +413,7 @@
             {
               "party": "https://harbourbank.example/#org",
               "authorizedFor": [
+                "urn:role:mortgage-lending",
                 "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
               ],
               "claimTypes": [
@@ -603,7 +605,7 @@
           ]
         },
         "recipientMustBe": {
-          "task": "mortgage lending",
+          "task": "urn:role:mortgage-lending",
           "label": "a regulated lender"
         }
       },
@@ -701,7 +703,7 @@
           ]
         },
         "recipientMustBe": {
-          "task": "mortgage lending",
+          "task": "urn:role:mortgage-lending",
           "label": "a regulated lender"
         }
       },
@@ -13925,6 +13927,13 @@
               "recipient": "https://northbank.example/#org",
               "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
               "parameters": {
+                "termsDigest": {
+                  "$ref": "steps.application-arrives.outbound.0.message.body.termsDigest"
+                },
+                "onward": ["https://underwriter.example/#org"],
+                "retentionDays": {
+                  "$ref": "steps.application-arrives.outbound.0.message.body.terms.retentionDays"
+                },
                 "evidence": [
                   "urn:fictional:payroll-national-insurance",
                   "urn:awp:evidence:harbourbank-deposit-2026-10",
@@ -28468,7 +28477,7 @@
           {
             "id": "mailbox-reply-as-evidence",
             "onlyUnder": "identity-email-endpoint",
-            "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. Prose from a mailbox is not signed evidence, so the evidence check stops it as evidence-invalid; the registered reason was structured-form-required.",
+            "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose.",
             "change": {
               "script": {
                 "forward-reply-as-income": {
@@ -28510,7 +28519,7 @@
             "expect": {
               "outcome": "stop",
               "check": "evidence",
-              "reason": "evidence-invalid"
+              "reason": "structured-form-required"
             },
             "outline": [],
             "catalogueExpected": {
@@ -28606,6 +28615,7 @@
             "kind": "register.entry",
             "value": {
               "authorizedFor": [
+                "urn:role:mortgage-lending",
                 "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
                 "https://w3id.org/jeswr/awp#op/valuation-order"
               ],
@@ -28643,6 +28653,7 @@
             "kind": "register.entry",
             "value": {
               "authorizedFor": [
+                "urn:role:mortgage-lending",
                 "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
               ],
               "claimTypes": [
@@ -30747,7 +30758,7 @@
                 ]
               },
               "recipientMustBe": {
-                "task": "mortgage lending",
+                "task": "urn:role:mortgage-lending",
                 "label": "a regulated lender"
               }
             },
@@ -30846,7 +30857,7 @@
                 ]
               },
               "recipientMustBe": {
-                "task": "mortgage lending",
+                "task": "urn:role:mortgage-lending",
                 "label": "a regulated lender"
               }
             },
@@ -31128,7 +31139,7 @@
                 ]
               },
               "recipientMustBe": {
-                "task": "mortgage lending",
+                "task": "urn:role:mortgage-lending",
                 "label": "a regulated lender"
               }
             }
@@ -31266,7 +31277,7 @@
                 ]
               },
               "recipientMustBe": {
-                "task": "mortgage lending",
+                "task": "urn:role:mortgage-lending",
                 "label": "a regulated lender"
               }
             }
@@ -32333,6 +32344,17 @@
           }
         },
         "claims": {
+          "record.proof": {
+            "kind": "record.proof",
+            "sources": [
+              "https://sam.example/#me",
+              "https://northbank.example/#org"
+            ],
+            "methods": [
+              "recorded-by-authority"
+            ],
+            "maxAgeDays": 30
+          },
           "fee.charged": {
             "kind": "fee.charged",
             "sources": [
@@ -32369,6 +32391,7 @@
             "id": "urn:purpose:redress",
             "claims": [
               "fee.charged",
+              "record.proof",
               "register.dispute-route",
               "forum.decision"
             ]
@@ -32801,6 +32824,7 @@
             "id": "file-claim",
             "agent": "sam-agent",
             "type": "forum-claim",
+            "proofOwners": ["sam-agent", "north-agent"],
             "case": "urn:case:mortgage-fee",
             "conversation": {
               "$ref": "steps.fee-notice.conversation"
@@ -32834,6 +32858,7 @@
             "id": "answer",
             "agent": "north-agent",
             "type": "forum-answer",
+            "proofOwners": ["north-agent"],
             "case": "urn:case:mortgage-fee",
             "segment": {
               "$ref": "steps.respondent-record.jws"
@@ -36901,6 +36926,7 @@
                 },
                 {
                   "id": "fault-claim-send",
+                  "segmentEnd": "added",
                   "agent": "sam-agent",
                   "type": "start",
                   "peer": "gate-operator-agent",
@@ -36921,18 +36947,9 @@
                     "fault-claim-statement"
                   ],
                   "atStep": 39
-                },
-                {
-                  "id": "fault-claim-approved",
-                  "agent": "sam-agent",
-                  "type": "approve",
-                  "decision": "approve",
-                  "note": "Yes, send this claim to the gate operator.",
-                  "segmentEnd": "added",
-                  "atStep": 39
                 }
               ],
-              "stopAfter": "fault-claim-approved"
+              "stopAfter": "fault-claim-send"
             },
             "expect": {
               "outcome": "stop",

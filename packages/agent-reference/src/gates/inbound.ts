@@ -1192,6 +1192,7 @@ export class InboundGate {
     caption: string,
     reason?: string,
     messageId?: string,
+    messageDigest?: string,
   ): void {
     this.emit({
       part: "inbound-gate",
@@ -1199,6 +1200,7 @@ export class InboundGate {
       verdict: OUTCOME_VERDICT[outcome],
       outcome,
       ...(messageId ? { messageId } : {}),
+      ...(messageDigest ? { messageDigest } : {}),
       ...(reason ? { reason } : {}),
       caption,
     });
@@ -2845,6 +2847,7 @@ export class Admission {
         : "The message is admitted; statements that did not pass are labelled as not admitted.",
       undefined,
       this.subject,
+      digestOf(msg),
     );
     for (const c of this.admittedClaims)
       this.gate.storeEvent(

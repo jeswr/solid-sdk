@@ -8578,7 +8578,7 @@
       }
     },
     "configuration": "accountability-regulator-claim",
-    "events": 755
+    "events": 765
   },
   {
     "file": "mortgage-main--entry-withheld--accountability-regulator-claim.json",
@@ -8628,7 +8628,7 @@
       }
     },
     "configuration": "accountability-regulator-claim",
-    "events": 741
+    "events": 751
   },
   {
     "file": "mortgage-main--identity-email-endpoint.json",
@@ -8684,7 +8684,7 @@
     "file": "mortgage-main--mailbox-reply-as-evidence--identity-email-endpoint.json",
     "scenario": {
       "id": "mortgage-main--mailbox-reply-as-evidence",
-      "title": "A mortgage in principle: The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. Prose from a mailbox is not signed evidence, so the evidence check stops it as evidence-invalid; the registered reason was structured-form-required.",
+      "title": "A mortgage in principle: The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose.",
       "steps": {
         "1": "Sam signs a mandate.",
         "2": "Sam asks for a mortgage in principle.",
@@ -8878,7 +8878,7 @@
       }
     },
     "configuration": "accountability-vendor-fault",
-    "events": 609
+    "events": 598
   },
   {
     "file": "mortgage-main--accountability-reputation-post.json",
@@ -8928,7 +8928,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 816
+    "events": 826
   },
   {
     "file": "mortgage-main--post-about-a-person--accountability-reputation-post.json",
@@ -8978,7 +8978,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 769
+    "events": 779
   },
   {
     "file": "mortgage-main--evidence-not-publishable--accountability-reputation-post.json",
@@ -9028,7 +9028,7 @@
       }
     },
     "configuration": "accountability-reputation-post",
-    "events": 767
+    "events": 777
   },
   {
     "file": "mortgage-main--meaning-plain-language-upgrade.json",

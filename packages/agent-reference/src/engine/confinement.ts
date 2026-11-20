@@ -240,7 +240,13 @@ export function addedSegmentDifferences(
           if (
             replied < 0 ||
             !laterRuns.some((next) =>
-              next.checks.some((event) => event.check === check && event.verdict === "pass"),
+              next.checks.some(
+                (event) =>
+                  event.check === check &&
+                  event.verdict === "pass" &&
+                  event.actionDigest === run.decision.actionDigest &&
+                  events.indexOf(event) > replied,
+              ),
             )
           )
             differences.push(
@@ -278,6 +284,9 @@ export function addedSegmentDifferences(
           decision.outcome === (incoming ? "admit" : "go") &&
           message.messageId &&
           decision.messageId === message.messageId &&
+          !!decision.messageDigest &&
+          decision.messageDigest === message.packet?.layers.header.digest &&
+          (incoming || decision.actionDigest === message.actionDigest) &&
           message.gateRun !== undefined &&
           decision.gateRun === message.gateRun &&
           (incoming ? decision.seq > message.seq : decision.seq < message.seq)

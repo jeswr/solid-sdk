@@ -107,7 +107,7 @@
     }
   ],
   "generated": {
-    "commit": "de608a3711989f251c180d9765bb215398282291",
+    "commit": "unknown",
     "core": "scripted"
   },
   "standIns": [
@@ -146,7 +146,8 @@
         }
       ],
       "reason": "intact",
-      "caption": "The person’s bank's income total statement is intact and signed with The person’s bank's pinned key."
+      "caption": "The person’s bank's income total statement is intact and signed with The person’s bank's pinned key.",
+      "gateRun": 1
     },
     {
       "seq": 2,
@@ -184,7 +185,8 @@
         ],
         "answer": "Accepted, for income total claims only."
       },
-      "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim."
+      "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim.",
+      "gateRun": 1
     },
     {
       "seq": 3,
@@ -202,7 +204,8 @@
         }
       ],
       "reason": "no-action",
-      "caption": "The person’s bank's income total statement asks for nothing, so there is no authority to check."
+      "caption": "The person’s bank's income total statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
     },
     {
       "seq": 4,
@@ -229,7 +232,8 @@
         "id": "urn:terms:onward-leak:income",
         "text": "Its terms allow this: use for Lending."
       },
-      "caption": "The person’s bank's income total statement: its terms allow this: use for Lending."
+      "caption": "The person’s bank's income total statement: its terms allow this: use for Lending.",
+      "gateRun": 1
     },
     {
       "seq": 5,
@@ -261,7 +265,8 @@
         "id": "urn:profile:onward-leak:income.total",
         "text": "Accept income total from The person’s bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "The person’s bank's income total statement is fit for A receiver passes data on against its terms: recorded-by-authority, 0 days old."
+      "caption": "The person’s bank's income total statement is fit for A receiver passes data on against its terms: recorded-by-authority, 0 days old.",
+      "gateRun": 1
     },
     {
       "seq": 6,
@@ -271,7 +276,8 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The person’s bank's income total statement is admitted."
+      "caption": "The person’s bank's income total statement is admitted.",
+      "gateRun": 1
     },
     {
       "seq": 7,
@@ -308,6 +314,16 @@
       "seq": 9,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -325,12 +341,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The marketing company's mandate covers this action."
+      "caption": "The marketing company's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 10,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -359,12 +386,23 @@
         "answer": "Accepted, for Request the needed information only."
       },
       "reason": "recipient-established",
-      "caption": "The lender: Accepted, for Request the needed information only."
+      "caption": "The lender: Accepted, for Request the needed information only.",
+      "gateRun": 1
     },
     {
       "seq": 11,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -377,12 +415,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 12,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -395,12 +444,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 13,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -413,12 +473,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The marketing company's limits."
+      "caption": "Inside what the agent may do on its own, and within The marketing company's limits.",
+      "gateRun": 1
     },
     {
       "seq": 14,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -431,12 +502,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
     },
     {
       "seq": 15,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "evidence",
@@ -458,24 +540,49 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS Ed DSA) with The marketing company’s agent's pinned key, and written to the record."
+      "caption": "Signed (JWS Ed DSA) with The marketing company’s agent's pinned key, and written to the record.",
+      "gateRun": 1
     },
     {
       "seq": 16,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to The lender’s agent."
+      "messageId": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:520beaf61e39dfc253dfe1f12e052f07d7d586ce27490ec6577cf6a39c78f099",
+      "caption": "The invoke message goes to The lender’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 17,
       "step": 2,
       "agent": "receiver-agent",
+      "actionDigest": "sha-256:12295c9f51a4bd847c05afc1c497abc2109a6c40ad22b3c12a468f3b04ac9ab6",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:onward-leak:request",
+        "operation": "urn:op:onward-leak:request",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:onward-leak:owner",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "transport",
       "kind": "message-out",
+      "messageId": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-onward-leak-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-onward-leak-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:r6HdGjkHp4av0LUGS_XWblcBkVgSsCnfsnQUj_q5SLs\"},\"to\":{\"id\":\"urn:awp:n:3FrhgqQD533vGTxkk3LzxRDihgGWP1fQzuYrzoK16-U\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:pblky7cUAq7X8hvV98Knlc87Vunp7XrTBtizU04H1qc\"},\"evidence\":{\"id\":\"urn:awp:n:QUHapPmVf5wf2N6tAwunIFauNFufbEeDqM3l51xyYm4\"},\"@included\":[{\"id\":\"urn:awp:n:r6HdGjkHp4av0LUGS_XWblcBkVgSsCnfsnQUj_q5SLs\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:onward-leak:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:onward-leak:receiver\"},{\"id\":\"urn:awp:n:3FrhgqQD533vGTxkk3LzxRDihgGWP1fQzuYrzoK16-U\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:onward-leak:owner-agent:actor\",\"party\":\"urn:fictional:onward-leak:owner\"},{\"id\":\"urn:awp:n:pblky7cUAq7X8hvV98Knlc87Vunp7XrTBtizU04H1qc\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:ZjkIm1HrapiPlJzryYtmMG4b0IVxV5nY5zZemseFfvI\"},\"input\":{\"id\":\"urn:awp:n:XD2iLvnKEZRgBUd4eXgLw5YnUF3k8nP_fpRZDDkBxQU\"},\"operation\":{\"id\":\"urn:op:onward-leak:request\"},\"purpose\":\"urn:purpose:onward-leak\"},{\"id\":\"urn:awp:n:QUHapPmVf5wf2N6tAwunIFauNFufbEeDqM3l51xyYm4\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:eDTSnsWogR-y4t9Kg716Yf_CWdZgt8Qg7cLDrp6fV_k\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:onward-leak:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:XD2iLvnKEZRgBUd4eXgLw5YnUF3k8nP_fpRZDDkBxQU\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Jm_T2l5Plot37sirjXLZFp9h6qmuALpw-o0BBTa4XA4\"}]},{\"id\":\"urn:awp:n:ZjkIm1HrapiPlJzryYtmMG4b0IVxV5nY5zZemseFfvI\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:eDTSnsWogR-y4t9Kg716Yf_CWdZgt8Qg7cLDrp6fV_k\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:lIIQnMs0a3qFXSutuwSNIf3crFr785cYiqJgPvZtxCo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:onward-leak:receiver\",\"proofGraph\":\"urn:awp:n:pzZwB2li6jHM9QDD1Wue7De4zRTRBAimqnXU5JiUlMw\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:Jm_T2l5Plot37sirjXLZFp9h6qmuALpw-o0BBTa4XA4\",\"type\":\"PropertyValue\",\"domainValue\":\"income.total\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:lIIQnMs0a3qFXSutuwSNIf3crFr785cYiqJgPvZtxCo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:X6N62DcXKFuGKNYAf9VaG3PLYClTMGUT8_3Xv6JKWAk\"}},{\"id\":\"urn:awp:n:X6N62DcXKFuGKNYAf9VaG3PLYClTMGUT8_3Xv6JKWAk\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:aba5aef1a8448883cc5c3eacb12dd18ff5dbb96cf46704fdc90f3ef62ecec545\",\"byteLength\":\"10943\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:pzZwB2li6jHM9QDD1Wue7De4zRTRBAimqnXU5JiUlMw\",\"@graph\":[{\"id\":\"urn:awp:n:0H-fHTtHi1DRVBgqzM_ICWos1x13XfKDnASjvvxJEC8\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MTFlM2RhYmQxYTJjZGExYTg0MThmMzkxZmE4YjE5YjI6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoiME5naHphVzBCcXM1WGhTUEtDTG5XUV9mQWdnS0hKNTNhWGlCVGU2VC1zZyIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOm9ud2FyZC1sZWFrIiwidXJuOm9wOm9ud2FyZC1sZWFrOnJlcXVlc3QiLCJ1cm46b3A6b253YXJkLWxlYWs6YWdyZWVtZW50IiwidXJuOm9wOmZvcnVtLWNsYWltIiwidXJuOm9wOmZvcnVtLWFuc3dlciJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.fB92R5hNadGLIjrpF-3WIPkElHc-qxrQZ-jizzT1FwG1WMJfQESfW3yz88t5MHx0yoLhc9IrElqROBqhn4VWAg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOnI2SGRHamtIcDRhdjBMVUdTX1hXYmxjQmtWZ1NzQ25mc25RVWpfcTVTTHMiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOm9ud2FyZC1sZWFrOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46M0ZyaGdxUUQ1MzN2R1R4a2szTHp4UkRpaGdHV1AxZlF6dVlyem9LMTYtVSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpvd25lciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46WmprSW0xSHJhcGlQbEp6cnlZdG1NRzRiMElWeFY1blk1elplbXNlRmZ2SSJ9LCJpZCI6InVybjphd3A6bjpwYmxreTdjVUFxN1g4aHZWOThLbmxjODdWdW5wN1hyVEJ0aXpVMDRIMXFjIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46WEQyaUx2bktFWlJnQlVkNGVYZ0x3NVluVUYzazhuUF9mcFJaRERrQnhRVSJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6b253YXJkLWxlYWs6cmVxdWVzdCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6b253YXJkLWxlYWsiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOmVEVFNuc1dvZ1IteTR0OUtnNzE2WWZfQ1dkWmd0OFFnN2NMRHJwNmZWX2sifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpRVUhhcFBtVmY1d2YyTjZ0QXd1bklGYXVORnVmYkVlRHFNM2w1MXh5WW00IiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6b253YXJkLWxlYWs6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpYRDJpTHZuS0VaUmdCVWQ0ZVhnTHc1WW5VRjNrOG5QX2ZwUlpERGtCeFFVIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpKbV9UMmw1UGxvdDM3c2lyalhMWkZwOWg2cW11QUxwdy1vMEJCVGE0WEE0In1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46WmprSW0xSHJhcGlQbEp6cnlZdG1NRzRiMElWeFY1blk1elplbXNlRmZ2SSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOmxJSVFuTXMwYTNxRlhTdXR1d1NOSWYzY3JGcjc4NWNZaXFKZ1B2WnR4Q28iLCJpZCI6InVybjphd3A6bjplRFRTbnNXb2dSLXk0dDlLZzcxNllmX0NXZFpndDhRZzdjTERycDZmVl9rIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOm9ud2FyZC1sZWFrOnJlY2VpdmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpwelp3QjJsaTZqSE05UUREMVd1ZTdEZTR6UlRSQkFpbXFuWFU1SmlVbE13IiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiZG9tYWluVmFsdWUiOiJpbmNvbWUudG90YWwiLCJpZCI6InVybjphd3A6bjpKbV9UMmw1UGxvdDM3c2lyalhMWkZwOWg2cW11QUxwdy1vMEJCVGE0WEE0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpsSUlRbk1zMGEzcUZYU3V0dXdTTklmM2NyRnI3ODVjWWlxSmdQdlp0eENvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpYNk42MkRjWEtGdUdLTllBZjlWYUczUExZQ2xUTUdVVDhfM1h2NkpLV0FrIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YWJhNWFlZjFhODQ0ODg4M2NjNWMzZWFjYjEyZGQxOGZmNWRiYjk2Y2Y0NjcwNGZkYzkwZjNlZjYyZWNlYzU0NSIsImJ5dGVMZW5ndGgiOiIxMDk0MyIsImlkIjoidXJuOmF3cDpuOlg2TjYyRGNYS0Z1R0tOWUFmOVZhRzNQTFlDbFRNR1VUOF8zWHY2SktXQWsiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOjBILWZIVHRIaTFEUlZCZ3F6TV9JQ1dvczF4MTNYZktEbkFTanZ2eEpFQzgiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWxKNU1qYzNZVzl1Vm1WeFZuTlVabHBDUlc5bU5VNWljVVpaYlhsMGRrcERibkZET0dwS2JWQXRkbFVpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZNVEZsTTJSaFltUXhZVEpqWkdFeFlUZzBNVGhtTXpreFptRTRZakU1WWpJNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHZibmRoY21RdGJHVmhhenB5WldObGFYWmxjaUlzSW1GamRHOXlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHZibmRoY21RdGJHVmhhenB5WldObGFYWmxjaTFoWjJWdWREcGhZM1J2Y2lJc0ltRmpkRzl5UzJsa0lqb2lNRTVuYUhwaFZ6QkNjWE0xV0doVFVFdERURzVYVVY5bVFXZG5TMGhLTlROaFdHbENWR1UyVkMxelp5SXNJbTl3WlhKaGRHbHZibk1pT2xzaWRYSnVPbTl3T205dWQyRnlaQzFzWldGcklpd2lkWEp1T205d09tOXVkMkZ5WkMxc1pXRnJPbkpsY1hWbGMzUWlMQ0oxY200NmIzQTZiMjUzWVhKa0xXeGxZV3M2WVdkeVpXVnRaVzUwSWl3aWRYSnVPbTl3T21admNuVnRMV05zWVdsdElpd2lkWEp1T205d09tWnZjblZ0TFdGdWMzZGxjaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExURXpWREE0T2pVNU9qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU55MHdNUzB4TWxRd09Ub3dNRG93TUM0d01EQmFJaXdpYVhOemRXVmtRWFFpT2lJeU1ESTJMVEV4TFRFelZEQTVPakF3T2pBd0xqQXdNRm9pZlEuZkI5MlI1aE5hZEdMSWpycEYtM1dJUGtFbEhjLXF4clFaLWppenpUMUZ3RzFXTUpmUUVTZlczeXo4OHQ1TUh4MHlvTGhjOUlyRWxxUk9CcWhuNFZXQWciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpwelp3QjJsaTZqSE05UUREMVd1ZTdEZTR6UlRSQkFpbXFuWFU1SmlVbE13In1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOnBibGt5N2NVQXE3WDhodlY5OEtubGM4N1Z1bnA3WHJUQnRpelUwNEgxcWMifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9zaWduZWQtZWQyNTUxOS8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1vbndhcmQtbGVhay1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46UVVIYXBQbVZmNXdmMk42dEF3dW5JRmF1TkZ1ZmJFZURxTTNsNTF4eVltNCJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOnI2SGRHamtIcDRhdjBMVUdTX1hXYmxjQmtWZ1NzQ25mc25RVWpfcTVTTHMifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1vbndhcmQtbGVhay1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAyIiwia2luZCI6Imludm9rZSIsInByZXNlbnRGaWVsZHMiOlsiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb250ZW50Il0sInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOjNGcmhncVFENTMzdkdUeGtrM0x6eFJEaWhnR1dQMWZRenVZcnpvSzE2LVUifSwidHlwZSI6WyJNZXNzYWdlIiwiSW52b2tlIl19.uLfDLX3_pdlyAkIMWWvZ_enXLSr3twfpFsRz3fz31Ma8wzDo6r1zincxQYe8DPsBob__ajylh2hjEgeDv5SjDQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -600,7 +707,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "The marketing company’s agent sends an invoke message to The lender’s agent."
+      "caption": "The marketing company’s agent sends an invoke message to The lender’s agent.",
+      "gateRun": 1
     },
     {
       "seq": 18,
@@ -608,6 +716,7 @@
       "agent": "owner-agent",
       "part": "transport",
       "kind": "message-in",
+      "messageId": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0002",
       "packet": {
         "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-onward-leak-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-onward-leak-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:r6HdGjkHp4av0LUGS_XWblcBkVgSsCnfsnQUj_q5SLs\"},\"to\":{\"id\":\"urn:awp:n:3FrhgqQD533vGTxkk3LzxRDihgGWP1fQzuYrzoK16-U\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:pblky7cUAq7X8hvV98Knlc87Vunp7XrTBtizU04H1qc\"},\"evidence\":{\"id\":\"urn:awp:n:QUHapPmVf5wf2N6tAwunIFauNFufbEeDqM3l51xyYm4\"},\"@included\":[{\"id\":\"urn:awp:n:r6HdGjkHp4av0LUGS_XWblcBkVgSsCnfsnQUj_q5SLs\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:onward-leak:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:onward-leak:receiver\"},{\"id\":\"urn:awp:n:3FrhgqQD533vGTxkk3LzxRDihgGWP1fQzuYrzoK16-U\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:onward-leak:owner-agent:actor\",\"party\":\"urn:fictional:onward-leak:owner\"},{\"id\":\"urn:awp:n:pblky7cUAq7X8hvV98Knlc87Vunp7XrTBtizU04H1qc\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:ZjkIm1HrapiPlJzryYtmMG4b0IVxV5nY5zZemseFfvI\"},\"input\":{\"id\":\"urn:awp:n:XD2iLvnKEZRgBUd4eXgLw5YnUF3k8nP_fpRZDDkBxQU\"},\"operation\":{\"id\":\"urn:op:onward-leak:request\"},\"purpose\":\"urn:purpose:onward-leak\"},{\"id\":\"urn:awp:n:QUHapPmVf5wf2N6tAwunIFauNFufbEeDqM3l51xyYm4\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:eDTSnsWogR-y4t9Kg716Yf_CWdZgt8Qg7cLDrp6fV_k\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:onward-leak:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:XD2iLvnKEZRgBUd4eXgLw5YnUF3k8nP_fpRZDDkBxQU\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Jm_T2l5Plot37sirjXLZFp9h6qmuALpw-o0BBTa4XA4\"}]},{\"id\":\"urn:awp:n:ZjkIm1HrapiPlJzryYtmMG4b0IVxV5nY5zZemseFfvI\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:eDTSnsWogR-y4t9Kg716Yf_CWdZgt8Qg7cLDrp6fV_k\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:lIIQnMs0a3qFXSutuwSNIf3crFr785cYiqJgPvZtxCo\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:onward-leak:receiver\",\"proofGraph\":\"urn:awp:n:pzZwB2li6jHM9QDD1Wue7De4zRTRBAimqnXU5JiUlMw\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:Jm_T2l5Plot37sirjXLZFp9h6qmuALpw-o0BBTa4XA4\",\"type\":\"PropertyValue\",\"domainValue\":\"income.total\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:lIIQnMs0a3qFXSutuwSNIf3crFr785cYiqJgPvZtxCo\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:X6N62DcXKFuGKNYAf9VaG3PLYClTMGUT8_3Xv6JKWAk\"}},{\"id\":\"urn:awp:n:X6N62DcXKFuGKNYAf9VaG3PLYClTMGUT8_3Xv6JKWAk\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:aba5aef1a8448883cc5c3eacb12dd18ff5dbb96cf46704fdc90f3ef62ecec545\",\"byteLength\":\"10943\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:pzZwB2li6jHM9QDD1Wue7De4zRTRBAimqnXU5JiUlMw\",\"@graph\":[{\"id\":\"urn:awp:n:0H-fHTtHi1DRVBgqzM_ICWos1x13XfKDnASjvvxJEC8\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MTFlM2RhYmQxYTJjZGExYTg0MThmMzkxZmE4YjE5YjI6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlciIsImFjdG9yIjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlci1hZ2VudDphY3RvciIsImFjdG9yS2lkIjoiME5naHphVzBCcXM1WGhTUEtDTG5XUV9mQWdnS0hKNTNhWGlCVGU2VC1zZyIsIm9wZXJhdGlvbnMiOlsidXJuOm9wOm9ud2FyZC1sZWFrIiwidXJuOm9wOm9ud2FyZC1sZWFrOnJlcXVlc3QiLCJ1cm46b3A6b253YXJkLWxlYWs6YWdyZWVtZW50IiwidXJuOm9wOmZvcnVtLWNsYWltIiwidXJuOm9wOmZvcnVtLWFuc3dlciJdLCJ2YWxpZEZyb20iOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNy0wMS0xMlQwOTowMDowMC4wMDBaIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoifQ.fB92R5hNadGLIjrpF-3WIPkElHc-qxrQZ-jizzT1FwG1WMJfQESfW3yz88t5MHx0yoLhc9IrElqROBqhn4VWAg\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlci1hZ2VudDphY3RvciIsImlkIjoidXJuOmF3cDpuOnI2SGRHamtIcDRhdjBMVUdTX1hXYmxjQmtWZ1NzQ25mc25RVWpfcTVTTHMiLCJvbkJlaGFsZk9mIjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpyZWNlaXZlciIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LHsiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOm9ud2FyZC1sZWFrOm93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46M0ZyaGdxUUQ1MzN2R1R4a2szTHp4UkRpaGdHV1AxZlF6dVlyem9LMTYtVSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpvbndhcmQtbGVhazpvd25lciIsInR5cGUiOiJBdWRpZW5jZVJlZiJ9LHsiYmFzaXMiOnsiaWQiOiJ1cm46YXdwOm46WmprSW0xSHJhcGlQbEp6cnlZdG1NRzRiMElWeFY1blk1elplbXNlRmZ2SSJ9LCJpZCI6InVybjphd3A6bjpwYmxreTdjVUFxN1g4aHZWOThLbmxjODdWdW5wN1hyVEJ0aXpVMDRIMXFjIiwiaW5wdXQiOnsiaWQiOiJ1cm46YXdwOm46WEQyaUx2bktFWlJnQlVkNGVYZ0x3NVluVUYzazhuUF9mcFJaRERrQnhRVSJ9LCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6b253YXJkLWxlYWs6cmVxdWVzdCJ9LCJwdXJwb3NlIjoidXJuOnB1cnBvc2U6b253YXJkLWxlYWsiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOmVEVFNuc1dvZ1IteTR0OUtnNzE2WWZfQ1dkWmd0OFFnN2NMRHJwNmZWX2sifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpRVUhhcFBtVmY1d2YyTjZ0QXd1bklGYXVORnVmYkVlRHFNM2w1MXh5WW00IiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6b253YXJkLWxlYWs6cmVxdWVzdCIsInR5cGUiOiJPcGVyYXRpb25SZWYiLCJ2ZXJzaW9uIjoiMC4xIn0seyJpZCI6InVybjphd3A6bjpYRDJpTHZuS0VaUmdCVWQ0ZVhnTHc1WW5VRjNrOG5QX2ZwUlpERGtCeFFVIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpKbV9UMmw1UGxvdDM3c2lyalhMWkZwOWg2cW11QUxwdy1vMEJCVGE0WEE0In1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImJhc2lzS2luZCI6InJlcHJlc2VudGVkIiwiaWQiOiJ1cm46YXdwOm46WmprSW0xSHJhcGlQbEp6cnlZdG1NRzRiMElWeFY1blk1elplbXNlRmZ2SSIsInR5cGUiOiJSZXF1ZXN0QmFzaXMifSx7ImNyZWRlbnRpYWxTdWJqZWN0IjoidXJuOmF3cDpuOmxJSVFuTXMwYTNxRlhTdXR1d1NOSWYzY3JGcjc4NWNZaXFKZ1B2WnR4Q28iLCJpZCI6InVybjphd3A6bjplRFRTbnNXb2dSLXk0dDlLZzcxNllmX0NXZFpndDhRZzdjTERycDZmVl9rIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZXIiOiJ1cm46ZmljdGlvbmFsOm9ud2FyZC1sZWFrOnJlY2VpdmVyIiwicHJvb2ZHcmFwaCI6InVybjphd3A6bjpwelp3QjJsaTZqSE05UUREMVd1ZTdEZTR6UlRSQkFpbXFuWFU1SmlVbE13IiwidHlwZSI6IlZlcmlmaWFibGVDcmVkZW50aWFsIiwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiJ9LHsiZG9tYWluVmFsdWUiOiJpbmNvbWUudG90YWwiLCJpZCI6InVybjphd3A6bjpKbV9UMmw1UGxvdDM3c2lyalhMWkZwOWg2cW11QUxwdy1vMEJCVGE0WEE0IiwibmFtZSI6InJlcXVlc3QiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cmVxdWVzdCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJpZCI6InVybjphd3A6bjpsSUlRbk1zMGEzcUZYU3V0dXdTTklmM2NyRnI3ODVjWWlxSmdQdlp0eENvIiwic3RhdGVtZW50UGF5bG9hZCI6eyJpZCI6InVybjphd3A6bjpYNk42MkRjWEtGdUdLTllBZjlWYUczUExZQ2xUTUdVVDhfM1h2NkpLV0FrIn0sInR5cGUiOiJMZWdhY3lDcmVkZW50aWFsU3ViamVjdCJ9LHsiYXR0YWNobWVudERpZ2VzdCI6InNoYS0yNTY6YWJhNWFlZjFhODQ0ODg4M2NjNWMzZWFjYjEyZGQxOGZmNWRiYjk2Y2Y0NjcwNGZkYzkwZjNlZjYyZWNlYzU0NSIsImJ5dGVMZW5ndGgiOiIxMDk0MyIsImlkIjoidXJuOmF3cDpuOlg2TjYyRGNYS0Z1R0tOWUFmOVZhRzNQTFlDbFRNR1VUOF8zWHY2SktXQWsiLCJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi9uLXF1YWRzIiwidHlwZSI6WyJOYW1lZFZhbHVlQ29sbGVjdGlvbiIsIkF0dGFjaG1lbnQiXX0seyJAZ3JhcGgiOlt7ImlkIjoidXJuOmF3cDpuOjBILWZIVHRIaTFEUlZCZ3F6TV9JQ1dvczF4MTNYZktEbkFTanZ2eEpFQzgiLCJqd3MiOiJleUpoYkdjaU9pSkZaRVJUUVNJc0ltdHBaQ0k2SWxKNU1qYzNZVzl1Vm1WeFZuTlVabHBDUlc5bU5VNWljVVpaYlhsMGRrcERibkZET0dwS2JWQXRkbFVpTENKMGVYQWlPaUpoZDNBdGNtVndjbVZ6Wlc1MFlYUnBiMjRyYW5kekluMC5leUowZVhCbElqb2lVbVZ3Y21WelpXNTBZWFJwYjI1VGRHRjBaVzFsYm5RaUxDSnBaQ0k2SW5WeWJqcGhkM0E2Y21Wd2NtVnpaVzUwWVhScGIyNDZNVEZsTTJSaFltUXhZVEpqWkdFeFlUZzBNVGhtTXpreFptRTRZakU1WWpJNk1UYzVORFUyTURRd01EQXdNQ0lzSW5CaGNuUjVJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHZibmRoY21RdGJHVmhhenB5WldObGFYWmxjaUlzSW1GamRHOXlJam9pZFhKdU9tWnBZM1JwYjI1aGJEcHZibmRoY21RdGJHVmhhenB5WldObGFYWmxjaTFoWjJWdWREcGhZM1J2Y2lJc0ltRmpkRzl5UzJsa0lqb2lNRTVuYUhwaFZ6QkNjWE0xV0doVFVFdERURzVYVVY5bVFXZG5TMGhLTlROaFdHbENWR1UyVkMxelp5SXNJbTl3WlhKaGRHbHZibk1pT2xzaWRYSnVPbTl3T205dWQyRnlaQzFzWldGcklpd2lkWEp1T205d09tOXVkMkZ5WkMxc1pXRnJPbkpsY1hWbGMzUWlMQ0oxY200NmIzQTZiMjUzWVhKa0xXeGxZV3M2WVdkeVpXVnRaVzUwSWl3aWRYSnVPbTl3T21admNuVnRMV05zWVdsdElpd2lkWEp1T205d09tWnZjblZ0TFdGdWMzZGxjaUpkTENKMllXeHBaRVp5YjIwaU9pSXlNREkyTFRFeExURXpWREE0T2pVNU9qQXdMakF3TUZvaUxDSjJZV3hwWkZWdWRHbHNJam9pTWpBeU55MHdNUzB4TWxRd09Ub3dNRG93TUM0d01EQmFJaXdpYVhOemRXVmtRWFFpT2lJeU1ESTJMVEV4TFRFelZEQTVPakF3T2pBd0xqQXdNRm9pZlEuZkI5MlI1aE5hZEdMSWpycEYtM1dJUGtFbEhjLXF4clFaLWppenpUMUZ3RzFXTUpmUUVTZlczeXo4OHQ1TUh4MHlvTGhjOUlyRWxxUk9CcWhuNFZXQWciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpwelp3QjJsaTZqSE05UUREMVd1ZTdEZTR6UlRSQkFpbXFuWFU1SmlVbE13In1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOnBibGt5N2NVQXE3WDhodlY5OEtubGM4N1Z1bnA3WHJUQnRpelUwNEgxcWMifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9zaWduZWQtZWQyNTUxOS8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1vbndhcmQtbGVhay1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46UVVIYXBQbVZmNXdmMk42dEF3dW5JRmF1TkZ1ZmJFZURxTTNsNTF4eVltNCJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOnI2SGRHamtIcDRhdjBMVUdTX1hXYmxjQmtWZ1NzQ25mc25RVWpfcTVTTHMifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1vbndhcmQtbGVhay1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAyIiwia2luZCI6Imludm9rZSIsInByZXNlbnRGaWVsZHMiOlsiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb250ZW50Il0sInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImlkIjoidXJuOmF3cDpuOjNGcmhncVFENTMzdkdUeGtrM0x6eFJEaWhnR1dQMWZRenVZcnpvSzE2LVUifSwidHlwZSI6WyJNZXNzYWdlIiwiSW52b2tlIl19.uLfDLX3_pdlyAkIMWWvZ_enXLSr3twfpFsRz3fz31Ma8wzDo6r1zincxQYe8DPsBob__ajylh2hjEgeDv5SjDQ\"}}",
         "context": "https://w3id.org/jeswr/awp/context/v1",
@@ -742,7 +851,8 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from The marketing company’s agent reaches the inbound gate."
+      "caption": "An invoke message from The marketing company’s agent reaches the inbound gate.",
+      "gateRun": 2
     },
     {
       "seq": 19,
@@ -769,7 +879,8 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with The marketing company’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The marketing company’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
     },
     {
       "seq": 20,
@@ -792,7 +903,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no statements from third parties."
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 2
     },
     {
       "seq": 21,
@@ -814,7 +926,8 @@
         "id": "urn:awp:representation:11e3dabd1a2cda1a8418f391fa8b19b2:1794560400000",
         "text": "A representation statement signed with The marketing company's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "The marketing company signed a statement that The marketing company’s agent acts for them in this operation."
+      "caption": "The marketing company signed a statement that The marketing company’s agent acts for them in this operation.",
+      "gateRun": 2
     },
     {
       "seq": 22,
@@ -837,7 +950,8 @@
         }
       ],
       "reason": "no-data",
-      "caption": "The message carries no data that needs terms."
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 2
     },
     {
       "seq": 23,
@@ -855,7 +969,8 @@
         }
       ],
       "reason": "no-claims",
-      "caption": "The message carries no claims whose quality matters."
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 2
     },
     {
       "seq": 24,
@@ -865,7 +980,10 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+      "messageId": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:520beaf61e39dfc253dfe1f12e052f07d7d586ce27490ec6577cf6a39c78f099",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2
     },
     {
       "seq": 25,
@@ -879,6 +997,16 @@
       "seq": 26,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "mandate",
@@ -896,12 +1024,23 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "The lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action.",
+      "gateRun": 1
     },
     {
       "seq": 27,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "recipient",
@@ -930,12 +1069,23 @@
         "answer": "Accepted, for A receiver passes data on against its terms only."
       },
       "reason": "recipient-established",
-      "caption": "The marketing company: Accepted, for A receiver passes data on against its terms only."
+      "caption": "The marketing company: Accepted, for A receiver passes data on against its terms only.",
+      "gateRun": 1
     },
     {
       "seq": 28,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -948,12 +1098,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 29,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -966,12 +1127,23 @@
         }
       ],
       "reason": "no-personal-data",
-      "caption": "This action passes on no personal data."
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
     },
     {
       "seq": 30,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "limits-approval",
@@ -984,12 +1156,23 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within The lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits.",
+      "gateRun": 1
     },
     {
       "seq": 31,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "disclosure",
@@ -1002,12 +1185,23 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "The gate checks the actual credential against the declared purpose."
+      "caption": "The gate checks the actual credential against the declared purpose.",
+      "gateRun": 1
     },
     {
       "seq": 32,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "check",
       "check": "data-terms",
@@ -1024,18 +1218,30 @@
         "id": "urn:terms:onward-leak:income",
         "text": "The issuer's terms: use for Lending. They go out with the data."
       },
-      "caption": "The person’s bank's income total statement: its terms forbid this (use for Lending)."
+      "caption": "The person’s bank's income total statement: its terms forbid this (use for Lending).",
+      "gateRun": 1
     },
     {
       "seq": 33,
       "step": 4,
       "agent": "owner-agent",
+      "actionDigest": "sha-256:106cc754b858ca2c3b9fd9d531abaeab2fadd5e6c6e009fa43e0d10400e51b4f",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:onward-leak",
+        "operation": "urn:op:onward-leak",
+        "conversation": "urn:awp:engine-onward-leak-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:onward-leak:receiver",
+        "purpose": "urn:purpose:onward-leak",
+        "evidence": []
+      },
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
       "outcome": "stop",
       "reason": "prohibited",
-      "caption": "The actual credential's terms prohibit release."
+      "caption": "The actual credential's terms prohibit release.",
+      "gateRun": 1
     }
   ]
 }

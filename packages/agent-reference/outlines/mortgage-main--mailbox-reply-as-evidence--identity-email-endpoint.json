@@ -4847,14 +4847,14 @@
       "kind": "check",
       "check": "evidence",
       "verdict": "fail",
-      "reason": "evidence-invalid"
+      "reason": "structured-form-required"
     },
     {
       "agent": "sams-agent",
       "part": "outbound-gate",
       "kind": "decision",
       "verdict": "fail",
-      "reason": "evidence-invalid"
+      "reason": "structured-form-required"
     }
   ]
 }

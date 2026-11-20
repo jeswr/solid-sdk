@@ -268,7 +268,9 @@ export interface EffectAdapter {
    */
   readonly purposeScoped?: boolean;
   /** Resolve the actual publication destination from the parameters the adapter will execute. */
-  readonly publicationRecipient?: (params: JsonObject) => Iri | undefined;
+  readonly publicationRecipient?: (
+    params: import("../model/named-values.js").NamedValuesNode,
+  ) => Iri | undefined;
   readonly id: string;
   execute(key: string, params: JsonObject): Promise<EffectResult>;
   /**

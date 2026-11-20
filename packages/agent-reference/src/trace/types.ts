@@ -129,6 +129,7 @@ export interface TraceEvent {
   readonly rule?: { readonly id: string; readonly text: string };
   readonly gateRun?: number;
   readonly messageId?: string;
+  readonly messageDigest?: string;
   readonly actionDigest?: string;
   readonly approvalDecision?: "approve" | "deny";
   readonly actionScope?: {
@@ -139,6 +140,7 @@ export interface TraceEvent {
     readonly recipient?: string;
     readonly purpose?: string;
     readonly evidence: readonly string[];
+    readonly otherParametersDigest?: string;
   };
   readonly effectRelease?: boolean;
   readonly packet?: PacketView;

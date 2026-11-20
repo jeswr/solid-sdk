@@ -49,7 +49,8 @@ for (const file of readdirSync(join(root, "scenarios"))
   const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
   for (const path of await runScenario(profile, scenario, {
     commit,
-    configuration: selectedConfiguration ?? "all",
+    configuration:
+      selectedConfiguration === "baseline" ? undefined : (selectedConfiguration ?? "all"),
     compare: !record,
     registry,
     proofCache: new ProofCache(join(root, "proofs")),
@@ -150,7 +151,7 @@ if (selected)
     ...previous.filter(
       (p) =>
         p.scenario !== selected ||
-        (selectedConfiguration && p.configuration !== selectedConfiguration),
+        (selectedConfiguration && (p.configuration ?? "baseline") !== selectedConfiguration),
     ),
   );
 writeFileSync(join(root, "scenario-runs.json"), `${JSON.stringify(status, null, 2)}\n`);

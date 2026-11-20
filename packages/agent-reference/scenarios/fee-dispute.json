@@ -329,6 +329,7 @@
       "id": "claimant-record",
       "agent": "owner-agent",
       "type": "record-segment",
+      "witness": "lender-agent",
       "conversation": {
         "$ref": "steps.agreement-offer.conversation"
       }
@@ -337,6 +338,7 @@
       "id": "respondent-record",
       "agent": "lender-agent",
       "type": "record-segment",
+      "witness": "owner-agent",
       "conversation": {
         "$ref": "steps.agreement-offer.conversation"
       }
@@ -352,6 +354,9 @@
       "respondent": "lender",
       "segment": {
         "$ref": "steps.claimant-record.jws"
+      },
+      "answerThrough": {
+        "$ref": "steps.respondent-record.terminal"
       },
       "allegation": "fee-not-agreed"
     },
@@ -493,6 +498,7 @@
             "id": "claimant-record",
             "agent": "owner-agent",
             "type": "record-segment",
+            "witness": "lender-agent",
             "conversation": {
               "$ref": "steps.agreement-offer.conversation"
             }
@@ -501,6 +507,7 @@
             "id": "respondent-record",
             "agent": "lender-agent",
             "type": "record-segment",
+            "witness": "owner-agent",
             "conversation": {
               "$ref": "steps.agreement-offer.conversation"
             },
@@ -517,6 +524,9 @@
             "respondent": "lender",
             "segment": {
               "$ref": "steps.claimant-record.jws"
+            },
+            "answerThrough": {
+              "$ref": "steps.respondent-record.terminal"
             },
             "allegation": "fee-not-agreed"
           },
