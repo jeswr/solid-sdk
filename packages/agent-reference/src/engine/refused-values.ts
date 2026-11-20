@@ -207,9 +207,10 @@ export function refusedContent(refused: RefusedStatement) {
       for (const match of value.matchAll(/[A-Za-z][A-Za-z0-9+.-]*:[^\s<>"{}|\\^\x60]+/g)) {
         const [token] = match;
         if (iris.has(token.toLowerCase()) && textMatch(token)) return true;
+        const opener = value[match.index - 1];
+        if (opener === "<" && value[match.index + token.length] === ">") continue;
         // Strip prose punctuation without dropping a query or fragment delimiter.
         let iri = token.replace(/[.,;!]+$/, "");
-        const opener = value[match.index - 1];
         const closer = opener === "(" ? ")" : opener === "[" ? "]" : opener;
         if (closer && (opener === "(" || opener === "[" || opener === "'") && iri.endsWith(closer))
           iri = iri.slice(0, -1);

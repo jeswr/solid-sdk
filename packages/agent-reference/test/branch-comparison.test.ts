@@ -3,10 +3,11 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
 import { DataFactory } from "n3";
-import { expect, it } from "vitest";
-import { canonicalJson, digestBytes, digestOf } from "../src/core/canonical.js";
+import { expect, it, vi } from "vitest";
+import { canonicalJson, digestBytes, digestOf, scopedUrn } from "../src/core/canonical.js";
 import type { AnyMessage, EvidenceItem, JsonObject } from "../src/core/types.js";
 import { verifierRegistry } from "../src/derive/verifiers.js";
+import * as comparator from "../src/engine/compare.js";
 import {
   type ComparisonRun,
   type ComparisonStep,
@@ -19,7 +20,7 @@ import {
 } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
-import type { Scenario } from "../src/engine/schema.js";
+import { type Scenario, scenarioSchema } from "../src/engine/schema.js";
 import { TYP } from "../src/mechanisms/statements.js";
 import { MessageNode } from "../src/model/message-nodes.js";
 import { NamedValueNode, NamedValuesNode, SCHEMA, scopedId } from "../src/model/named-values.js";
@@ -384,6 +385,62 @@ it("preserves the fee acceptance and the P4 stop in the recorded invoice branch"
   );
 }, 120_000);
 
+it("compares the executed invoice world when it shares a packaged scenario ID", async () => {
+  const { profile, scenario } = loadCase(root, "pay-an-invoice");
+  const actor = "urn:fictional:modified-business:actor";
+  const supplier = "urn:fictional:modified-supplier";
+  const ruleId = "urn:rule:modified-paid-service";
+  // Rename the supplier throughout the world, including the trust list and reply script.
+  const world = scenarioSchema.parse(
+    JSON.parse(
+      JSON.stringify(scenario)
+        .replaceAll('"urn:fictional:supplier"', JSON.stringify(supplier))
+        .replaceAll('"urn:fictional:business-agent:agent"', JSON.stringify(actor))
+        .replaceAll('"urn:rule:use:paid-service"', JSON.stringify(ruleId)),
+    ),
+  );
+  const paths = await runScenario(profile, world, {
+    compare: false,
+    reportExpectationFailures: true,
+  });
+  const branch = paths.find((path) => path.path === "branch-1");
+  const events = branch?.trace?.events.filter(({ agent }) => agent === "business-agent");
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      check: "mandate",
+      verdict: "pass",
+      rule: expect.objectContaining({ id: ruleId }),
+    }),
+  );
+  expect(events).toContainEqual(expect.objectContaining({ check: "recipient", verdict: "pass" }));
+  expect(
+    events?.find((event) => event.packet?.kind === "accept" && event.kind === "message-out"),
+  ).toMatchObject({
+    actionScope: { action: "use", recipient: supplier },
+    packet: { layers: { header: { raw: { from: { actor } } } } },
+  });
+  expect(branch).toMatchObject({
+    disagrees: false,
+    actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
+  });
+}, 120_000);
+
+it("requires an explicit scenario to excuse a recorded invoice acceptance", async () => {
+  const { profile, scenario } = loadCase(root, "pay-an-invoice");
+  const spy = vi.spyOn(comparator, "stoppedReleaseProblem");
+  try {
+    await runScenario(profile, scenario, { reportExpectationFailures: true });
+    const call = spy.mock.calls.find(
+      ([run]) => run.trace?.scenario.id === "pay-an-invoice--branch-1",
+    );
+    if (!call) throw new Error("Missing invoice comparison");
+    const [run, stop, outcome] = call;
+    expect(stoppedReleaseProblem(run, stop, outcome)).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+}, 120_000);
+
 it("rejects a refused terms policy ID copied under a different field", () => {
   const payload = { id: acceptedId, policyHint: refusedClaim.terms.policy.id };
   expect(
@@ -540,6 +597,7 @@ interface ActionSlotFixture {
   readonly envelope?: (bytes: string) => string;
   readonly scopeDigest?: string;
   readonly admit?: Partial<TraceEvent> | null;
+  readonly replay?: boolean;
   readonly cite?: boolean;
   readonly revoke?: boolean;
   readonly mandateEvidence?:
@@ -575,6 +633,7 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     envelope = (bytes) => bytes,
     scopeDigest,
     admit = {},
+    replay,
     cite,
     revoke,
     mandateEvidence,
@@ -776,29 +835,57 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     wire = { format: "awp-jws-compact/0.1", jws: await signCompact(key, "message+jws", message) };
   }
   const messageDigest = digestOf(observed);
-  const release: TraceEvent = { ...gated, seq: 8, actionDigest, actionScope: scope, messageDigest };
+  const release: TraceEvent = {
+    ...gated,
+    seq: 10,
+    actionDigest,
+    actionScope: scope,
+    messageDigest,
+  };
   const proposal = packetWithStatement(acceptedId);
+  const proposalPacket: PacketView = {
+    ...proposal,
+    id: proposalId,
+    kind: "propose",
+    layers: {
+      ...proposal.layers,
+      header: {
+        present: true,
+        summary: "",
+        digest: proposalDigest,
+        raw: { from: { onBehalfOf: sender } },
+      },
+      content: { present: true, summary: "", raw: { termsDigest } },
+    },
+  };
   const arrived: TraceEvent = {
     ...checked(4),
     part: "transport",
     kind: "message-in",
     messageId: proposalId,
     gateRun: 4,
+    packet: proposalPacket,
+  };
+  const replayDigest = digestOf({ id: proposalId, replay: true });
+  const replayIn: TraceEvent = {
+    ...arrived,
+    seq: 6,
+    gateRun: 5,
     packet: {
-      ...proposal,
-      id: proposalId,
-      kind: "propose",
+      ...proposalPacket,
       layers: {
-        ...proposal.layers,
-        header: {
-          present: true,
-          summary: "",
-          digest: proposalDigest,
-          raw: { from: { onBehalfOf: sender } },
-        },
-        content: { present: true, summary: "", raw: { termsDigest } },
+        ...proposalPacket.layers,
+        header: { ...proposalPacket.layers.header, digest: replayDigest },
       },
     },
+  };
+  const replayRefusal: TraceEvent = {
+    ...accepted(7, "admit"),
+    outcome: "refuse",
+    reason: "replay-conflict",
+    gateRun: 5,
+    messageId: proposalId,
+    messageDigest: replayDigest,
   };
   const events: TraceEvent[] = [
     checked(1),
@@ -814,10 +901,11 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
           messageDigest: proposalDigest,
           ...admit,
         },
+    ...(replay ? [replayIn, replayRefusal] : []),
     mandate === null
-      ? checked(6)
+      ? checked(8)
       : {
-          ...checked(6),
+          ...checked(8),
           part: "outbound-gate",
           gateRun: 3,
           check: "mandate",
@@ -825,9 +913,9 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
           ...mandate,
         },
     recipientCheck === null
-      ? checked(7)
+      ? checked(9)
       : {
-          ...checked(7),
+          ...checked(9),
           part: "outbound-gate",
           gateRun: 3,
           check: "recipient",
@@ -838,7 +926,7 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     release,
     {
       ...sent,
-      seq: 9,
+      seq: 11,
       actionDigest,
       packet: {
         ...proposal,
@@ -858,7 +946,7 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
     const sendStep = { id: "send", agent: "agent", type: "instruct", text: "Send" } as const;
     world.script =
       mandateEvidence === "silent revocation" ? [revokeStep, sendStep] : [sendStep, revokeStep];
-    steps.set(9, { id: sendStep.id, descriptor: describeStep(sendStep) });
+    steps.set(11, { id: sendStep.id, descriptor: describeStep(sendStep) });
   }
   return stoppedReleaseProblem(
     {
@@ -874,7 +962,7 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
           : undefined,
       payloads: new Map<number, unknown>([
         [release.seq, parameters],
-        [9, { message: observed, wire }],
+        [11, { message: observed, wire }],
       ]),
     },
     refusal,
@@ -886,6 +974,25 @@ async function checkActionSlots(options: ActionSlotFixture = {}) {
 it("masks the action of a passed scenario mandate and the recipient of the admitted proposal", async () => {
   expect(await checkActionSlots({ refusedFields: { terms: { action: "use" } } })).toBe(false);
   expect(await checkActionSlots({ refusedFields: { value: { payee: peerParty } } })).toBe(false);
+});
+
+it("keeps the original proposal admission after a same-ID replay refusal", async () => {
+  expect(await checkActionSlots({ replay: true })).toBe(false);
+});
+
+it("requires a proposal admission before excusing a reply recipient", async () => {
+  expect(await checkActionSlots({ replay: true, admit: { outcome: "refuse" } })).toBe(true);
+});
+
+it("uses the provisioned ID of a mandate permission with a local label", async () => {
+  const label = "paid-service";
+  expect(
+    await checkActionSlots({
+      rule: { ...useRule, id: `#${label}` },
+      mandate: { ...checkedMandate, rule: { id: scopedUrn("rule", ownActor, label), text: "" } },
+      refusedFields: { terms: { action: "use" } },
+    }),
+  ).toBe(false);
 });
 
 it.each([
@@ -1084,9 +1191,16 @@ it.each([
   ["https://pay.example/account", "https://pay.example/account#alias"],
   ["https://pay.example/account#alias", "https://pay.example/account"],
   ["https://pay.example/account?alias=o", "https://pay.example/account?alias=o'neil"],
-])("matches whole values in releases and citations (%s, %s)", (refusedAccount, otherAccount) => {
+  ["https://pay.example/account", "https://pay.example/account!", true],
+  ["https://pay.example/account!", "https://pay.example/account", true],
+] satisfies [
+  string,
+  string,
+  boolean?,
+][])("matches whole values in releases and citations (%s, %s)", (refusedAccount, otherAccount, bracketed: boolean = false) => {
   const statement = { ...refusedClaim, account: refusedAccount };
   const refused = { ...refusedStatement, claimDigest: digestOf(statement), statement };
+  const reference = (iri: string) => `Account: ${bracketed ? `<${iri}>` : iri}.`;
   const check = (destination: string, cited?: string) =>
     afterRefusal(
       [
@@ -1097,13 +1211,13 @@ it.each([
       checked(1),
       refusal,
       new Map([
-        [sent.seq, { message: { body: { destination: `Account: ${destination}.` } }, wire: {} }],
+        [sent.seq, { message: { body: { destination: reference(destination) } }, wire: {} }],
       ]),
-      { admissions: admittedClaim({ ...externalClaim, destination: `Account: ${cited}.` }) },
+      { admissions: admittedClaim({ ...externalClaim, destination: reference(cited ?? "") }) },
       refused,
     );
-  expect(check(otherAccount)).toBe(false);
   expect(check(refusedAccount, otherAccount)).toBe(true);
+  expect(check(otherAccount)).toBe(false);
   expect(check(refusedAccount, refusedAccount)).toBe(false);
 });
 

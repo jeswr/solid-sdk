@@ -4,9 +4,7 @@ import { bitstringStatusListEntry } from "@jeswr/solid-vc";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { createPrivateKey, createPublicKey, sign } from "crypto";
 import { DataFactory, type Store } from "n3";
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { fileURLToPath } from "url";
-import { digestBytes, digestOf, isIri } from "../core/canonical.js";
+import { digestBytes, digestOf, isIri, scopedUrn } from "../core/canonical.js";
 import { mandateSchema } from "../mechanisms/mandate.js";
 import { TYP } from "../mechanisms/statements.js";
 import { attachmentGraph, attachmentGraphs, materializeAttachments } from "../model/attachments.js";
@@ -23,9 +21,6 @@ import {
   documentConfiguration,
   isMessagePacket,
 } from "../wire/message-packet.js";
-import { applyIdentityNames } from "./identity-names.js";
-import { loadCase } from "./load.js";
-import { matrixProfileChanges, matrixWorld } from "./matrix.js";
 import {
   explainedValues,
   maskJsonStrings,
@@ -33,8 +28,7 @@ import {
   type RefusedStatement,
   refusedContent,
 } from "./refused-values.js";
-import { patch } from "./run.js";
-import { domainProfileSchema, type Scenario, scenarioSchema } from "./schema.js";
+import type { Scenario } from "./schema.js";
 
 export function decisionsOf(events: readonly TraceEvent[]) {
   return events
@@ -182,41 +176,6 @@ export interface ComparisonRun {
   readonly payloads?: ReadonlyMap<number, unknown>;
   readonly releaseSupport?: ReadonlyMap<number, readonly string[]>;
   readonly approvedAsks?: ReadonlySet<number>;
-}
-
-/** Use trace metadata only to select the authored scenario and its variant. */
-function authoredScenario(trace: TraceFile | undefined): Scenario | undefined {
-  if (!trace) return undefined;
-  const [id, branchId, extra] = trace.scenario.id.split("--");
-  if (!id || extra !== undefined) return undefined;
-  try {
-    const directory = fileURLToPath(new URL("../../", import.meta.url));
-    const { scenario, profile } = loadCase(directory, id);
-    const configuration = scenario.configurations.find(
-      (entry) => entry.id === trace.configuration.id,
-    );
-    if (!configuration && !["baseline", `${id}-local`].includes(trace.configuration.id))
-      return undefined;
-    const configured = configuration ? matrixWorld(scenario, configuration) : scenario;
-    const branch =
-      typeof trace.path === "object" ? configured.branches[trace.path.index - 1] : undefined;
-    if (branch?.id !== branchId || (branch?.onlyUnder && branch.onlyUnder !== configuration?.id))
-      return undefined;
-    const world = scenarioSchema.parse(branch ? patch(configured, branch.change) : configured);
-    if (configuration?.change.identity === "did") {
-      const changes = [...matrixProfileChanges(scenario, configuration), branch?.profileChange];
-      const pathProfile = domainProfileSchema.parse(
-        changes.reduce(
-          (value, change) => (change === undefined ? value : patch(value, change)),
-          profile,
-        ),
-      );
-      applyIdentityNames(pathProfile, world);
-    }
-    return world;
-  } catch {
-    return undefined;
-  }
 }
 
 interface DecisionWitness {
@@ -654,10 +613,10 @@ function replyRecipientEstablished(
       event.agent === go.agent &&
       event.part === "inbound-gate" &&
       event.kind === "decision" &&
+      event.outcome === "admit" &&
       event.messageId === replyTo,
   );
-  if (decision?.outcome !== "admit" || decision.gateRun === undefined || !decision.messageDigest)
-    return false;
+  if (decision?.gateRun === undefined || !decision.messageDigest) return false;
   const packet = run.events.findLast(
     (event) =>
       event.seq < decision.seq &&
@@ -665,17 +624,18 @@ function replyRecipientEstablished(
       event.kind === "message-in" &&
       event.gateRun === decision.gateRun &&
       event.messageId === replyTo &&
-      event.packet?.id === replyTo,
+      event.packet?.id === replyTo &&
+      event.packet.layers.header.digest === decision.messageDigest,
   )?.packet;
-  if (packet?.layers.header.digest !== decision.messageDigest) return false;
-  const from = object(object(packet?.layers.header.raw)?.from);
+  if (!packet) return false;
+  const from = object(object(packet.layers.header.raw)?.from);
   if (from?.onBehalfOf !== recipient) return false;
   if (message.kind !== "accept") return true;
   const body = object(message.body);
-  const content = object(packet?.layers.content.raw);
+  const content = object(packet.layers.content.raw);
   const termsDigest = string((object(content?.body) ?? content)?.termsDigest);
   return (
-    packet?.kind === "propose" &&
+    packet.kind === "propose" &&
     body?.proposal === replyTo &&
     !!termsDigest &&
     body.termsDigest === termsDigest
@@ -744,9 +704,13 @@ function gateEstablishedSlots(
   const ruleId = mandateCheck?.rule?.id;
   const rule =
     ruleId &&
-    [...(mandate?.autonomous ?? []), ...(mandate?.withApproval ?? [])].find(
-      (entry) => entry.id === ruleId,
-    );
+    [...(mandate?.autonomous ?? []), ...(mandate?.withApproval ?? [])].find(({ id }) => {
+      if (typeof id !== "string") return false;
+      const provisionedId = id.startsWith("#")
+        ? agent.actor && scopedUrn("rule", agent.actor, id.slice(1))
+        : id;
+      return provisionedId === ruleId;
+    });
   const slots: ActionSlots = {};
   if (
     mandateCheck?.verdict === "pass" &&
@@ -1175,7 +1139,6 @@ export function stoppedReleaseProblem(
     );
   }
 
-  scenario ??= authoredScenario(run.trace);
   const ownActors = new Set(signingAgents(scenario, stop.agent).map(({ actor }) => actor));
   const withheld = [refusedContent(refused)];
   const admitted = new Map<string, { statement: VerifiedStatement; decision: TraceEvent }>();
@@ -1252,17 +1215,14 @@ export function stoppedReleaseProblem(
           );
           const message = send && boundMessage(run, event, send);
           const envelope = message && boundActionEnvelope(message, event);
-          if (send && envelope) {
-            if (scenario) {
-              const world = scenario;
-              slots = new Map(
-                withheld.map((content) => [
-                  content,
-                  gateEstablishedSlots(run, world, stop, event, envelope, content),
-                ]),
-              );
-              established.set(send.seq, { envelope, slots });
-            }
+          if (send && envelope && scenario) {
+            slots = new Map(
+              withheld.map((content) => [
+                content,
+                gateEstablishedSlots(run, scenario, stop, event, envelope, content),
+              ]),
+            );
+            established.set(send.seq, { envelope, slots });
           }
         }
         if (

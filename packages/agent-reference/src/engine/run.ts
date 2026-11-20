@@ -634,7 +634,7 @@ export async function runScenario(
         expectationProblem = "a release after the stop lacks a narrower authorised proposal";
       } else if (
         ((witness.outcome === "stop" && !witness.continues) || witness.outcome === "refuse") &&
-        stoppedReleaseProblem(run, witnessed, witness.outcome)
+        stoppedReleaseProblem(run, witnessed, witness.outcome, world)
       ) {
         expectationProblem = "an effect followed a stop";
       }
