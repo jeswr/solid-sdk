@@ -10,6 +10,7 @@ import {
 } from "../bindings/a2a.js";
 import { envelopeBytes, envelopeJson } from "../bindings/bytes.js";
 import { writeEmail } from "../bindings/email.js";
+import { isAgentDescriptionAddress } from "../bindings/email-mime.js";
 import {
   FictionalAuthorizationServer,
   MCP_BINDING,
@@ -91,8 +92,12 @@ export class ScenarioCarriage {
       !this.scenario.carriage?.at || this.scenario.carriage.at === step
         ? this.scenario.carriage?.fault
         : undefined;
-    const descriptionFor = (party: string) =>
-      `${this.scenario.parties.find((item) => item.id === party)?.actor?.split("#")[0]}/description`;
+    // A party with no web actor has no description to advertise: send the email without the header.
+    const descriptionFor = (party: string) => {
+      const actor = this.scenario.parties.find((item) => item.id === party)?.actor;
+      const address = actor === undefined ? undefined : `${actor.split("#")[0]}/description`;
+      return address !== undefined && isAgentDescriptionAddress(address) ? address : undefined;
+    };
     const message = carriageBytes(wire);
     const notices: CarriageNotice[] = [];
     let input: CarriageDelivery;
@@ -160,7 +165,7 @@ export class ScenarioCarriage {
           this.keys(lender),
           "The fictional lender’s agent",
           this.endpoint,
-          descriptionFor(lender),
+          descriptionFor(lender) ?? `${actor.split("#")[0]}/description`,
         );
         const http = cardResponse(card);
         const checked = await checkAgentCard(envelopeJson(http.body), this.keys(lender));
