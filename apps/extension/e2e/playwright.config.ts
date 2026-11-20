@@ -5,6 +5,9 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: true,
   retries: 0,
+  // On CI Playwright captures the whole pull-request diff by default; a PR that carries large
+  // generated fixtures overflows Node's string limit before any test starts. The commit is enough.
+  captureGitInfo: { commit: true, diff: false },
   use: {
     headless: true,
   },
