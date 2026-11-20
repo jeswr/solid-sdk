@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { defineConfig } from "@playwright/test";
 
@@ -8,7 +9,8 @@ export default defineConfig({
   outputDir: "./e2e/results",
   timeout: 90_000,
   use: {
-    baseURL: "http://127.0.0.1:5191",
+    // Chromium supports localhost as the relying party for HTTP WebAuthn tests.
+    baseURL: "http://localhost:5191",
     browserName: "chromium",
     trace: "off",
     ...(process.env.PW_CHROMIUM

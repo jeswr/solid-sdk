@@ -21,14 +21,21 @@ const NOW = new Date("2026-11-13T12:00:00.000Z");
 
 /** Answers each approval with the next scripted answer, recording what was asked. */
 function harness(answers: ((r: ApprovalRequest) => PrincipalResponse)[], now = () => NOW) {
-  const session = new Session({ pace: 0, now });
+  const session = new Session({ pace: 0, now, demoMode: true });
   const asked: ApprovalRequest[] = [];
   session.engine.subscribe((s) => {
     const req = s.pending?.request;
     if (req && !asked.includes(req)) {
       asked.push(req);
       const answer = answers.shift();
-      if (answer) queueMicrotask(() => void session.engine.respond(answer(req)));
+      if (answer) {
+        queueMicrotask(async () => {
+          const response = answer(req);
+          const check =
+            response.type === "deny" ? undefined : await session.engine.verifyApproval(response);
+          await session.engine.respond(response, check);
+        });
+      }
     }
   });
   const messages = (): readonly ChatMessage[] => session.engine.getState().chats[0]?.messages ?? [];
@@ -220,7 +227,7 @@ function pauseSigning(matches: (payload: Record<string, unknown>) => boolean) {
 }
 
 /** Pause exactly one WebCrypto signature, then continue through the real signer. */
-function pauseConsentSigning(type: "revocation" | "spending-rule") {
+function pauseConsentSigning(type: "approval" | "revocation" | "spending-rule") {
   const entered = deferred();
   const release = deferred();
   const original = crypto.subtle.sign.bind(crypto.subtle);
@@ -641,6 +648,54 @@ describe("second adversarial review", () => {
   });
 
   it.each([
+    "purchase",
+    "rule",
+    "step-up",
+  ] as const)("discards the %s signature when signing reaches the approval deadline", async (kind) => {
+    let time = NOW;
+    const { session, asked, messages } = harness(kind === "step-up" ? [once] : [], () => time);
+    const engine = session.engine;
+    await engine.ready;
+    const chatId = engine.getState().activeChat;
+    const action =
+      kind === "step-up" ? engine.mortgageApply(chatId) : engine.buy(chatId, "p:socks");
+    const requestKind = kind === "step-up" ? "step-up" : "purchase";
+    const request = await vi.waitFor(() => {
+      const request = engine.getState().pending?.request;
+      expect(request?.kind).toBe(requestKind);
+      return request as ApprovalRequest;
+    });
+    const response = (kind === "step-up" ? face : kind === "rule" ? setLimit : once)(request);
+    const deadline = Date.parse(request.expiresAt);
+    time = new Date(deadline - 1);
+    const verification = await engine.verifyApproval(response);
+    expect(verification.status).toBe("simulated");
+    const signing =
+      kind === "step-up"
+        ? pauseSigning((payload) => payload.method === "face-check")
+        : pauseConsentSigning(kind === "rule" ? "spending-rule" : "approval");
+    try {
+      expect(await engine.respond(response, verification)).toEqual({ ok: true });
+      await signing.entered;
+      time = new Date(deadline);
+      signing.release();
+      await expect(action).resolves.toBe("expired");
+      expect(engine.getState().pending).toBeUndefined();
+      expect(asked).toHaveLength(kind === "step-up" ? 2 : 1);
+      expect(messages()).toContainEqual(
+        expect.objectContaining({ type: "approval", requestId: request.id, state: "expired" }),
+      );
+      expect(messages().some((m) => m.type === "offer" || m.type === "receipt")).toBe(false);
+      expect(engine.getState().rules).toHaveLength(0);
+    } finally {
+      signing.release();
+      signing.restore();
+      engine.stop();
+      await action.catch(() => undefined);
+    }
+  });
+
+  it.each([
     "order",
     "actionDigest",
     "total",
@@ -753,7 +808,11 @@ describe("review security regressions", () => {
     const socks = session.send("buy socks");
     await firstPending.promise;
     const old = once(asked[0] as ApprovalRequest);
-    const answers = await Promise.all([session.engine.respond(old), session.engine.respond(old)]);
+    const check = await session.engine.verifyApproval(old);
+    const answers = await Promise.all([
+      session.engine.respond(old, check),
+      session.engine.respond(old, check),
+    ]);
     expect(answers).toEqual([{ ok: true }, { ok: false, reason: "nothing-pending" }]);
     await socks;
     unsubscribe();
@@ -847,21 +906,20 @@ describe("review security regressions", () => {
   });
 
   it("an expired signed face check does not authorize release", async () => {
-    let time = NOW;
-    let expired = false;
-    const { session, asked, messages } = harness([once, face, deny], () => time);
+    const { session, asked, messages } = harness([once, face, deny]);
     const original = Parties.prototype.sign;
-    const spy = vi.spyOn(Parties.prototype, "sign").mockImplementation(async function (
+    const spy = vi.spyOn(Parties.prototype, "sign").mockImplementation(function (
       this: Parties,
       from,
       payload,
     ) {
-      const signed = await original.call(this, from, payload);
-      if (from === "org:idp" && !expired) {
-        expired = true;
-        time = new Date(NOW.getTime() + 15 * 60000);
-      }
-      return signed;
+      return original.call(
+        this,
+        from,
+        from === "org:idp"
+          ? { ...payload, issuedAt: new Date(NOW.getTime() - 15 * 60_000).toISOString() }
+          : payload,
+      );
     });
     try {
       await session.send("Go with North Bank");
