@@ -79,7 +79,7 @@
       "assurances": [
         "attested"
       ],
-      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:degree-recognition:university> . GRAPH ?g { ?subject <urn:claim:education.degree-code> ?degree . } FILTER(?degree IN (\"BSc\", \"MSc\")) }"
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:degree-recognition:university> . GRAPH ?g { ?subject <urn:claim:education.degree-code> ?degree . FILTER(?degree IN (\"BSc\", \"MSc\")) } }"
     }
   ],
   "decisionsForPerson": [],

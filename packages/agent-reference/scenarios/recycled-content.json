@@ -459,7 +459,7 @@
       "id": "prove-answer",
       "agent": "owner-agent",
       "type": "prove",
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "request": {
         "$ref": "steps.fresh-request.request"
       },
@@ -616,6 +616,31 @@
       "catalogueExpected": {
         "outcome": "ask-more",
         "reason": "method-not-accepted"
+      }
+    },
+    {
+      "id": "supplier-below-threshold",
+      "what": "One supplier reports 0.29 and the verified minimum condition releases false.",
+      "expect": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "source"
+      },
+      "outline": [],
+      "change": {
+        "statements": {
+          "audited-tier-3": {
+            "value": {
+              "value": 0.29
+            }
+          }
+        },
+        "blocked": [
+          {
+            "path": "supplier-below-threshold",
+            "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
+          }
+        ]
       }
     }
   ],
@@ -1130,7 +1155,12 @@
   ],
   "suites": {},
   "assurance": "attested",
-  "blocked": [],
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
+    }
+  ],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -1146,14 +1176,12 @@
     }
   ],
   "traceSteps": {},
-  "requiredMethods": [
-    "sparq-noir-closed-world/0"
-  ],
+  "requiredMethods": [],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [
     {
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "issuer": "tier",
       "subject": "urn:fictional:recycled-content:lot",
       "statements": [
@@ -1161,7 +1189,7 @@
       ]
     },
     {
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "issuer": "tier-2",
       "subject": "urn:fictional:recycled-content:lot",
       "statements": [
@@ -1169,7 +1197,7 @@
       ]
     },
     {
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "issuer": "tier-3",
       "subject": "urn:fictional:recycled-content:lot",
       "statements": [

@@ -6,14 +6,22 @@ import { Store } from "n3";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { isDeepStrictEqual } from "util";
 import { ScriptedMailbox } from "../bindings/email.js";
-import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
+import { digestBytes, digestContent, digestOf, scopedUrn } from "../core/canonical.js";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import { availableAdapters } from "../derive/adapters/index.js";
 import { SPARQ_AGGREGATE } from "../derive/adapters/sparq-aggregate.js";
+import { SPARQ_ZK_QUERY, SparqZkQuery } from "../derive/adapters/sparq-zk-query.js";
+import {
+  legacyStatusRef,
+  resultPublicKey,
+  resultVerificationMethod,
+  SPARQ_ZK_RESULT,
+} from "../derive/adapters/sparq-zk-result.js";
 import type { ProofCache } from "../derive/cache.js";
+import { queryFor, ruleInputs } from "../derive/rules.js";
 import type { DerivedRequest, FixedJointSession, VerifierRegistry } from "../derive/verifiers.js";
-import { DERIVATION_LIMITS, registryForRun } from "../derive/verifiers.js";
+import { DERIVATION_LIMITS, registryForRun, verifierRegistry } from "../derive/verifiers.js";
 import { SyntheticPaymentRail, underwritingTermsFor } from "../domains/mortgage.js";
 import {
   PURPOSE_STORE_RELEASE_CONDITION,
@@ -59,6 +67,7 @@ import { EmbeddedCredentialNode } from "../model/evidence-item.js";
 import { LabelIndex } from "../model/labels.js";
 import { MessageNode } from "../model/message-nodes.js";
 import { PaymentFacts } from "../model/payment.js";
+import { queryVerificationMethod } from "../model/sparq-query.js";
 import {
   alternativeWireId,
   CONFIG_AGREEMENT,
@@ -357,7 +366,8 @@ export async function runScenario(
 ): Promise<PathResult[]> {
   const profile = domainProfileSchema.parse(profileInput);
   const scenario = scenarioSchema.parse(scenarioInput);
-  const verifiers = options.registry ?? (await availableAdapters());
+  let optionalVerifiers: VerifierRegistry | undefined;
+  const emptyVerifiers = verifierRegistry();
   if (profile.id !== scenario.profile) throw new Error("profile/scenario id mismatch");
   validateReferences(profile, scenario);
   if (options.configuration === "all") {
@@ -428,6 +438,11 @@ export async function runScenario(
       Object.assign(world, renameIdentities(world, world.identityNames));
     }
     validateReferences(pathProfile, world, { pathWorld: true });
+    let verifiers = options.registry ?? emptyVerifiers;
+    if (!options.registry && world.requiredMethods.length) {
+      optionalVerifiers ??= await availableAdapters();
+      verifiers = optionalVerifiers;
+    }
     const combinationProblems = alternative
       ? scenarioRegistry().check({
           layers: {
@@ -949,7 +964,23 @@ async function runPath(
   for (const agent of agents)
     for (const rule of scenario.trust.sources[agent.id] ?? []) cast.rule(agent.id, rule);
   const proofIssuerKeys: NonNullable<GateContext["proofIssuerKeys"]>[number][] = [];
-  const proofCredentials: NonNullable<GateContext["proofCredentials"]>[number][] = [];
+  const proofCredentials: (NonNullable<GateContext["proofCredentials"]>[number] & {
+    holder?: string;
+  })[] = [];
+  const queryFixtures: {
+    credential: JsonObject;
+    subject: string;
+    source: NonNullable<GateContext["proofIssuerKeys"]>[number];
+  }[] = [];
+  const resultFixtures = new Map<
+    string,
+    {
+      issuer: string;
+      issuerId: string;
+      publicKey: string;
+      status: { status_list: string; version: number; bits: number[] };
+    }
+  >();
   for (const spec of scenario.proofCredentials) {
     const system = verifiers.proofSystems.get(spec.method);
     if (!system || !scenario.requiredMethods.includes(spec.method)) continue;
@@ -964,6 +995,38 @@ async function runPath(
       claims: { statements },
       ...(spec.status ? { status: spec.status } : {}),
     });
+    if (system.method === SPARQ_ZK_QUERY.method && system.kind === "real") {
+      if (statements.some((statement) => statement.issuer !== issuer.identity))
+        throw new Error("Query fixture statements must come from the credential issuer");
+      queryFixtures.push({
+        credential,
+        subject: spec.subject,
+        source: {
+          issuer: issuer.identity,
+          key: keys.publicKey,
+          claimTypes: [...new Set(statements.map((statement) => String(statement.claimType)))],
+        },
+      });
+    }
+    if (system.method === SPARQ_ZK_RESULT.method && system.kind === "real") {
+      const ref = legacyStatusRef.parse(spec.status);
+      if (ref.index >= 2 ** 20)
+        throw new Error("Result fixture status index exceeds member bounds");
+      const fixture = resultFixtures.get(ref.list) ?? {
+        issuer: issuer.identity,
+        issuerId: issuer.id,
+        publicKey: resultPublicKey.parse(keys.publicKey).publicKey,
+        status: { status_list: ref.list, version: ref.version, bits: [] },
+      };
+      if (fixture.issuer !== issuer.identity || fixture.status.version !== ref.version)
+        throw new Error("Conflicting result fixture status list");
+      const offset = Math.floor(ref.index / 8);
+      while (fixture.status.bits.length <= offset) fixture.status.bits.push(255);
+      if (ref.active)
+        fixture.status.bits[offset] =
+          required(fixture.status.bits[offset]) & ~(1 << (ref.index % 8));
+      resultFixtures.set(ref.list, fixture);
+    }
     const knownKey = proofIssuerKeys.find(
       (k) => k.issuer === issuer.identity && digestOf(k.key) === digestOf(keys.publicKey),
     );
@@ -982,7 +1045,111 @@ async function runPath(
         credential,
         statement: String(statement.id),
         digest: digestOf(statement),
+        ...(system.method === SPARQ_ZK_RESULT.method && system.kind === "real"
+          ? { holder: spec.subject }
+          : {}),
       });
+  }
+  const queryPresentationSalts = new Map<string, string>();
+  const queryProofPolicies: NonNullable<GateContext["queryProofPolicies"]>[number][] = [];
+  const querySystem = verifiers.proofSystems.get(SPARQ_ZK_QUERY.method);
+  if (querySystem instanceof SparqZkQuery && scenario.queryProofOptions) {
+    for (const step of scenario.script) {
+      if (step.type !== "proof-request") continue;
+      const options = scenario.queryProofOptions[step.rule];
+      const rule = profile.rules.find((rule) => rule.id === step.rule);
+      if (!options || !rule || !("template" in rule)) continue;
+      const scope = digestOf([rule.id, step.subject]);
+      if (queryPresentationSalts.has(scope)) continue;
+      const kinds = ruleInputs(rule);
+      const sources = rule.inputsFrom.map((source) => profile.sources[source] ?? source);
+      const fixtures = queryFixtures.filter(
+        ({ subject, source }) =>
+          subject === step.subject &&
+          sources.includes(source.issuer) &&
+          source.claimTypes.some((kind) => kinds.includes(kind)),
+      );
+      const coverage = fixtures.map(({ source }) => ({
+        ...source,
+        claimTypes: source.claimTypes.filter((kind) => kinds.includes(kind)),
+      }));
+      const trustMembers = [
+        ...new Map(
+          coverage.map(({ issuer, key }) => [
+            digestOf([issuer, key]),
+            {
+              issuer,
+              verificationMethod: queryVerificationMethod(issuer),
+              ...resultPublicKey.parse(key),
+            },
+          ]),
+        ).values(),
+      ];
+      const trustedIssuers = [...new Set(trustMembers.map(({ publicKey }) => publicKey))];
+      // Fixture-only salt, held outside the signed request and proof record.
+      const salt = digestOf(["query fixture salt", scenario.id, path, scope]).slice(
+        "sha-256:".length,
+      );
+      const credentialByDigest = new Map(
+        fixtures.map(({ credential }) => [digestOf(credential), credential]),
+      );
+      const credentials = [...credentialByDigest.keys()]
+        .sort()
+        .map((digest) => required(credentialByDigest.get(digest)));
+      const inputCommitment = querySystem.fixtureInputCommitment({
+        query: queryFor(rule),
+        policy: { ...options, trustMembers, trustedIssuers },
+        nonce: scope,
+        credentials,
+        presentationSaltHex: salt,
+      });
+      queryProofPolicies.push({
+        rule: rule.id,
+        subject: step.subject,
+        policy: { ...options, inputCommitment },
+        coverage,
+      });
+      queryPresentationSalts.set(scope, salt);
+    }
+  }
+  const resultBindings = new Map<string, { jws: string }[]>();
+  for (const issuer of new Set([...resultFixtures.values()].map((fixture) => fixture.issuer))) {
+    const fixtures = [...resultFixtures.values()].filter((fixture) => fixture.issuer === issuer);
+    const keyFixture = required(fixtures[0]);
+    const key = required(sourceKeys.get(keyFixture.issuerId));
+    const issue = (claimType: string, id: string, value: JsonObject) =>
+      signClaim(key, {
+        id: scopedUrn("proof-metadata", id, claimType.replace(".", "-")),
+        issuer,
+        subject: issuer,
+        claimType,
+        method: "recorded-by-authority",
+        asOf: now().toISOString(),
+        value: { method: SPARQ_ZK_RESULT.method, ...value },
+      });
+    const statements = await Promise.all([
+      issue("proof.issuer-key", issuer, {
+        publicKey: keyFixture.publicKey,
+        verificationMethod: resultVerificationMethod(issuer),
+        statusLists: fixtures.map(({ status }) => status.status_list),
+      }),
+      ...fixtures.map(({ status }) => issue("proof.status", status.status_list, status)),
+    ]);
+    resultBindings.set(
+      issuer,
+      statements.map((jws) => ({ jws })),
+    );
+    for (const agent of agents) {
+      if (!(scenario.trust.sources[agent.id] ?? []).some((rule) => rule.source === issuer))
+        continue;
+      cast.rule(agent.id, {
+        id: scopedUrn("proof-metadata", issuer, "fixture-authority"),
+        version: "1",
+        source: issuer,
+        subjects: [issuer],
+        claimTypes: ["proof.issuer-key", "proof.status"],
+      });
+    }
   }
   const proofDatasets = profile.acceptedProofs
     .filter((a) => a.binds.includes("complete"))
@@ -1004,6 +1171,14 @@ async function runPath(
         issuer: required(parties.get(c.issuer)).identity,
         status: c.status as JsonObject,
       })),
+    ...(resultFixtures.size
+      ? {
+          resultSnapshots: [...resultFixtures.values()].map(({ issuer, status }) => ({
+            issuer,
+            snapshot: status,
+          })),
+        }
+      : {}),
   };
   for (const credential of scenario.selectiveCredentials) {
     const issuer = required(parties.get(credential.issuer));
@@ -1971,9 +2146,12 @@ async function runPath(
       acceptedProofs: profile.acceptedProofs,
       acceptedJoint: profile.acceptedJoint,
       proofIssuerKeys,
-      proofCredentials,
+      proofCredentials: proofCredentials.filter(
+        ({ holder }) => !holder || holder === cast.get(agent.id).identity.party,
+      ),
       proofDatasets,
       proofStatusPolicy,
+      queryProofPolicies,
       proofCache: options.proofCache,
       generateProofs: options.generateProofs,
       ...(profile.codeMappings?.receivers.includes(agent.actor ?? "")
@@ -2137,16 +2315,27 @@ async function runPath(
       ),
       reliance: {
         id: `urn:profile:${profile.id}`,
-        rules: profile.claims.map((c) => ({
-          id: `urn:profile:${profile.id}:${c.kind}`,
-          claimType: c.kind,
-          methods: c.methods,
-          maxAgeDays: c.maxAgeDays,
-          ...(c.precedence ? { precedence: c.precedence } : {}),
-          ...(c.corroboration ? { corroboration: c.corroboration } : {}),
-          ...(c.completeness ? { completeness: c.completeness } : {}),
-          text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
-        })),
+        rules: [
+          ...profile.claims.map((c) => ({
+            id: `urn:profile:${profile.id}:${c.kind}`,
+            claimType: c.kind,
+            methods: c.methods,
+            maxAgeDays: c.maxAgeDays,
+            ...(c.precedence ? { precedence: c.precedence } : {}),
+            ...(c.corroboration ? { corroboration: c.corroboration } : {}),
+            ...(c.completeness ? { completeness: c.completeness } : {}),
+            text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
+          })),
+          ...(resultFixtures.size
+            ? ["proof.issuer-key", "proof.status"].map((claimType) => ({
+                id: `urn:profile:${profile.id}:${claimType}`,
+                claimType,
+                methods: ["recorded-by-authority"],
+                maxAgeDays: 1,
+                text: "Use current identity-signed proof metadata from this fixture's accepted sources.",
+              }))
+            : []),
+        ],
       },
       resolver: new TrustResolver({
         principal: name(cast.get(agent.id).identity.party),
@@ -2922,6 +3111,28 @@ async function runPath(
       }
       case "proof-request":
         {
+          const rule = profile.rules.find((entry) => entry.id === step.rule);
+          if (rule && "template" in rule && resultBindings.size) {
+            const kinds = ruleInputs(rule);
+            for (const [issuer, evidence] of resultBindings) {
+              if (
+                !rule.inputsFrom.includes(issuer) ||
+                !kinds.every((kind) =>
+                  profile.claims.some(
+                    (claim) => claim.kind === kind && claim.sources.includes(issuer),
+                  ),
+                )
+              )
+                continue;
+              await runtime.admitStatements(evidence, {
+                task,
+                taskId: task,
+                purpose: step.purpose,
+                subject: issuer,
+                policyMetadata: true,
+              });
+            }
+          }
           const request = runtime.issueDerivationRequest(step);
           result = {
             request,
@@ -2933,13 +3144,19 @@ async function runPath(
           };
         }
         break;
-      case "prove":
+      case "prove": {
+        const request = template<DerivedRequest>(step.request);
         result = await runtime.proveDerived({
           ...step,
-          request: template<DerivedRequest>(step.request),
+          request,
           inputs: step.inputs.map((id) => String(required(signed[id]).statement.id)),
+          presentationSaltHex:
+            step.method === SPARQ_ZK_QUERY.method
+              ? queryPresentationSalts.get(digestOf([request.rule, request.subject]))
+              : undefined,
         });
         break;
+      }
       case "joint-action": {
         const party = required(jointParties.get(step.agent));
         if (step.action === "contribute") {

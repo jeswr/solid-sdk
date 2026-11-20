@@ -52,7 +52,9 @@ import type {
   ReasonCode,
   RepresentationAssessment,
 } from "../core/types.js";
-import { evaluateRule, queryFor } from "../derive/rules.js";
+import { SPARQ_ZK_QUERY } from "../derive/adapters/sparq-zk-query.js";
+import { resultSupportsSubject, SPARQ_ZK_RESULT } from "../derive/adapters/sparq-zk-result.js";
+import { evaluateRule, isBooleanRule, queryFor } from "../derive/rules.js";
 import { contributorUpperBound, proofPolicy } from "../derive/verification.js";
 import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
 import { checkApprovalRelease } from "../gates/approval-release.js";
@@ -1942,6 +1944,7 @@ export class AgentRuntime {
       readonly purpose?: Iri;
       readonly taskId?: Iri;
       readonly operation?: Iri;
+      readonly policyMetadata?: boolean;
     },
   ) {
     return this.exclusive(async () => {
@@ -2036,7 +2039,7 @@ export class AgentRuntime {
       nonce,
       query: queryFor(rule),
       consumed: false,
-      policy: proofPolicy(gate, rule, (source, claimType) => {
+      policy: proofPolicy(gate, rule, input.subject, (source, claimType) => {
         const query = {
           evaluator: this.identity.actor,
           source,
@@ -2196,6 +2199,7 @@ export class AgentRuntime {
     assurance: "attested" | "proved";
     proofBinds: readonly ProofBinds[];
     inputs: readonly string[];
+    presentationSaltHex?: string;
   }) {
     return this.exclusive(async () => {
       const system = this.options.gates?.proofSystems?.get(input.method),
@@ -2248,15 +2252,32 @@ export class AgentRuntime {
           ...new Map((credentials as JsonObject[]).map((c) => [digestOf(c), c])).values(),
         ],
       };
+      const queryCondition =
+        system.kind === "real" && system.method === SPARQ_ZK_QUERY.method && isBooleanRule(rule);
+      if (system.method === SPARQ_ZK_QUERY.method && input.request.policy.inputCommitment)
+        args.credentials.sort((a, b) => digestOf(a).localeCompare(digestOf(b)));
       let proof = gate?.proofCache?.read(input.method, args);
       const cached = !!proof;
       if (!proof) {
         if (input.method === "sparq-noir-closed-world/0" && !gate?.generateProofs)
           return { ok: false as const, reason: "evidence-missing" };
-        proof = await system.prove(args);
+        proof = await system.prove({
+          ...args,
+          ...(queryCondition ? { booleanResult: true } : {}),
+          ...(input.presentationSaltHex === undefined
+            ? {}
+            : { presentationSaltHex: input.presentationSaltHex }),
+        });
         if (gate?.generateProofs && system.kind === "real")
           gate.proofCache?.write(input.method, args, proof);
       }
+      const subjectAnswer =
+        system.kind === "real" && system.method === SPARQ_ZK_RESULT.method && isBooleanRule(rule);
+      if (subjectAnswer && !resultSupportsSubject(proof.result, input.request.subject))
+        return { ok: false as const, reason: "derivation-not-verified" };
+      if (queryCondition && typeof proof.result !== "boolean")
+        return { ok: false as const, reason: "derivation-not-verified" };
+      const value = subjectAnswer ? true : proof.result;
       gate?.sink?.emit({
         part: "outbound-gate",
         kind: "check",
@@ -2275,7 +2296,7 @@ export class AgentRuntime {
         subject: input.request.subject,
         claimType: rule.output,
         method: "derived",
-        value: proof.result,
+        value,
         asOf: facts.map((f) => f?.asOf ?? this.now()).sort()[0] ?? this.now(),
         terms: {
           policy: { id: this.newId() },
@@ -2294,7 +2315,7 @@ export class AgentRuntime {
           proofBinds: [...input.proofBinds],
           deriver: issuer,
           at: this.now(),
-          outputDigest: digestOf(proof.result),
+          outputDigest: digestOf(value),
           inputs: facts.map((f) => ({
             id: f?.id ?? "",
             digest: f?.digest ?? "",

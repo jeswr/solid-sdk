@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { emailAddress } from "../bindings/email.js";
 import { CORE_REASON_CODES } from "../core/types.js";
+import { queryPolicyOptions } from "../derive/adapters/sparq-zk-query.js";
 import { ruleSchema } from "../derive/rules.js";
 import { agreementDefinitionSchema } from "../mechanisms/agreements.js";
 import { chainPolicySchema } from "../mechanisms/authority-chain.js";
@@ -856,6 +857,7 @@ export const scenarioSchema = z.strictObject({
       }),
     )
     .default([]),
+  queryProofOptions: z.record(iri, queryPolicyOptions.omit({ inputCommitment: true })).optional(),
   jointSession: z
     .strictObject({
       method: z.string(),

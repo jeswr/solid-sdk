@@ -91,6 +91,9 @@ export const ruleSchema = z.discriminatedUnion("template", [
   }),
 ]);
 export type DerivationRule = z.infer<typeof ruleSchema>;
+export function isBooleanRule(rule: DerivationRule): boolean {
+  return ["threshold", "membership", "all-of", "any-of"].includes(rule.template);
+}
 /** A closed SELECT counterpart of the installed rule; the holder never chooses its text. */
 export function queryFor(rule: DerivationRule): string {
   if (rule.proofQuery) return rule.proofQuery;

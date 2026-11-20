@@ -7,17 +7,18 @@ import { fileURLToPath } from "url";
 import { gunzipSync } from "zlib";
 
 export const SHA256 = "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830";
-export const RESULT_SHA256 = "e2b19eead2bcc471661b3698fb43b922caee4f9cf448024687c1f8c98335d86d";
+export const RESULT_SHA256 = "42a52776b3046efab999d8555ea9e815175f1b2ac0dce3f2832e8905748410e0";
+export const QUERY_SHA256 = "8b4bacb109c5f190e04565483c86c11efe3af5050b23ada80ab48512dbedc8b3";
+const packages = new Map([
+  [SHA256, "sparq-verifiable-aggregate"],
+  [RESULT_SHA256, "sparq-zk-result"],
+  [QUERY_SHA256, "sparq-zk-query"],
+]);
 export function install(tarball, destination) {
   // Read once: unpack exactly the authenticated bytes without a subprocess or network.
   const bytes = readFileSync(resolve(tarball));
   const hash = createHash("sha256").update(bytes).digest("hex");
-  const name =
-    hash === SHA256
-      ? "sparq-verifiable-aggregate"
-      : hash === RESULT_SHA256
-        ? "sparq-zk-result"
-        : undefined;
+  const name = packages.get(hash);
   if (!name) throw new Error("SPARQ tarball SHA-256 mismatch; nothing unpacked");
   destination ??= fileURLToPath(new URL(`../.sparq/${name}`, import.meta.url));
   mkdirSync(dirname(destination), { recursive: true });
@@ -65,7 +66,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   for (const tarball of process.argv.slice(2)) {
     const installed = install(tarball);
     console.log(
-      `Installed research-grade, unaudited ${installed.name} (${installed.sha256})${installed.name === "sparq-zk-result" ? "; sparq commitment-signed credentials, not standard VCs; test-only issuer keys" : ""}`,
+      `Installed research-grade, unaudited ${installed.name} (${installed.sha256})${installed.name === "sparq-zk-result" ? "; sparq commitment-signed credentials, not standard VCs; test-only issuer keys" : installed.name === "sparq-zk-query" ? "; sparq Merkle-suite credentials; test-only issuer keys" : ""}`,
     );
   }
 }

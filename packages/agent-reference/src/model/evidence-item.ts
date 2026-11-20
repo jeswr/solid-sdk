@@ -75,8 +75,8 @@ export class EmbeddedCredentialNode extends RdfNode {
       throw new TypeError("Wrong embedded proof type");
     return proofs[0].object.value;
   }
-  static fromJws(jws: string, id: string, dataset: Store): EmbeddedCredentialNode {
-    const { header, payload } = inspectEvidenceJws(jws);
+  static fromJws(jws: string, id: string, dataset: Store, format?: string): EmbeddedCredentialNode {
+    const { header, payload } = inspectEvidenceJws(jws, format);
     const node = new EmbeddedCredentialNode(id, dataset);
     node.types.add(VC + "VerifiableCredential");
     // A JWT names its issuer in iss only for the two JWT profiles that use it
@@ -147,7 +147,7 @@ export class EmbeddedCredentialNode extends RdfNode {
     dataset: Store,
   ): EmbeddedCredentialNode {
     if (!value.startsWith("{") && !value.startsWith("["))
-      return EmbeddedCredentialNode.fromJws(value, id, dataset);
+      return EmbeddedCredentialNode.fromJws(value, id, dataset, format);
     const envelope = inspectEvidenceEnvelope(value, format, { allowEmpty: true });
     const node = new EmbeddedCredentialNode(id, dataset);
     node.types.add(VC + "VerifiablePresentation");
@@ -220,7 +220,12 @@ export class EmbeddedCredentialNode extends RdfNode {
           credentials.every((c) => c.projectionMatches())
         );
       }
-      const expected = EmbeddedCredentialNode.fromJws(this.originalJws, this.id, new Store());
+      const expected = EmbeddedCredentialNode.fromJws(
+        this.originalJws,
+        this.id,
+        new Store(),
+        format,
+      );
       const actual = credentialClosure(this);
       return (
         actual.size === expected.dataset.size && [...expected.dataset].every((q) => actual.has(q))

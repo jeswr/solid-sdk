@@ -4826,6 +4826,140 @@
         "additionalProperties": false
       }
     },
+    "queryProofOptions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "bounds": {
+            "type": "object",
+            "properties": {
+              "credentials": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "quadsPerCredential": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "rowsPerTable": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "credentials",
+              "quadsPerCredential",
+              "rowsPerTable"
+            ],
+            "additionalProperties": false
+          },
+          "audience": {
+            "type": "string"
+          },
+          "notBefore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "notAfter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "credentialQuadBounds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "maxPresentationBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "maxResultSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "holderBinding": {
+            "type": "object",
+            "properties": {
+              "issuers": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "acceptedSnapshots": {
+            "type": "object",
+            "properties": {
+              "digests": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[0-9a-f]{2})+$"
+                }
+              },
+              "allowMissing": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "digests"
+            ],
+            "additionalProperties": false
+          },
+          "validityTime": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "earliestCreated": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tableRowBounds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "openingProfile": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "long-objects",
+              "extended"
+            ]
+          }
+        },
+        "required": [
+          "bounds",
+          "audience",
+          "notBefore",
+          "notAfter"
+        ],
+        "additionalProperties": false
+      }
+    },
     "jointSession": {
       "type": "object",
       "properties": {

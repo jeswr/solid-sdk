@@ -90,7 +90,7 @@
       "assurances": [
         "attested"
       ],
-      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:immigration-office> . GRAPH ?g { ?subject <urn:claim:work.valid-until> ?until . } FILTER(?until >= \"2026-11-13\"^^<http://www.w3.org/2001/XMLSchema#date>) }"
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:immigration-office> . GRAPH ?g { ?subject <urn:claim:work.valid-until> ?until . FILTER(?until >= \"2026-11-13\"^^<http://www.w3.org/2001/XMLSchema#date>) } }"
     }
   ],
   "decisionsForPerson": [],
@@ -165,7 +165,7 @@
     },
     {
       "what": "sparq-zk-result/5",
-      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). No holder, absence or completeness binding or unlinkability guarantee. Unsupported rules stay blocked; no real scenario proof is claimed."
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
     }
   ],
   "parties": {

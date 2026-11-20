@@ -163,7 +163,7 @@ it("requires currently accepted completeness for the exact list, subject and per
   const { profile, scenario } = loadCase(root, "trial-eligibility");
   const paths = await runScenario(profile, scenario);
   expect(paths[0]).toMatchObject({
-    blocked: "Blocked: needs a Noir circuit for absence and totals, not yet delivered.",
+    blocked: expect.stringContaining('"missing catalogue plan"'),
   });
   expect(paths[0]?.trace).toBeUndefined();
   expect(paths[1]?.actual).toMatchObject({

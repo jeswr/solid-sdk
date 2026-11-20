@@ -331,6 +331,13 @@ export interface GateContext {
     claimTypes: readonly string[];
   }[];
   readonly proofStatusPolicy?: import("../core/types.js").JsonObject;
+  /** Verifier-owned pins and coverage of independently agreed credential datasets. */
+  readonly queryProofPolicies?: readonly {
+    rule: string;
+    subject: string;
+    policy: import("../core/types.js").JsonObject;
+    coverage: NonNullable<GateContext["proofIssuerKeys"]>;
+  }[];
   readonly proofDatasets?: readonly {
     format: "engine-credential-digests/1";
     rule: string;

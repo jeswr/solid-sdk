@@ -683,7 +683,7 @@
       "id": "prove-answer",
       "agent": "owner-agent",
       "type": "prove",
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "request": {
         "$ref": "steps.fresh-request.request"
       },
@@ -1820,7 +1820,12 @@
   ],
   "suites": {},
   "assurance": "attested",
-  "blocked": [],
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact count-and-completeness query. The preferred absence alternative lacks an xsd prefix and has no catalogue plan even with the prefix declared."
+    }
+  ],
   "standIns": [
     {
       "what": "Outside organizations and data sources",
@@ -1832,14 +1837,12 @@
     }
   ],
   "traceSteps": {},
-  "requiredMethods": [
-    "sparq-noir-closed-world/0"
-  ],
+  "requiredMethods": [],
   "catalogueAssurance": "proved",
   "recordedAssurance": "attested",
   "proofCredentials": [
     {
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "issuer": "claims-register",
       "subject": "urn:fictional:insurance-quote:owner",
       "statements": [
@@ -1848,7 +1851,7 @@
       ]
     },
     {
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "issuer": "licensing",
       "subject": "urn:fictional:insurance-quote:owner",
       "statements": [

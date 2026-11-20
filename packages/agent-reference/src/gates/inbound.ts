@@ -102,6 +102,9 @@ import {
 } from "./common.js";
 import { acceptsOfferedTerms, evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
 
+const QUERY_CONDITION_FALSE =
+  "The verified query released false. The requested condition is unmet.";
+
 export interface InboundDeps {
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
   readonly trust: TrustStore;
@@ -945,6 +948,7 @@ export class InboundGate {
     verdict: Verdict;
     reason?: string;
     claim?: Claim;
+    verifiedCondition?: false;
     methodOverride?: string;
     resolution?: Resolution;
     rule?: { id: string; text: string };
@@ -1363,9 +1367,11 @@ export class InboundGate {
     }
     let c = r.claim;
     let label = c ? this.labelOf(c) : "A relayed statement";
+    const opaque = !!c?.derivation && opaqueDerivation(c as JsonObject);
     if (
       phase === "source" &&
       c &&
+      (!opaque || r.verdict === "pass") &&
       (c.claimType === "joint.message" ||
         (c.derivation as JsonObject | undefined)?.assurance === "joint")
     ) {
@@ -1440,7 +1446,7 @@ export class InboundGate {
         }
       }
     }
-    if (phase === "source" && c?.derivation && opaqueDerivation(c as JsonObject)) {
+    if (phase === "source" && r.verdict === "pass" && c?.derivation && opaque) {
       const proof = (c.derivation as JsonObject).proof as JsonObject | undefined;
       if (
         proof?.method === "sparq-zk-result/5" &&
@@ -1500,6 +1506,20 @@ export class InboundGate {
         return false;
       }
       c = result.statement as Claim;
+      if (result.verifiedCondition === false) {
+        const reason = "not-authorised";
+        this.verdictEvent("source", "fail", QUERY_CONDITION_FALSE, { reason });
+        cache.set(item.value, {
+          ...r,
+          claim: c,
+          verdict: "fail",
+          reason,
+          verifiedCondition: false,
+        });
+        this.failedClaim(c, reason, need.taskId ?? need.task);
+        this.claimFailure = { outcome: "refuse", reason };
+        return false;
+      }
       cache.set(item.value, {
         ...r,
         claim: c,
@@ -1509,7 +1529,7 @@ export class InboundGate {
       });
       return true;
     }
-    if (phase === "source" && c?.derivation) {
+    if (phase === "source" && c?.derivation && !opaque) {
       const derived = verifyDerivation(c as JsonObject, {
         rules: this.deps.gate.rules ?? [],
         attestedDerivers: this.deps.gate.attestedDerivers,
@@ -1991,6 +2011,7 @@ export class InboundGate {
       readonly purpose?: Iri;
       readonly taskId?: Iri;
       readonly operation?: Iri;
+      readonly policyMetadata?: boolean;
     },
   ): Promise<{ admitted: number; refused: number }> {
     let admitted = 0;
@@ -2081,7 +2102,7 @@ export class InboundGate {
       const claim = (cache.get(item.jws)?.claim ?? r.claim) as Claim;
       this.storeEvent(claim);
       const fact = this.deps.memory.facts.get(claim.id ?? digestOf(claim));
-      if (fact)
+      if (fact && !opts.policyMetadata)
         this.deps.memory.enter(this.deps.gate.taskId ?? opts.taskId ?? "*", {
           ...fact,
           accepted: true,
@@ -2365,6 +2386,8 @@ export class Admission {
         this.claimCache,
       );
       const r = this.claimCache.get(item.value);
+      if (r?.verifiedCondition === false)
+        this.sourceFailure ??= { reason: "not-authorised", detail: QUERY_CONDITION_FALSE };
       if (r?.claim)
         this.sources.set(
           `${r.claim.issuer}|${r.claim.claimType}|${msg.from.onBehalfOf ?? ""}`,

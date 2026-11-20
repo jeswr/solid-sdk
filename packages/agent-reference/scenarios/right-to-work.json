@@ -868,7 +868,9 @@
       "id": "hidden-validity-proof",
       "what": "Show valid until at least a date while hiding the actual date",
       "change": {
-        "requiredMethods": [],
+        "requiredMethods": [
+          "sparq-zk-result/5"
+        ],
         "catalogueAssurance": "proved",
         "recordedAssurance": "attested",
         "proofCredentials": [
@@ -1021,12 +1023,7 @@
           "fitness",
           "disclosure"
         ],
-        "blocked": [
-          {
-            "path": "hidden-validity-proof",
-            "reason": "Blocked: needs a hidden date comparison, due in sparq’s next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
-          }
-        ]
+        "blocked": []
       },
       "expect": {
         "outcome": "ask-more",
@@ -1076,6 +1073,98 @@
         },
         {
           "agent": "candidate-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "employer-agent",
           "part": "inbound-gate",
           "kind": "decision",
           "verdict": "pass"
@@ -1397,6 +1486,14 @@
           "check": "terms",
           "verdict": "pass",
           "reason": "terms-acceptable"
+        },
+        {
+          "agent": "employer-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
         },
         {
           "agent": "employer-agent",

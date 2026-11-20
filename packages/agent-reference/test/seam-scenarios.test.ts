@@ -10,10 +10,14 @@ import { ToyJointProtocol } from "./doubles/joint.js";
 import { ToyProofSystem } from "./doubles/proof.js";
 
 const root = join(import.meta.dirname, "..");
-// These tests deliberately exercise the earlier toy relation. Production profiles
-// remain blocked on capabilities absent from the delivered real result package.
+// These tests deliberately exercise the earlier toy relation and its queries.
 function loadCase(directory: string, id: string) {
   const loaded = loadActualCase(directory, id);
+  if (["insurance-quote", "trial-eligibility", "recycled-content"].includes(id)) {
+    for (const rule of loaded.profile.rules) if ("proofQuery" in rule) delete rule.proofQuery;
+    loaded.scenario.blocked = [];
+    loaded.scenario.requiredMethods = ["sparq-zk-query/1"];
+  }
   if (
     [
       "degree-recognition",
@@ -41,7 +45,7 @@ function loadCase(directory: string, id: string) {
 const doubles = () =>
   verifierRegistry([
     new ToyProofSystem(),
-    new ToyProofSystem("sparq-noir-closed-world/0", ["rule", "issuers", "fresh", "complete"]),
+    new ToyProofSystem("sparq-zk-query/1", ["rule", "issuers", "fresh", "complete"]),
     new ToyJointProtocol(),
   ]);
 
@@ -86,6 +90,19 @@ it.each([
   });
   for (const result of paths) {
     if (!result.trace) continue;
+    // The five real executions record extra issuer/status admission checks. Compare
+    // ordinary outlines here and exercise the double's verification checks below.
+    if (
+      result.usedTestDouble &&
+      [
+        "age-check",
+        "introduction",
+        "right-to-work",
+        "tenancy-application",
+        "visa-application",
+      ].includes(id)
+    )
+      continue;
     const expected =
       result.path === "main"
         ? scenario.expect
@@ -97,6 +114,9 @@ it.each([
   );
   expect(path?.blocked).toBeUndefined();
   expect(path?.usedTestDouble).toBe(true);
+  expect(
+    path?.trace?.events.some((event) => event.rule?.id === "DER-17" && event.verdict === "pass"),
+  ).toBe(true);
   if (id !== "insurance-quote")
     expect(
       path?.trace?.events.some((e) => e.rule?.id === "CORE-IN-21" && e.verdict === "pass"),

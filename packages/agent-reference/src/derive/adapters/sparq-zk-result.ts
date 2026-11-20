@@ -12,15 +12,16 @@ import { resolve } from "path";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath, pathToFileURL } from "url";
 import { z } from "zod";
+import { scopedUrn } from "../../core/canonical.js";
 import { resultCredentialGraph } from "../../model/sparq-result.js";
-import type { ProofSystem } from "../verifiers.js";
+import { DERIVATION_LIMITS, type ProofSystem } from "../verifiers.js";
 
 export const SPARQ_ZK_RESULT = {
   method: "sparq-zk-result/5",
   package: "@sparq-org/zk-result",
   version: "0.1.8",
-  commit: "7a56f943",
-  sha256: "e2b19eead2bcc471661b3698fb43b922caee4f9cf448024687c1f8c98335d86d",
+  commit: "95c7b325476b3b0cf6ae69ca287926d05b6e87cd",
+  sha256: "42a52776b3046efab999d8555ea9e815175f1b2ac0dce3f2832e8905748410e0",
   notice:
     "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen).",
 } as const;
@@ -35,7 +36,7 @@ export const resultStatusRef = z.strictObject({
   version: uint,
   index: uint,
 });
-const legacyStatusRef = z.strictObject({
+export const legacyStatusRef = z.strictObject({
   list: z.string(),
   version: uint,
   index: uint,
@@ -46,8 +47,16 @@ export const resultSnapshot = z.strictObject({
   version: uint,
   bits: z.array(byte),
 });
+export const trustMember = z.strictObject({
+  issuer: z.string(),
+  verificationMethod: z.string(),
+  publicKey: key,
+});
+export const resultVerificationMethod = (issuer: string) =>
+  scopedUrn("verification-method", issuer, "sparq-zk-result");
 export const resultPolicy = z.strictObject({
   trustedIssuers: z.array(key),
+  trustMembers: z.array(trustMember).optional(),
   snapshots: z.array(resultSnapshot),
   minVersion: uint,
   maxVersion: uint,
@@ -69,6 +78,18 @@ const term = z.discriminatedUnion("kind", [
   }),
 ]);
 const rows = z.array(z.record(z.string(), term));
+/** A successful-result proof is positive evidence for the named subject only. */
+export function resultSupportsSubject(value: unknown, subject: string): boolean {
+  const checked = rows.safeParse(value);
+  if (!checked.success || checked.data.length !== 1) return false;
+  const row = checked.data[0];
+  return (
+    !!row &&
+    Object.keys(row).length === 1 &&
+    row.subject?.kind === "iri" &&
+    row.subject.value === subject
+  );
+}
 export const resultPresentation = z.strictObject({
   version: uint,
   query: z.string(),
@@ -79,18 +100,35 @@ export const resultPresentation = z.strictObject({
   proof: z.array(byte),
 });
 export const resultProved = z.strictObject({ presentation: resultPresentation, result: rows });
-export const resultVerified = z.strictObject({
-  verified: z.boolean(),
-  released: rows,
-  reason: z.string().optional(),
+const wirePresentation = resultPresentation.extend({
+  proof: z
+    .string()
+    .max(Math.ceil((DERIVATION_LIMITS.maxArrayLength * 4) / 3))
+    .regex(/^[A-Za-z0-9_-]+$/),
 });
+export const resultVerified = z.discriminatedUnion("verified", [
+  z.strictObject({
+    verified: z.literal(true),
+    released: rows,
+    report: z.strictObject({
+      rule: z.strictObject({ query: z.string(), member: z.string() }),
+      issuers: z.array(key).min(1),
+      trustMembers: z.array(trustMember).optional(),
+      subject: z.tuple([]),
+      fresh: z.string(),
+      complete: z.literal(false),
+    }),
+  }),
+  z.strictObject({ verified: z.literal(false), released: z.tuple([]), reason: z.string() }),
+]);
 export interface ResultPackage {
   testIssuerKeygen(seedHex: string): unknown;
-  issue(
-    issuer: z.infer<typeof testIssuer>,
-    graph: string,
-    status: z.infer<typeof resultStatusRef>,
-  ): unknown;
+  testIssue(input: {
+    issuer: z.infer<typeof testIssuer>;
+    graphNQuads: string;
+    status: z.infer<typeof resultStatusRef>;
+    seedHex: string;
+  }): unknown;
   prove(input: {
     query: string;
     credentials: z.infer<typeof resultCredential>[];
@@ -132,8 +170,12 @@ export class SparqZkResult implements ProofSystem {
         ? { status_list: legacy.data.list, version: legacy.data.version, index: legacy.data.index }
         : input.status,
     );
-    const graph = await resultCredentialGraph(input.subject, input.claims);
-    return resultCredential.parse(this.native.issue(issuer, graph, status));
+    const graphNQuads = await resultCredentialGraph(input.subject, input.claims);
+    const seedHex = createHash("sha256")
+      .update(`test-issue/${issuer.seedHex}`)
+      .digest("hex")
+      .slice(0, 16);
+    return resultCredential.parse(this.native.testIssue({ issuer, graphNQuads, status, seedHex }));
   };
   prove: ProofSystem["prove"] = async (input) => {
     const checked = resultProved.parse(
@@ -144,11 +186,30 @@ export class SparqZkResult implements ProofSystem {
         nonce: nonceField(input.nonce),
       }),
     );
-    return checked;
+    const { presentation, result } = checked;
+    return {
+      presentation: {
+        ...presentation,
+        proof: Buffer.from(presentation.proof).toString("base64url"),
+      },
+      result,
+    };
   };
   verify: ProofSystem["verify"] = async (input) => {
     if (!input.seenNonces) return { ok: false, reason: "persistent nonce store missing" };
-    const presentation = resultPresentation.parse(input.presentation);
+    let presentation: z.infer<typeof resultPresentation>;
+    if (typeof input.presentation.proof === "string") {
+      const wire = wirePresentation.parse(input.presentation);
+      const bytes = Buffer.from(wire.proof, "base64url");
+      if (
+        bytes.toString("base64url") !== wire.proof ||
+        bytes.length > DERIVATION_LIMITS.maxArrayLength
+      )
+        return { ok: false, reason: "malformed proof encoding" };
+      presentation = { ...wire, proof: Array.from(bytes) };
+    } else {
+      presentation = resultPresentation.parse(input.presentation);
+    }
     const policy = resultPolicy.parse(input.policy);
     const checked = resultVerified.parse(
       await this.native.verify({
@@ -159,8 +220,7 @@ export class SparqZkResult implements ProofSystem {
         seenNonces: input.seenNonces,
       }),
     );
-    if (!checked.verified)
-      return { ok: false, reason: checked.reason ?? "result verifier refused without a reason" };
+    if (!checked.verified) return { ok: false, reason: checked.reason };
     // These slots are public inputs reconstructed by the real verifier, not trusted
     // merely because the holder supplied them. Reject unfamiliar slots even on success.
     if (
@@ -200,9 +260,9 @@ export async function loadSparqZkResult(): Promise<SparqZkResult | undefined> {
     // @ts-ignore Optional delivery is absent in ordinary SDK installations.
     const loaded: unknown = await import("../../../.sparq/sparq-zk-result/index.js");
     const api = z
-      .strictObject({
+      .object({
         testIssuerKeygen: z.function(),
-        issue: z.function(),
+        testIssue: z.function(),
         prove: z.function(),
         verify: z.function(),
       })
