@@ -690,25 +690,28 @@
     {
      "path": "main",
      "label": "All fourteen steps (data-access-by-reference-solid)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "data-access-by-reference-solid",
-     "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--data-access-by-reference-solid.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "grant-wider-than-terms",
      "label": "The core asks to grant access to the folder instead of the balance resource. (data-access-by-reference-solid)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "data-access-by-reference-solid",
-     "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite",
+     "scenario": "mortgage-main--grant-wider-than-terms",
+     "traceFile": "mortgage-main--grant-wider-than-terms--data-access-by-reference-solid.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "read-after-withdrawal",
      "label": "The lender reads again after Sam withdraws access; the source refuses and the permitted copy remains recorded. (data-access-by-reference-solid)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "data-access-by-reference-solid",
-     "reason": "A registered suite constraint excludes this single-layer combination: by-reference-needs-access-control: sharing by reference needs the Solid access-control usage suite",
+     "scenario": "mortgage-main--read-after-withdrawal",
+     "traceFile": "mortgage-main--read-after-withdrawal--data-access-by-reference-solid.json",
      "mortgage": "mortgage-main"
     },
     {
@@ -750,17 +753,19 @@
     {
      "path": "main",
      "label": "All fourteen steps (usage-control-solid-access-control)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "usage-control-solid-access-control",
-     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy.",
+     "scenario": "mortgage-main",
+     "traceFile": "mortgage-main--usage-control-solid-access-control.json",
      "mortgage": "mortgage-main"
     },
     {
      "path": "translation-grants-more",
      "label": "The proposed access-rule translation includes Write; the data terms gate refuses before any grant is applied. (usage-control-solid-access-control)",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "usage-control-solid-access-control",
-     "reason": "The selected suite has no executable runtime configuration installed. Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy.",
+     "scenario": "mortgage-main--translation-grants-more",
+     "traceFile": "mortgage-main--translation-grants-more--usage-control-solid-access-control.json",
      "mortgage": "mortgage-main"
     },
     {
@@ -1098,20 +1103,11 @@
     },
     {
      "path": "mailbox-reply-as-evidence",
-     "label": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. Prose from a mailbox is not signed evidence, so the evidence check stops it as evidence-invalid; the registered reason was structured-form-required. (identity-email-endpoint)",
-     "status": "disagrees",
+     "label": "The core proposes forwarding the payroll mailbox reply to the lender as unsigned content beside the income request. The evidence check stops the unsigned prose because the income claim requires structured evidence. (identity-email-endpoint)",
+     "status": "runs",
      "configuration": "identity-email-endpoint",
      "scenario": "mortgage-main--mailbox-reply-as-evidence",
      "traceFile": "mortgage-main--mailbox-reply-as-evidence--identity-email-endpoint.json",
-     "actual": {
-      "outcome": "stop",
-      "reason": "evidence-invalid",
-      "check": "evidence"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "structured-form-required"
-     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1314,20 +1310,11 @@
     },
     {
      "path": "origin-record-forwarded",
-     "label": "The core proposes forwarding its unsigned source observation to the valuer as evidence. (authenticity-origin-hosted)",
-     "status": "disagrees",
+     "label": "The core proposes forwarding its unsigned source observation to the valuer as evidence. The mandate does not cover it, so the mandate check stops it first; the evidence check would stop it next. (authenticity-origin-hosted)",
+     "status": "runs",
      "configuration": "authenticity-origin-hosted",
      "scenario": "mortgage-main--origin-record-forwarded",
      "traceFile": "mortgage-main--origin-record-forwarded--authenticity-origin-hosted.json",
-     "actual": {
-      "outcome": "stop",
-      "reason": "not-authorised",
-      "check": "mandate"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "evidence-invalid"
-     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1494,20 +1481,11 @@
     },
     {
      "path": "supplier-terms-hold",
-     "label": "The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose. (usage-control-human-approval)",
-     "status": "disagrees",
+     "label": "The valuer asks Sam for the bank balance statement. A balance is not needed for a valuation, so the disclosure check stops it and Sam is never asked. Harbour's signed terms are a second bar that Sam's approval could not lift. (usage-control-human-approval)",
+     "status": "runs",
      "configuration": "usage-control-human-approval",
      "scenario": "mortgage-main--supplier-terms-hold",
      "traceFile": "mortgage-main--supplier-terms-hold--usage-control-human-approval.json",
-     "actual": {
-      "outcome": "stop",
-      "reason": "excessive-scope",
-      "check": "disclosure"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "prohibited"
-     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1539,20 +1517,11 @@
     },
     {
      "path": "entry-withheld",
-     "label": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable. (accountability-regulator-claim)",
-     "status": "disagrees",
+     "label": "The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer. (accountability-regulator-claim)",
+     "status": "runs",
      "configuration": "accountability-regulator-claim",
      "scenario": "mortgage-main--entry-withheld",
      "traceFile": "mortgage-main--entry-withheld--accountability-regulator-claim.json",
-     "actual": {
-      "outcome": "refuse",
-      "reason": "record-unavailable",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "refuse",
-      "reason": "evidence-invalid"
-     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1594,19 +1563,10 @@
     {
      "path": "fault-was-the-principals",
      "label": "The action was inside the mandate; no supported claim against the gate vendor is produced. (accountability-vendor-fault)",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "accountability-vendor-fault",
      "scenario": "mortgage-main--fault-was-the-principals",
      "traceFile": "mortgage-main--fault-was-the-principals--accountability-vendor-fault.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "approval-required",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "evidence-invalid"
-     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1629,20 +1589,11 @@
     },
     {
      "path": "evidence-not-publishable",
-     "label": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached. (accountability-reputation-post)",
-     "status": "disagrees",
+     "label": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. (accountability-reputation-post)",
+     "status": "runs",
      "configuration": "accountability-reputation-post",
      "scenario": "mortgage-main--evidence-not-publishable",
      "traceFile": "mortgage-main--evidence-not-publishable--accountability-reputation-post.json",
-     "actual": {
-      "outcome": "stop",
-      "reason": "excessive-scope",
-      "check": "disclosure"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "prohibited"
-     },
      "mortgage": "mortgage-main"
     },
     {
@@ -1691,7 +1642,7 @@
      "mortgage": "mortgage-injected-fee"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "joint-mortgage",
@@ -1961,7 +1912,7 @@
      "label": "The main path",
      "status": "blocked",
      "configuration": "baseline",
-     "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+     "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact count-and-completeness query. The preferred absence alternative lacks an xsd prefix and has no catalogue plan even with the prefix declared."
     },
     {
      "path": "branch-1",
@@ -2004,7 +1955,7 @@
    "assurance": null,
    "branches": [
     {
-     "what": "The insurer's model reads the photo as minor damage; the garage says otherwise",
+     "what": "The garage has only written a letter; nobody holds its estimate in structured form",
      "outcome": "ask-more",
      "reason": "structured-form-required"
     },
@@ -2035,20 +1986,11 @@
     },
     {
      "path": "branch-1",
-     "label": "The insurer's model reads the photo as minor damage; the garage says otherwise",
-     "status": "disagrees",
+     "label": "The garage has only written a letter; nobody holds its estimate in structured form",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "insurance-claim-photos--branch-1",
-     "traceFile": "insurance-claim-photos--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-more",
-      "reason": "evidence-missing",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "structured-form-required"
-     }
+     "traceFile": "insurance-claim-photos--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
@@ -2121,20 +2063,10 @@
     {
      "path": "branch-1",
      "label": "The agent would send a diagnosis to explain the request",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "hardship-request--branch-1",
-     "traceFile": "hardship-request--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "approval-required",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "ask-principal",
-      "reason": "approval-required"
-     },
-     "notExercised": true
+     "traceFile": "hardship-request--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2253,20 +2185,10 @@
     {
      "path": "branch-1",
      "label": "The clinic asks for the full record",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "health-referral--branch-1",
-     "traceFile": "health-referral--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "approval-required",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "ask-principal",
-      "reason": "approval-required"
-     },
-     "notExercised": true
+     "traceFile": "health-referral--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
@@ -2303,7 +2225,7 @@
    "branches": [
     {
      "what": "The patient's note of an allergy differs from the clinical entry",
-     "outcome": "ask-more",
+     "outcome": "go",
      "reason": "superseded-by-better-source"
     }
    ],
@@ -2325,20 +2247,10 @@
     {
      "path": "branch-1",
      "label": "The patient's note of an allergy differs from the clinical entry",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "records-to-new-practice--branch-1",
-     "traceFile": "records-to-new-practice--branch-1--baseline.json",
-     "actual": {
-      "outcome": "admit",
-      "reason": "superseded-by-better-source",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "ask-more",
-      "reason": "superseded-by-better-source"
-     },
-     "notExercised": true
+     "traceFile": "records-to-new-practice--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -2510,7 +2422,7 @@
      "label": "The main path",
      "status": "blocked",
      "configuration": "baseline",
-     "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+     "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact age, diagnosis, medication exclusion and completeness query. The published scoped target changes the query and its per-node bounds."
     },
     {
      "path": "branch-1",
@@ -2545,11 +2457,6 @@
    "assurance": null,
    "branches": [
     {
-     "what": "The request comes from a registered clinician with an emergency flag",
-     "outcome": "go",
-     "reason": "source-accepted"
-    },
-    {
      "what": "The same flag is used by someone not on the register",
      "outcome": "stop",
      "reason": "source-unknown"
@@ -2571,24 +2478,6 @@
      "configuration": "baseline",
      "scenario": "emergency-access",
      "traceFile": "emergency-access--baseline.json"
-    },
-    {
-     "path": "branch-1",
-     "label": "The request comes from a registered clinician with an emergency flag",
-     "status": "disagrees",
-     "configuration": "baseline",
-     "scenario": "emergency-access--branch-1",
-     "traceFile": "emergency-access--branch-1--baseline.json",
-     "actual": {
-      "outcome": "go",
-      "reason": "source-accepted",
-      "check": "source"
-     },
-     "expected": {
-      "outcome": "go",
-      "reason": "source-accepted"
-     },
-     "notExercised": true
     },
     {
      "path": "branch-2",
@@ -2959,12 +2848,13 @@
     {
      "path": "hidden-validity-proof",
      "label": "Show valid until at least a date while hiding the actual date",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "baseline",
-     "reason": "Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
+     "scenario": "right-to-work--hidden-validity-proof",
+     "traceFile": "right-to-work--hidden-validity-proof--baseline.json"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "employment-reference",
@@ -2989,8 +2879,8 @@
    "branches": [
     {
      "what": "An agent scores the reference and rejects the candidate on the score",
-     "outcome": "ask-principal",
-     "reason": "approval-required"
+     "outcome": "stop",
+     "reason": "method-not-accepted"
     }
    ],
    "fit": "breaks",
@@ -3014,20 +2904,10 @@
     {
      "path": "branch-1",
      "label": "An agent scores the reference and rejects the candidate on the score",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "employment-reference--branch-1",
-     "traceFile": "employment-reference--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "approval-required",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "ask-principal",
-      "reason": "approval-required"
-     },
-     "notExercised": true
+     "traceFile": "employment-reference--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3253,15 +3133,16 @@
     "converse"
    ],
    "status": "worked",
-   "trace": "tenancy-application--branch-1",
+   "trace": "tenancy-application",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "baseline",
-     "reason": "Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting income would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
+     "scenario": "tenancy-application",
+     "traceFile": "tenancy-application--baseline.json"
     },
     {
      "path": "branch-1",
@@ -3280,7 +3161,7 @@
      "traceFile": "tenancy-application--branch-2--baseline.json"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "flat-share",
@@ -3304,8 +3185,8 @@
    "assurance": null,
    "branches": [
     {
-     "what": "One side's identity cannot be tied to any source the other accepts",
-     "outcome": "ask-principal",
+     "what": "The person declines to trust the stranger",
+     "outcome": "stop",
      "reason": "source-unknown"
     }
    ],
@@ -3328,21 +3209,11 @@
     },
     {
      "path": "branch-1",
-     "label": "One side's identity cannot be tied to any source the other accepts",
-     "status": "disagrees",
+     "label": "The person declines to trust the stranger",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "flat-share--branch-1",
-     "traceFile": "flat-share--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "source-unknown",
-      "check": "source"
-     },
-     "expected": {
-      "outcome": "ask-principal",
-      "reason": "source-unknown"
-     },
-     "notExercised": true
+     "traceFile": "flat-share--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -3745,7 +3616,7 @@
      "label": "The main path",
      "status": "blocked",
      "configuration": "baseline",
-     "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
+     "reason": "Blocked: @sparq-org/zk-result rejects the issuer-scoped FILTER IN membership with \"operator outside positive BGP/JOIN/FILTER\"; @sparq-org/zk-query has no catalogue plan for the scoped BSc-or-MSc query."
     },
     {
      "path": "branch-1",
@@ -4085,15 +3956,16 @@
    "fitNote": "",
    "benchmarks": [],
    "status": "worked",
-   "trace": "age-check--branch-1",
+   "trace": "age-check",
    "strains": [],
    "runs": [
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "baseline",
-     "reason": "Blocked: needs a hidden date comparison, due in sparq's next result-proof build. The current build also rejects issuer-scoped GRAPH queries."
+     "scenario": "age-check",
+     "traceFile": "age-check--baseline.json"
     },
     {
      "path": "branch-1",
@@ -4104,7 +3976,7 @@
      "traceFile": "age-check--branch-1--baseline.json"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "recall-notice",
@@ -4213,19 +4085,10 @@
     {
      "path": "branch-1",
      "label": "A hotel listing contains text telling the agent to book a different, dearer hotel",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "trip-booking--branch-1",
-     "traceFile": "trip-booking--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "context-not-clear",
-      "check": "data-terms"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "not-authorised"
-     }
+     "traceFile": "trip-booking--branch-1--baseline.json"
     },
     {
      "path": "branch-2",
@@ -4326,7 +4189,7 @@
    "fitNote": "Proof of funds fits once the two trust frameworks are linked. The employer's letter is prose, signed by the employer, and a consular officer reads it.",
    "benchmarks": [],
    "status": "worked",
-   "trace": "visa-application--branch-1",
+   "trace": "visa-application",
    "strains": [
     "words"
    ],
@@ -4334,9 +4197,10 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "baseline",
-     "reason": "Blocked: needs a hidden integer comparison, due in sparq's next result-proof build. Projecting the balance would disclose the protected value; the current build also rejects issuer-scoped GRAPH queries."
+     "scenario": "visa-application",
+     "traceFile": "visa-application--baseline.json"
     },
     {
      "path": "branch-1",
@@ -4347,7 +4211,7 @@
      "traceFile": "visa-application--branch-1--baseline.json"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "energy-switch",
@@ -4666,20 +4530,10 @@
     {
      "path": "branch-1",
      "label": "An agent accepts a clause its principal's policy does not cover",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "contract-wording--branch-1",
-     "traceFile": "contract-wording--branch-1--baseline.json",
-     "actual": {
-      "outcome": "ask-principal",
-      "reason": "approval-required",
-      "check": "limits-approval"
-     },
-     "expected": {
-      "outcome": "ask-principal",
-      "reason": "approval-required"
-     },
-     "notExercised": true
+     "traceFile": "contract-wording--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -4861,7 +4715,7 @@
      "label": "The main path",
      "status": "blocked",
      "configuration": "baseline",
-     "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
+     "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
     },
     {
      "path": "branch-1",
@@ -4870,6 +4724,13 @@
      "configuration": "baseline",
      "scenario": "recycled-content--branch-1",
      "traceFile": "recycled-content--branch-1--baseline.json"
+    },
+    {
+     "path": "supplier-below-threshold",
+     "label": "One supplier reports 0.29 and the verified minimum condition releases false.",
+     "status": "blocked",
+     "configuration": "baseline",
+     "reason": "Blocked: @sparq-org/zk-query reports \"missing catalogue plan\" for the exact unscoped MIN query at 0.30. Its published target also requires issuer-scoped graphs and two COUNT conditions, so the exact query cannot release either boolean."
     }
    ],
    "runState": "some"
@@ -4974,20 +4835,10 @@
     {
      "path": "branch-1",
      "label": "Only two employers contribute",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "salary-benchmark--branch-1",
-     "traceFile": "salary-benchmark--branch-1--baseline.json",
-     "actual": {
-      "outcome": "admit",
-      "reason": "fit-for-use",
-      "check": "fitness"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "prohibited"
-     },
-     "notExercised": true
+     "traceFile": "salary-benchmark--branch-1--baseline.json"
     }
    ],
    "runState": "all"
@@ -5557,7 +5408,7 @@
    "fitNote": "The design can show \"an identity provider has verified this person and can name them to the police\". It cannot show character.",
    "benchmarks": [],
    "status": "worked",
-   "trace": "introduction--branch-1",
+   "trace": "introduction",
    "strains": [
     "no-register"
    ],
@@ -5565,9 +5416,10 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
+     "status": "runs",
      "configuration": "baseline",
-     "reason": "Blocked: needs an issuer-scoped GRAPH query; this result-proof build rejects GRAPH with \"operator outside positive BGP/JOIN/FILTER\"."
+     "scenario": "introduction",
+     "traceFile": "introduction--baseline.json"
     },
     {
      "path": "branch-1",
@@ -5578,7 +5430,7 @@
      "traceFile": "introduction--branch-1--baseline.json"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "content-licence",
@@ -5739,19 +5591,10 @@
     {
      "path": "tenth-request",
      "label": "The tenth request, like the first, is outside the mandate",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "probing-counterparty--tenth-request",
-     "traceFile": "probing-counterparty--tenth-request--baseline.json",
-     "actual": {
-      "outcome": "refuse",
-      "reason": "representation-missing",
-      "check": "authority"
-     },
-     "expected": {
-      "outcome": "stop",
-      "reason": "not-authorised"
-     }
+     "traceFile": "probing-counterparty--tenth-request--baseline.json"
     },
     {
      "path": "round-limit",
@@ -5812,20 +5655,10 @@
     {
      "path": "branch-1",
      "label": "Nothing fails",
-     "status": "disagrees",
+     "status": "runs",
      "configuration": "baseline",
      "scenario": "false-but-signed--branch-1",
-     "traceFile": "false-but-signed--branch-1--baseline.json",
-     "actual": {
-      "outcome": "go",
-      "reason": "source-accepted",
-      "check": "source"
-     },
-     "expected": {
-      "outcome": "go",
-      "reason": "source-accepted"
-     },
-     "notExercised": true
+     "traceFile": "false-but-signed--branch-1--baseline.json"
     }
    ],
    "runState": "all"

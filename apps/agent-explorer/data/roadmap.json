@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-13T18:30Z",
+  "updated": "2026-11-20T13:00Z",
   "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
@@ -10,8 +10,8 @@
         {
           "id": "P9.1",
           "title": "RDF through the pipeline: model, wire and gates",
-          "detail": "One ontology with SHACL shapes and a JSON-LD context. Messages travel as JSON-LD under pinned contexts, every gate reads RDF through typed wrappers, statements and mandates become W3C Verifiable Credentials, terms stay ODRL. The baseline keeps a plain signature over the document; the Data Integrity option signs the canonical graph. Being built since 18:04 UTC on 13 Nov.",
-          "status": "doing",
+          "detail": "One ontology with SHACL shapes and a JSON-LD context. Messages travel as JSON-LD under pinned contexts, every gate reads RDF through typed wrappers, statements and mandates become W3C Verifiable Credentials, terms stay ODRL. The baseline keeps a plain signature over the document; the Data Integrity option signs the canonical graph. Being built since 18:04 UTC on 13 Nov. Done 20 Nov: the integrated engine is RDF throughout and a guard checks it (0 failures). Draft PR #646 to main.",
+          "status": "done",
           "owner": "Fable (design), Codex (build)"
         },
         {
@@ -24,56 +24,56 @@
         {
           "id": "P9.3",
           "title": "Payment as a contract, with a selector at the point of payment",
-          "detail": "A payment settles an agreement: the agent may pay only what a signed, accepted offer says is due, to the party it names, once. A paid valuation step is added to the mortgage journey. Options at the point of payment: a plain RDF description, x402, the Machine Payments Protocol, AP2 mandates and the Agentic Commerce Protocol, each lifted to the same RDF terms so the same checks run. Four failures: the amount differs, the payee differs, there is no offer behind it, and asked to look but not to buy. Designed (specification 18 updated); the build follows the RDF build.",
-          "status": "doing",
+          "detail": "A payment settles an agreement: the agent may pay only what a signed, accepted offer says is due, to the party it names, once. A paid valuation step is added to the mortgage journey. Options at the point of payment: a plain RDF description, x402, the Machine Payments Protocol, AP2 mandates and the Agentic Commerce Protocol, each lifted to the same RDF terms so the same checks run. Four failures: the amount differs, the payee differs, there is no offer behind it, and asked to look but not to buy. Designed (specification 18 updated); the build follows the RDF build. Done 20 Nov: all four settlement options run on the mortgage journey.",
+          "status": "done",
           "owner": "Fable (design), Codex (build)"
         },
         {
           "id": "P9.4",
           "title": "Transport options",
-          "detail": "A2A 1.0, MCP (revision 2026-07-28) and email as real runs of the mortgage journey, with a test that changing the transport changes no verdict. Each has a failure of its own, for example a readable copy of an email that says something different from the signed part. Designed; built with the configuration matrix right after the RDF build. Solid inbox comes with the Solid options.",
-          "status": "next",
+          "detail": "A2A 1.0, MCP (revision 2026-07-28) and email as real runs of the mortgage journey, with a test that changing the transport changes no verdict. Each has a failure of its own, for example a readable copy of an email that says something different from the signed part. Designed; built with the configuration matrix right after the RDF build. Solid inbox comes with the Solid options. Done 20 Nov: A2A, MCP, email and Solid inbox all run on the mortgage journey.",
+          "status": "done",
           "owner": "Codex (to Fable's design)"
         },
         {
           "id": "P9.5",
           "title": "Solid options",
-          "detail": "One in-process storage that speaks the Solid Protocol, then: messages through an inbox, data by reference with a grant no wider than the terms, terms translated into access rules, the record mirrored to the person's own storage, and WebID. Designed.",
-          "status": "next",
+          "detail": "One in-process storage that speaks the Solid Protocol, then: messages through an inbox, data by reference with a grant no wider than the terms, terms translated into access rules, the record mirrored to the person's own storage, and WebID. Designed. Done 20 Nov: inbox, data by reference with a WAC grant no wider than the terms, translated access rules, pod mirror and WebID all run.",
+          "status": "done",
           "owner": "Codex (to Fable's design)"
         },
         {
           "id": "P9.6",
           "title": "Identity and authority options",
-          "detail": "Decentralized identifier, email address as an endpoint, no identifier, mandate as a credential with a status list, grant from an authorization server, agent registry. Designed.",
-          "status": "next",
+          "detail": "Decentralized identifier, email address as an endpoint, no identifier, mandate as a credential with a status list, grant from an authorization server, agent registry. Designed. Done 20 Nov: every identity and authority option runs on the mortgage journey.",
+          "status": "done",
           "owner": "Codex (to Fable's design)"
         },
         {
           "id": "P9.7",
           "title": "Authenticity and trust options",
-          "detail": "Data Integrity proof (built with P9.1), served from the source's domain, selective disclosure, own list only, federation membership, trusted index with receipts, reputation. Designed.",
-          "status": "next",
+          "detail": "Data Integrity proof (built with P9.1), served from the source's domain, selective disclosure, own list only, federation membership, trusted index with receipts, reputation. Designed. Done 20 Nov: every authenticity and trust option runs on the mortgage journey.",
+          "status": "done",
           "owner": "Codex (to Fable's design)"
         },
         {
           "id": "P9.8",
           "title": "Meaning and reliance options",
-          "detail": "Registry lookup, negotiated meaning, plain language then upgrade, stated confidence, two sources must agree, certified quality. Designed.",
-          "status": "next",
+          "detail": "Registry lookup, negotiated meaning, plain language then upgrade, stated confidence, two sources must agree, certified quality. Designed. Done 20 Nov: every meaning and reliance option runs on the mortgage journey.",
+          "status": "done",
           "owner": "Codex (to Fable's design)"
         },
         {
           "id": "P9.9",
           "title": "Usage control, commitments and accountability options",
-          "detail": "A model that may tighten the rules, human approval, agreement credential, claim to a regulator, fault passed to the vendor, public reputation, reputation score. Designed.",
-          "status": "next",
+          "detail": "A model that may tighten the rules, human approval, agreement credential, claim to a regulator, fault passed to the vendor, public reputation, reputation score. Designed. Done 20 Nov: every usage control, commitments and accountability option runs on the mortgage journey.",
+          "status": "done",
           "owner": "Codex (to Fable's design)"
         },
         {
           "id": "P9.10",
           "title": "Proof of a query, and joint computation",
-          "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov.",
+          "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov. 20 Nov: the sparq proof adapters are wired in and run live; 5 paths wait on sparq #7412 (missing catalogue plans for absence, totals and scoped queries).",
           "status": "doing",
           "owner": "Engine project, Codex"
         },
@@ -276,7 +276,7 @@
         {
           "id": "P6.2",
           "title": "A real run for every use case",
-          "detail": "151 of 166 paths are real runs. The other 15 are listed by name: nine wait on a proof system, six on a joint computation.",
+          "detail": "151 of 166 paths are real runs. The other 15 are listed by name: nine wait on a proof system, six on a joint computation. 20 Nov: all 70 use cases run; 278 of 283 paths agree with the catalogue and 0 differ; 5 wait on sparq.",
           "status": "doing",
           "owner": "Fable (design and review), Codex (build)"
         },
