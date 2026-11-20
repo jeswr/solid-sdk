@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" role="img" aria-labelledby="t">
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+<title id="t">Figure 1: the reference design. A person gives tasks; an inbound gate admits, asks for more or refuses; the core proposes actions; an outbound gate lets them go, asks the principal or stops; four stores.</title>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="context-stroke"/></marker>
+<style>
+.p{fill:#faeded;stroke:#a33a32;stroke-width:2}.g{fill:#eaf0fa;stroke:#2a5a8c;stroke-width:2.5}.c{fill:#3b3b3b;stroke:#222;stroke-width:2}
+.s{fill:#fff;stroke:#9a6d1c;stroke-width:2}.v{fill:#fff;stroke:#2a5a8c;stroke-width:1.5}
+.ht{font-size:18px;font-weight:700}.it{font-size:12px;font-style:italic}.li{font-size:15px;fill:#222}.sm{font-size:13px;fill:#222}
+.gb{fill:#2a5a8c}.gt{fill:#2a5a8c}.st{fill:#9a6d1c}.pt{fill:#a33a32}.n{font-size:11px;font-weight:700;fill:#fff;text-anchor:middle}
+.lr{stroke:#a33a32;stroke-width:2;fill:none}.lb{stroke:#2a5a8c;stroke-width:2;fill:none}.lk{stroke:#444;stroke-width:2;fill:none}.ls{stroke:#9a6d1c;stroke-width:2;fill:none}
+</style>
+</defs>
+<rect width="1000" height="580" fill="#fff"/>
+<rect class="p" x="55" y="15" width="890" height="60" rx="10"/>
+<text x="75" y="42" class="ht" fill="#222">Sam, the principal</text>
+<text x="75" y="63" class="sm" font-size="14">Signs the mandate, gives tasks, answers when the agent asks</text>
+<path class="lr" d="M500 75V116" marker-end="url(#a)"/><text x="508" y="100" class="it pt">tasks</text>
+<path class="lr" d="M887 120V79" marker-end="url(#a)"/><text x="896" y="100" class="it pt">asks</text>
+
+<rect class="g" x="55" y="120" width="243" height="290" rx="12"/>
+<text x="72" y="152" class="ht gt">Inbound gate</text><text x="72" y="172" class="it gt">ordinary code, in order</text>
+<g class="li"><circle class="gb" cx="83" cy="203" r="10"/><text x="83" y="207" class="n">1</text><text x="101" y="208">integrity</text>
+<circle class="gb" cx="83" cy="230" r="10"/><text x="83" y="234" class="n">2</text><text x="101" y="235">source</text>
+<circle class="gb" cx="83" cy="257" r="10"/><text x="83" y="261" class="n">3</text><text x="101" y="262">authority</text>
+<circle class="gb" cx="83" cy="284" r="10"/><text x="83" y="288" class="n">4</text><text x="101" y="289">terms</text>
+<circle class="gb" cx="83" cy="311" r="10"/><text x="83" y="315" class="n">5</text><text x="101" y="316">fitness</text></g>
+<rect class="v" x="69" y="359" width="215" height="38" rx="7"/><text x="176" y="383" text-anchor="middle" font-size="13.5" font-weight="700" class="gt">admit · ask for more · refuse</text>
+
+<rect class="c" x="378" y="120" width="244" height="290" rx="10"/>
+<text x="500" y="157" text-anchor="middle" class="ht" fill="#fff">Core</text>
+<g fill="#fff" font-size="15" text-anchor="middle"><text x="500" y="222">A black box:</text><text x="500" y="243">a model, code,</text><text x="500" y="264">or both</text>
+<text x="500" y="301">Never holds keys</text><text x="500" y="322">or credentials</text></g>
+
+<rect class="g" x="702" y="120" width="243" height="290" rx="12"/>
+<text x="719" y="152" class="ht gt">Outbound gate</text><text x="719" y="172" class="it gt">ordinary code, in order</text>
+<g class="li"><circle class="gb" cx="730" cy="203" r="10"/><text x="730" y="207" class="n">1</text><text x="748" y="208">mandate</text>
+<circle class="gb" cx="730" cy="230" r="10"/><text x="730" y="234" class="n">2</text><text x="748" y="235">recipient</text>
+<circle class="gb" cx="730" cy="257" r="10"/><text x="730" y="261" class="n">3</text><text x="748" y="262">disclosure</text>
+<circle class="gb" cx="730" cy="284" r="10"/><text x="730" y="288" class="n">4</text><text x="748" y="289">data terms</text>
+<circle class="gb" cx="730" cy="311" r="10"/><text x="730" y="315" class="n">5</text><text x="748" y="316">limits and approval</text>
+<circle class="gb" cx="730" cy="338" r="10"/><text x="730" y="342" class="n">6</text><text x="748" y="343">evidence</text></g>
+<rect class="v" x="716" y="359" width="215" height="38" rx="7"/><text x="823" y="383" text-anchor="middle" font-size="13.5" font-weight="700" class="gt">go · ask the principal · stop</text>
+
+<path class="lk" d="M10 278H51" marker-end="url(#a)"/><text x="12" y="268" class="it">in</text>
+<path class="lb" d="M298 278H374" marker-end="url(#a)"/><text x="336" y="250" text-anchor="middle" class="it gt">admitted,</text><text x="336" y="266" text-anchor="middle" class="it gt">labeled</text>
+<path class="lk" d="M622 278H698" marker-end="url(#a)"/><text x="660" y="250" text-anchor="middle" class="it">proposed</text><text x="660" y="266" text-anchor="middle" class="it">actions</text>
+<path class="lb" d="M945 278H990" marker-end="url(#a)"/><text x="988" y="268" text-anchor="end" class="it">out</text>
+
+<path class="ls" stroke-dasharray="6 5" d="M160 468V414" marker-end="url(#a)"/>
+<path class="ls" d="M435 468V414" marker-start="url(#a)" marker-end="url(#a)"/>
+<path class="ls" stroke-dasharray="6 5" d="M612 468V440H750V414" marker-end="url(#a)"/>
+<path class="ls" d="M887 410V464" marker-end="url(#a)"/>
+<g><rect class="s" x="55" y="468" width="210" height="80" rx="9"/><text x="70" y="495" class="ht st" font-size="17">Trust store</text><text x="70" y="517" class="sm">keys, registers,</text><text x="70" y="535" class="sm">accepted sources</text>
+<rect class="s" x="282" y="468" width="210" height="80" rx="9"/><text x="297" y="495" class="ht st" font-size="17">Memory</text><text x="297" y="517" class="sm">facts, each with its</text><text x="297" y="535" class="sm">source and terms</text>
+<rect class="s" x="508" y="468" width="210" height="80" rx="9"/><text x="523" y="495" class="ht st" font-size="17">Policies</text><text x="523" y="517" class="sm">Sam's mandate</text><text x="523" y="535" class="sm">and rules</text>
+<rect class="s" x="735" y="468" width="210" height="80" rx="9"/><text x="750" y="495" class="ht st" font-size="17">Record</text><text x="750" y="517" class="sm">every verdict,</text><text x="750" y="535" class="sm">signed and chained</text></g>
+</svg>

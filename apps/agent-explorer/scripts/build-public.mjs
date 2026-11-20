@@ -19,6 +19,9 @@ for (const f of ['index.html', 'styles.css', 'js']) {
 }
 // The walkthrough video is not committed (see media/README.md); copy it when present.
 if (existsSync(join(root, 'media'))) cpSync(join(root, 'media'), join(out, 'media'), { recursive: true });
+// The paper's pre-publication page (built by scripts/build-paper.mjs) is hosted at paper/.
+mkdirSync(join(out, 'paper'), { recursive: true });
+for (const f of ['index.html', 'figure-1.svg']) cpSync(join(root, 'paper', f), join(out, 'paper', f));
 // The Errand consumer app (apps/agent-chat), when a prebuilt copy is given, is hosted at app/.
 // Build it with relative asset paths first (pnpm --filter @jeswr/app-agent-chat build:artifact)
 // and pass its output folder: AX_APP_DIR=<path>/apps/agent-chat/dist-artifact.
