@@ -7,14 +7,21 @@ import { Store } from "n3";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { isDeepStrictEqual } from "util";
 import { ScriptedMailbox } from "../bindings/email.js";
-import { digestBytes, digestContent, digestOf } from "../core/canonical.js";
+import { digestBytes, digestContent, digestOf, scopedUrn } from "../core/canonical.js";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import { availableAdapters } from "../derive/adapters/index.js";
 import { SPARQ_AGGREGATE } from "../derive/adapters/sparq-aggregate.js";
+import {
+  legacyStatusRef,
+  resultPublicKey,
+  resultVerificationMethod,
+  SPARQ_ZK_RESULT,
+} from "../derive/adapters/sparq-zk-result.js";
 import type { ProofCache } from "../derive/cache.js";
+import { ruleInputs } from "../derive/rules.js";
 import type { DerivedRequest, FixedJointSession, VerifierRegistry } from "../derive/verifiers.js";
-import { DERIVATION_LIMITS, registryForRun } from "../derive/verifiers.js";
+import { DERIVATION_LIMITS, registryForRun, verifierRegistry } from "../derive/verifiers.js";
 import { SyntheticPaymentRail, underwritingTermsFor } from "../domains/mortgage.js";
 import {
   PURPOSE_STORE_RELEASE_CONDITION,
@@ -343,7 +350,8 @@ export async function runScenario(
 ): Promise<PathResult[]> {
   const profile = domainProfileSchema.parse(profileInput);
   const scenario = scenarioSchema.parse(scenarioInput);
-  const verifiers = options.registry ?? (await availableAdapters());
+  let optionalVerifiers: VerifierRegistry | undefined;
+  const emptyVerifiers = verifierRegistry();
   if (profile.id !== scenario.profile) throw new Error("profile/scenario id mismatch");
   validateReferences(profile, scenario);
   if (options.configuration === "all") {
@@ -397,6 +405,11 @@ export async function runScenario(
       Object.assign(world, renameIdentities(world, world.identityNames));
     }
     validateReferences(pathProfile, world, { pathWorld: true });
+    let verifiers = options.registry ?? emptyVerifiers;
+    if (!options.registry && world.requiredMethods.length) {
+      optionalVerifiers ??= await availableAdapters();
+      verifiers = optionalVerifiers;
+    }
     const combinationProblems = alternative
       ? scenarioRegistry().check({
           layers: {
@@ -896,7 +909,18 @@ async function runPath(
   for (const agent of agents)
     for (const rule of scenario.trust.sources[agent.id] ?? []) cast.rule(agent.id, rule);
   const proofIssuerKeys: NonNullable<GateContext["proofIssuerKeys"]>[number][] = [];
-  const proofCredentials: NonNullable<GateContext["proofCredentials"]>[number][] = [];
+  const proofCredentials: (NonNullable<GateContext["proofCredentials"]>[number] & {
+    holder?: string;
+  })[] = [];
+  const resultFixtures = new Map<
+    string,
+    {
+      issuer: string;
+      issuerId: string;
+      publicKey: string;
+      status: { status_list: string; version: number; bits: number[] };
+    }
+  >();
   for (const spec of scenario.proofCredentials) {
     const system = verifiers.proofSystems.get(spec.method);
     if (!system || !scenario.requiredMethods.includes(spec.method)) continue;
@@ -911,6 +935,25 @@ async function runPath(
       claims: { statements },
       ...(spec.status ? { status: spec.status } : {}),
     });
+    if (system.method === SPARQ_ZK_RESULT.method && system.kind === "real") {
+      const ref = legacyStatusRef.parse(spec.status);
+      if (ref.index >= 2 ** 20)
+        throw new Error("Result fixture status index exceeds member bounds");
+      const fixture = resultFixtures.get(ref.list) ?? {
+        issuer: issuer.identity,
+        issuerId: issuer.id,
+        publicKey: resultPublicKey.parse(keys.publicKey).publicKey,
+        status: { status_list: ref.list, version: ref.version, bits: [] },
+      };
+      if (fixture.issuer !== issuer.identity || fixture.status.version !== ref.version)
+        throw new Error("Conflicting result fixture status list");
+      const offset = Math.floor(ref.index / 8);
+      while (fixture.status.bits.length <= offset) fixture.status.bits.push(255);
+      if (ref.active)
+        fixture.status.bits[offset] =
+          required(fixture.status.bits[offset]) & ~(1 << (ref.index % 8));
+      resultFixtures.set(ref.list, fixture);
+    }
     const knownKey = proofIssuerKeys.find(
       (k) => k.issuer === issuer.identity && digestOf(k.key) === digestOf(keys.publicKey),
     );
@@ -929,7 +972,49 @@ async function runPath(
         credential,
         statement: String(statement.id),
         digest: digestOf(statement),
+        ...(system.method === SPARQ_ZK_RESULT.method && system.kind === "real"
+          ? { holder: spec.subject }
+          : {}),
       });
+  }
+  const resultBindings = new Map<string, { jws: string }[]>();
+  for (const issuer of new Set([...resultFixtures.values()].map((fixture) => fixture.issuer))) {
+    const fixtures = [...resultFixtures.values()].filter((fixture) => fixture.issuer === issuer);
+    const keyFixture = required(fixtures[0]);
+    const key = required(sourceKeys.get(keyFixture.issuerId));
+    const issue = (claimType: string, id: string, value: JsonObject) =>
+      signClaim(key, {
+        id: scopedUrn("proof-metadata", id, claimType.replace(".", "-")),
+        issuer,
+        subject: issuer,
+        claimType,
+        method: "recorded-by-authority",
+        asOf: now().toISOString(),
+        value: { method: SPARQ_ZK_RESULT.method, ...value },
+      });
+    const statements = await Promise.all([
+      issue("proof.issuer-key", issuer, {
+        publicKey: keyFixture.publicKey,
+        verificationMethod: resultVerificationMethod(issuer),
+        statusLists: fixtures.map(({ status }) => status.status_list),
+      }),
+      ...fixtures.map(({ status }) => issue("proof.status", status.status_list, status)),
+    ]);
+    resultBindings.set(
+      issuer,
+      statements.map((jws) => ({ jws })),
+    );
+    for (const agent of agents) {
+      if (!(scenario.trust.sources[agent.id] ?? []).some((rule) => rule.source === issuer))
+        continue;
+      cast.rule(agent.id, {
+        id: scopedUrn("proof-metadata", issuer, "fixture-authority"),
+        version: "1",
+        source: issuer,
+        subjects: [issuer],
+        claimTypes: ["proof.issuer-key", "proof.status"],
+      });
+    }
   }
   const proofDatasets = profile.acceptedProofs
     .filter((a) => a.binds.includes("complete"))
@@ -951,6 +1036,14 @@ async function runPath(
         issuer: required(parties.get(c.issuer)).identity,
         status: c.status as JsonObject,
       })),
+    ...(resultFixtures.size
+      ? {
+          resultSnapshots: [...resultFixtures.values()].map(({ issuer, status }) => ({
+            issuer,
+            snapshot: status,
+          })),
+        }
+      : {}),
   };
   for (const credential of scenario.selectiveCredentials) {
     const issuer = required(parties.get(credential.issuer));
@@ -1896,7 +1989,9 @@ async function runPath(
       acceptedProofs: profile.acceptedProofs,
       acceptedJoint: profile.acceptedJoint,
       proofIssuerKeys,
-      proofCredentials,
+      proofCredentials: proofCredentials.filter(
+        ({ holder }) => !holder || holder === cast.get(agent.id).identity.party,
+      ),
       proofDatasets,
       proofStatusPolicy,
       proofCache: options.proofCache,
@@ -2062,16 +2157,27 @@ async function runPath(
       ),
       reliance: {
         id: `urn:profile:${profile.id}`,
-        rules: profile.claims.map((c) => ({
-          id: `urn:profile:${profile.id}:${c.kind}`,
-          claimType: c.kind,
-          methods: c.methods,
-          maxAgeDays: c.maxAgeDays,
-          ...(c.precedence ? { precedence: c.precedence } : {}),
-          ...(c.corroboration ? { corroboration: c.corroboration } : {}),
-          ...(c.completeness ? { completeness: c.completeness } : {}),
-          text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
-        })),
+        rules: [
+          ...profile.claims.map((c) => ({
+            id: `urn:profile:${profile.id}:${c.kind}`,
+            claimType: c.kind,
+            methods: c.methods,
+            maxAgeDays: c.maxAgeDays,
+            ...(c.precedence ? { precedence: c.precedence } : {}),
+            ...(c.corroboration ? { corroboration: c.corroboration } : {}),
+            ...(c.completeness ? { completeness: c.completeness } : {}),
+            text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
+          })),
+          ...(resultFixtures.size
+            ? ["proof.issuer-key", "proof.status"].map((claimType) => ({
+                id: `urn:profile:${profile.id}:${claimType}`,
+                claimType,
+                methods: ["recorded-by-authority"],
+                maxAgeDays: 1,
+                text: "Use current identity-signed proof metadata from this fixture's accepted sources.",
+              }))
+            : []),
+        ],
       },
       resolver: new TrustResolver({
         principal: name(cast.get(agent.id).identity.party),
@@ -2844,6 +2950,28 @@ async function runPath(
       }
       case "proof-request":
         {
+          const rule = profile.rules.find((entry) => entry.id === step.rule);
+          if (rule && "template" in rule && resultBindings.size) {
+            const kinds = ruleInputs(rule);
+            for (const [issuer, evidence] of resultBindings) {
+              if (
+                !rule.inputsFrom.includes(issuer) ||
+                !kinds.every((kind) =>
+                  profile.claims.some(
+                    (claim) => claim.kind === kind && claim.sources.includes(issuer),
+                  ),
+                )
+              )
+                continue;
+              await runtime.admitStatements(evidence, {
+                task,
+                taskId: task,
+                purpose: step.purpose,
+                subject: issuer,
+                policyMetadata: true,
+              });
+            }
+          }
           const request = runtime.issueDerivationRequest(step);
           result = {
             request,

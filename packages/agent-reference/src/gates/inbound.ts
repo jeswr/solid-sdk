@@ -60,6 +60,7 @@ import type {
   SourceAuthorityAssessment,
   VerificationResult,
 } from "../core/types.js";
+import { SPARQ_ZK_QUERY } from "../derive/adapters/sparq-zk-query.js";
 import { admittedResultPolicy } from "../derive/result-trust.js";
 import { verifyDerivation } from "../derive/rules.js";
 import {
@@ -100,6 +101,9 @@ import {
   resolutionView,
 } from "./common.js";
 import { acceptsOfferedTerms, evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
+
+const QUERY_CONDITION_FALSE =
+  "The verified query released false. The requested condition is unmet.";
 
 export interface InboundDeps {
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
@@ -943,6 +947,7 @@ export class InboundGate {
     verdict: Verdict;
     reason?: string;
     claim?: Claim;
+    verifiedCondition?: false;
     methodOverride?: string;
     resolution?: Resolution;
     rule?: { id: string; text: string };
@@ -1490,6 +1495,24 @@ export class InboundGate {
         return false;
       }
       c = result.statement as Claim;
+      if (
+        proof?.method === SPARQ_ZK_QUERY.method &&
+        this.deps.gate.proofSystems?.get(proof.method)?.kind === "real" &&
+        c.value === false
+      ) {
+        const reason = "not-authorised";
+        this.verdictEvent("source", "fail", QUERY_CONDITION_FALSE, { reason });
+        cache.set(item.value, {
+          ...r,
+          claim: c,
+          verdict: "fail",
+          reason,
+          verifiedCondition: false,
+        });
+        this.failedClaim(c, reason, need.taskId ?? need.task);
+        this.claimFailure = { outcome: "refuse", reason };
+        return false;
+      }
       cache.set(item.value, {
         ...r,
         claim: c,
@@ -1981,6 +2004,7 @@ export class InboundGate {
       readonly purpose?: Iri;
       readonly taskId?: Iri;
       readonly operation?: Iri;
+      readonly policyMetadata?: boolean;
     },
   ): Promise<{ admitted: number; refused: number }> {
     let admitted = 0;
@@ -2071,7 +2095,7 @@ export class InboundGate {
       const claim = (cache.get(item.jws)?.claim ?? r.claim) as Claim;
       this.storeEvent(claim);
       const fact = this.deps.memory.facts.get(claim.id ?? digestOf(claim));
-      if (fact)
+      if (fact && !opts.policyMetadata)
         this.deps.memory.enter(this.deps.gate.taskId ?? opts.taskId ?? "*", {
           ...fact,
           accepted: true,
@@ -2355,6 +2379,8 @@ export class Admission {
         this.claimCache,
       );
       const r = this.claimCache.get(item.value);
+      if (r?.verifiedCondition === false)
+        this.sourceFailure ??= { reason: "not-authorised", detail: QUERY_CONDITION_FALSE };
       if (r?.claim)
         this.sources.set(
           `${r.claim.issuer}|${r.claim.claimType}|${msg.from.onBehalfOf ?? ""}`,

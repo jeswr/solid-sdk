@@ -164,7 +164,8 @@
       ],
       "assurances": [
         "attested"
-      ]
+      ],
+      "proofQuery": "SELECT DISTINCT ?result WHERE {\n  ?subject <urn:claim:licence.years> ?v0 .               BIND((?v0 >= 5) AS ?test0)\n  ?subject <urn:claim:licence.points> ?v1 .              BIND((?v1 <= 3) AS ?test1)\n  ?subject <urn:claim:claims.five-year-count> ?v2 .      BIND((?v2 = 0) AS ?test2)\n  ?subject <urn:claim:claims.five-year-complete> ?v3 .   BIND((?v3 = true) AS ?test3)\n  BIND((?test0 && ?test1 && ?test2 && ?test3) AS ?result)\n}\n"
     }
   ],
   "decisionsForPerson": [],
@@ -241,7 +242,7 @@
   "acceptedProofs": [
     {
       "rule": "urn:rule:insurance-quote:proof",
-      "method": "sparq-noir-closed-world/0",
+      "method": "sparq-zk-query/1",
       "assurance": "attested",
       "binds": [
         "rule",
@@ -256,8 +257,8 @@
   ],
   "standIns": [
     {
-      "what": "Planned proof method sparq-noir-closed-world/0",
-      "replacedBy": "Purpose-built Noir circuits for absence and totals are not yet delivered. Native dataset commitment preparation remains an open gap from Brief 21."
+      "what": "sparq-zk-query/1",
+      "replacedBy": "Research-grade and unaudited. Uses sparq Merkle-suite credentials and test-only issuer keys. The exact scenario query is absent from the pinned catalogue."
     }
   ],
   "actionClaims": [

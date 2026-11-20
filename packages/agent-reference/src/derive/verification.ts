@@ -3,6 +3,14 @@
 import { digestOf } from "../core/canonical.js";
 import type { JsonObject } from "../core/types.js";
 import type { GateContext } from "../gates/common.js";
+import { queryVerificationMethod } from "../model/sparq-query.js";
+import { queryPolicyOptions, SPARQ_ZK_QUERY } from "./adapters/sparq-zk-query.js";
+import {
+  resultPublicKey,
+  resultSupportsSubject,
+  SPARQ_ZK_RESULT,
+} from "./adapters/sparq-zk-result.js";
+import { resultRequestPolicy } from "./result-trust.js";
 import { type DerivationRule, queryFor, ruleInputs } from "./rules.js";
 import type { JointOutcome, ProofBinds } from "./verifiers.js";
 
@@ -80,6 +88,37 @@ export function proofPolicy(
   accepted: (issuer: string, kind: string) => boolean,
 ): JsonObject {
   const kinds = ruleInputs(rule);
+  const sources = rule.inputsFrom.map((source) => gate.sourceAliases?.[source] ?? source);
+  if (
+    gate.proofSystems?.get(SPARQ_ZK_QUERY.method)?.kind === "real" &&
+    gate.acceptedProofs?.some(
+      (entry) => entry.rule === rule.id && entry.method === SPARQ_ZK_QUERY.method,
+    )
+  ) {
+    const members = (gate.proofIssuerKeys ?? []).flatMap(({ issuer, key, claimTypes }) => {
+      const parsed = resultPublicKey.safeParse(key);
+      return parsed.success &&
+        sources.includes(issuer) &&
+        kinds.every((kind) => claimTypes.includes(kind) && accepted(issuer, kind))
+        ? [{ issuer, verificationMethod: queryVerificationMethod(issuer), ...parsed.data }]
+        : [];
+    });
+    if (!members.length) throw new Error("No trusted query issuer for the rule");
+    return {
+      ...queryPolicyOptions.parse(gate.proofStatusPolicy?.queryPolicy),
+      trustedIssuers: [...new Set(members.map(({ publicKey }) => publicKey))],
+      trustMembers: members,
+    };
+  }
+  if (
+    gate.proofSystems?.get(SPARQ_ZK_RESULT.method)?.kind === "real" &&
+    gate.acceptedProofs?.some(
+      (entry) => entry.rule === rule.id && entry.method === SPARQ_ZK_RESULT.method,
+    )
+  )
+    return resultRequestPolicy(gate, sources, (issuer, claimTypes) =>
+      kinds.every((kind) => claimTypes.includes(kind) && accepted(issuer, kind)),
+    );
   return {
     issuerKeys: (gate.proofIssuerKeys ?? [])
       .filter((k) => kinds.some((kind) => k.claimTypes.includes(kind) && accepted(k.issuer, kind)))
@@ -277,13 +316,15 @@ export async function verifyOpaqueDerivation(input: {
         presentation: proof.presentation as JsonObject,
         policy: request.policy,
         nonce: request.nonce,
-        seenNonces: {
-          has: () => request.consumed,
-          add: () => {
-            request.consumed = true;
-            gate.saveDerivationState?.();
-          },
-        },
+        seenNonces: gate.saveDerivationState
+          ? {
+              has: () => request.consumed,
+              add: () => {
+                request.consumed = true;
+                gate.saveDerivationState?.();
+              },
+            }
+          : undefined,
       });
     } catch {
       checked = { ok: false, reason: "verifier failed" };
@@ -291,7 +332,10 @@ export async function verifyOpaqueDerivation(input: {
     if (
       !step(
         "DER-17",
-        checked.ok && digestOf(checked.released) === digestOf(s.value),
+        checked.ok &&
+          (method === SPARQ_ZK_RESULT.method && verifier.kind === "real" && s.value === true
+            ? resultSupportsSubject(checked.released, request.subject)
+            : digestOf(checked.released) === digestOf(s.value)),
         "derivation-not-verified",
         checked.ok
           ? "The verifier checked the receiver's own query, issuer/status policy and nonce, and the released value equals the claim."

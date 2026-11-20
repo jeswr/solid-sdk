@@ -51,6 +51,7 @@ import type {
   ReasonCode,
   RepresentationAssessment,
 } from "../core/types.js";
+import { resultSupportsSubject, SPARQ_ZK_RESULT } from "../derive/adapters/sparq-zk-result.js";
 import { evaluateRule, queryFor } from "../derive/rules.js";
 import { proofPolicy } from "../derive/verification.js";
 import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/verifiers.js";
@@ -1860,6 +1861,7 @@ export class AgentRuntime {
       readonly purpose?: Iri;
       readonly taskId?: Iri;
       readonly operation?: Iri;
+      readonly policyMetadata?: boolean;
     },
   ) {
     return this.exclusive(async () => {
@@ -2174,6 +2176,13 @@ export class AgentRuntime {
         if (gate?.generateProofs && system.kind === "real")
           gate.proofCache?.write(input.method, args, proof);
       }
+      const subjectAnswer =
+        system.kind === "real" &&
+        system.method === SPARQ_ZK_RESULT.method &&
+        ["threshold", "membership", "all-of", "any-of"].includes(rule.template);
+      if (subjectAnswer && !resultSupportsSubject(proof.result, input.request.subject))
+        return { ok: false as const, reason: "derivation-not-verified" };
+      const value = subjectAnswer ? true : proof.result;
       gate?.sink?.emit({
         part: "outbound-gate",
         kind: "check",
@@ -2192,7 +2201,7 @@ export class AgentRuntime {
         subject: input.request.subject,
         claimType: rule.output,
         method: "derived",
-        value: proof.result,
+        value,
         asOf: facts.map((f) => f?.asOf ?? this.now()).sort()[0] ?? this.now(),
         terms: {
           policy: { id: this.newId() },
@@ -2211,7 +2220,7 @@ export class AgentRuntime {
           proofBinds: [...input.proofBinds],
           deriver: issuer,
           at: this.now(),
-          outputDigest: digestOf(proof.result),
+          outputDigest: digestOf(value),
           inputs: facts.map((f) => ({
             id: f?.id ?? "",
             digest: f?.digest ?? "",

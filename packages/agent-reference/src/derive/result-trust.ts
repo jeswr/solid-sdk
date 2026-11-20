@@ -3,22 +3,51 @@
  * test-only issuer keys. Authenticate public inputs from admitted statements. */
 import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
-import type { GateMemory, RelianceProfile } from "../gates/common.js";
+import type { GateContext, GateMemory, RelianceProfile } from "../gates/common.js";
 import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
 import { StatementQualityNode } from "../model/quality.js";
 import {
   resultPolicy,
   resultPublicKey,
   resultSnapshot,
+  resultVerificationMethod,
   SPARQ_ZK_RESULT,
 } from "./adapters/sparq-zk-result.js";
 
 const keyStatement = z.strictObject({
   method: z.literal(SPARQ_ZK_RESULT.method),
   publicKey: z.string(),
+  verificationMethod: z.string().optional(),
   statusLists: z.array(z.string()),
 });
 const snapshotStatement = resultSnapshot.extend({ method: z.literal(SPARQ_ZK_RESULT.method) });
+const snapshotsByIssuer = z.array(z.strictObject({ issuer: z.string(), snapshot: resultSnapshot }));
+
+export function resultRequestPolicy(
+  gate: GateContext,
+  sources: readonly string[],
+  accepts: (issuer: string, claimTypes: readonly string[]) => boolean,
+) {
+  const members = (gate.proofIssuerKeys ?? []).flatMap(({ issuer, key, claimTypes }) => {
+    const parsed = resultPublicKey.safeParse(key);
+    return parsed.success && sources.includes(issuer) && accepts(issuer, claimTypes)
+      ? [{ issuer, verificationMethod: resultVerificationMethod(issuer), ...parsed.data }]
+      : [];
+  });
+  const snapshots = snapshotsByIssuer
+    .parse(gate.proofStatusPolicy?.resultSnapshots ?? [])
+    .filter(({ issuer }) => members.some((member) => member.issuer === issuer))
+    .map(({ snapshot }) => snapshot);
+  if (!members.length || !snapshots.length)
+    throw new Error("No trusted result issuer or status snapshot");
+  return {
+    trustedIssuers: [...new Set(members.map((member) => member.publicKey))],
+    trustMembers: members,
+    snapshots,
+    minVersion: Math.min(...snapshots.map((snapshot) => snapshot.version)),
+    maxVersion: Math.max(...snapshots.map((snapshot) => snapshot.version)),
+  };
+}
 
 /** Only previously admitted source statements authenticate these inputs. A key or
  * snapshot asserted inside a presentation never becomes receiver policy. */
@@ -69,7 +98,18 @@ export function admittedResultPolicy(
         : [];
     })[0];
   });
-  if (bindings.some((b) => !b))
+  if (
+    bindings.some((b) => !b) ||
+    policy.trustMembers?.some(
+      (member) =>
+        !bindings.some(
+          (binding) =>
+            binding?.issuer === member.issuer &&
+            binding.value.publicKey === member.publicKey &&
+            binding.value.verificationMethod === member.verificationMethod,
+        ),
+    )
+  )
     return {
       ok: false as const,
       reason: "source-not-accepted",

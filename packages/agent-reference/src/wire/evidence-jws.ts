@@ -3,8 +3,15 @@
 import { DEFAULT_LIMITS, parseBoundedJson } from "../core/limits.js";
 import type { JsonObject } from "../core/types.js";
 import { assertUniqueKeys } from "./document.js";
-export function inspectEvidenceJws(jws: string): { header: JsonObject; payload: JsonObject } {
-  if (Buffer.byteLength(jws) > DEFAULT_LIMITS.maxEnvelopeBytes)
+export function inspectEvidenceJws(
+  jws: string,
+  format?: string,
+): { header: JsonObject; payload: JsonObject } {
+  const limits =
+    format === "derivation+jws"
+      ? { ...DEFAULT_LIMITS, maxEnvelopeBytes: 2 * 1024 * 1024, maxStringLength: 1024 * 1024 }
+      : DEFAULT_LIMITS;
+  if (Buffer.byteLength(jws) > limits.maxEnvelopeBytes)
     throw new TypeError("Evidence JWS too large");
   const parts = jws.split(".");
   if (parts.length !== 3 || parts.some((part) => !/^[A-Za-z0-9_-]+$/.test(part)))
@@ -15,7 +22,7 @@ export function inspectEvidenceJws(jws: string): { header: JsonObject; payload: 
       throw new TypeError("Noncanonical base64url evidence");
     const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     assertUniqueKeys(text);
-    const value = parseBoundedJson(text);
+    const value = parseBoundedJson(text, limits);
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new TypeError("Expected JWS object");
     return value as JsonObject;

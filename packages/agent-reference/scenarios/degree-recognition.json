@@ -888,7 +888,7 @@
   "blocked": [
     {
       "path": "main",
-      "reason": "Blocked: needs issuer-scoped GRAPH and the unchanged BSc-or-MSc membership rule; this result-proof build rejects GRAPH and FILTER IN. Selecting only BSc would narrow the rule; releasing the degree would change disclosure."
+      "reason": "Blocked: @sparq-org/zk-result rejects the issuer-scoped FILTER IN membership with \"operator outside positive BGP/JOIN/FILTER\"; @sparq-org/zk-query has no catalogue plan for the scoped BSc-or-MSc query."
     }
   ],
   "standIns": [

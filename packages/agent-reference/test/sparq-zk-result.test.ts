@@ -127,7 +127,7 @@ it("uses strict nested schemas for every delivered return type and retains nativ
   ).toThrow();
   const api: ResultPackage = {
     testIssuerKeygen: () => ({ publicKey: "key", seedHex: "1", ignored: true }),
-    issue: () => ({
+    testIssue: () => ({
       graphNQuads: "",
       salt: "salt",
       issuer: "key",
@@ -171,27 +171,21 @@ it("uses strict nested schemas for every delivered return type and retains nativ
   ).rejects.toThrow();
 });
 
-it("keeps all six unsupported rules blocked with or without the optional installation", async () => {
-  const registries = [verifierRegistry(), ...(installed ? [await availableAdapters()] : [])];
+it("keeps result paths blocked without installation and preserves the scoped membership blocker", async () => {
   for (const id of names) {
     const { profile, scenario } = loadCase(root, id);
     const path = id === "right-to-work" ? "hidden-validity-proof" : "main";
     expect(queryFor(profile.rules[0] as Parameters<typeof queryFor>[0])).toContain("GRAPH ?g");
-    const reason =
-      id === "right-to-work"
-        ? (
-            required(scenario.branches.find((b) => b.id === path)).change.blocked as {
-              path: string;
-              reason: string;
-            }[]
-          )[0]?.reason
-        : scenario.blocked[0]?.reason;
-    expect(reason).toMatch(/^Blocked:/);
+    const unsupported = id === "degree-recognition";
+    const registries = [verifierRegistry()];
+    if (unsupported && installed) registries.push(await availableAdapters());
     for (const registry of registries) {
       const result = (await runScenario(profile, scenario, { registry })).find(
         (p) => p.path === path,
       );
-      expect(result?.blocked).toBe(reason);
+      expect(result?.blocked).toMatch(
+        unsupported ? /scoped BSc-or-MSc/ : /package, which is not installed/,
+      );
       expect(result?.trace).toBeUndefined();
     }
   }
@@ -234,7 +228,7 @@ it("claims the receiver nonce before any verifier await", async () => {
   };
   const system = new SparqZkResult({
     testIssuerKeygen() {},
-    issue() {},
+    testIssue() {},
     prove: async () => ({}),
     verify: async () => ({}),
   });
@@ -505,14 +499,14 @@ describe.skipIf(!installed)("real offline result proofs (diagnostics, not six-pa
       });
       samples.push({ keys, policy, nonce, proof });
     }
-    expect(salts.size).toBe(3);
+    expect(salts.size).toBe(1);
     expect(new Set(samples.map((sample) => digestOf(sample.keys.publicKey))).size).toBe(1);
     writeFileSync(
       join(tmpdir(), "brief28-diagnostic-times.json"),
       JSON.stringify({ query, samples: times }, null, 2),
     );
   }, 180_000);
-  it("really proves and verifies three fresh, randomly salted diagnostic presentations", () => {
+  it("really proves and verifies three independent challenges over a seeded credential", () => {
     expect(new Set(samples.map((s) => digestOf(s.proof.presentation))).size).toBe(3);
     expect(system.binds).not.toContain("subject");
     expect(system.binds).not.toContain("complete");
@@ -586,7 +580,7 @@ describe.skipIf(!installed)("real offline result proofs (diagnostics, not six-pa
       ).toBe(false);
     }
   }, 60_000);
-  it("rejects all six required queries instead of substituting an admitted weaker query", async () => {
+  it("rejects scoped FILTER IN without weakening the membership rule", async () => {
     const keys = required(samples[0]).keys;
     const credential = await system.issue({
       issuerKey: keys.secretKey,
@@ -594,17 +588,25 @@ describe.skipIf(!installed)("real offline result proofs (diagnostics, not six-pa
       claims: { statements: [{ subject, claimType: "identity.verified", value: true }] },
       status,
     });
-    for (const id of names) {
-      const { profile } = loadCase(root, id);
-      await expect(
-        system.prove({
-          query: queryFor(profile.rules[0] as Parameters<typeof queryFor>[0]),
-          credentials: [credential],
-          policy: required(samples[0]).policy,
-          nonce: randomBytes(32).toString("hex"),
-        }),
-      ).rejects.toThrow("operator outside positive BGP/JOIN/FILTER");
-    }
+    const { profile } = loadCase(root, "degree-recognition");
+    const policy = {
+      ...required(samples[0]).policy,
+      trustMembers: [
+        {
+          issuer: "urn:fictional:degree-recognition:university",
+          verificationMethod: "urn:result:degree-key",
+          publicKey: String(keys.publicKey.publicKey),
+        },
+      ],
+    };
+    await expect(
+      system.prove({
+        query: queryFor(profile.rules[0] as Parameters<typeof queryFor>[0]),
+        credentials: [credential],
+        policy,
+        nonce: randomBytes(32).toString("hex"),
+      }),
+    ).rejects.toThrow("operator outside positive BGP/JOIN/FILTER");
   }, 60_000);
 });
 
