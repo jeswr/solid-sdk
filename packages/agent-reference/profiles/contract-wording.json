@@ -48,6 +48,13 @@
       "values": [
         "received"
       ]
+    },
+    "decision": {
+      "type": "code",
+      "values": [
+        "review-clause",
+        "accept-clause"
+      ]
     }
   },
   "operations": [

@@ -14,7 +14,9 @@
     {
       "kind": "unstructured-content",
       "sources": [
-        "urn:fictional:insurance-claim-photos:owner"
+        "urn:fictional:insurance-claim-photos:owner",
+        "urn:fictional:insurance-claim-photos:garage",
+        "urn:fictional:insurance-claim-photos:other-garage"
       ],
       "methods": [
         "recorded-by-authority"

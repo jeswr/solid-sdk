@@ -408,7 +408,7 @@
             }
           },
           {
-            "id": "human-decision",
+            "id": "accept-clause",
             "agent": "receiver-agent",
             "type": "effect",
             "intent": {
@@ -419,7 +419,7 @@
               "purpose": "urn:purpose:contract-wording",
               "conversation": "urn:scenario:contract-wording:task",
               "parameters": {
-                "decision": "accept-unknown-clause",
+                "decision": "accept-clause",
                 "originalDigest": "sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0",
                 "support": [
                   "urn:scenario:contract-wording:original"
@@ -427,9 +427,17 @@
               }
             },
             "params": {
-              "decision": "accept-unknown-clause"
+              "decision": "accept-clause"
             },
             "activityType": "urn:activity:human-decision"
+          },
+          {
+            "id": "deny-acceptance",
+            "agent": "receiver-agent",
+            "type": "approve",
+            "decision": "deny",
+            "note": "Do not accept the clause.",
+            "evidence": []
           }
         ],
         "traceSteps": {
@@ -440,7 +448,8 @@
           "5": "The first fictional company’s agent completes the approve step.",
           "6": "The second fictional company’s agent checks the message and prepares a response.",
           "7": "The second fictional company’s agent completes the read content step.",
-          "8": "The second fictional company’s agent proposes the local action."
+          "8": "The receiving company’s agent proposes accepting the original clause.",
+          "9": "The receiving company declines the proposed acceptance."
         }
       },
       "expect": {

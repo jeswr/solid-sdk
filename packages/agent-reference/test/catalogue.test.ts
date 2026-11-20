@@ -172,7 +172,7 @@ it("requires currently accepted completeness for the exact list, subject and per
   });
 });
 
-it("models an unregistered notice key, insufficient borrowing credentials, and missing structured evidence before a photograph reading", async () => {
+it("models an unregistered notice key and insufficient borrowing credentials", async () => {
   const recall = loadCase(root, "recall-notice");
   const recalls = await runScenario(recall.profile, recall.scenario);
   expect(recalls[1]?.actual).toMatchObject({ outcome: "refuse", reason: "source-unknown" });
@@ -203,29 +203,83 @@ it("models an unregistered notice key, insufficient borrowing credentials, and m
     ),
   ).toBe(true);
   expect(loanEvents.some((e) => e.agent === "receiver-agent" && e.outcome === "admit")).toBe(false);
+});
+
+it("asks the garage for a structured estimate when its assessment arrived as a letter", async () => {
   const photo = loadCase(root, "insurance-claim-photos");
   const photos = await runScenario(photo.profile, photo.scenario);
-  const events = photos[1]?.trace?.events ?? [];
-  expect(
-    events.some(
-      (e) =>
-        e.agent === "receiver-agent" && e.outcome === "ask-more" && e.reason === "evidence-missing",
-    ),
-  ).toBe(true);
+  const branch = photos.find((path) => path.path === "branch-1");
+  expect(branch?.disagrees).toBe(false);
+  expect(branch?.actual).toEqual({
+    outcome: "ask-more",
+    check: "fitness",
+    reason: "structured-form-required",
+  });
+  const events = branch?.trace?.events ?? [];
   const request = events.find(
-    (e) => e.agent === "receiver-agent" && e.check === "fitness" && e.reason === "evidence-missing",
+    (e) =>
+      e.agent === "receiver-agent" &&
+      e.check === "fitness" &&
+      e.verdict === "ask-more" &&
+      e.reason === "structured-form-required",
   );
-  expect(request?.caption).toContain("Accepted sources: The accepted repair garage");
+  if (!request) throw new Error("missing structured estimate request");
+  expect(request.caption).toContain("The accepted repair garage");
   expect(
-    request?.refs?.some((ref) => ref.id === "urn:fictional:insurance-claim-photos:garage"),
+    request.refs?.some((ref) => ref.id === "urn:scenario:insurance-claim-photos:garage-letter"),
   ).toBe(true);
-  expect(request?.caption).toContain("repair estimate");
+  expect(request.caption).toContain("repair estimate");
   expect(
     events
-      .slice(events.indexOf(request!))
+      .slice(events.indexOf(request))
       .some((e) => e.agent === "receiver-agent" && e.part === "core"),
   ).toBe(false);
   expect(
-    events.some((e) => e.agent === "receiver-agent" && e.fact?.claimType === "repair.estimate"),
+    events.some(
+      (e) =>
+        e.agent === "receiver-agent" &&
+        (e.fact?.claimType === "repair.estimate" || e.fact?.method === "model-output"),
+    ),
   ).toBe(false);
+  expect(photos.find((path) => path.path === "needed-claim-left-out")?.actual).toEqual({
+    outcome: "ask-more",
+    check: "fitness",
+    reason: "evidence-missing",
+  });
+});
+
+it("admits each represented probe and stops each proposed action at the mandate", async () => {
+  const { profile, scenario } = loadCase(root, "probing-counterparty");
+  const paths = await runScenario(profile, scenario, { compare: false });
+  const branch = paths.find(({ path }) => path === "tenth-request");
+  expect(branch?.actual).toEqual({ outcome: "stop", check: "mandate", reason: "not-authorised" });
+  expect(branch?.disagrees).toBe(false);
+  const events = branch?.trace?.events ?? [];
+  const probes = events.filter(
+    (e) => e.agent === "person-agent" && e.kind === "message-in" && e.packet?.kind === "invoke",
+  );
+  expect(probes).toHaveLength(10);
+  const checks = probes.map(({ step }) =>
+    events
+      .filter((e) => e.agent === "person-agent" && (e.step === step || e.step === step + 1))
+      .map(({ kind, check, outcome, verdict, reason }) => ({
+        kind,
+        check,
+        outcome,
+        verdict,
+        reason,
+      })),
+  );
+  for (const segment of checks) {
+    expect(segment).toEqual(checks[0]);
+    expect(segment).toContainEqual(
+      expect.objectContaining({ check: "authority", verdict: "pass", reason: "authority-valid" }),
+    );
+    expect(segment).toContainEqual(expect.objectContaining({ kind: "decision", outcome: "admit" }));
+    expect(segment).toContainEqual(
+      expect.objectContaining({ check: "mandate", verdict: "fail", reason: "not-authorised" }),
+    );
+    expect(segment).toContainEqual(expect.objectContaining({ kind: "decision", outcome: "stop" }));
+    expect(segment).not.toContainEqual(expect.objectContaining({ kind: "message-out" }));
+  }
 });

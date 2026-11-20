@@ -176,6 +176,7 @@
   "labels": {
     "urn:purpose:passport-management": "Passport management",
     "urn:purpose:ticketing": "Ticketing",
-    "urn:purpose:trip-booking": "Trip booking"
+    "urn:purpose:trip-booking": "Trip booking",
+    "urn:op:unapproved-other-hotel": "The dearer hotel outside the approved booking"
   }
 }

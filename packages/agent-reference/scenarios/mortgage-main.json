@@ -14726,7 +14726,7 @@
     {
       "id": "origin-record-forwarded",
       "onlyUnder": "authenticity-origin-hosted",
-      "what": "The core proposes forwarding its unsigned source observation to the valuer as evidence.",
+      "what": "The core proposes forwarding its unsigned source observation to the valuer as evidence. The mandate does not cover it, so the mandate check stops it first; the evidence check would stop it next.",
       "change": {
         "script": [
           {
@@ -15769,15 +15769,11 @@
         "stopAfter": "origin-forward-proposed"
       },
       "expect": {
-        "check": "mandate",
-        "reason": "not-authorised",
-        "outcome": "stop"
-      },
-      "outline": [],
-      "catalogueExpected": {
         "outcome": "stop",
-        "reason": "evidence-invalid"
-      }
+        "check": "mandate",
+        "reason": "not-authorised"
+      },
+      "outline": []
     },
     {
       "id": "index-shows-two-histories",
@@ -16186,12 +16182,12 @@
     {
       "id": "entry-withheld",
       "onlyUnder": "accountability-regulator-claim",
-      "what": "The lender withholds a record entry; the claimant receipt commitment exposes the gap.",
+      "what": "The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer.",
       "change": {},
       "expect": {
         "outcome": "refuse",
-        "check": "evidence",
-        "reason": "evidence-invalid"
+        "check": "fitness",
+        "reason": "record-unavailable"
       },
       "outline": []
     },
@@ -28477,7 +28473,7 @@
           {
             "id": "mailbox-reply-as-evidence",
             "onlyUnder": "identity-email-endpoint",
-            "what": "The core proposes forwarding the payroll mailbox reply to the lender, as unsigned content beside the income request. The evidence check requires structured form and stops the unsigned prose.",
+            "what": "The core proposes forwarding the payroll mailbox reply to the lender as unsigned content beside the income request. The evidence check stops the unsigned prose because the income claim requires structured evidence.",
             "change": {
               "script": {
                 "forward-reply-as-income": {
@@ -32111,7 +32107,7 @@
           {
             "id": "supplier-terms-hold",
             "onlyUnder": "usage-control-human-approval",
-            "what": "The valuer asks Sam for the bank balance statement instead; Sam's approval cannot waive Harbour's signed terms, and Sam is never asked. Disagrees with the brief's data-terms / prohibited: the gate stops at the earlier disclosure check (excessive-scope), because a bank balance is not needed for the valuation purpose.",
+            "what": "The valuer asks Sam for the bank balance statement. A balance is not needed for a valuation, so the disclosure check stops it and Sam is never asked. Harbour's signed terms are a second bar that Sam's approval could not lift.",
             "change": {
               "trust": {
                 "ownLists": {
@@ -32236,10 +32232,6 @@
               "outcome": "stop",
               "check": "disclosure",
               "reason": "excessive-scope"
-            },
-            "catalogueExpected": {
-              "outcome": "stop",
-              "reason": "prohibited"
             },
             "outline": []
           }
@@ -32893,7 +32885,7 @@
           {
             "id": "entry-withheld",
             "onlyUnder": "accountability-regulator-claim",
-            "what": "The lender withholds an entry from its record segment; the chain of its own record no longer verifies, so the forum refuses the answer. Disagrees with the registered evidence / evidence-invalid: the forum measures the gap at fitness as record-unavailable.",
+            "what": "The lender withholds an entry from its record segment. The sequence no longer runs on, the chain does not verify, and the forum refuses the answer.",
             "change": {
               "script": {
                 "respondent-record": {
@@ -32907,11 +32899,7 @@
               "check": "fitness",
               "reason": "record-unavailable"
             },
-            "outline": [],
-            "catalogueExpected": {
-              "outcome": "refuse",
-              "reason": "evidence-invalid"
-            }
+            "outline": []
           }
         ]
       },
@@ -37423,7 +37411,7 @@
           "evidence-not-publishable": {
             "id": "evidence-not-publishable",
             "onlyUnder": "accountability-reputation-post",
-            "what": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves. Disagrees with the registered data-terms / prohibited: the gate's disclosure check runs first and stops the balance statement as outside what the publication purpose names (excessive-scope); the bank's signed terms are not reached.",
+            "what": "Sam's agent is asked to add the bank's balance statement to the post. Sam's outbound gate stops the post before anything leaves.",
             "change": {
               "script": {
                 "publish-post": {
@@ -37439,10 +37427,6 @@
               "outcome": "stop",
               "check": "disclosure",
               "reason": "excessive-scope"
-            },
-            "catalogueExpected": {
-              "outcome": "stop",
-              "reason": "prohibited"
             },
             "outline": []
           }

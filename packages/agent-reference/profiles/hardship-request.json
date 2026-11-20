@@ -51,7 +51,8 @@
     "input.request": {
       "type": "code",
       "values": [
-        "unstructured-content"
+        "unstructured-content",
+        "health.diagnosis"
       ]
     },
     "output.status": {
