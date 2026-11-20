@@ -19,13 +19,31 @@ export interface AccessRule {
   modes: readonly AccessMode[];
   resource: string;
   defaults?: boolean;
-  policy?: string;
+  fragment?: string;
+  policies?: readonly string[];
 }
-export async function accessDocument(url: string, rules: readonly AccessRule[]): Promise<string> {
-  const dataset = new Store();
+export async function accessDocument(
+  url: string,
+  rules: readonly AccessRule[],
+  current?: string,
+  remove?: string,
+): Promise<string> {
+  const dataset = current
+    ? new Store(
+        await parseRdf(current, "text/turtle", {
+          baseIRI: url,
+          maxBytes: 65536,
+          maxQuads: 1024,
+        }),
+      )
+    : new Store();
   const acl = new AclResource(dataset, DataFactory);
+  if (remove) dataset.deleteMatches(DataFactory.namedNode(`${url}#${remove}`));
   for (const [i, value] of rules.entries()) {
-    const rule = new Authorization(`${url}#rule-${i}`, acl, DataFactory);
+    const fragment = value.fragment ?? `rule-${i}`;
+    if (dataset.countQuads(DataFactory.namedNode(`${url}#${fragment}`), null, null, null))
+      throw new Error("Access rule identifier is already in use");
+    const rule = new Authorization(`${url}#${fragment}`, acl, DataFactory);
     rule.type.add(`${ACL}Authorization`);
     rule.accessTo = value.resource;
     if (value.defaults) rule.default = value.resource;
@@ -33,7 +51,7 @@ export async function accessDocument(url: string, rules: readonly AccessRule[]):
     if (value.public) rule.accessibleToAny = true;
     if (value.authenticated) rule.accessibleToAuthenticated = true;
     for (const mode of value.modes) rule.mode.add(`${ACL}${mode}`);
-    if (value.policy) addIriTriple(rule, `${PROV}wasDerivedFrom`, value.policy);
+    for (const policy of value.policies ?? []) addIriTriple(rule, `${PROV}wasDerivedFrom`, policy);
   }
   return serialize([...dataset]);
 }

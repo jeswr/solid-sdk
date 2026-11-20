@@ -13,6 +13,7 @@
  * four different records; none implies another.
  */
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+
 import { AsyncLocalStorage } from "async_hooks";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { randomBytes } from "crypto";
@@ -61,6 +62,7 @@ import { type Admission, InboundGate } from "../gates/inbound.js";
 import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { paymentDigest, periodKey, sameAmount } from "../gates/payment.js";
 import { evaluateItemTerms, fitnessOf } from "../gates/quality.js";
+import { type AccessPointer, isAccessPointer } from "../mechanisms/access-pointer.js";
 import { jointPayloadSchema } from "../mechanisms/joint.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
@@ -119,6 +121,7 @@ import {
 import { PILOT_PROFILE } from "../profile/vocabulary.js";
 import { SettlementError } from "../settlement/adapter.js";
 import { readCarried } from "../settlement/carried.js";
+import { POD_ACCESS_ADAPTER, WITHDRAW_ACCESS } from "../standins/pod-access.js";
 import {
   type EvidenceLedger,
   type LedgerEntry,
@@ -512,6 +515,16 @@ export class AgentRuntime {
         });
     }
     for (const e of options.effects ?? []) this.effectAdapters.set(e.id, e);
+    if (options.gates?.accessPod?.actor === options.identity.actor)
+      this.effectAdapters.set(POD_ACCESS_ADAPTER, {
+        id: POD_ACCESS_ADAPTER,
+        bindsParameters: true,
+        execute: (_key, params) => this.executeWithdrawal(params),
+        reconcile: async (_key, params) =>
+          this.state.duties.work[String(params?.duty)]?.status === "discharged"
+            ? { conclusion: "completed", observed: { duty: String(params?.duty) } }
+            : { conclusion: "uncertain", reason: "The withdrawal has not been confirmed" },
+      });
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
     this.state.domain.derivedRequests ??= {};
@@ -674,6 +687,21 @@ export class AgentRuntime {
     this.outbound = new OutboundGate({
       identity: this.identity,
       now: () => this.now(),
+      referencePeer: (id) => {
+        const conv = this.state.conversations[id];
+        const actor = readPeerDescription(this.getDomain(`_peerDescription:${id}`))?.describes;
+        return actor && conv?.peer.actor === actor && conv.peer.party
+          ? { actor, party: conv.peer.party }
+          : undefined;
+      },
+      referenceAgreementId: (intent) => {
+        const conv = this.state.conversations[intent.conversation];
+        return (
+          conv?.agreement ??
+          (conv?.openProposal &&
+            this.agreementId(conv.openProposal.id, conv.openProposal.termsDigest))
+        );
+      },
       recordRelease: (intent) => this.recordReleaseDigest === actionDigest(intent),
       recordBacks: (claim, recipient) => this.recordBacks(claim, recipient),
       mandate: () =>
@@ -1867,6 +1895,178 @@ export class AgentRuntime {
       this.persist();
       return result;
     });
+  }
+
+  storeInEvidencePod(itemId: string): Promise<void> {
+    return this.exclusive(async () => {
+      const pod = this.options.gates?.accessPod;
+      const fact = this.gateMemory.facts.get(itemId);
+      if (
+        !pod ||
+        pod.actor !== this.identity.actor ||
+        !fact?.statement ||
+        fact.subject !== pod.owner
+      )
+        throw new Error("No admitted statement for this pod owner");
+      const original = [...this.retainedMessageViews.values()]
+        .filter(
+          (msg) =>
+            this.state.recordMessages[msg.id]?.direction === "in" &&
+            this.state.seen[msg.id]?.disposition === "accepted",
+        )
+        .flatMap((msg) => msg.evidence ?? [])
+        .find(
+          (item) =>
+            isClaimEvidence(item) && digestOf(unverifiedEvidenceClaim(item)) === fact.digest,
+        );
+      if (!original) throw new Error("The admitted signed statement is unavailable");
+      await pod.store(
+        { id: itemId, claimType: fact.claimType, issuer: fact.source },
+        original.value,
+        (event) => this.record(event),
+      );
+      this.persist();
+    });
+  }
+
+  readByReference(item: string, purpose: string): Promise<StepResult> {
+    return this.exclusive(async () => {
+      const pod = this.options.gates?.accessPod;
+      const admitted = this.getDomain(`_reference:${item}`) as unknown as
+        | { pointer: AccessPointer; conversation: string; delivery: string }
+        | undefined;
+      const key = this.keysByAlg.get("EdDSA");
+      if (
+        !pod ||
+        !key ||
+        !admitted ||
+        this.state.recordMessages[admitted.delivery]?.direction !== "in"
+      )
+        throw new Error("No admitted pod reference for this item");
+      const { pointer, conversation, delivery } = admitted;
+      const at = this.now();
+      const expired = Date.parse(pointer.validUntil) <= Date.parse(at);
+      const response = expired
+        ? undefined
+        : await pod.read(pointer, this.identity.actor, key).catch(() => undefined);
+      this.record({
+        type: "reference-read",
+        pointer: pointer.id,
+        resource: pointer.resource,
+        at,
+        status: response?.status ?? null,
+        receipt: response?.receipt ?? null,
+        digestMatches: response?.digestMatches ?? null,
+      });
+      const result = await this.inbound.admitStatements(
+        response?.status === 200 ? [{ jws: response.body }] : [],
+        {
+          task: "a mortgage application",
+          taskId: conversation,
+          subject: pointer.owner,
+          purpose,
+          reference: {
+            pointer,
+            conversation,
+            expired,
+            status: response?.status ?? 0,
+            receiptValid: response?.receiptValid ?? false,
+            digestMatches: response?.digestMatches ?? false,
+            readOnly: response?.readOnly ?? false,
+          },
+        },
+      );
+      if (!result.admitted) {
+        this.record({
+          type: "reference-read-refused",
+          pointer: pointer.id,
+          at,
+          reason: result.reason,
+          status: response?.status ?? null,
+          receipt: response?.receipt ?? null,
+        });
+        this.persist();
+        return this.result("rejected", { reason: result.reason, outbound: [] });
+      }
+      const conv = this.mustConversation(conversation);
+      const handler = conv.operation && this.handlers.get(operationKey(conv.operation));
+      const fact = this.gateMemory.facts.get(item);
+      const reply =
+        fact?.statement && handler?.onReferenceRead
+          ? await handler.onReferenceRead(this.context(conv), pointer, copyData(fact))
+          : undefined;
+      const outbound =
+        reply && !isTerminal(conv.phase)
+          ? [
+              await this.replyReceipt(
+                conv,
+                delivery,
+                reply,
+                derivedUrn("reference-read-receipt", {
+                  pointer: pointer.id,
+                  delivery,
+                }),
+              ),
+            ]
+          : [];
+      this.persist();
+      return this.result("accepted", { conversation, outbound });
+    });
+  }
+
+  private withdrawalPlan(
+    duty: import("./duties.js").DutyWork,
+    reason: "principal" | "expiry",
+  ): EffectPlan {
+    const key = derivedUrn("withdraw-access", { duty: duty.id, reason });
+    const parameters = { duty: duty.id, reason };
+    return {
+      adapter: POD_ACCESS_ADAPTER,
+      key,
+      params: parameters,
+      activityType: WITHDRAW_ACCESS,
+      intent: {
+        action: "use",
+        operation: WITHDRAW_ACCESS,
+        target: WITHDRAW_ACCESS,
+        purpose: "urn:purpose:pod-access-withdraw",
+        conversation: key,
+        parameters,
+      },
+    };
+  }
+
+  async withdrawAccess(item: string) {
+    const duties = Object.values(this.state.duties.work).filter(
+      (duty) =>
+        duty.kind === "withdraw-access" && duty.status === "pending" && duty.items.includes(item),
+    );
+    for (const duty of duties) {
+      const plan = this.withdrawalPlan(duty, "principal");
+      await this.runTask({ taskId: plan.key, kind: "withdraw-access", plan });
+    }
+  }
+
+  private async executeWithdrawal(
+    params: Readonly<Record<string, unknown>>,
+  ): ReturnType<EffectAdapter["execute"]> {
+    const duty = this.state.duties.work[String(params.duty)];
+    const reason = params.reason;
+    const pod = this.options.gates?.accessPod;
+    if (
+      !pod ||
+      pod.actor !== this.identity.actor ||
+      !duty?.grant ||
+      duty.kind !== "withdraw-access" ||
+      (reason !== "principal" && reason !== "expiry") ||
+      (reason === "expiry" && Date.parse(this.now()) < Date.parse(duty.due))
+    )
+      return { conclusion: "not-executed", reason: "No authorized withdrawal duty" };
+    if (duty.status !== "discharged") {
+      await pod.withdraw(duty.grant, reason, (event) => this.record(event));
+      this.dutyExecutor().withdrawn(duty.id);
+    }
+    return { conclusion: "completed", observed: { duty: duty.id } };
   }
 
   private hasTrustPin(party: string, purpose: string | undefined, kid?: string): boolean {
@@ -4260,6 +4460,17 @@ export class AgentRuntime {
       return this.replyClose(conv, msg, "refuse", r.reason, r.detail);
     }
     if (!entersCore) return undefined;
+    for (const pointer of this.admission?.admittedPointers ?? []) {
+      this.setDomain(
+        `_reference:${pointer.item.id}`,
+        {
+          pointer,
+          conversation: conv.id,
+          delivery: msg.id,
+        } as unknown as JsonObject,
+        conv.id,
+      );
+    }
     this.recordItemTransfer(msg, conv, true);
     const task = this.options.gates?.taskId ?? conv.id;
     if (msg.kind === "invoke")
@@ -4389,6 +4600,10 @@ export class AgentRuntime {
         );
       }
       if (decision.outcome === "deny") {
+        if (this.options.gates?.accessPod && intent.parameters.access !== undefined) {
+          this.closeLocally(conv, "refused", decision.reason);
+          return { disposition: "rejected", reason: decision.reason, outbound: [] };
+        }
         return this.replyClose(
           conv,
           msg,
@@ -4545,19 +4760,31 @@ export class AgentRuntime {
           }),
         ];
       }
-      case "receipt": {
-        const body = {
-          ref: conv.agreement ?? inReplyTo,
-          activity: reply.activity,
-          outcome: reply.outcome,
-          ...(reply.observed ? { observed: reply.observed } : {}),
-          final: reply.final,
-        };
-        return [await this.emit(conv.id, "receipt", body, { inReplyTo })];
-      }
+      case "receipt":
+        return [await this.replyReceipt(conv, inReplyTo, reply)];
       default:
         return [];
     }
+  }
+
+  private replyReceipt(
+    conv: ConversationState,
+    inReplyTo: Iri,
+    reply: Omit<import("../core/types.js").ReceiptBody, "ref">,
+    id?: Iri,
+  ): Promise<OutboundMessage> {
+    return this.emit(
+      conv.id,
+      "receipt",
+      {
+        ref: conv.agreement ?? inReplyTo,
+        activity: reply.activity,
+        outcome: reply.outcome,
+        ...(reply.observed ? { observed: reply.observed } : {}),
+        final: reply.final,
+      },
+      { inReplyTo, ...(id ? { id } : {}) },
+    );
   }
 
   private async executeAgreementPlan(
@@ -5080,7 +5307,7 @@ export class AgentRuntime {
       caption: `Duty audit: ${Object.values(this.state.duties.work)
         .map(
           (duty) =>
-            `${duty.kind === "notify" ? "Notification" : "Deletion"} ${duty.status}${"acknowledgedAt" in duty && duty.acknowledgedAt ? "; acknowledged by its recipient" : ""}`,
+            `${duty.kind === "notify" ? "Notification" : duty.kind === "withdraw-access" ? "Access withdrawal" : "Deletion"} ${duty.status}${"acknowledgedAt" in duty && duty.acknowledgedAt ? "; acknowledged by its recipient" : ""}`,
         )
         .join(". ")}.`,
     });
@@ -5093,6 +5320,13 @@ export class AgentRuntime {
       this.auditDuties();
       const outbound: OutboundMessage[] = [];
       for (const duty of Object.values(this.state.duties.work)) {
+        if (duty.kind === "withdraw-access") {
+          if (duty.status === "pending" && Date.parse(this.now()) >= Date.parse(duty.due)) {
+            const plan = this.withdrawalPlan(duty, "expiry");
+            await this.runEffect(plan.key, plan, duty.source);
+          }
+          continue;
+        }
         if (duty.kind === "delete" || duty.message || !duty.recipient) continue;
         const operation =
           duty.kind === "inform-onward" ? "urn:op:erasure-request" : "urn:op:general-notice";
@@ -5379,6 +5613,16 @@ export class AgentRuntime {
 
   private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
     const boundary = this.effectAdapters.get(plan.adapter);
+    if (
+      plan.adapter === POD_ACCESS_ADAPTER &&
+      (plan.intent.operation !== WITHDRAW_ACCESS ||
+        plan.intent.target !== WITHDRAW_ACCESS ||
+        plan.intent.action !== "use")
+    ) {
+      for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
+        this.record(verdict);
+      return [];
+    }
     if (boundary?.bindsParameters || boundary?.plainTextEmail) {
       if (digestOf(plan.params) !== digestOf(plan.intent.parameters)) {
         for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
@@ -6700,6 +6944,7 @@ export class AgentRuntime {
     /** Validated against the message schema before signing. */
     body: BodyByKind[K] | Record<string, unknown>,
     opts: {
+      id?: Iri;
       inReplyTo?: Iri;
       evidence?: readonly EvidenceItem[];
       content?: readonly import("../core/types.js").ContentPart[];
@@ -6936,7 +7181,7 @@ export class AgentRuntime {
       ({
         profile: PILOT_PROFILE,
         configuration,
-        id: this.newId(),
+        id: opts.id ? this.registerIdentifier(opts.id) : this.newId(),
         conversation: conversationId,
         kind,
         from: anonymousRequester ? {} : this.selfRef(),
@@ -6992,7 +7237,14 @@ export class AgentRuntime {
       const checked = validateMessage(message);
       if (!checked.ok) throw new Error(`internal: outbound ${kind} invalid: ${checked.detail}`);
     }
+    const pod = this.options.gates?.accessPod;
     for (const evidence of message.evidence ?? []) {
+      if (pod && isAccessPointer(evidence)) {
+        this.outbound.stopDisclosure(message.id);
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "excessive-scope", outbound: [] }),
+        );
+      }
       if (!isClaimEvidence(evidence)) continue;
       const checkedEvidence = await this.inbound.assessClaim(evidence, this.identity.party);
       if (
@@ -7007,6 +7259,17 @@ export class AgentRuntime {
             conversation: conv.id,
             outbound: [],
           }),
+        );
+      }
+      if (
+        pod?.actor === this.identity.actor &&
+        kind === "deliver" &&
+        pod.stored(String(checkedEvidence.claim.id)) &&
+        opts.intent?.parameters.access === undefined
+      ) {
+        this.outbound.stopDisclosure(message.id);
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "excessive-scope", outbound: [] }),
         );
       }
     }
@@ -7129,7 +7392,7 @@ export class AgentRuntime {
           this.result("rejected", { reason: "evidence-invalid", outbound: [] }),
         );
     }
-    const prepared = opts.resumePacket
+    let prepared = opts.resumePacket
       ? await readHeldMessagePacket(opts.resumePacket, nativeDocumentLimits(this.limits))
       : await writeAttachmentDocument(credentialMessage ?? MessageNode.toNode(message), {
           limits: nativeDocumentLimits(this.limits),
@@ -7258,145 +7521,230 @@ export class AgentRuntime {
       throw new MessageReleaseError(
         this.result("rejected", { reason: "record-unavailable", outbound: [] }),
       );
-    if (opts.intent?.purpose) this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
-    if (!opts.force || !isTerminal(conv.phase)) {
-      const next = transition(
-        conv,
-        {
-          type: "message",
-          direction: "out",
-          message,
-          at: message.createdAt,
-          agreementDelivery: conv.operation
-            ? this.handlers.get(operationKey(conv.operation))?.agreementDelivery
-            : undefined,
-        },
-        this.limits,
-      );
-      if (!next.ok) {
-        if (next.reason === "round-limit") {
-          this.outbound.stopLimit(message.id, "round-limit");
-          throw new MessageReleaseError(
-            this.result("rejected", { reason: "round-limit", conversation: conv.id, outbound: [] }),
-          );
-        }
-        if (!opts.force)
-          throw new Error(`internal: outbound ${kind} violates state machine: ${next.detail}`);
-      } else {
-        this.saveConversation(next.state);
+    const signing = cfg.integrity;
+    const prepareRelease = async (pointers?: ReadonlyMap<string, EvidenceItem>) => {
+      if (pointers) {
+        let count = 0;
+        const evidence = (message.evidence ?? []).map((item) => {
+          if (!isClaimEvidence(item)) return item;
+          const id = String(unverifiedEvidenceClaim(item).id);
+          const pointer = pointers.get(id);
+          if (!pointer) return item;
+          if (digestBytes(item.value) !== this.options.gates?.accessPod?.stored(id)?.digest)
+            throw new Error("The protected item differs from the stored statement");
+          count++;
+          return pointer;
+        });
+        if (count !== pointers.size || evidence.filter(isAccessPointer).length !== pointers.size)
+          throw new Error("The delivery does not match the checked grants");
+        message = { ...copyData(message), evidence: copyData(evidence) };
+        prepared = await writeAttachmentDocument(MessageNode.toNode(message), {
+          limits: nativeDocumentLimits(this.limits),
+        });
+        message = new MessageNode(message.id, prepared.dataset).live;
+        if (approvalBindingRecord)
+          approvalBindingRecord = {
+            ...approvalBindingRecord,
+            messageDigest: await documentDigest(prepared.document, suite),
+          };
       }
-    }
-    let wire: WireMessage;
-    if (anonymousRequester) {
-      if (!cfg.unsignedRequestKinds.includes(kind))
-        throw new Error(`internal: anonymous requester cannot send ${kind}`);
-      wire = {
-        format: "awp-jsonld/0.1",
-        jsonld: JSON.stringify(prepared.document),
-        attachments: prepared.attachments,
-      };
-    } else {
-      const key = this.keysByAlg.get(cfg.integrity.alg);
-      if (!key) throw new Error(`no actor key for ${cfg.integrity.alg}`);
-      const signed = await signDocument(prepared.document, {
-        suite,
-        key,
-        verificationMethod: "urn:awp:key:" + key.kid,
-        created: message.createdAt,
-        limits: nativeDocumentLimits(this.limits),
-      });
-      wire = {
-        format: "awp-jsonld/0.1",
-        jsonld: JSON.stringify(signed),
-        attachments: prepared.attachments,
-      };
-    }
-    if (isMessagePacket(wire)) {
-      const read = await readAttachmentDocument(wire.jsonld, wire.attachments, {
-        suite,
-        limits: nativeDocumentLimits(this.limits),
-      });
-      if (!read.ok) throw new Error(`internal: signed document refused: ${read.detail}`);
-      await rememberMessagePacket(wire, new MessageNode(read.root, read.dataset));
-    }
-    if (kind === "propose")
-      this.setDomain(`_offer:${message.id}`, (body as JsonObject).terms as Json, conversationId);
-    const entry: OutboxEntry = {
-      id: message.id,
-      conversation: conversationId,
-      kind,
-      ...(conv.peer.actor ? { toActor: conv.peer.actor } : {}),
-      wire,
-      message: copyData(message),
-      createdAt: message.createdAt,
-      ...(opts.intent ? { intent: opts.intent } : {}),
-      ...(opts.conditions ? { conditions: opts.conditions } : {}),
-    };
-    this.record({
-      type: "message-out",
-      id: message.id,
-      kind,
-      conversation: conversationId,
-      digest: digestOf(message),
-      at: message.createdAt,
-      // Bind the approved scope to this exact release without adding a separate ledger event.
-      ...(approvalBindingRecord ? { approvalBinding: approvalBindingRecord } : {}),
-      // The payload-free authorisation basis of a protected disclosure (kind + reference).
-      ...(opts.conditions ? { conditions: opts.conditions } : {}),
-    });
-    // Evidence and the write-ahead record must succeed before the outbox can expose it.
-    this.outbound.seal(message, wire, {
-      vocabulary,
-      known,
-      ...(opts.intent ? { intent: opts.intent } : {}),
-      ...(this.operationOf(conv) ? { operation: this.operationOf(conv) as Iri } : {}),
-    });
-    this.gateMemory.rememberIdentifiers(message.conversation, message);
-    if (opts.intent) {
-      const standing = this.standingAccess(opts.intent);
-      if (standing?.ok)
-        for (const duty of standing.rule.duties)
-          for (const recipient of duty.notify) {
-            const id = digestOf({ use: message.id, rule: standing.rule.id, recipient });
-            if (!this.state.notificationDuties[id]) {
-              this.state.notificationDuties[id] = {
-                id,
-                rule: standing.rule.id,
-                use: message.id,
-                recipient,
-                due: new Date(Date.parse(this.now()) + 3600000).toISOString(),
-                status: "pending",
-              };
-              this.record({
-                type: "duty-created",
-                ...this.state.notificationDuties[id],
-                at: this.now(),
-              });
-            }
+      if (opts.intent?.purpose) this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
+      if (!opts.force || !isTerminal(conv.phase)) {
+        const next = transition(
+          conv,
+          {
+            type: "message",
+            direction: "out",
+            message,
+            at: message.createdAt,
+            agreementDelivery: conv.operation
+              ? this.handlers.get(operationKey(conv.operation))?.agreementDelivery
+              : undefined,
+          },
+          this.limits,
+        );
+        if (!next.ok) {
+          if (next.reason === "round-limit") {
+            this.outbound.stopLimit(message.id, "round-limit");
+            throw new MessageReleaseError(
+              this.result("rejected", {
+                reason: "round-limit",
+                conversation: conv.id,
+                outbound: [],
+              }),
+            );
           }
-    }
-    if (isMessagePacket(wire))
-      this.state.recordMessages[message.id] = {
-        direction: "out",
-        conversation: message.conversation,
-        digest: digestOf(message),
-        jws: encodeMessageProof(wire),
+          if (!opts.force)
+            throw new Error(`internal: outbound ${kind} violates state machine: ${next.detail}`);
+        } else {
+          this.saveConversation(next.state);
+        }
+      }
+      let wire: WireMessage;
+      if (anonymousRequester) {
+        if (!cfg.unsignedRequestKinds.includes(kind))
+          throw new Error(`internal: anonymous requester cannot send ${kind}`);
+        wire = {
+          format: "awp-jsonld/0.1",
+          jsonld: JSON.stringify(prepared.document),
+          attachments: prepared.attachments,
+        };
+      } else {
+        if (signing.status !== "selected") throw new Error("No selected message signature");
+        const key = this.keysByAlg.get(signing.alg);
+        if (!key) throw new Error(`no actor key for ${signing.alg}`);
+        const signed = await signDocument(prepared.document, {
+          suite,
+          key,
+          verificationMethod: "urn:awp:key:" + key.kid,
+          created: message.createdAt,
+          limits: nativeDocumentLimits(this.limits),
+        });
+        wire = {
+          format: "awp-jsonld/0.1",
+          jsonld: JSON.stringify(signed),
+          attachments: prepared.attachments,
+        };
+      }
+      if (isMessagePacket(wire)) {
+        const read = await readAttachmentDocument(wire.jsonld, wire.attachments, {
+          suite,
+          limits: nativeDocumentLimits(this.limits),
+        });
+        if (!read.ok) throw new Error(`internal: signed document refused: ${read.detail}`);
+        await rememberMessagePacket(wire, new MessageNode(read.root, read.dataset));
+      }
+      if (kind === "propose")
+        this.setDomain(`_offer:${message.id}`, (body as JsonObject).terms as Json, conversationId);
+      const entry: OutboxEntry = {
+        id: message.id,
+        conversation: conversationId,
+        kind,
+        ...(conv.peer.actor ? { toActor: conv.peer.actor } : {}),
+        wire,
+        message: copyData(message),
+        createdAt: message.createdAt,
+        ...(opts.intent ? { intent: opts.intent } : {}),
+        ...(opts.conditions ? { conditions: opts.conditions } : {}),
       };
-    this.retainedMessageViews.set(message.id, message);
-    this.recordItemTransfer(message, conv, false);
-    // Mirror the seal, decision and transfer entries before exposing the message to carriage.
-    if (!(await this.outbound.ensureRecord(message.id)))
-      throw new MessageReleaseError(
-        this.result("rejected", { reason: "record-unavailable", outbound: [] }),
+      this.record({
+        type: "message-out",
+        id: message.id,
+        kind,
+        conversation: conversationId,
+        digest: digestOf(message),
+        at: message.createdAt,
+        // Bind the approved scope to this exact release without adding a separate ledger event.
+        ...(approvalBindingRecord ? { approvalBinding: approvalBindingRecord } : {}),
+        // The payload-free authorisation basis of a protected disclosure (kind + reference).
+        ...(opts.conditions ? { conditions: opts.conditions } : {}),
+      });
+      // Evidence and the write-ahead record must succeed before the outbox can expose it.
+      this.outbound.seal(message, wire, {
+        vocabulary,
+        known,
+        ...(opts.intent ? { intent: opts.intent } : {}),
+        ...(this.operationOf(conv) ? { operation: this.operationOf(conv) as Iri } : {}),
+      });
+      this.gateMemory.rememberIdentifiers(message.conversation, message);
+      if (opts.intent) {
+        const standing = this.standingAccess(opts.intent);
+        if (standing?.ok)
+          for (const duty of standing.rule.duties)
+            for (const recipient of duty.notify) {
+              const id = digestOf({ use: message.id, rule: standing.rule.id, recipient });
+              if (!this.state.notificationDuties[id]) {
+                this.state.notificationDuties[id] = {
+                  id,
+                  rule: standing.rule.id,
+                  use: message.id,
+                  recipient,
+                  due: new Date(Date.parse(this.now()) + 3600000).toISOString(),
+                  status: "pending",
+                };
+                this.record({
+                  type: "duty-created",
+                  ...this.state.notificationDuties[id],
+                  at: this.now(),
+                });
+              }
+            }
+      }
+      if (isMessagePacket(wire))
+        this.state.recordMessages[message.id] = {
+          direction: "out",
+          conversation: message.conversation,
+          digest: digestOf(message),
+          jws: encodeMessageProof(wire),
+        };
+      this.retainedMessageViews.set(message.id, message);
+      this.recordItemTransfer(message, conv, false);
+      // Mirror the seal, decision and transfer entries before exposing the message to carriage.
+      if (!(await this.outbound.ensureRecord(message.id)))
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "record-unavailable", outbound: [] }),
+        );
+      return entry;
+    };
+
+    const publish = (entry: OutboxEntry) => {
+      this.state.outbox[message.id] = entry;
+      // Associate the response with the inbound message being processed NOW, so any
+      // mid-dispatch snapshot already links them (a replay then returns this response).
+      const seen = this.current ? this.state.seen[this.current.id] : undefined;
+      if (this.current && seen && !seen.responses.includes(message.id)) {
+        this.state.seen[this.current.id] = { ...seen, responses: [...seen.responses, message.id] };
+      }
+      return this.outboundFromEntry(entry, message);
+    };
+
+    if (!pod || kind !== "deliver" || !opts.intent || opts.intent.parameters.access === undefined)
+      return publish(await prepareRelease());
+
+    const grants = copyData(this.outbound.accessGrants(opts.intent));
+    try {
+      if (
+        !grants?.length ||
+        message.kind !== "deliver" ||
+        message.body.basis.kind !== "agreement" ||
+        grants.some(
+          ({ pointer }) =>
+            message.kind !== "deliver" ||
+            message.body.basis.kind !== "agreement" ||
+            pointer.agreement !== message.body.basis.agreement ||
+            pointer.reader.actor !== message.to?.actor ||
+            pointer.reader.party !== message.to?.party ||
+            Date.parse(pointer.validUntil) <= Date.parse(this.now()),
+        )
+      )
+        throw new Error("The delivery does not match the authorized pod grants");
+      const entry = await pod.grantAndRelease(
+        grants,
+        actionDigest(opts.intent),
+        (event) => this.record(event),
+        prepareRelease,
+        (grant) => {
+          this.dutyExecutor().add({
+            kind: "withdraw-access",
+            grant,
+            source: grant.pointer.agreement,
+            items: [grant.pointer.item.id],
+            due: grant.pointer.validUntil,
+          });
+        },
       );
-    this.state.outbox[message.id] = entry;
-    // Associate the response with the inbound message being processed NOW, so any
-    // mid-dispatch snapshot already links them (a replay then returns this response).
-    const seen = this.current ? this.state.seen[this.current.id] : undefined;
-    if (this.current && seen && !seen.responses.includes(message.id)) {
-      this.state.seen[this.current.id] = { ...seen, responses: [...seen.responses, message.id] };
+      return publish(entry);
+    } catch {
+      this.saveConversation(conv);
+      this.outbound.stopAccessRelease();
+      throw new MessageReleaseError(
+        this.result("rejected", {
+          reason: "execution-failed",
+          conversation: conv.id,
+          outbound: [],
+        }),
+      );
     }
-    return this.outboundFromEntry(entry, message);
   }
 
   private purposeOf(id: Iri): Iri | undefined {
@@ -7540,6 +7888,7 @@ export class AgentRuntime {
 
   private coreEvidence(items: readonly EvidenceItem[]): EvidenceItem[] {
     return items.filter((item) => {
+      if (this.options.gates?.accessPod && isAccessPointer(item)) return false;
       if (!isClaimEvidence(item)) return true;
       try {
         const claim = unverifiedEvidenceClaim(item);
@@ -7633,6 +7982,32 @@ export class AgentRuntime {
       trust: this.trust,
       mintIdentifier: () => this.newId(),
       admittedStatement: (id, digest) => this.gateMemory.facts.get(id)?.digest === digest,
+      ...(this.options.gates?.accessPod
+        ? {
+            referenceResource: (id: string, agreedDays: number) => {
+              const pod = this.options.gates!.accessPod!;
+              const stored = pod.actor === this.identity.actor ? pod.stored(id) : undefined;
+              return (
+                stored && {
+                  resource:
+                    this.options.gates?.referenceResource?.(stored.resource) ?? stored.resource,
+                  retentionDays: this.outbound.referenceRetentionDays(agreedDays),
+                }
+              );
+            },
+            pendingReferences: Object.keys(this.state.domain)
+              .filter((key) => key.startsWith("_reference:"))
+              .map(
+                (key) =>
+                  this.getDomain(key) as unknown as {
+                    pointer: AccessPointer;
+                    conversation: string;
+                  },
+              )
+              .filter((entry) => entry.conversation === conv.id)
+              .map((entry) => entry.pointer),
+          }
+        : {}),
       refusedEvidence: () => this.refusedEvidence(conv.id, message?.evidence ?? []),
       evaluateRule: (rule, subject, purpose) => {
         const result = evaluateRule({

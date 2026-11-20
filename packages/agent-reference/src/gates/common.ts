@@ -131,6 +131,7 @@ export interface AdmittedFact {
   readonly terms?: ItemTerms;
   readonly identifiers?: readonly string[];
   readonly admittedPurpose?: string;
+  readonly dataUseGrant?: import("@jeswr/solid-odrl").OdrlPolicy;
   readonly statement?: import("../core/types.js").JsonObject;
 }
 
@@ -213,6 +214,11 @@ export class GateMemory {
 }
 
 export interface GateContext {
+  readonly accessPod?: import("../standins/pod-access.js").EvidencePod;
+  readonly referenceResource?: (resource: string) => string;
+  readonly translateAccess?: (
+    rule: import("../mechanisms/access-translation.js").TranslatedRule,
+  ) => import("../mechanisms/access-translation.js").TranslatedRule;
   readonly originHosted?: import("../suites/authenticity-origin.js").OriginHostedVerifier;
   readonly selectiveAnnual?: boolean;
   readonly reputation?: import("../suites/trust-reputation.js").ReputationResolver;
@@ -472,6 +478,11 @@ export function alternativeInstalled(ctx: GateContext, id: string): boolean {
   // Brief 31 §2.9: advertised only by the agents of the reputation-post configuration.
   if (id === alternativeWireId("accountability-reputation-post"))
     return ctx.configuration?.id === "accountability-reputation-post";
+  if (
+    id === alternativeWireId("data-access-by-reference-solid") ||
+    id === alternativeWireId("usage-control-solid-access-control")
+  )
+    return ctx.configuration?.pilotConfiguration === id && !!ctx.accessPod;
   if (id === alternativeWireId("identity-did")) return ctx.webId?.configuration === id;
   if (id === alternativeWireId("authority-mandate-credential")) return !!ctx.mandateCredential;
   if (id === alternativeWireId("authority-authorization-server")) return !!ctx.authorizationGrant;

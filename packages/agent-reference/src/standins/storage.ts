@@ -238,6 +238,14 @@ export class FictionalSolidStorage {
           } catch {
             return reply(400);
           }
+          // ACL parsing yields. Recheck the validator immediately before mutation.
+          const current = this.resources.get(request.url);
+          if (
+            request.headers.has("if-match") &&
+            request.headers.get("if-match") !== (current && `"${digestBytes(current.body)}"`)
+          )
+            return reply(412);
+          if (request.headers.get("if-none-match") === "*" && current) return reply(412);
         }
         this.resources.set(request.url, {
           body,

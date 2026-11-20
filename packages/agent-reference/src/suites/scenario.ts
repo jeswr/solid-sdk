@@ -224,8 +224,9 @@ export function scenarioRegistry() {
     id: "by-reference-solid",
     name: "By reference on Solid",
     mode: "by-reference",
+    accessControl: "wac",
     summary:
-      "Not run: the runtime lacks atomic WAC grant-and-pointer release and a five-check reference-message admission boundary.",
+      "Releases a signed pointer with a resource-scoped WAC Read grant, then checks the signed statement returned by the pod.",
   });
   registry.register({
     layer: "transport",
@@ -250,7 +251,7 @@ export function scenarioRegistry() {
     rulesOnly: true,
     policyLanguage: "ODRL pilot subset, narrowed to WAC Read plus scheduled ACL withdrawal",
     summary:
-      "Not run: pod-only access needs the protected-reference transaction, while this single-layer configuration retains baseline by-value delivery.",
+      "Translates the signed supplier terms and agreement into a WAC Read grant, with permission provenance and downstream terms.",
   });
   registry.register({
     layer: "identity",

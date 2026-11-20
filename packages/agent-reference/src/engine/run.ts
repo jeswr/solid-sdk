@@ -1,3 +1,4 @@
+import { EvidencePod } from "../standins/pod-access.js";
 import { decodeCompactPayload } from "../wire/inspect.js";
 // AUTHORED-BY Codex GPT-6
 /** Data drives cores and the synthetic world. Only the real runtime/gates emit events. */
@@ -327,6 +328,17 @@ function unsupported(
   return undefined;
 }
 
+interface SolidStepFixture {
+  readonly path: string;
+  readonly step: Scenario["script"][number];
+  readonly pod: EvidencePod;
+  readonly ledgers: ReadonlyMap<string, MemoryLedger>;
+  readonly runtimes: ReadonlyMap<string, AgentRuntime>;
+  readonly stores: ReadonlyMap<string, PurposeBoundStore>;
+  readonly queued: readonly OutboundMessage[];
+  advance(milliseconds: number): void;
+}
+
 /** Run every path independently, including branches whose world changes affect setup. */
 export async function runScenario(
   profileInput: unknown,
@@ -337,10 +349,13 @@ export async function runScenario(
     compare?: boolean;
     registry?: VerifierRegistry;
     testOnly?: boolean;
+    beforeSolidStep?: (fixture: SolidStepFixture) => void | Promise<void>;
     proofCache?: ProofCache;
     generateProofs?: boolean;
   } = {},
 ): Promise<PathResult[]> {
+  if (options.beforeSolidStep && !options.testOnly)
+    throw new Error("Solid step fixtures are restricted to in-memory tests");
   const profile = domainProfileSchema.parse(profileInput);
   const scenario = scenarioSchema.parse(scenarioInput);
   const verifiers = options.registry ?? (await availableAdapters());
@@ -597,6 +612,7 @@ async function runPath(
     generateProofs?: boolean;
     alternative?: Scenario["configurations"][number];
     onlyUnder?: string;
+    beforeSolidStep?: (fixture: SolidStepFixture) => void | Promise<void>;
   },
 ): Promise<TraceFile> {
   // Brief 32: the faulty-gate stand-in runs only on a branch under accountability-vendor-fault
@@ -1568,6 +1584,28 @@ async function runPath(
     );
     await recordMirror.setup();
   }
+  let accessPod: EvidencePod | undefined;
+  if (configuration.layers["data-access"] === "by-reference-solid") {
+    const provider = required(parties.get("solid-provider"));
+    const owner = cast.get("sam-agent");
+    const storage = new FictionalSolidStorage(
+      new URL(provider.identity).origin,
+      provider.identity,
+      required(sourceKeys.get(provider.id)),
+      () => now().toISOString(),
+    );
+    for (const agent of cast.agents.values()) {
+      storage.introduce(agent.identity.actor, agent.actorKey);
+      if (agent.identity.party) storage.introduce(agent.identity.party, agent.ownerKey);
+    }
+    accessPod = new EvidencePod(
+      storage,
+      required(owner.identity.party),
+      owner.identity.actor,
+      owner.actorKey,
+    );
+    await accessPod.setup();
+  }
   const outputs: Record<string, unknown> = {};
   const queue: Array<{ from: string; out: OutboundMessage }> = [];
   const openings = new Map<string, unknown>();
@@ -1654,6 +1692,21 @@ async function runPath(
         )
       : [];
     const gate: GateContext = {
+      ...(accessPod
+        ? {
+            accessPod,
+            ...(scenario.solid?.fault === "grant-wider-than-terms"
+              ? {
+                  referenceResource: () => accessPod!.folder,
+                }
+              : {}),
+            ...(scenario.solid?.fault === "translation-grants-more"
+              ? {
+                  translateAccess: (rule) => ({ ...rule, modes: ["Read", "Write"] }),
+                }
+              : {}),
+          }
+        : {}),
       ...(agentRegistry
         ? {
             agentRegistry: {
@@ -2650,6 +2703,19 @@ async function runPath(
     const runtime = runtimes.get(step.agent);
     if (!runtime) throw new Error(`step ${step.id}: ${step.agent} does not run an agent`);
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
+    if (accessPod && options.beforeSolidStep)
+      await options.beforeSolidStep({
+        path,
+        step,
+        pod: accessPod,
+        ledgers,
+        runtimes,
+        stores,
+        queued: queue.map(({ out }) => out),
+        advance: (milliseconds) => {
+          clock += milliseconds;
+        },
+      });
     let result: unknown;
     switch (step.type) {
       case "term-deliberation": {
@@ -3219,6 +3285,23 @@ async function runPath(
         });
         break;
       }
+      case "pod-store":
+        for (const statement of step.statements)
+          await runtime.storeInEvidencePod(String(required(signed[statement]).statement.id));
+        recorder.sink(parties.get(step.agent)?.traceId ?? step.agent).emit({
+          part: "record",
+          kind: "record",
+          caption:
+            "The admitted balance statement is stored unchanged in Sam’s private evidence pod.",
+        });
+        break;
+      case "reference-read":
+        result = await runtime.readByReference(step.item, step.purpose);
+        enqueue(step.agent, result as StepResult);
+        break;
+      case "withdraw-access":
+        await runtime.withdrawAccess(String(required(signed[step.statement]).statement.id));
+        break;
       case "host-fetch":
         // The host vouches for nothing: every item it serves goes through this agent's
         // own five inbound checks.

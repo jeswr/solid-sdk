@@ -63,11 +63,12 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   // Brief 31 §2.9 runs reputation-post: main and post-about-a-person run,
   // evidence-not-publishable disagrees (the disclosure check stops it before the terms).
   // Brief 31 §2.5 runs plain-language-upgrade: main, prose-as-evidence and step-back-down.
+  // Brief 33 runs all five Solid reference and access-control paths.
   expect(alternatives).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(99);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(104);
   expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(6);
   const blocked = alternatives.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(5);
+  expect(blocked).toHaveLength(0);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,

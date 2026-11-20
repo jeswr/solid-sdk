@@ -6,6 +6,7 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 import { BASELINE, BASELINE_SUITES, baselineRegistry } from "../src/suites/baseline.js";
 import { LAYER_IDS, SuiteRegistry } from "../src/suites/registry.js";
+import { scenarioRegistry } from "../src/suites/scenario.js";
 
 const model = JSON.parse(
   readFileSync(join(import.meta.dirname, "fixtures/model.json"), "utf8"),
@@ -34,7 +35,7 @@ describe("suite registry", () => {
     ]);
   });
 
-  it("applies suite constraints and never combines two configurations", () => {
+  it("by-reference without pod access control is still excluded", () => {
     const r = baselineRegistry();
     r.register({
       ...BASELINE_SUITES["data-access"],
@@ -43,7 +44,26 @@ describe("suite registry", () => {
     });
     expect(
       r.check({ layers: { ...BASELINE.layers, "data-access": "by-reference-solid" } }),
-    ).toEqual([expect.objectContaining({ layer: "data-access", problem: "constraint" })]);
+    ).toEqual([
+      expect.objectContaining({
+        layer: "data-access",
+        problem: "constraint",
+        detail:
+          "by-reference-needs-access-control: sharing by reference needs access control enforced at the pod",
+      }),
+    ]);
+  });
+
+  it("by-reference on Solid meets the constraint through its own grant", () => {
+    const r = scenarioRegistry();
+    expect(r.suite("data-access", "by-reference-solid")?.accessControl).toBe("wac");
+    expect(
+      r.check({ layers: { ...BASELINE.layers, "data-access": "by-reference-solid" } }),
+    ).toEqual([]);
+  });
+
+  it("registers and settles only complete configurations", () => {
+    const r = baselineRegistry();
     expect(() => r.configure(BASELINE)).toThrow(/already registered/);
     expect(() => r.register(BASELINE_SUITES.transport)).toThrow(/already registered/);
     expect(() => new SuiteRegistry().configure(BASELINE)).toThrow(/invalid/);

@@ -240,13 +240,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     authentication:
       "Controlled Identifier Multikey profiles; key thumbprints and lifetimes committed by an independently signed fictional register answer",
   },
-  [CONFIG_SOLID_ACCESS]: {
-    ...localDefinition(CONFIG_SOLID_ACCESS, "Solid access control — not run"),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.7: Specification 17 requires data to stay in a pod, but the single-layer configuration retains baseline by-value access. The cell must require data-access-by-reference-solid and be compared with that run, so it stays blocked behind the protected-reference transaction (section 2.6); its own remaining work is translating the terms into access rules that each name their policy.",
-    ],
-  },
+  [CONFIG_SOLID_ACCESS]: localDefinition(
+    CONFIG_SOLID_ACCESS,
+    "Solid access rules translated from the signed evidence terms",
+  ),
   [CONFIG_POD_MIRROR]: localDefinition(
     CONFIG_POD_MIRROR,
     "Independent principal-owned record mirror",
@@ -255,13 +252,10 @@ export const CONFIGURATIONS: Readonly<Record<string, ConfigurationDefinition>> =
     ...localDefinition(CONFIG_SOLID_INBOX, "Signed messages through Solid inboxes"),
     bindings: ["solid-inbox/0.1"],
   },
-  [CONFIG_SOLID_REFERENCE]: {
-    ...localDefinition(CONFIG_SOLID_REFERENCE, "Solid reference access — not run"),
-    status: "unresolved",
-    unresolved: [
-      "Brief 31 section 2.6: the revised confinement rule admits the lender's read as an added exchange. Not built: the protected-reference transaction, namely one outbound action that applies the Web Access Control grant and releases the pointer together or not at all, and the reference read as a signed request and signed response admitted through all five inbound checks; the existing ResourceReader admits statements, not a signed reference-read message.",
-    ],
-  },
+  [CONFIG_SOLID_REFERENCE]: localDefinition(
+    CONFIG_SOLID_REFERENCE,
+    "Signed reference access with a resource-scoped WAC grant",
+  ),
   [CONFIG_AUTHENTICITY_DI]: {
     ...localDefinition(CONFIG_AUTHENTICITY_DI, "Signed RDF with Data Integrity"),
     integrity: {
