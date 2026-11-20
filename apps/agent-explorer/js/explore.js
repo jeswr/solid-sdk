@@ -25,6 +25,7 @@
   var raf = null;
   var LEVELS = [['steps', 'Steps'], ['checks', 'Checks'], ['raw', 'Raw']];
   var SPEEDS = [0.5, 1, 2];
+  function displayText(text) { return AX.tracePartyText(S.trace, AX.phone.displayText(S.trace, text)); }
 
   // ---- Icons ---------------------------------------------------------------
   var ICON = {
@@ -82,7 +83,7 @@
       '    <div class="pos" id="pos" aria-live="polite"></div>' +
       '    <div class="legend" id="legend"></div>' +
       '  </div>' +
-      '  <div class="scrub" id="scrub" data-anchor="timeline.scrubber"></div>' +
+      '  <div class="scrub" id="scrub" role="region" aria-label="Step scrubber" tabindex="0" data-anchor="timeline.scrubber"></div>' +
       '</footer>' +
       '<button type="button" class="present-exit" id="present-exit">Exit presentation</button>' +
       '</section>';
@@ -382,13 +383,13 @@
     var html = '<div class="scrub-track" role="group" aria-label="Timeline">';
     AX.stepsOf(t).forEach(function (s) {
       html += '<div class="scrub-step' + (diff[s.n] ? ' differs' : '') + '" style="flex:' + Math.max(s.events.length, 3) + '" data-run="' + s.first + '">';
-      html += '<button type="button" class="scrub-label" data-i="' + s.first + '" title="' + esc('Step ' + s.n + ': ' + AX.stepTitle(t.scenario.id, s.n, t) + (diff[s.n] ? ' (differs from baseline)' : '')) + '">' + s.n + '</button>';
+      html += '<button type="button" class="scrub-label" data-i="' + s.first + '" title="' + esc('Step ' + s.position + ': ' + AX.stepTitle(t, s) + (diff[s.n] ? ' (differs from baseline)' : '')) + '">' + s.position + '</button>';
       html += '<div class="ticks">';
       for (var i = s.first; i <= s.last; i++) {
         var e = t.events[i];
         var v = e.verdict && e.verdict !== 'pass' && e.verdict !== 'not-applicable' ? ' v-' + AX.verdicts[e.verdict].cls : '';
         var k = e.kind === 'check' ? ' chk' : (e.kind.indexOf('message') === 0 ? ' msg' : '');
-        html += '<span class="tick' + k + v + '" data-i="' + i + '" title="' + esc(e.seq + '. ' + e.caption) + '"></span>';
+        html += '<span class="tick' + k + v + '" data-i="' + i + '" title="' + esc(e.seq + '. ' + displayText(e.caption)) + '"></span>';
       }
       html += '</div></div>';
     });
@@ -410,19 +411,27 @@
   }
   function renderPos() {
     var t = S.trace;
-    var e = t.events[S.idx];
-    var steps = AX.stepsOf(t);
-    var sIdx = steps.indexOf(stepOf(S.idx)) + 1;
-    root.querySelector('#pos').innerHTML = '<strong>Step ' + esc(e.step) + '</strong><span>' + sIdx + ' of ' + steps.length + ' steps</span><span>Event ' + (S.idx + 1) + ' of ' + t.events.length + '</span>';
+    var step = stepOf(S.idx);
+    root.querySelector('#pos').innerHTML = '<strong>Step ' + step.position + ' of ' + AX.stepsOf(t).length + '</strong><span>Event ' + (S.idx + 1) + ' of ' + t.events.length + '</span>';
     root.querySelector('#btn-back').disabled = curStop() === 0;
     root.querySelector('#btn-next').disabled = curStop() >= stops().length - 1;
     var cur = root.querySelector('.tick.cur');
     if (cur) cur.classList.remove('cur');
     var tick = root.querySelector('.tick[data-i="' + S.idx + '"]');
     if (tick) tick.classList.add('cur');
-    root.querySelectorAll('.scrub-step.cur').forEach(function (n) { n.classList.remove('cur'); });
-    var ss = root.querySelector('.scrub-step[data-run="' + stepOf(S.idx).first + '"]');
-    if (ss) ss.classList.add('cur');
+    root.querySelectorAll('.scrub-step.cur').forEach(function (n) {
+      n.classList.remove('cur');
+      n.querySelector('button').removeAttribute('aria-current');
+    });
+    var ss = root.querySelector('.scrub-step[data-run="' + step.first + '"]');
+    if (ss) {
+      ss.classList.add('cur');
+      ss.querySelector('button').setAttribute('aria-current', 'step');
+      var scrub = root.querySelector('#scrub');
+      var end = ss.offsetLeft + ss.offsetWidth;
+      if (ss.offsetLeft < scrub.scrollLeft) scrub.scrollLeft = ss.offsetLeft;
+      else if (end > scrub.scrollLeft + scrub.clientWidth) scrub.scrollLeft = end - scrub.clientWidth;
+    }
     root.querySelectorAll('.tick.past').forEach(function (n) { n.classList.remove('past'); });
   }
 
@@ -437,7 +446,7 @@
       if (!e.chat) continue;
       var who = e.chat.who === 'principal' ? 'principal' : 'agent';
       var name = who === 'principal' ? principalName() : chatAgentName();
-      html += '<li class="bubble ' + who + (k === last ? ' latest' : '') + (k === S.idx ? ' now' : '') + '"><span class="who">' + esc(name) + '</span>' + esc(e.chat.text) + '</li>';
+      html += '<li class="bubble ' + who + (k === last ? ' latest' : '') + (k === S.idx ? ' now' : '') + '"><span class="who">' + esc(name) + '</span>' + esc(displayText(e.chat.text)) + '</li>';
     }
     var list = root.querySelector('#chat-list');
     var owner = principalName();
@@ -453,7 +462,7 @@
       var model = AX.phone.model(t, S.idx, {
         principal: owner,
         agentName: chatAgentName(),
-        stepTitle: function (n) { return AX.stepTitle(t.scenario.id, n, t); },
+        stepTitle: function (idx) { return AX.stepTitle(t, stepOf(idx)); },
       });
       var tab = S.phoneTab && S.phoneTab.at === S.idx ? S.phoneTab.tab : null;
       AX.phone.render(host, model, { tab: tab });
@@ -484,7 +493,8 @@
     return p ? p.kind : 'agent';
   }
   function traceAgent(id) {
-    return S.trace.agents.filter(function (a) { return a.id === id; })[0] || { id: id, name: (AX.partyById[id] || {}).name || id, role: '' };
+    var agent = S.trace.agents.find(function (a) { return a.id === id; });
+    return Object.assign({ id: id, role: '' }, agent, { name: AX.tracePartyName(S.trace, id) });
   }
   function counterpartAt(i) {
     var ev = S.trace.events;
@@ -513,12 +523,10 @@
     var kind = partyKind(id);
     var v = { id: id, name: a.name, kind: kind === 'service' ? 'service' : 'agent', badge: acting ? 'Acting' : 'Counterpart', acting: acting, compact: true };
     var party = AX.partyById[id] || {};
-    var tParty = (S.trace.parties || []).filter(function (x) { return x.id === a.actsFor; })[0];
-    var actsFor = a.actsFor && a.actsFor !== id ? (AX.partyById[a.actsFor] || tParty || {}).name || a.actsFor : (party.actsFor ? (AX.partyById[party.actsFor] || {}).name : a.name);
+    var principal = a.actsFor || party.actsFor;
     v.role = a.role || party.role || '';
     if (v.kind === 'agent') {
-      v.principal = actsFor || a.name;
-      v.role = (a.role || party.role || 'Agent') + (actsFor && actsFor !== a.name ? ', acts for ' + actsFor : '');
+      v.principal = principal && principal !== id ? AX.tracePartyName(S.trace, principal) : a.name;
       v.gates = {
         'inbound-gate': AX.gateAt(S.trace, id, 'inbound-gate', i),
         'outbound-gate': AX.gateAt(S.trace, id, 'outbound-gate', i),
@@ -531,9 +539,7 @@
     return v;
   }
   function stageLayout() {
-    var fig = root.querySelector('#stage-figure');
-    var w = fig.clientWidth || 800;
-    return w < 640 ? 'tall' : 'wide';
+    return root.querySelector('.stage').clientWidth < 590 ? 'tall' : 'wide';
   }
   function renderStage() {
     var t = S.trace;
@@ -541,11 +547,10 @@
     var e = t.events[i];
     var acting = e.agent;
     var other = counterpartAt(i);
-    // Left is always the agent acting in this event; right is its counterpart, drawn smaller.
+    // Left is always the agent acting in this event.
     var pair = [acting, other];
     var left = partyView(pair[0], i, true);
     var right = pair[1] ? partyView(pair[1], i, false) : null;
-    if (right) right.scale = 0.62;
     var msg = null;
     var isMsg = e.kind === 'message-out' || e.kind === 'message-in';
     if (isMsg && e.packet) {
@@ -561,7 +566,7 @@
       layout: stageLayout(),
       lane: { name: AX.suiteName('transport', laneSuite), lit: e.part === 'transport' },
       message: msg,
-      label: left.name + (right ? ' and ' + right.name : '') + '. ' + e.caption,
+      label: left.name + (right ? ' and ' + right.name : '') + '. ' + displayText(e.caption),
     });
     var fig = root.querySelector('#stage-figure');
     fig.innerHTML = out.svg;
@@ -569,7 +574,7 @@
     var strip = t.agents.map(function (a) {
       var on = a.id === acting ? ' acting' : (a.id === other ? ' counterpart' : '');
       if (a.id === 'sam' && e.part === 'principal') on = ' acting';
-      return '<span class="party ' + partyKind(a.id) + on + '" title="' + esc(a.role) + '"><span class="dot"></span>' + esc(a.name) + '</span>';
+      return '<span class="party ' + partyKind(a.id) + on + '" title="' + esc(a.role) + '"><span class="dot"></span>' + esc(AX.tracePartyName(t, a.id)) + '</span>';
     }).join('');
     root.querySelector('#parties').innerHTML = strip;
     // Packet animation.
@@ -599,7 +604,7 @@
       }
     }
     var cap = root.querySelector('#caption');
-    cap.textContent = e.caption;
+    cap.textContent = displayText(e.caption);
     var raw = root.querySelector('#raw');
     raw.hidden = S.level !== 'raw';
     if (S.level === 'raw') raw.textContent = JSON.stringify(e, null, 2);
@@ -623,9 +628,15 @@
     var textName = p.rdf ? 'RDF' : (p.turtle ? 'Turtle' : 'TriG');
     var form = text && (S.rdfForm === 'text' || p.jsonld == null) ? 'text' : 'jsonld';
     var doc = p.jsonld;
-    var ctx = p.context !== undefined ? p.context : (doc && doc['@context']);
+    var invalidJson = false;
+    if (form === 'jsonld' && typeof doc === 'string') {
+      try { doc = JSON.parse(doc); }
+      catch (error) { invalidJson = true; }
+    }
+    var ctx;
     if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
-      var shown = {};
+      ctx = doc['@context'] !== undefined ? doc['@context'] : p.context;
+      var shown = Object.create(null);
       if (S.rdfContext && ctx !== undefined) shown['@context'] = ctx;
       Object.keys(doc).forEach(function (k) { if (k !== '@context') shown[k] = doc[k]; });
       doc = shown;
@@ -638,7 +649,7 @@
     }
     h += '</div>';
     if (form === 'jsonld') {
-      h += '<pre class="json rdf-doc">' + esc(JSON.stringify(doc, null, 2)) + '</pre>';
+      h += '<pre class="json rdf-doc">' + esc(invalidJson ? doc : JSON.stringify(doc, null, 2)) + '</pre>';
       if (ctx !== undefined) {
         h += '<p class="rdf-note">' + (S.rdfContext
           ? 'The context maps each short name to a full term. It is pinned: the gate never fetches it.'
@@ -659,13 +670,13 @@
     if (p.attachments && p.attachments.length) {
       h += '<details class="layer present"><summary>Attachments</summary><pre class="json">' + esc(JSON.stringify(p.attachments, null, 2)) + '</pre></details>';
     }
-    h += '<div class="layer carriage"><div class="layer-head"><span class="ln">Carriage</span><span class="lstate untrusted">Never trusted</span></div><p>' + esc(AX.suiteName('transport', p.carriage.suite) + '. ' + p.carriage.summary) + '</p></div>';
+    h += '<div class="layer carriage"><div class="layer-head"><span class="ln">Carriage</span><span class="lstate untrusted">Never trusted</span></div><p>' + esc(AX.suiteName('transport', p.carriage.suite) + '. ' + displayText(p.carriage.summary)) + '</p></div>';
     h += '<div class="signed"><div class="signed-label">Signed by ' + esc(sender) + '</div>';
     AX.model.message.layers.filter(function (l) { return l.signed; }).forEach(function (ml) {
       var lv = (p.layers && p.layers[ml.id]) || { present: false, summary: 'Not in this trace.' };
       var cls = 'layer ' + (lv.present ? 'present' : 'absent');
       var head = '<span class="ln">' + esc(ml.name) + '</span><span class="lstate">' + (lv.present ? 'Present' : 'Absent') + '</span>';
-      var body = '<p>' + esc(lv.summary) + '</p>';
+      var body = '<p>' + esc(displayText(lv.summary)) + '</p>';
       if (lv.present && lv.raw !== undefined) {
         h += '<details class="' + cls + '"><summary class="layer-head">' + head + '</summary>' + body +
           '<p class="read-by">Read by: ' + esc(ml.readBy) + '</p>' +
@@ -712,7 +723,7 @@
     h += '<p class="question">' + esc(c.question) + '</p>';
     h += '<div class="verdict-row">' + AX.verdictPill(e.verdict) + (e.reason ? '<code class="reason">' + esc(e.reason) + '</code>' : '') + '</div>';
     if (e.resolution) h += AX.resolutionHtml(e.resolution);
-    if (e.rule) h += '<dl class="kv"><dt>Rule</dt><dd>' + esc(e.rule.text) + '<div class="rule-id"><code>' + esc(e.rule.id) + '</code></div></dd></dl>';
+    if (e.rule) h += '<dl class="kv"><dt>Rule</dt><dd>' + esc(displayText(e.rule.text)) + '<div class="rule-id"><code>' + esc(e.rule.id) + '</code></div></dd></dl>';
     var store = AX.diagram.CONSULTS[e.check];
     if (store) h += '<dl class="kv"><dt>Reads</dt><dd>' + esc(AX.partName(store)) + '</dd></dl>';
     if (c.detail) h += '<p class="detail">' + esc(c.detail) + '</p>';
@@ -742,7 +753,7 @@
       var na = [];
       g.checks.forEach(function (c) {
         var i = c._i;
-        var btn = '<button type="button" class="linkish" data-jump="' + i + '" title="' + esc(c.caption) + '">' + AX.glyphSvg(c.verdict, 14) + esc((AX.checkById[c.check] || {}).name || c.check) + '</button>';
+        var btn = '<button type="button" class="linkish" data-jump="' + i + '" title="' + esc(displayText(c.caption)) + '">' + AX.glyphSvg(c.verdict, 14) + esc((AX.checkById[c.check] || {}).name || c.check) + '</button>';
         if (c.verdict === 'not-applicable') na.push('<li class="na-row">' + btn + (c.reason ? '<code>' + esc(c.reason) + '</code>' : '') + '</li>');
         else h += '<li>' + btn + '</li>';
       });
@@ -757,9 +768,8 @@
     var t = S.trace;
     var e = t.events[S.idx];
     var step = stepOf(S.idx);
-    var steps = AX.stepsOf(t);
-    var h = '<header class="insp-head"><p class="eyebrow">Step ' + esc(e.step) + '<span class="of">' + (steps.indexOf(step) + 1) + ' of ' + steps.length + '</span></p>';
-    h += '<h2>' + esc(AX.stepTitle(t.scenario.id, e.step, t)) + '</h2>';
+    var h = '<header class="insp-head"><p class="eyebrow">Step ' + step.position + ' of ' + AX.stepsOf(t).length + '</p>';
+    h += '<h2>' + esc(AX.stepTitle(t, step)) + '</h2>';
     h += '<p class="who"><span class="chip">' + esc(traceAgent(e.agent).name) + '</span><span class="chip">' + esc(AX.partName(e.part)) + '</span><span class="chip quiet">' + esc(AX.kindLabels[e.kind] || e.kind) + '</span></p></header>';
     h += omittedAttachmentsHtml(e);
     if (S.level === 'steps') h += stepSummaryHtml(step);
@@ -772,8 +782,8 @@
     if (e.kind !== 'check' && e.kind !== 'decision' && !e.packet) {
       var part = AX.partById[e.part];
       h += '<section class="part-info"><h3>' + esc(part ? part.name : e.part) + '</h3><p>' + esc(part ? part.summary : '') + '</p>';
-      if (e.rule) h += '<dl class="kv"><dt>Rule</dt><dd>' + esc(e.rule.text) + '<div class="rule-id"><code>' + esc(e.rule.id) + '</code></div></dd></dl>';
-      if (e.chat) h += '<dl class="kv"><dt>In the chat</dt><dd>' + esc(e.chat.text) + '</dd></dl>';
+      if (e.rule) h += '<dl class="kv"><dt>Rule</dt><dd>' + esc(displayText(e.rule.text)) + '<div class="rule-id"><code>' + esc(e.rule.id) + '</code></div></dd></dl>';
+      if (e.chat) h += '<dl class="kv"><dt>In the chat</dt><dd>' + esc(displayText(e.chat.text)) + '</dd></dl>';
       if (e.fact) h += '<details class="layer present fact"><summary class="layer-head"><span class="ln">Fact stored</span><span class="lstate">' + esc(e.fact.claimType || '') + '</span></summary><pre class="json">' + esc(JSON.stringify(e.fact, null, 2)) + '</pre></details>';
       h += refsHtml(e.refs) + '</section>';
     } else if (e.packet) {
@@ -796,7 +806,7 @@
     visit(value);
     var h = '';
     attachments.forEach(function (a) {
-      h += '<p class="rdf-note">Content omitted from the explorer copy; digest ' + esc(a.digest) + ' (' + esc(a.byteLength) + ' bytes). The full trace is in the engine repository.</p>';
+      h += '<p class="rdf-note">The explorer copy omits this attachment (' + esc(a.byteLength) + ' bytes). Digest <code>' + esc(a.digest) + '</code>. The full trace is in the engine repository.</p>';
     });
     return h;
   }

@@ -19,7 +19,7 @@ const body = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1];
 if (!body) throw new Error('index.html has no body');
 const keep = head
   .split('\n')
-  .filter((l) => /<title>|name="claude:|name="description"|rel="stylesheet"/.test(l))
+  .filter((l) => /<meta charset=|<title>|name="claude:|name="description"|rel="stylesheet"/.test(l))
   .join('\n');
 
 rmSync(out, { recursive: true, force: true });

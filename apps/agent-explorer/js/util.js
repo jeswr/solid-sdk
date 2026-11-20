@@ -199,6 +199,27 @@
     else if (!to) { to = e.kind === 'message-in' ? e.agent : (others.length === 1 ? others[0] : null); }
     return { from: from, to: to };
   };
+  function mortgageBank(t, partyId) {
+    if (t.useCase !== 'mortgage-in-principle') return null;
+    var modelId = partyId === 'north' ? 'lender' : (partyId === 'harbour' ? 'bank' : null);
+    return modelId ? AX.partyById[modelId] : null;
+  }
+  AX.tracePartyName = function (t, id) {
+    var agent = (t.agents || []).find(function (a) { return a.id === id; });
+    var party = (t.parties || []).find(function (p) { return p.id === id; });
+    var name = (agent || party || AX.partyById[id] || {}).name || id;
+    // The mortgage traces identify these two parties by role in their display metadata.
+    var modelParty = mortgageBank(t, agent ? agent.actsFor : id);
+    if (!modelParty) return name;
+    return modelParty.name + (agent ? '’s agent' : ' (fictional)');
+  };
+  AX.tracePartyText = function (t, text) {
+    var north = mortgageBank(t, 'north');
+    var harbour = mortgageBank(t, 'harbour');
+    if (north) text = text.replace(/\bthe fictional lender\b/gi, north.name);
+    if (harbour) text = text.replace(/\bSam['’]s fictional bank\b/g, harbour.name);
+    return text;
+  };
 
   // ---- Traces --------------------------------------------------------------
   AX.traces = (D.traces || []).map(function (t) {
@@ -309,12 +330,43 @@
     var t = AX.tracesFor(id)[0];
     return t ? t.scenario.title : id;
   };
-  // Step titles: the trace's own scenario.steps, then data/scenarios.json, then "Step n".
-  AX.stepTitle = function (scenarioId, n, trace) {
-    var own = trace && trace.scenario && trace.scenario.steps;
-    if (own && own[String(n)]) return own[String(n)];
-    var m = AX.scenarioMeta(scenarioId);
-    return (m.steps && m.steps[String(n)]) || 'Step ' + n;
+  AX.stepTitle = function (trace, step) {
+    var titles = trace.summary.stepTitleEvents || {};
+    var e = trace.events[titles[step.first]];
+    if (e && e.caption) {
+      var title = e.caption;
+      if (e.kind === 'decision' && e.outcomeKey && e.outcomeKey !== 'GO' && e.outcomeKey !== 'ADMIT') {
+        var prior = step.events.slice(0, titles[step.first] - step.first);
+        var check = prior.findLast(function (c) {
+          return c.kind === 'check' && c.agent === e.agent && c.part === e.part && c.reason === e.reason && c.caption;
+        });
+        var action = check && /mandate does not allow this: (share|pay)\b/.exec(check.caption);
+        if (e.outcomeKey === 'STOP' && action && trace.useCase === 'mortgage-in-principle') {
+          var injected = action[1] === 'pay' && prior.some(function (c) {
+            return c.kind === 'propose' && /untrusted free text/.test(c.caption);
+          });
+          var subject = injected ? 'the injected fee' : (action[1] === 'pay' ? 'the payment' : 'the evidence from being shared');
+          return 'The gate stops ' + subject + ' because Sam’s mandate does not allow it.';
+        }
+        if (e.reason === 'approval-denied' && prior.some(function (c) {
+          return c.kind === 'decision' && c.outcomeKey === 'ASK_PRINCIPAL' && c.reason === 'limit-exceeded';
+        })) {
+          title += ' The request exceeded the agreed limit.';
+        }
+        var reason = check && check.caption !== title && check.caption;
+        if (e.outcomeKey === 'STOP' && title === 'The action is stopped; nothing leaves.' && reason) {
+          title = AX.outcomeName(e.outcomeKey) + '. ' + reason;
+        } else if (e.outcomeKey === 'ASK_MORE' && /\brefused\b/i.test(title) && reason) {
+          title = AX.outcomeName(e.outcomeKey) + '. ' + reason;
+        } else if (!/\b(stops?|stopped|refuses?|refused|asks?|asked|held|declined)\b/i.test(title)) {
+          title = AX.outcomeName(e.outcomeKey) + '. ' + title;
+        }
+      }
+      return AX.tracePartyText(trace, AX.phone.displayText(trace, title));
+    }
+    var own = trace.scenario.steps || {};
+    var meta = AX.scenarioMeta(trace.scenario.id).steps || {};
+    return own[step.n] || meta[step.n] || 'Step ' + step.position;
   };
   AX.configLabel = function (t) {
     if (t.isBaseline) return 'Baseline';
@@ -335,7 +387,10 @@
     var steps = [];
     var cur = null;
     t.events.forEach(function (e, i) {
-      if (!cur || cur.n !== e.step) { cur = { n: e.step, first: i, last: i, events: [] }; steps.push(cur); }
+      if (!cur || cur.n !== e.step) {
+        cur = { n: e.step, position: steps.length + 1, first: i, last: i, events: [] };
+        steps.push(cur);
+      }
       cur.last = i;
       cur.events.push(e);
     });

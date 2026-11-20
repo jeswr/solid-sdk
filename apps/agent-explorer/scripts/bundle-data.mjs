@@ -32,6 +32,7 @@ const baselineLayers = Object.fromEntries([...model.layers, ...(model.settlement
 const traces = [];
 const traceFiles = [];
 const outlines = new Map();
+const stories = new Map();
 const seen = new Set();
 const outPath = process.env.AX_BUNDLE_OUT ?? join(root, 'data/bundle.js');
 const traceDir = join(dirname(outPath), 'traces');
@@ -39,6 +40,23 @@ const MAX_TRACE_BYTES = 12_000_000;
 function outline(events) {
   return events.filter((e) => /^(check|decision|message-in|message-out|ask-principal)$/.test(e.kind))
     .map((e) => [e.agent, e.part, e.kind, e.check || '', e.verdict || '', e.reason || ''].join('|')).join('\n');
+}
+// Compare what the run does, ignoring changes in the number and wording of routine checks.
+// Keep event positions so Explore can use the recorded language and reasons when it renders.
+function storyEvent(e, i) {
+  if (e.kind === 'decision') {
+    const outcome = e.outcome || e.reason || e.verdict;
+    const priority = /^(stop|refuse|fail)$/i.test(outcome) ? 4
+      : /^(ask[-_]more|ask[-_]principal)$/i.test(outcome) ? 3 : 0;
+    return { i, priority, key: JSON.stringify([e.kind, e.agent, e.part, outcome, e.reason]) };
+  }
+  if (e.kind === 'principal-reply' || e.kind === 'propose' || e.kind === 'core-output') {
+    return { i, priority: 2, key: JSON.stringify([e.kind, e.agent, e.caption]) };
+  }
+  if (e.kind === 'message-out' || e.kind === 'message-in') {
+    return { i, priority: 1, key: JSON.stringify([e.kind, e.agent, e.packet?.kind]) };
+  }
+  return null;
 }
 function target(e) { return e ? { step: e.step, seq: e.seq } : null; }
 for (const file of readdirSync(join(root, 'traces')).filter((f) => f.endsWith('.json')).sort()) {
@@ -61,8 +79,16 @@ for (const file of readdirSync(join(root, 'traces')).filter((f) => f.endsWith('.
   const t = traceData.restore(packed);
   const summary = { eventCount: t.events.length, checkCounts: {}, parts: {}, checks: {}, segments: {}, requirements: {} };
   const grouped = {};
+  const story = [];
+  let step;
   t.events.forEach((e, i) => {
     (grouped[e.step] ??= []).push(e);
+    if (!step || step.n !== e.step) {
+      step = { n: e.step, first: i, events: [] };
+      story.push(step);
+    }
+    const entry = storyEvent(e, i);
+    if (entry) step.events.push(entry);
     if (e.kind === 'check') {
       summary.checkCounts[e.verdict] = (summary.checkCounts[e.verdict] || 0) + 1;
       if (e.verdict !== 'not-applicable') summary.checks[e.check] ??= target(e);
@@ -81,6 +107,7 @@ for (const file of readdirSync(join(root, 'traces')).filter((f) => f.endsWith('.
     summary.requirements[risk.id] = target(e);
   }
   outlines.set(key, Object.fromEntries(Object.entries(grouped).map(([step, events]) => [step, outline(events)])));
+  stories.set(key, story);
   const index = Object.fromEntries(INDEX_FIELDS.filter((k) => k in t).map((k) => [k, t[k]]));
   index.file = file;
   index.key = key;
@@ -94,11 +121,43 @@ function isBaseline(t) {
   const layers = { ...baselineLayers, ...t.configuration.layers };
   return Object.keys(baselineLayers).every((k) => layers[k] === baselineLayers[k]);
 }
+function sameLayers(a, b) {
+  return Object.keys(baselineLayers).every((k) =>
+    (a.configuration.layers?.[k] ?? baselineLayers[k]) === (b.configuration.layers?.[k] ?? baselineLayers[k]));
+}
+function mainScript(t) {
+  // The three original mortgage branches use separate scenario ids and follow the short script.
+  const id = /^mortgage-(over-ask|injected-fee|out-of-limit)$/.test(t.scenario.id)
+    ? 'mortgage-core' : t.scenario.id.split('--')[0];
+  const peers = traces.filter((x) => x.scenario.id === id && !x.path?.index && x.generated?.core !== 'fixture');
+  return peers.find((x) => x !== t && sameLayers(t, x)) || peers.find(isBaseline) || peers[0];
+}
 for (const t of traces) {
   const list = traces.filter((x) => x.scenario.id === t.scenario.id);
   const base = list.find((x) => isBaseline(x) && x.generated?.core !== 'fixture') || list.find(isBaseline) || list[0];
   const bs = outlines.get(base.key), ts = outlines.get(t.key);
   t.summary.diffSteps = Object.fromEntries(Object.keys(ts).filter((k) => bs[k] !== ts[k]).map((k) => [k, true]));
+  const main = mainScript(t);
+  const mainSteps = new Map();
+  for (const step of stories.get(main?.key) || []) {
+    const runs = mainSteps.get(step.n) ?? [];
+    runs.push(new Set(step.events.map((e) => e.key)));
+    mainSteps.set(step.n, runs);
+  }
+  const stepTitleEvents = {};
+  for (const step of stories.get(t.key)) {
+    const mainEvents = mainSteps.get(step.n)?.shift();
+    const titled = t.scenario.steps?.[step.n] || scenarios[t.scenario.id]?.steps?.[step.n];
+    if (main === t && titled) continue;
+    let priority = !titled || (t.path?.index && mainEvents) ? 1 : 3;
+    // A late successful send can carry a refusal, so prefer the gate decision that caused it.
+    for (const e of step.events) {
+      if (e.priority < priority || mainEvents?.has(e.key)) continue;
+      stepTitleEvents[step.first] = e.i;
+      priority = e.priority;
+    }
+  }
+  if (Object.keys(stepTitleEvents).length) t.summary.stepTitleEvents = stepTitleEvents;
 }
 const tours = readDir('tours').map(({ data }) => data);
 

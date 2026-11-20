@@ -1,11 +1,11 @@
 {
   "updated": "2026-11-20T19:30Z",
-  "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
+  "note": "Everything to build, in the order it will be done. On 13 Nov 2026 the maintainer reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by the maintainer on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by the maintainer: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
       "id": "P9",
       "title": "RDF throughout, and every option a real run",
-      "goal": "From Jesse's review on 13 Nov 2026, now first in the order: meaning explicit at every gate, payment treated as a contract, and every option on every selector backed by a real run you can switch to on the mortgage journey. Of 38 alternative options, 13 have a real run somewhere in the use cases and 25 have none. On the mortgage journey none can be switched to as a real run today: the email trace shown there is a development fixture and is labelled as one. Done means: the journey runs under the baseline with that one option changed, between separately keyed agents, and one failure only that option can have also runs.",
+      "goal": "From the maintainer's review on 13 Nov 2026, now first in the order: meaning explicit at every gate, payment treated as a contract, and every option on every selector backed by a real run you can switch to on the mortgage journey. Of 38 alternative options, 13 have a real run somewhere in the use cases and 25 have none. On the mortgage journey none can be switched to as a real run today: the email trace shown there is a development fixture and is labelled as one. Done means: the journey runs under the baseline with that one option changed, between separately keyed agents, and one failure only that option can have also runs.",
       "items": [
         {
           "id": "P9.1",
@@ -73,7 +73,7 @@
         {
           "id": "P9.10",
           "title": "Proof of a query, and joint computation",
-          "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov. 20 Nov: the sparq proof adapters are wired in and run live; 5 paths wait on sparq #7412 (missing catalogue plans for absence, totals and scoped queries).",
+          "detail": "Zero-knowledge proofs use Noir circuits, as agreed with the maintainer on 13 Nov. The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov. 20 Nov: the sparq proof adapters are wired in and run live; 5 paths wait on sparq #7412 (missing catalogue plans for absence, totals and scoped queries).",
           "status": "doing",
           "owner": "Engine project, Codex"
         },
@@ -208,7 +208,7 @@
         },
         {
           "id": "P2.2",
-          "title": "Ten layer specifications",
+          "title": "Layer specifications",
           "detail": "For each layer: what a suite must define, and the suites registered so far.",
           "status": "done",
           "owner": "Fable"
@@ -398,9 +398,9 @@
         {
           "id": "P7.1",
           "title": "A name",
-          "detail": "Answerable. Chosen by Jesse on 13 Nov 2026.",
+          "detail": "The maintainer chose Answerable on 13 Nov 2026.",
           "status": "done",
-          "owner": "Fable, Jesse decides"
+          "owner": "Fable, with the maintainer's decision"
         },
         {
           "id": "P7.2",
