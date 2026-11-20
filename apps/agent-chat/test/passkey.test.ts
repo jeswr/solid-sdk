@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import {
   type ApprovalRequest,
   actionDigest,
@@ -18,7 +18,11 @@ import {
   verifyUser as runVerification,
   STORE_KEY,
 } from "../src/ui/passkey.js";
-import { importCoseKey, verifyAssertionSignature } from "../src/ui/passkey-keys.js";
+import {
+  importCoseKey,
+  registrationKey,
+  verifyAssertionSignature,
+} from "../src/ui/passkey-keys.js";
 
 const RP = "errand.example";
 const DIGEST = "sha-256:abc123";
@@ -99,27 +103,39 @@ function coseKey(publicKey: KeyObject): Buffer {
     ]);
   }
   if (!jwk.n || !jwk.e) throw new Error("expected a test RSA key");
-  const modulus = Buffer.from(jwk.n, "base64url");
-  const modulusHeader =
-    modulus.length < 256
-      ? [0x58, modulus.length]
-      : [0x59, modulus.length >> 8, modulus.length & 0xff];
+  return rsaCoseKey(jwk.n, jwk.e);
+}
+
+function rsaCoseKey(modulus: string, exponent: string): Buffer {
+  const byteString = (value: string) => {
+    const bytes = Buffer.from(value, "base64url");
+    const length = bytes.length;
+    const header =
+      length < 24
+        ? [0x40 + length]
+        : length < 256
+          ? [0x58, length]
+          : [0x59, length >> 8, length & 0xff];
+    return Buffer.concat([Buffer.from(header), bytes]);
+  };
   return Buffer.concat([
     Buffer.from("a401030339010020", "hex"),
-    Buffer.from(modulusHeader),
-    modulus,
-    Buffer.from("2143", "hex"),
-    Buffer.from(jwk.e, "base64url"),
+    byteString(modulus),
+    Buffer.from([0x21]),
+    byteString(exponent),
   ]);
 }
 
-function storedPasskey(publicKey = ec.publicKey) {
-  return memoryStorage({
-    [STORE_KEY]: JSON.stringify({
-      id: b64url(RAW),
-      publicKey: coseKey(publicKey).toString("base64url"),
-    }),
+function passkeyRecord(publicKey = ec.publicKey, pending = false) {
+  return JSON.stringify({
+    id: b64url(RAW),
+    publicKey: coseKey(publicKey).toString("base64url"),
+    ...(pending ? { pending: true } : {}),
   });
+}
+
+function storedPasskey(publicKey = ec.publicKey) {
+  return memoryStorage({ [STORE_KEY]: passkeyRecord(publicKey) });
 }
 
 const verifyUser = (digest: string, displayName: string, environment: PasskeyEnv) =>
@@ -273,7 +289,7 @@ describe("verifyUser", () => {
     );
     const getPublicKeyAlgorithm = vi.fn(() => -7);
     const get = vi.fn(async (o: CredentialRequestOptions) => {
-      expect(storage.getItem(STORE_KEY)).toBeNull();
+      expect(storage.getItem(STORE_KEY)).toBe(passkeyRecord(ec.publicKey, true));
       return assertion()(o);
     });
     let randomCall = 0;
@@ -333,11 +349,93 @@ describe("verifyUser", () => {
       },
       { status: "cancelled" },
     ],
-  ] as const)("does not save or approve on first use with %s", async (_scenario, get, result) => {
+  ] as const)("leaves enrollment pending on first use with %s", async (_scenario, get, result) => {
     const e = env({ create: registration(), get });
     expect(await verifyUser(DIGEST, "Sam", e)).toEqual(result);
     expect(e.calls).toEqual(["create", "get"]);
-    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
+    expect(e.storage?.getItem(STORE_KEY)).toBe(passkeyRecord(ec.publicKey, true));
+  });
+
+  it("retries a cancelled enrollment with the saved credential and a fresh approval challenge", async () => {
+    const storage = memoryStorage();
+    const controller = new AbortController();
+    const cancelled = vi.fn(async (options: CredentialRequestOptions) => {
+      controller.abort();
+      return assertion()(options);
+    });
+    let randomCall = 0;
+    const random: PasskeyEnv["random"] = (b) => b.fill(++randomCall);
+    const first = env({ create: registration(), get: cancelled }, { storage, random });
+    expect(await runVerification(DIGEST, "Sam", () => first, controller.signal)).toEqual({
+      status: "cancelled",
+    });
+
+    const retryDigest = "sha-256:edited-terms";
+    const allows = vi.fn((ceremony) => ceremony === "get");
+    const get = vi.fn(async (options: CredentialRequestOptions) => {
+      expect(storage.getItem(STORE_KEY)).toBe(passkeyRecord(ec.publicKey, true));
+      return assertion()(options);
+    });
+    const retry = env({ get }, { storage, allows, random });
+    expect(await verifyUser(retryDigest, "Sam", retry)).toEqual({
+      status: "verified",
+      method: "passkey",
+      registered: true,
+    });
+    expect(first.calls).toEqual(["create", "get"]);
+    expect(retry.calls).toEqual(["get"]);
+    expect(allows.mock.calls).toEqual([["get"]]);
+    expect(get.mock.calls[0]?.[0].publicKey?.allowCredentials?.[0]?.id).toEqual(RAW);
+    const previous = cancelled.mock.calls[0]?.[0].publicKey?.challenge as Uint8Array;
+    const challenge = get.mock.calls[0]?.[0].publicKey?.challenge as Uint8Array;
+    const prefix = new Uint8Array(
+      await subtle.digest("SHA-256", new TextEncoder().encode(`errand-approval:${retryDigest}`)),
+    );
+    expect(challenge.subarray(0, 32)).toEqual(prefix);
+    expect(challenge.subarray(32)).not.toEqual(previous.subarray(32));
+    expect(storage.getItem(STORE_KEY)).toBe(passkeyRecord());
+    expect(await verifyUser(retryDigest, "Sam", env({ get: assertion() }, { storage }))).toEqual({
+      status: "verified",
+      method: "passkey",
+      registered: false,
+    });
+  });
+
+  it("keeps the enrollment pending if saving the confirmation fails", async () => {
+    const storage = memoryStorage();
+    const setItem = vi.fn(storage.setItem).mockImplementationOnce(storage.setItem);
+    setItem.mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const e = env(
+      { create: registration(), get: assertion() },
+      { storage: { ...storage, setItem } },
+    );
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "could not confirm the saved passkey",
+    });
+    expect(e.calls).toEqual(["create", "get"]);
+    expect(storage.getItem(STORE_KEY)).toBe(passkeyRecord(ec.publicKey, true));
+  });
+
+  it("honors a reset while the first assertion is in progress", async () => {
+    const storage = memoryStorage();
+    const e = env(
+      {
+        create: registration(),
+        get: async (options) => {
+          forgetPasskey(e);
+          return assertion()(options);
+        },
+      },
+      { storage },
+    );
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "the saved passkey changed; try again",
+    });
+    expect(storage.getItem(STORE_KEY)).toBeNull();
   });
 
   it("binds the challenge to the action digest", async () => {
@@ -604,7 +702,7 @@ describe("verifyUser", () => {
       {
         create: registration({ legacy: true }),
         get: async (options) => {
-          expect(storage.getItem(STORE_KEY)).toBeNull();
+          expect(storage.getItem(STORE_KEY)).toBe(passkeyRecord(ec.publicKey, true));
           expect(options.publicKey?.allowCredentials?.[0]?.id).toEqual(RAW);
           if (status === "cancelled") return null;
           return assertion(0x05, { signature: status === "failed" ? "wrong-key" : undefined })(
@@ -617,9 +715,7 @@ describe("verifyUser", () => {
     expect((await verifyUser(DIGEST, "Sam", e)).status).toBe(status);
     expect(e.calls).toEqual(["create", "get"]);
     expect(allows.mock.calls).toEqual([["create"], ["get"]]);
-    expect(storage.getItem(STORE_KEY)).toBe(
-      status === "verified" ? storedPasskey().getItem(STORE_KEY) : null,
-    );
+    expect(storage.getItem(STORE_KEY)).toBe(passkeyRecord(ec.publicKey, status !== "verified"));
   });
 
   it("surfaces storage read, save, and reset failures", async () => {
@@ -645,6 +741,23 @@ describe("verifyUser", () => {
 });
 
 describe("passkey signature and key formats", () => {
+  it.each([0, 1, 2, 4, "modulus"])("rejects RSA exponent %s in COSE and SPKI", async (exponent) => {
+    const jwk = rsa.publicKey.export({ format: "jwk" });
+    const e = typeof exponent === "number" ? b64url(Uint8Array.of(exponent)) : jwk.n;
+    const key = createPublicKey({ key: { ...jwk, e }, format: "jwk" });
+    const response = {
+      getPublicKey: () => Uint8Array.from(key.export({ type: "spki", format: "der" })).buffer,
+      getPublicKeyAlgorithm: () => -257,
+    } as AuthenticatorAttestationResponse;
+    if (!jwk.n || !e) throw new Error("expected RSA modulus and exponent");
+    await expect(importCoseKey(subtle, Uint8Array.from(rsaCoseKey(jwk.n, e)))).rejects.toThrow(
+      "invalid RSA credential exponent",
+    );
+    await expect(registrationKey(subtle, response, RAW, undefined)).rejects.toThrow(
+      "invalid RSA credential exponent",
+    );
+  });
+
   it.each([
     {
       scenario: "required padding",

@@ -219,16 +219,26 @@ export async function importCoseKey(
   ) {
     const jwk = { kty: "RSA", n: b64url(first), e: b64url(second) };
     const imported = await subtle.importKey("jwk", jwk, RSA, false, ["verify"]);
-    checkRsaModulus(imported);
+    checkRsaKey(imported, first);
     return imported;
   }
   throw new Error("unsupported credential public key");
 }
 
-function checkRsaModulus(key: CryptoKey): void {
-  const { modulusLength } = key.algorithm as RsaHashedKeyAlgorithm;
+function unsignedInteger(bytes: Uint8Array): bigint {
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return BigInt(`0x0${hex}`);
+}
+
+function checkRsaKey(key: CryptoKey, modulus: Uint8Array): void {
+  const { modulusLength, publicExponent } = key.algorithm as RsaHashedKeyAlgorithm;
   if (!Number.isInteger(modulusLength) || modulusLength < 2048) {
     throw new Error("RSA credential modulus must be at least 2048 bits");
+  }
+  // PKCS #1 requires 3 <= e < n and coprimality with the even lambda(n).
+  const exponent = unsignedInteger(publicExponent);
+  if (exponent < 3n || exponent % 2n === 0n || exponent >= unsignedInteger(modulus)) {
+    throw new Error("invalid RSA credential exponent");
   }
 }
 
@@ -244,8 +254,9 @@ export async function registrationKey(
     const algorithm = alg === ES256 ? EC : alg === RS256 ? RSA : undefined;
     if (!algorithm) throw new Error("unsupported credential algorithm");
     const key = await subtle.importKey("spki", spki, algorithm, true, ["verify"]);
-    if (alg === RS256) checkRsaModulus(key);
-    const cose = encodeCoseKey(alg, await subtle.exportKey("jwk", key));
+    const jwk = await subtle.exportKey("jwk", key);
+    if (alg === RS256 && jwk.n) checkRsaKey(key, fromB64url(jwk.n));
+    const cose = encodeCoseKey(alg, jwk);
     return { key, cose };
   }
   const cose = readAttestedKey(response, id, authData);

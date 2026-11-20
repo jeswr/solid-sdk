@@ -142,24 +142,26 @@ test("platform WebAuthn registers and asserts before signing the selected terms"
   page,
 }) => {
   const { cdp, authenticatorId } = await virtualPasskey(page);
+  const registrationCount = new Promise<number>((resolve) => {
+    cdp.once("WebAuthn.credentialAdded", ({ credential }) => resolve(credential.signCount));
+  });
   await page.goto("/");
   await send(page, "buy socks");
   await page.getByRole("button", { name: "Set a spending limit" }).click();
   await page.getByLabel("Up to, per month").fill("43");
   await holdUntil(page, /Hold to set limit/, page.getByText(/New rule: up to \$43/));
   await expect(page.locator(".receipt-head")).toHaveCount(1);
-  const registered = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
-  expect(registered.credentials).toHaveLength(1);
+  const first = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
+  expect(first.credentials).toHaveLength(1);
+  expect(first.credentials[0]?.signCount).toBeGreaterThan(await registrationCount);
 
   await send(page, "buy jacket");
   await holdUntil(page, /Just this once/, page.locator(".receipt-head").nth(1));
   await expect(page.locator(".receipt-head")).toHaveCount(2);
-  const asserted = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
-  expect(asserted.credentials).toHaveLength(1);
-  expect(asserted.credentials[0]?.credentialId).toBe(registered.credentials[0]?.credentialId);
-  expect(asserted.credentials[0]?.signCount).toBeGreaterThan(
-    registered.credentials[0]?.signCount ?? 0,
-  );
+  const second = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
+  expect(second.credentials).toHaveLength(1);
+  expect(second.credentials[0]?.credentialId).toBe(first.credentials[0]?.credentialId);
+  expect(second.credentials[0]?.signCount).toBeGreaterThan(first.credentials[0]?.signCount ?? 0);
   await expect(page.getByText("Demo: Face ID simulated")).toHaveCount(0);
 });
 

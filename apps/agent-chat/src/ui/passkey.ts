@@ -98,7 +98,7 @@ export function browserEnv(): PasskeyEnv {
   };
 }
 
-/** Forget the registered credential, surfacing a blocked storage reset to the caller. */
+/** Forget the saved credential, surfacing a blocked storage reset to the caller. */
 export function forgetPasskey(env: PasskeyEnv = browserEnv()): void {
   if (!env.storage) throw new Error("Passkey storage is unavailable.");
   env.storage.removeItem(STORE_KEY);
@@ -162,16 +162,26 @@ function errorName(e: unknown): string {
 
 const failed = (reason: string): UserCheck => ({ status: "failed", reason });
 
-async function loadPasskey(
-  subtle: SubtleCrypto,
-  stored: string,
-): Promise<{ id: Uint8Array<ArrayBuffer>; key: CryptoKey } | null> {
+type PasskeyRecord = { id: string; publicKey: string; pending?: true };
+type SavedPasskey = { id: Uint8Array<ArrayBuffer>; key: CryptoKey; record: PasskeyRecord };
+
+async function loadPasskey(subtle: SubtleCrypto, stored: string): Promise<SavedPasskey | null> {
   try {
-    const record = JSON.parse(stored) as { id?: unknown; publicKey?: unknown } | null;
-    if (typeof record?.id !== "string" || typeof record.publicKey !== "string") return null;
-    const id = fromB64url(record.id);
+    const value = JSON.parse(stored) as {
+      id?: unknown;
+      publicKey?: unknown;
+      pending?: unknown;
+    } | null;
+    if (typeof value?.id !== "string" || typeof value.publicKey !== "string") return null;
+    // Existing confirmed records have no pending marker.
+    if (value.pending !== undefined && value.pending !== true) return null;
+    const id = fromB64url(value.id);
     if (id.length === 0) return null;
-    return { id, key: await importCoseKey(subtle, fromB64url(record.publicKey)) };
+    return {
+      id,
+      key: await importCoseKey(subtle, fromB64url(value.publicKey)),
+      record: { id: value.id, publicKey: value.publicKey, pending: value.pending },
+    };
   } catch {
     return null;
   }
@@ -224,11 +234,13 @@ export async function verifyUser(
   signal?: AbortSignal,
 ): Promise<UserCheck> {
   let env: PasskeyEnv;
+  let storage: NonNullable<PasskeyEnv["storage"]>;
   let stored: string | null;
   try {
     env = getEnv();
     if (!env.storage) return { status: "failed", reason: "passkey storage is unavailable" };
-    stored = env.storage.getItem(STORE_KEY);
+    storage = env.storage;
+    stored = storage.getItem(STORE_KEY);
   } catch {
     return { status: "failed", reason: "could not read passkey settings" };
   }
@@ -254,69 +266,85 @@ export async function verifyUser(
     if (!available) return failed("this device has no Face ID or screen lock passkey");
     const challenge = await challengeFor(env, digest);
     signal?.throwIfAborted();
+    let passkey: SavedPasskey;
+    let assertionChallenge = challenge;
     if (stored !== null) {
-      const passkey = await loadPasskey(env.subtle, stored);
-      if (!passkey)
+      const saved = await loadPasskey(env.subtle, stored);
+      if (!saved)
         return failed("the saved passkey has no usable public key; reset it and try again");
-      return await assertPasskey(env, credentials, passkey.id, passkey.key, challenge, signal);
+      passkey = saved;
+    } else {
+      const cred = (await credentials.create({
+        signal,
+        publicKey: {
+          rp: { id: env.rpId, name: "Errand (demo)" },
+          user: {
+            id: env.random(new Uint8Array(16)),
+            name: `${displayName} (Errand demo)`,
+            displayName,
+          },
+          challenge,
+          pubKeyCredParams: [
+            { type: "public-key", alg: -7 },
+            { type: "public-key", alg: -257 },
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "preferred",
+          },
+          attestation: "none",
+          timeout: 60_000,
+        },
+      })) as PublicKeyCredential | null;
+      if (!cred) return { status: "cancelled" };
+      signal?.throwIfAborted();
+      const id = new Uint8Array(cred.rawId);
+      if (id.length === 0) return failed("registration returned no credential ID");
+      const res = cred.response as AuthenticatorAttestationResponse;
+      const hasAuthData = typeof res.getAuthenticatorData === "function";
+      const authData = res.getAuthenticatorData?.();
+      const bad = hasAuthData
+        ? await checkResponse(env, "webauthn.create", challenge, res.clientDataJSON, authData)
+        : checkClientData(env, "webauthn.create", challenge, res.clientDataJSON);
+      if (bad) return failed(bad);
+      const registered = await registrationKey(env.subtle, res, id, authData).catch(() => null);
+      if (!registered) return failed("registration returned no usable passkey public key");
+      const record: PasskeyRecord = {
+        id: b64url(id),
+        publicKey: b64url(registered.cose),
+        pending: true,
+      };
+      // Keep the credential available for retry if the first assertion is cancelled or fails.
+      try {
+        if (storage.getItem(STORE_KEY) !== null)
+          return failed("the saved passkey changed; try again");
+        stored = JSON.stringify(record);
+        storage.setItem(STORE_KEY, stored);
+      } catch {
+        return failed("could not save the new passkey");
+      }
+      passkey = { id, key: registered.key, record };
+      assertionChallenge = await challengeFor(env, digest);
     }
 
-    const cred = (await credentials.create({
-      signal,
-      publicKey: {
-        rp: { id: env.rpId, name: "Errand (demo)" },
-        user: {
-          id: env.random(new Uint8Array(16)),
-          name: `${displayName} (Errand demo)`,
-          displayName,
-        },
-        challenge,
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 },
-          { type: "public-key", alg: -257 },
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform",
-          userVerification: "required",
-          residentKey: "preferred",
-        },
-        attestation: "none",
-        timeout: 60_000,
-      },
-    })) as PublicKeyCredential | null;
-    if (!cred) return { status: "cancelled" };
-    const id = new Uint8Array(cred.rawId);
-    if (id.length === 0) return failed("registration returned no credential ID");
-    const res = cred.response as AuthenticatorAttestationResponse;
-    const hasAuthData = typeof res.getAuthenticatorData === "function";
-    const authData = res.getAuthenticatorData?.();
-    const bad = hasAuthData
-      ? await checkResponse(env, "webauthn.create", challenge, res.clientDataJSON, authData)
-      : checkClientData(env, "webauthn.create", challenge, res.clientDataJSON);
-    signal?.throwIfAborted();
-    if (bad) return failed(bad);
-    const registered = await registrationKey(env.subtle, res, id, authData).catch(() => null);
-    signal?.throwIfAborted();
-    if (!registered) return failed("registration returned no usable passkey public key");
-    // Registration requests no attestation signature. Verify a fresh assertion with the new key.
-    const assertionChallenge = await challengeFor(env, digest);
     const result = await assertPasskey(
       env,
       credentials,
-      id,
-      registered.key,
+      passkey.id,
+      passkey.key,
       assertionChallenge,
       signal,
     );
-    if (result.status !== "verified") return result;
+    if (result.status !== "verified" || !passkey.record.pending) return result;
     signal?.throwIfAborted();
     try {
-      env.storage.setItem(
-        STORE_KEY,
-        JSON.stringify({ id: b64url(id), publicKey: b64url(registered.cose) }),
-      );
+      if (storage.getItem(STORE_KEY) !== stored)
+        return failed("the saved passkey changed; try again");
+      const { id, publicKey } = passkey.record;
+      storage.setItem(STORE_KEY, JSON.stringify({ id, publicKey }));
     } catch {
-      return failed("could not save the new passkey");
+      return failed("could not confirm the saved passkey");
     }
     return { status: "verified", method: "passkey", registered: true };
   } catch (e) {
