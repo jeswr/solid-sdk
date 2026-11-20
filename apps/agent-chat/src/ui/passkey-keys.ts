@@ -17,9 +17,15 @@ export function fromB64url(s: string): Uint8Array<ArrayBuffer> {
 }
 
 type CborKey = number | string;
-type CborValue = CborKey | Uint8Array<ArrayBuffer> | Map<CborKey, CborValue> | CborValue[];
+type CborValue =
+  | CborKey
+  | boolean
+  | null
+  | Uint8Array<ArrayBuffer>
+  | Map<CborKey, CborValue>
+  | CborValue[];
 
-/** Read the definite-length CBOR types used in WebAuthn attestation objects and COSE keys. */
+/** Read the definite-length CBOR types used by attestation objects, COSE keys and extensions. */
 class CborReader {
   offset: number;
 
@@ -76,9 +82,12 @@ class CborReader {
         }
         return map;
       }
-      default:
-        throw new Error("unsupported CBOR type");
+      case 7:
+        if (value === 20 || value === 21) return value === 21;
+        if (value === 22) return null;
+        break;
     }
+    throw new Error("unsupported CBOR type");
   }
 }
 
@@ -113,9 +122,15 @@ function readAttestedKey(
   const start = 55 + idLength;
   const reader = new CborReader(data, start);
   reader.read();
-  if (!(flags & extensions) && reader.offset !== data.length)
-    throw new Error("unexpected attested data");
-  return data.subarray(start, reader.offset);
+  const end = reader.offset;
+  if (flags & extensions) {
+    const outputs = reader.read();
+    if (!(outputs instanceof Map) || [...outputs.keys()].some((key) => typeof key !== "string")) {
+      throw new Error("invalid authenticator extensions");
+    }
+  }
+  if (reader.offset !== data.length) throw new Error("unexpected attested data");
+  return data.subarray(start, end);
 }
 
 function byteString(s: string): Uint8Array<ArrayBuffer> {
@@ -203,9 +218,18 @@ export async function importCoseKey(
     second.length > 0
   ) {
     const jwk = { kty: "RSA", n: b64url(first), e: b64url(second) };
-    return subtle.importKey("jwk", jwk, RSA, false, ["verify"]);
+    const imported = await subtle.importKey("jwk", jwk, RSA, false, ["verify"]);
+    checkRsaModulus(imported);
+    return imported;
   }
   throw new Error("unsupported credential public key");
+}
+
+function checkRsaModulus(key: CryptoKey): void {
+  const { modulusLength } = key.algorithm as RsaHashedKeyAlgorithm;
+  if (!Number.isInteger(modulusLength) || modulusLength < 2048) {
+    throw new Error("RSA credential modulus must be at least 2048 bits");
+  }
 }
 
 export async function registrationKey(
@@ -220,6 +244,7 @@ export async function registrationKey(
     const algorithm = alg === ES256 ? EC : alg === RS256 ? RSA : undefined;
     if (!algorithm) throw new Error("unsupported credential algorithm");
     const key = await subtle.importKey("spki", spki, algorithm, true, ["verify"]);
+    if (alg === RS256) checkRsaModulus(key);
     const cose = encodeCoseKey(alg, await subtle.exportKey("jwk", key));
     return { key, cose };
   }

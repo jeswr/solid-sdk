@@ -3,9 +3,10 @@
 /**
  * Real user verification before an approval is signed: a passkey on this device's platform
  * authenticator (Face ID, Touch ID, Windows Hello, the phone's screen lock), asked with
- * userVerification "required". The first approval registers the passkey; later ones assert
- * with it. Each challenge is bound to the approval payload. The response must match the
- * challenge, origin and relying party, and the authenticator must report user verification.
+ * userVerification "required". Every approval requires an assertion, with registration first
+ * if there is no saved passkey. Each challenge is bound to the approval payload. The response
+ * must match the challenge, origin and relying party, and the authenticator must report user
+ * verification.
  * Assertions must also carry a valid signature from the registered credential.
  *
  * This is a gate in the browser, not a server check: the approval itself is still the record
@@ -239,7 +240,8 @@ export async function verifyUser(
         return "could not check passkey permission";
       }
     };
-    const denied = permissionFailure(stored === null ? "create" : "get");
+    const denied =
+      (stored === null ? permissionFailure("create") : null) ?? permissionFailure("get");
     if (denied) return failed(denied);
     const credentials = env.credentials;
     if (!credentials || !env.rpId || !env.origin) return failed("WebAuthn is not supported here");
@@ -296,21 +298,17 @@ export async function verifyUser(
     const registered = await registrationKey(env.subtle, res, id, authData).catch(() => null);
     signal?.throwIfAborted();
     if (!registered) return failed("registration returned no usable passkey public key");
-    if (!hasAuthData) {
-      // Older browsers need an assertion with the new key to confirm user verification.
-      const denied = permissionFailure("get");
-      if (denied) return failed(denied);
-      const fallbackChallenge = await challengeFor(env, digest);
-      const result = await assertPasskey(
-        env,
-        credentials,
-        id,
-        registered.key,
-        fallbackChallenge,
-        signal,
-      );
-      if (result.status !== "verified") return result;
-    }
+    // Registration requests no attestation signature. Verify a fresh assertion with the new key.
+    const assertionChallenge = await challengeFor(env, digest);
+    const result = await assertPasskey(
+      env,
+      credentials,
+      id,
+      registered.key,
+      assertionChallenge,
+      signal,
+    );
+    if (result.status !== "verified") return result;
     signal?.throwIfAborted();
     try {
       env.storage.setItem(

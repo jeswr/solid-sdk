@@ -18,6 +18,7 @@ import {
   verifyUser as runVerification,
   STORE_KEY,
 } from "../src/ui/passkey.js";
+import { importCoseKey, verifyAssertionSignature } from "../src/ui/passkey-keys.js";
 
 const RP = "errand.example";
 const DIGEST = "sha-256:abc123";
@@ -84,6 +85,8 @@ const RAW = new Uint8Array([1, 2, 3, 4]);
 const ec = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const otherEc = generateKeyPairSync("ec", { namedCurve: "P-256" });
+const otherRsa = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const shortRsa = generateKeyPairSync("rsa", { modulusLength: 1024 });
 
 function coseKey(publicKey: KeyObject): Buffer {
   const jwk = publicKey.export({ format: "jwk" });
@@ -96,19 +99,25 @@ function coseKey(publicKey: KeyObject): Buffer {
     ]);
   }
   if (!jwk.n || !jwk.e) throw new Error("expected a test RSA key");
+  const modulus = Buffer.from(jwk.n, "base64url");
+  const modulusHeader =
+    modulus.length < 256
+      ? [0x58, modulus.length]
+      : [0x59, modulus.length >> 8, modulus.length & 0xff];
   return Buffer.concat([
-    Buffer.from("a401030339010020590100", "hex"),
-    Buffer.from(jwk.n, "base64url"),
+    Buffer.from("a401030339010020", "hex"),
+    Buffer.from(modulusHeader),
+    modulus,
     Buffer.from("2143", "hex"),
     Buffer.from(jwk.e, "base64url"),
   ]);
 }
 
-function storedPasskey() {
+function storedPasskey(publicKey = ec.publicKey) {
   return memoryStorage({
     [STORE_KEY]: JSON.stringify({
       id: b64url(RAW),
-      publicKey: coseKey(ec.publicKey).toString("base64url"),
+      publicKey: coseKey(publicKey).toString("base64url"),
     }),
   });
 }
@@ -124,6 +133,7 @@ function registration(
     coseOnly?: boolean;
     noKey?: boolean;
     publicKey?: KeyObject;
+    extensionsHex?: string;
   } = {},
 ) {
   return async (o: CredentialCreationOptions) => {
@@ -133,8 +143,16 @@ function registration(
     const key = options.publicKey ?? ec.publicKey;
     const header = Buffer.from(await authData(options.flags ?? 0x45));
     const cose = options.noKey ? Buffer.alloc(0) : coseKey(key);
+    const extensions = Buffer.from(options.extensionsHex ?? "", "hex");
     const ad = Uint8Array.from(
-      Buffer.concat([header, Buffer.alloc(16), Buffer.from([0, RAW.length]), RAW, cose]),
+      Buffer.concat([
+        header,
+        Buffer.alloc(16),
+        Buffer.from([0, RAW.length]),
+        RAW,
+        cose,
+        extensions,
+      ]),
     ).buffer;
     const length =
       ad.byteLength < 256
@@ -221,23 +239,22 @@ describe("browser WebAuthn policy", () => {
   }) => {
     const self = {};
     const feature = "publickey-credentials-create";
-    const allowsFeature = vi.fn(() => allowed);
+    const get = "publickey-credentials-get";
+    const allowsFeature = vi.fn((candidate) => candidate === get || allowed);
     vi.stubGlobal("self", self);
     vi.stubGlobal("top", topLevel ? self : {});
     vi.stubGlobal("document", {
       featurePolicy: {
-        ...(enumerates
-          ? { features: () => ["publickey-credentials-get", ...(recognized ? [feature] : [])] }
-          : {}),
+        ...(enumerates ? { features: () => [get, ...(recognized ? [feature] : [])] } : {}),
         allowsFeature,
       },
     });
     try {
-      const e = env({ create: registration() }, { allows: browserEnv().allows });
+      const e = env({ create: registration(), get: assertion() }, { allows: browserEnv().allows });
       const result = await verifyUser(DIGEST, "Sam", e);
       expect(result.status).toBe(expected ? "verified" : "failed");
-      expect(e.calls).toEqual(expected ? ["create"] : []);
-      expect(allowsFeature.mock.calls).toEqual([[feature]]);
+      expect(e.calls).toEqual(expected ? ["create", "get"] : []);
+      expect(allowsFeature.mock.calls).toEqual(expected ? [[feature], [get]] : [[feature]]);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -245,22 +262,37 @@ describe("browser WebAuthn policy", () => {
 });
 
 describe("verifyUser", () => {
-  it("registers a platform passkey on first use, requiring user verification", async () => {
+  it.each([
+    "first use",
+    "after reset",
+  ])("requires a fresh approval-bound assertion with the new passkey (%s)", async (scenario) => {
     let seen: PublicKeyCredentialCreationOptions | undefined;
+    const storage = scenario === "after reset" ? storedPasskey(otherEc.publicKey) : memoryStorage();
     const getPublicKey = vi.fn(
       () => Uint8Array.from(ec.publicKey.export({ type: "spki", format: "der" })).buffer,
     );
     const getPublicKeyAlgorithm = vi.fn(() => -7);
-    const sync = env({
-      create: async (o) => {
-        seen = o.publicKey;
-        const cred = await registration({ coseOnly: true })(o);
-        return { ...cred, response: { ...cred.response, getPublicKey, getPublicKeyAlgorithm } };
-      },
+    const get = vi.fn(async (o: CredentialRequestOptions) => {
+      expect(storage.getItem(STORE_KEY)).toBeNull();
+      return assertion()(o);
     });
+    let randomCall = 0;
+    const sync = env(
+      {
+        create: async (o) => {
+          seen = o.publicKey;
+          const cred = await registration({ coseOnly: true })(o);
+          return { ...cred, response: { ...cred.response, getPublicKey, getPublicKeyAlgorithm } };
+        },
+        get,
+      },
+      { storage, random: (b) => b.fill(++randomCall) },
+    );
+    if (scenario === "after reset") forgetPasskey(sync);
     const r = await verifyUser(DIGEST, "Sam", sync);
     expect(r).toEqual({ status: "verified", method: "passkey", registered: true });
-    expect(sync.storage?.getItem(STORE_KEY)).toBe(storedPasskey().getItem(STORE_KEY));
+    expect(sync.calls).toEqual(["create", "get"]);
+    expect(storage.getItem(STORE_KEY)).toBe(storedPasskey().getItem(STORE_KEY));
     expect(getPublicKey).toHaveBeenCalledOnce();
     expect(getPublicKeyAlgorithm).toHaveBeenCalledOnce();
     expect(seen?.authenticatorSelection).toMatchObject({
@@ -268,6 +300,44 @@ describe("verifyUser", () => {
       userVerification: "required",
     });
     expect(seen?.rp.id).toBe(RP);
+    const request = get.mock.calls[0]?.[0].publicKey;
+    expect(request?.allowCredentials).toEqual([
+      { type: "public-key", id: RAW, transports: ["internal"] },
+    ]);
+    const registrationChallenge = seen?.challenge as Uint8Array;
+    const assertionChallenge = request?.challenge as Uint8Array;
+    const prefix = new Uint8Array(
+      await subtle.digest("SHA-256", new TextEncoder().encode(`errand-approval:${DIGEST}`)),
+    );
+    expect(registrationChallenge.subarray(0, 32)).toEqual(prefix);
+    expect(assertionChallenge.subarray(0, 32)).toEqual(prefix);
+    expect(assertionChallenge.subarray(32)).not.toEqual(registrationChallenge.subarray(32));
+  });
+
+  it.each([
+    [
+      "missing signature",
+      assertion(0x05, { signature: "missing" }),
+      { status: "failed", reason: "no passkey signature" },
+    ],
+    [
+      "invalid signature",
+      assertion(0x05, { signature: "invalid" }),
+      { status: "failed", reason: "invalid passkey signature" },
+    ],
+    ["no credential", async () => null, { status: "cancelled" }],
+    [
+      "cancelled prompt",
+      async () => {
+        throw new DOMException("cancelled", "NotAllowedError");
+      },
+      { status: "cancelled" },
+    ],
+  ] as const)("does not save or approve on first use with %s", async (_scenario, get, result) => {
+    const e = env({ create: registration(), get });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual(result);
+    expect(e.calls).toEqual(["create", "get"]);
+    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
   });
 
   it("binds the challenge to the action digest", async () => {
@@ -324,6 +394,18 @@ describe("verifyUser", () => {
     expect(e.calls).toEqual(["get"]);
   });
 
+  it("rejects an RS256 assertion signed by a different RSA key", async () => {
+    const e = env(
+      { get: assertion(0x05, { privateKey: otherRsa.privateKey }) },
+      { storage: storedPasskey(rsa.publicKey) },
+    );
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "invalid passkey signature",
+    });
+    expect(e.calls).toEqual(["get"]);
+  });
+
   it.each([
     { keys: ec, coseOnly: true },
     { keys: rsa, coseOnly: false },
@@ -348,7 +430,58 @@ describe("verifyUser", () => {
       status: "verified",
       registered: false,
     });
+    expect(e.calls).toEqual(["create", "get", "get"]);
+  });
+
+  it.each([false, true])("rejects a 1024-bit RSA key (COSE fallback: %s)", async (coseOnly) => {
+    const e = env({
+      create: registration({ publicKey: shortRsa.publicKey, coseOnly }),
+      get: assertion(0x05, { privateKey: shortRsa.privateKey }),
+    });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "registration returned no usable passkey public key",
+    });
+    expect(e.calls).toEqual(["create"]);
+    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
+  });
+
+  it.each([
+    ["no bytes with ED set", 0xc5, ""],
+    ["non-map item", 0xc5, "80"],
+    ["truncated map value", 0xc5, "a16178"],
+    ["duplicate map key", 0xc5, "a2617801617802"],
+    ["invalid extension identifier", 0xc5, "a10001"],
+    ["trailing bytes after map", 0xc5, "a0a0"],
+    ["map without ED set", 0x45, "a0"],
+  ] as const)("rejects attested COSE data with %s", async (_scenario, flags, extensionsHex) => {
+    const e = env({
+      create: registration({ coseOnly: true, flags, extensionsHex }),
+      get: assertion(),
+    });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "registration returned no usable passkey public key",
+    });
+    expect(e.calls).toEqual(["create"]);
+    expect(e.storage?.getItem(STORE_KEY)).toBeNull();
+  });
+
+  it.each([
+    "a0",
+    "a16178f5",
+  ])("consumes a valid extension map (%s) without storing it with the key", async (extensionsHex) => {
+    const e = env({
+      create: registration({ coseOnly: true, flags: 0xc5, extensionsHex }),
+      get: assertion(),
+    });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "verified",
+      method: "passkey",
+      registered: true,
+    });
     expect(e.calls).toEqual(["create", "get"]);
+    expect(e.storage?.getItem(STORE_KEY)).toBe(storedPasskey().getItem(STORE_KEY));
   });
 
   it("requires a reset for an older stored ID without a public key", async () => {
@@ -429,12 +562,19 @@ describe("verifyUser", () => {
     expect(e.calls).toEqual(["create"]);
   });
 
-  it("probes only create for registration and only get for a stored passkey", async () => {
+  it("requires both permissions before registration and only get for a stored passkey", async () => {
     const storage = memoryStorage();
     const allows = vi.fn((ceremony) => ceremony === "create");
     const e = env({ create: registration(), get: assertion() }, { allows, storage });
+    expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
+      status: "failed",
+      reason: "this page is embedded without passkey permission",
+    });
+    expect(allows.mock.calls).toEqual([["create"], ["get"]]);
+    expect(e.calls).toEqual([]);
+    allows.mockClear().mockReturnValue(true);
     expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("verified");
-    expect(allows.mock.calls).toEqual([["create"]]);
+    expect(allows.mock.calls).toEqual([["create"], ["get"]]);
     allows.mockClear().mockImplementation((ceremony) => ceremony === "get");
     expect((await verifyUser(DIGEST, "Sam", e)).status).toBe("verified");
     expect(allows.mock.calls).toEqual([["get"]]);
@@ -457,7 +597,7 @@ describe("verifyUser", () => {
     "verified",
     "failed",
     "cancelled",
-  ] as const)("uses the returned ID for one fallback assertion and only saves on success (%s)", async (status) => {
+  ] as const)("uses the returned ID for one assertion after legacy registration (%s)", async (status) => {
     const storage = memoryStorage();
     const allows = vi.fn(() => true);
     const e = env(
@@ -490,7 +630,7 @@ describe("verifyUser", () => {
       throw new Error("blocked");
     };
     const e = env(
-      { create: registration() },
+      { create: registration(), get: assertion() },
       { storage: { ...storage, setItem: blocked, removeItem: blocked } },
     );
     expect(await verifyUser(DIGEST, "Sam", e)).toEqual({
@@ -501,6 +641,61 @@ describe("verifyUser", () => {
     const unreadable = env({}, { storage: { ...storage, getItem: blocked } });
     expect((await verifyUser(DIGEST, "Sam", unreadable)).status).toBe("failed");
     expect(unreadable.calls).toEqual([]);
+  });
+});
+
+describe("passkey signature and key formats", () => {
+  it.each([
+    {
+      scenario: "required padding",
+      hex:
+        "3045022100efb9fb6fc08f59b44417c8da76cc766815d2319c3f917f15329e60d4cf3ee68f" +
+        "022066fc375ba138f8f2e4c8b455013f16b02ed3e16376b92955acd739b668bc141c",
+      valid: true,
+    },
+    {
+      scenario: "excess padding",
+      hex:
+        "3046022100efb9fb6fc08f59b44417c8da76cc766815d2319c3f917f15329e60d4cf3ee68f" +
+        "02210066fc375ba138f8f2e4c8b455013f16b02ed3e16376b92955acd739b668bc141c",
+      valid: false,
+    },
+    {
+      scenario: "missing required padding",
+      hex:
+        "30440220efb9fb6fc08f59b44417c8da76cc766815d2319c3f917f15329e60d4cf3ee68f" +
+        "022066fc375ba138f8f2e4c8b455013f16b02ed3e16376b92955acd739b668bc141c",
+      valid: false,
+    },
+  ])("checks fixed ES256 signatures with $scenario", async ({ hex, valid }) => {
+    const key = await subtle.importKey(
+      "jwk",
+      {
+        kty: "EC",
+        crv: "P-256",
+        x: "one9aTEMVxpZ8e-Tzj2iXbwscpo9wTgsEAUeJ8H8mfY",
+        y: "PMwttPJyl-LV3tfMH9NWnFg6sS1JJ9QKTTpfhe3lBm4",
+      },
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
+    const response = {
+      clientDataJSON: clientData("webauthn.get", new Uint8Array(48)),
+      authenticatorData: await authData(0x05),
+      signature: Uint8Array.from(Buffer.from(hex, "hex")).buffer,
+    } as AuthenticatorAssertionResponse;
+    expect(await verifyAssertionSignature(subtle, key, response)).toBe(valid);
+  });
+
+  it.each([
+    ["ES256 declared as RSA", ec.publicKey, 3],
+    ["RS256 declared as EC2", rsa.publicKey, 2],
+  ] as const)("rejects a mismatched COSE algorithm and key type (%s)", async (_scenario, key, kty) => {
+    const cose = Uint8Array.from(coseKey(key));
+    // The first entry is kty (label 1). Keep the algorithm and parameters intact.
+    cose[2] = kty;
+    await expect(importCoseKey(subtle, cose)).rejects.toThrow("unsupported credential public key");
   });
 });
 
@@ -580,6 +775,11 @@ function expectUnsigned(engine: Engine) {
 describe("approval signing boundary", () => {
   it.each([
     ["cancelled", env({ create: async () => null })],
+    ["cancelled assertion", env({ create: registration(), get: async () => null })],
+    [
+      "invalid assertion",
+      env({ create: registration(), get: assertion(0x05, { signature: "wrong-key" }) }),
+    ],
     ["invalid response", env({ create: registration({ flags: 0x41 }) })],
     ["denied frame policy", env({ create: registration() }, { allows: () => false })],
   ] as const)("does not sign or act after %s", async (scenario, passkeyEnv) => {
@@ -599,7 +799,7 @@ describe("approval signing boundary", () => {
         reason: "verification-required",
       });
       const check = await engine.verifyApproval(response);
-      expect(check.status).toBe(scenario === "cancelled" ? "cancelled" : "failed");
+      expect(check.status).toBe(scenario.startsWith("cancelled") ? "cancelled" : "failed");
       expect(await engine.respond(response, check)).toEqual({
         ok: false,
         reason: "verification-required",
@@ -677,9 +877,10 @@ describe("approval signing boundary", () => {
   it("refuses verification that resolves after expiry", async () => {
     let now = NOW;
     const e = env({
-      create: async (o) => {
+      create: registration(),
+      get: async (o) => {
         now = new Date(NOW.getTime() + 10 * 60_000);
-        return registration()(o);
+        return assertion()(o);
       },
     });
     const engine = new Engine({ pace: 0, now: () => now, passkeyEnv: () => e });
