@@ -176,3 +176,36 @@ has 582 events and the readable-copy fault branch has 211. The manifest remains 
   The RDF check reported zero failures and 212 tracked exceptions.
 - All 50 personal-agent email, outbound, and transmission tests passed, along with
   typecheck and lint. Both Vitest runs used `--maxWorkers=2`.
+
+## Review fixes (38g)
+
+- The runtime persists configured `Agent-Description` addresses separately from known
+  identifiers and excludes the current and former addresses at load, registration, and lookup.
+  Older snapshots lack provenance for global HTTPS identifiers, so the migration drops those
+  entries and rebuilds the registry from current configuration and retained state. A global
+  HTTPS identifier that existed only in the old registry needs to be established again. The
+  payment regression covers URL removal from a legacy snapshot and replacement after tracking
+  begins. In both cases the old address fails P4 and an admitted invoice still reaches the adapter.
+- A credential-by-digest reference returns `record-unavailable` with the detail
+  `A retained legacy credential has no matching recorded admission.` when the signed inbound
+  packet remains in a legacy snapshot and the ledger no longer provides its message or
+  admission decision. Only a recorded admission can restore unmarked credential bytes. If
+  either ledger record has been pruned, a newly admitted message must carry the full credential
+  before it can be reused by digest. The regression exercises the absence of each ledger entry.
+- A definitive Gmail rejection ends the attempt. For an unexpired message, dry-run and live
+  send both accept a fresh review with the current header. Live send writes the new MIME digest
+  before calling the provider. A lookup that overlaps the rejection cannot reopen the attempt.
+- A conflicting signed message with an already admitted ID reports `replay-conflict` before
+  the runtime checks its profile. The regression compares the persisted state before and after
+  the refusal.
+
+The four findings reproduced on `2d8fccc1b`. Both mortgage email traces match the committed
+traces after excluding generation metadata, with 582 events for the main run and 211 for the
+readable-copy fault branch. The manifests remain at **283 paths, 278 runs, 0 disagreements,
+and 5 blocked**.
+
+- The agent-reference library-only rebuild, both package typechecks, and both lint checks
+  passed. Agent-reference lint reported existing warnings. The RDF pipeline reported zero
+  failures and 212 tracked exceptions.
+- The 94 focused agent-reference tests and three oracle tests passed with `--maxWorkers=2`.
+- All 52 personal-agent email, outbound, and transmission tests passed with `--maxWorkers=2`.

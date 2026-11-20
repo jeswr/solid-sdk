@@ -115,8 +115,8 @@ async function world(opts: { dir?: boolean } = {}) {
   const dir = opts.dir ? mkdtempSync(join(tmpdir(), "awp-tx-")) : undefined;
   if (dir) dirs.push(dir);
   const { alice: pa, bob: pb } = await provisionPair({ now: clock.now, ...(dir ? { dir } : {}) });
-  const open = async (store?: StateStore) =>
-    startAgent(pa, londonCalendar(), {
+  const open = async (store?: StateStore, provisioned = pa) =>
+    startAgent(provisioned, londonCalendar(), {
       now: clock.now,
       accepted: [CONFIG_ED25519],
       ...(dir ? { dir } : {}),
@@ -172,12 +172,12 @@ async function item(alice: PersonalAgent, out: OutboundMessage, now: Date) {
   return i as ProcessedOutbound;
 }
 
-function adapter(alice: PersonalAgent, transport: GmailTransport) {
+function adapter(alice: PersonalAgent, transport: GmailTransport, dryRun = false) {
   return new GmailProviderAdapter(transport, {
     allowedRecipients: [BOB.email as string],
     sourceAccount: ALICE.email as string,
     verifier: alice.runtime.outboundVerifier(),
-    dryRun: false,
+    dryRun,
   });
 }
 
@@ -271,6 +271,56 @@ describe("review item 1 — authorisation and expiry are re-decided at transmiss
 });
 
 describe("review item 2 — durable provider-send records", () => {
+  it("starts a new attempt with newly reviewed MIME after a definitive Gmail refusal", async () => {
+    const { alice, bob, clock, open, pa } = await world({ dir: true });
+    const { propose } = await alicePropose(alice, bob, clock.now());
+    const original = await item(alice, propose, clock.now());
+    const mb = mailbox();
+    mb.set("reject");
+    expect(await adapter(alice, mb.transport).sendReviewed(original)).toEqual({
+      status: "not-sent",
+      reason: "HTTP 400",
+    });
+    expect(mb.sends()).toBe(1);
+    alice.runtime.close();
+
+    const descriptionUrl = "https://fictional.example/alice/new-description";
+    const restarted = await open(undefined, {
+      ...pa,
+      identity: { ...pa.identity, descriptionUrl },
+    });
+    const revised = await item(restarted, propose, clock.now());
+    const raw = revised.email?.raw;
+    if (!raw) throw new Error("No revised email");
+    expect(raw).toContain(`Agent-Description: ${descriptionUrl}\r\n`);
+    const gmail = adapter(restarted, mb.transport);
+    const dryRun = adapter(restarted, mb.transport, true);
+    for (const binding of [dryRun, gmail]) {
+      expect(await binding.sendReviewed(original)).toMatchObject({
+        status: "refused",
+        reason: expect.stringContaining("Agent-Description differs"),
+      });
+    }
+    expect(await dryRun.sendReviewed(revised)).toMatchObject({ status: "dry-run" });
+    expect(restarted.runtime.transmissions()).toMatchObject([{ status: "not-sent", attempts: 1 }]);
+    expect(mb.sends()).toBe(1);
+
+    mb.set("ok");
+    mb.onAccept(() => {
+      expect(restarted.runtime.transmissions()).toMatchObject([
+        { status: "attempting", attempts: 2, mimeDigest: emailDigest(raw) },
+      ]);
+    });
+    expect(await gmail.sendReviewed(revised)).toEqual({
+      status: "sent",
+      providerId: "g1",
+      reconciled: false,
+    });
+    expect(mb.accepted).toMatchObject([{ raw }]);
+    expect(mb.sends()).toBe(2);
+    restarted.runtime.close();
+  });
+
   it("a repeated send of a sent message transmits nothing", async () => {
     const { alice, bob, clock } = await world();
     const { propose } = await alicePropose(alice, bob, clock.now());
@@ -671,6 +721,34 @@ describe("phase-3 review — the generic transmission contract", () => {
     throw new Error("connection reset");
   };
   const absent = async () => ({ outcome: "absent" });
+
+  it("keeps a definitive rejection when an overlapping provider lookup comes back unknown", async () => {
+    const g = await gate();
+    const sending = deferred<void>();
+    const response = deferred<unknown>();
+    const first = g.transmit({
+      send: () => {
+        sending.resolve(undefined);
+        return response.promise;
+      },
+    });
+    await sending.promise;
+    const lookingUp = deferred<void>();
+    const search = deferred<unknown>();
+    const second = g.transmit({
+      lookup: () => {
+        lookingUp.resolve(undefined);
+        return search.promise;
+      },
+    });
+    await lookingUp.promise;
+    response.resolve({ outcome: "rejected", detail: "HTTP 400" });
+    expect(await first).toMatchObject({ status: "not-sent" });
+    search.resolve({ outcome: "unknown", detail: "search unavailable" });
+    expect(await second).toMatchObject({ status: "not-sent" });
+    expect(g.alice.runtime.transmissions()).toMatchObject([{ status: "not-sent", attempts: 1 }]);
+    expect(g.sends()).toBe(1);
+  });
 
   it("phase-7 review: a LATE refusal of an idempotent resend keeps the earlier uncertainty (and across a restart)", async () => {
     const g = await gate({ dir: true });

@@ -180,6 +180,7 @@ export class InboundGate {
   private activePaymentDocument: unknown;
   private readonly verifiedStatements = new WeakMap<Claim, VerifiedStatement>();
   private readonly credentialBytes = new Map<string, string>();
+  private readonly unavailableLegacyCredentials = new Set<string>();
   private observeVerified(claim: Claim, item: EvidenceItem): void {
     if (!this.deps.gate.sink?.observePayloads) return;
     this.verifiedStatements.set(claim, {
@@ -191,7 +192,7 @@ export class InboundGate {
   }
 
   /** Capture the carried bytes before dispatch, and publish them only after admission. */
-  stageCredentials(message: AnyMessage): () => void {
+  stageCredentials(message: AnyMessage): (admission?: "admission-unavailable") => void {
     if (message instanceof MessageNode)
       bindCredentialResolver(message.dataset, (digest) => this.credentialBytes.get(digest));
     const credentials: [string, string][] = [];
@@ -204,8 +205,13 @@ export class InboundGate {
         /* Missing prior digests fail at integrity, never fetch. */
       }
     }
-    return () => {
+    return (admission) => {
       for (const [digest, value] of credentials) {
+        if (admission === "admission-unavailable") {
+          if (!this.credentialBytes.has(digest)) this.unavailableLegacyCredentials.add(digest);
+          continue;
+        }
+        this.unavailableLegacyCredentials.delete(digest);
         if (!this.credentialBytes.has(digest) && this.credentialBytes.size >= 4096)
           this.credentialBytes.delete(this.credentialBytes.keys().next().value!);
         this.credentialBytes.set(digest, value);
@@ -563,6 +569,12 @@ export class InboundGate {
         try {
           void item.value;
         } catch {
+          const digest = item.credentialDigest;
+          if (digest && this.unavailableLegacyCredentials.has(digest))
+            return fail(
+              "record-unavailable",
+              "A retained legacy credential has no matching recorded admission.",
+            );
           return fail("evidence-invalid", "prior-credential-missing-or-digest-mismatch");
         }
         if (item.credential && !item.credential.projectionMatches(item.format))

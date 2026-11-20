@@ -182,9 +182,13 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
     ...extra,
   };
   // Each restart loads the same independently provisioned anchors.
-  const make = async () => {
+  const make = async ({ address }: { address?: string } = { address: descriptionUrl }) => {
     const rtOptions = {
-      identity: { actor: p.identity.actor, party: p.identity.party, descriptionUrl },
+      identity: {
+        actor: p.identity.actor,
+        party: p.identity.party,
+        ...(address ? { descriptionUrl: address } : {}),
+      },
       actorKeys: [p.actorKey],
       trust: await TrustStore.load(cast.trust.get("payer")),
       mandateJws: p.mandateJws,
@@ -346,6 +350,35 @@ it("does not treat the configured email description as a known payment reference
   );
   expect(f.effects()).toBe(0);
   await f.pay(f.rt, "admitted-reference");
+  expect(f.effects()).toBe(1);
+});
+it.each([
+  { mode: "legacy", address: undefined },
+  { mode: "tracked", address: "https://fictional.example/payer/new-description" },
+])("excludes a former description URL from a $mode payment registry after restart", async ({
+  mode,
+  address,
+}) => {
+  const f = await fixture();
+  f.rt.close();
+  const state = f.store.load();
+  const scope = mode === "legacy" ? "*" : task;
+  state.knownIdentifiers[scope] = [...(state.knownIdentifiers[scope] ?? []), descriptionUrl];
+  if (mode === "legacy") delete state.descriptionAddresses;
+  else expect(state.descriptionAddresses).toContain(descriptionUrl);
+  f.store.save(state);
+
+  const rt = await f.make({ ...(address ? { address } : {}) });
+  expect(rt.outboundVerifier().emailDescriptionAddress?.()).toBe(address);
+  await f.pay(rt, "former-metadata-reference", 500, undefined, descriptionUrl);
+  expect(f.recorder.events().filter((event) => event.check === "P4")).toContainEqual(
+    expect.objectContaining({ check: "P4", verdict: "fail", reason: "structured-form-required" }),
+  );
+  expect(f.effects()).toBe(0);
+  expect(Object.values(f.store.load().knownIdentifiers).flat()).not.toContain(descriptionUrl);
+  if (mode === "tracked")
+    expect(f.store.load().descriptionAddresses).toEqual([descriptionUrl, address]);
+  await f.pay(rt, "admitted-reference-after-restart");
   expect(f.effects()).toBe(1);
 });
 it("persists monthly totals before release, refuses the fifth payment across restart, and starts a new calendar month", async () => {

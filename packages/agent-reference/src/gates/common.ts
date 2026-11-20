@@ -189,12 +189,12 @@ export class GateMemory {
     readonly relianceHolds: Record<string, RelianceHold> = {},
     readonly relianceBindings: Record<string, string> = {},
     readonly precedenceHolds: Record<string, AdmittedFact> = {},
-    private readonly descriptionAddress?: string,
+    readonly descriptionAddresses: ReadonlySet<string> = new Set(),
   ) {}
   rememberIdentifiers(scope: string, value: unknown): void {
     this.identifiers[scope] = [
       ...new Set([...(this.identifiers[scope] ?? []), ...identifiersIn(value)]),
-    ].filter((id) => id !== this.descriptionAddress);
+    ].filter((id) => !this.descriptionAddresses.has(id));
   }
   knownIdentifiers(task: string, conversation: string, profile: unknown): Set<string> {
     const known = new Set([
@@ -204,7 +204,7 @@ export class GateMemory {
       ...identifiersIn(profile),
       ...this.context(task).flatMap((item) => identifiersIn(item)),
     ]);
-    if (this.descriptionAddress !== undefined) known.delete(this.descriptionAddress);
+    for (const address of this.descriptionAddresses) known.delete(address);
     return known;
   }
   context(task: string): readonly ContextItem[] {

@@ -370,7 +370,7 @@ const DEFAULT_EFFECT_TIMEOUT_MS = 30_000;
 /** Outcome of a serial transmission phase: done, look up first, or send (outside the lock). */
 type TransmitStep =
   | { readonly result: TransmitResult }
-  | { readonly lookup: true }
+  | { readonly lookup: number }
   | { readonly send: number; readonly resend: boolean };
 
 /** Thrown by `exclusive` when a handler/adapter calls back into its own runtime. */
@@ -449,6 +449,7 @@ export class AgentRuntime {
   private readonly inside = new AsyncLocalStorage<true>();
   /** Provider sends from this process that timed out but have not settled (not cancelled). */
   private readonly inFlight = new Set<Iri>();
+  private readonly descriptionRegistryChanged: boolean;
   private closed = false;
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
@@ -663,6 +664,25 @@ export class AgentRuntime {
       throw new Error(
         "personMayRelyOn cannot support payment or unrestricted personal-data disclosure",
       );
+    const priorAddresses = this.state.descriptionAddresses;
+    const descriptionAddresses = new Set(priorAddresses);
+    if (this.identity.descriptionUrl !== undefined)
+      descriptionAddresses.add(this.identity.descriptionUrl);
+    this.state.descriptionAddresses = [...descriptionAddresses];
+    let removed = false;
+    for (const [scope, identifiers] of Object.entries(this.state.knownIdentifiers)) {
+      // Older snapshots have no provenance for the global HTTPS entries. Rebuild those
+      // from the configured anchors and retained context below.
+      const legacyGlobal = priorAddresses === undefined && scope === "*";
+      const retained = identifiers.filter(
+        (id) => !descriptionAddresses.has(id) && !(legacyGlobal && isAgentDescriptionAddress(id)),
+      );
+      if (retained.length === identifiers.length) continue;
+      this.state.knownIdentifiers[scope] = retained;
+      removed = true;
+    }
+    this.descriptionRegistryChanged =
+      removed || descriptionAddresses.size > (priorAddresses?.length ?? 0);
     const memory = new GateMemory(
       this.state.contextItems,
       this.state.knownIdentifiers,
@@ -670,7 +690,7 @@ export class AgentRuntime {
       this.state.relianceHolds,
       this.state.relianceBindings,
       this.state.precedenceHolds,
-      this.identity.descriptionUrl,
+      descriptionAddresses,
     );
     this.gateMemory = memory;
     memory.rememberIdentifiers("*", {
@@ -1067,7 +1087,7 @@ export class AgentRuntime {
         /* Without its admitted RDF offer this record cannot authorize a payment. */
       }
     }
-    let legacyAdmissions: ReadonlyMap<string, string> | undefined;
+    let legacyDecisions: ReturnType<AgentRuntime["legacyCredentialDecisions"]> | undefined;
     for (const [id, record] of Object.entries(rt.state.recordMessages)) {
       const read = await verifyRecordedMessage(record.jws, rt.trust);
       if (!read) continue;
@@ -1076,15 +1096,19 @@ export class AgentRuntime {
       if (record.direction === "out" || record.credentialsAdmitted) {
         remember();
       } else if (record.credentialsAdmitted === undefined) {
-        legacyAdmissions ??= rt.legacyCredentialAdmissions();
-        if (legacyAdmissions.get(id) === record.digest) {
+        legacyDecisions ??= rt.legacyCredentialDecisions();
+        const decision = legacyDecisions.get(id);
+        if (decision?.digest !== record.digest) {
+          remember("admission-unavailable");
+        } else if (decision.admitted) {
           record.credentialsAdmitted = true;
           remember();
         }
       }
     }
     if (rt.ledgerAuditTrusted || !rt.ledger.recoverUncommittedSuffix) rt.notificationDuties();
-    if (rt.ledger.requiresTrustedCheckpoint && rt.ledgerAuditTrusted) rt.persist();
+    if (rt.ledger.requiresTrustedCheckpoint ? rt.ledgerAuditTrusted : rt.descriptionRegistryChanged)
+      rt.persist();
     return rt;
   }
 
@@ -1092,8 +1116,8 @@ export class AgentRuntime {
    * Older snapshots keep the admission verdict in the ledger. A seen entry can also
    * be marked accepted when dispatch issued a refusal notice, so use the gate verdict.
    */
-  private legacyCredentialAdmissions(): ReadonlyMap<string, string> {
-    const admitted = new Map<string, string>();
+  private legacyCredentialDecisions() {
+    const decisions = new Map<string, { digest: string; admitted: boolean }>();
     let message: { id: string; digest: string } | undefined;
     for (const { record } of this.auditEntries()) {
       if (
@@ -1109,16 +1133,16 @@ export class AgentRuntime {
         message
       ) {
         const seen = this.state.seen[message.id];
-        if (
-          record.outcome === "admit" &&
-          (!seen || (seen.disposition === "accepted" && seen.digest === message.digest))
-        )
-          admitted.set(message.id, message.digest);
-        else admitted.delete(message.id);
+        decisions.set(message.id, {
+          digest: message.digest,
+          admitted:
+            record.outcome === "admit" &&
+            (!seen || (seen.disposition === "accepted" && seen.digest === message.digest)),
+        });
         message = undefined;
       }
     }
-    return admitted;
+    return decisions;
   }
 
   /**
@@ -1722,6 +1746,12 @@ export class AgentRuntime {
   checkTransmission(req: TransmitRequest): Promise<{ ok: true } | TransmitResult> {
     return this.exclusive(async () => {
       const rec = this.state.transmissions[req.messageId];
+      if (rec && this.transmissionPayloadDiffers(rec, req))
+        return {
+          status: "refused",
+          reason: "wire-mismatch",
+          detail: "a different payload is already recorded for this message",
+        };
       if (rec?.status === "sent")
         return {
           status: "duplicate",
@@ -4698,12 +4728,6 @@ export class AgentRuntime {
         this.reject("human-parity-mismatch", problem);
       }
     }
-    if (msg.profile !== PILOT_PROFILE && !this.isUnsupportedClosingNotice(msg)) {
-      const detail = `${msg.profile} / ${msg.configuration} not accepted`;
-      admission.failIntegrity("unsupported-profile", detail);
-      this.reject("unsupported-profile", detail);
-    }
-
     const msgDigest = digestOf(msg);
     const documentConfig = configurationById(msg.configuration);
     const admittedDocumentDigest = isMessagePacket(wire)
@@ -4715,19 +4739,26 @@ export class AgentRuntime {
             : "jws",
         )
       : undefined;
-    this.current = { id: msg.id, ...(checked.signedBy ? { kid: checked.signedBy.kid } : {}) };
-
-    // Replay / idempotency.
-    this.pruneSeen(Date.parse(at));
+    // Check for a live replay entry before refusing the profile or mutating replay state.
+    const now = Date.parse(at);
     const seen = this.state.seen[msg.id];
-    if (seen) {
-      if (
-        seen.digest !== msgDigest ||
-        (seen.documentDigest && seen.documentDigest !== admittedDocumentDigest)
-      ) {
-        admission.failIntegrity("replay-conflict", "message id reused with different content");
-        this.reject("replay-conflict", "message id reused with different content");
-      }
+    const liveReplay = seen && Date.parse(seen.expiresAt) + this.limits.maxClockSkewMs >= now;
+    if (
+      liveReplay &&
+      (seen.digest !== msgDigest ||
+        (seen.documentDigest && seen.documentDigest !== admittedDocumentDigest))
+    ) {
+      admission.failIntegrity("replay-conflict", "message id reused with different content");
+      this.reject("replay-conflict", "message id reused with different content");
+    }
+    if (msg.profile !== PILOT_PROFILE && !this.isUnsupportedClosingNotice(msg)) {
+      const detail = `${msg.profile} / ${msg.configuration} not accepted`;
+      admission.failIntegrity("unsupported-profile", detail);
+      this.reject("unsupported-profile", detail);
+    }
+    this.current = { id: msg.id, ...(checked.signedBy ? { kid: checked.signedBy.kid } : {}) };
+    this.pruneSeen(now);
+    if (liveReplay) {
       const responses = seen.responses
         .map((id) => this.state.outbox[id])
         .filter((e): e is OutboxEntry => Boolean(e))
@@ -7377,9 +7408,10 @@ export class AgentRuntime {
       return s;
     });
     if ("lookup" in step) {
+      const attempt = step.lookup;
       const found = await this.lookupOutside(io);
       step = await this.exclusive(async () => {
-        const s = this.transmitAfterLookup(req, io, found);
+        const s = this.transmitAfterLookup(req, io, attempt, found);
         this.persist();
         return s;
       });
@@ -7397,12 +7429,13 @@ export class AgentRuntime {
   ): TransmissionRecord {
     const prior = this.state.transmissions[req.messageId];
     const at = this.now();
+    const mimeDigest = status === "attempting" ? req.mimeDigest : prior?.mimeDigest;
     const rec: TransmissionRecord = {
       messageId: req.messageId,
       binding: req.binding,
       externalId: req.externalId,
       wireDigest: req.wireDigest,
-      ...(prior?.mimeDigest === undefined ? {} : { mimeDigest: prior.mimeDigest }),
+      ...(mimeDigest === undefined ? {} : { mimeDigest }),
       attempts: prior?.attempts ?? 0,
       createdAt: prior?.createdAt ?? at,
       ...(prior?.providerRef ? { providerRef: prior.providerRef } : {}),
@@ -7490,16 +7523,21 @@ export class AgentRuntime {
     return { status: "refused", reason, detail };
   }
 
+  private transmissionPayloadDiffers(rec: TransmissionRecord, req: TransmitRequest): boolean {
+    return (
+      rec.binding !== req.binding ||
+      rec.externalId !== req.externalId ||
+      rec.wireDigest !== req.wireDigest ||
+      (rec.status !== "not-sent" &&
+        rec.mimeDigest !== undefined &&
+        rec.mimeDigest !== req.mimeDigest)
+    );
+  }
+
   /** Phase 1 (serial): what to do with this request now. */
   private transmitStart(req: TransmitRequest, io: TransmissionIo): TransmitStep {
     const rec = this.state.transmissions[req.messageId];
-    if (
-      rec &&
-      (rec.binding !== req.binding ||
-        rec.externalId !== req.externalId ||
-        rec.wireDigest !== req.wireDigest ||
-        (rec.mimeDigest !== undefined && rec.mimeDigest !== req.mimeDigest))
-    ) {
+    if (rec && this.transmissionPayloadDiffers(rec, req)) {
       return {
         result: this.refuseTransmission(
           req,
@@ -7541,7 +7579,7 @@ export class AgentRuntime {
         this.noteTransmission(req, "uncertain", { detail: `unresolved: ${detail}` });
         return { result: { status: "uncertain", detail } };
       }
-      return { lookup: true };
+      return { lookup: rec.attempts };
     }
     return this.transmitAttempt(req, io, false);
   }
@@ -7565,6 +7603,7 @@ export class AgentRuntime {
   private transmitAfterLookup(
     req: TransmitRequest,
     io: TransmissionIo,
+    attempt: number,
     lookup: ProviderLookupResult,
   ): TransmitStep {
     const rec = this.state.transmissions[req.messageId];
@@ -7573,6 +7612,18 @@ export class AgentRuntime {
         result: {
           status: "duplicate",
           ...(rec.providerRef ? { providerRef: rec.providerRef } : {}),
+        },
+      };
+    // A definitive rejection can close the attempt while this lookup is outstanding.
+    if (!rec || rec.attempts !== attempt)
+      return {
+        result: { status: "uncertain", detail: "the attempt changed during provider lookup" },
+      };
+    if (rec.status === "not-sent")
+      return {
+        result: {
+          status: "not-sent",
+          detail: rec.detail ?? "the attempt ended during provider lookup",
         },
       };
     let found = lookup;
@@ -7607,22 +7658,12 @@ export class AgentRuntime {
   private transmitAttempt(req: TransmitRequest, io: TransmissionIo, resend: boolean): TransmitStep {
     if (io.sendRefusal !== undefined)
       return { result: this.refuseTransmission(req, "wire-mismatch", io.sendRefusal) };
-    const refusal = this.transmissionRefusal(req);
+    const refusal = this.transmissionRefusal(req, io.maxAttempts);
     if (refusal) return { result: this.refuseTransmission(req, refusal[0], refusal[1]) };
     const attempts = this.state.transmissions[req.messageId]?.attempts ?? 0;
-    const max = io.maxAttempts ?? MAX_TRANSMISSION_ATTEMPTS;
-    if (attempts >= max)
-      return {
-        result: this.refuseTransmission(
-          req,
-          "attempt-limit",
-          `${attempts} provider attempts already made`,
-        ),
-      };
     // Write-ahead: the attempt is durable before the provider sees anything.
     this.noteTransmission(req, "attempting", {
       attempts: attempts + 1,
-      ...(req.mimeDigest === undefined ? {} : { mimeDigest: req.mimeDigest }),
       ...(resend
         ? { detail: "identical resend after an unresolved attempt (receiver deduplicates)" }
         : {}),
@@ -7691,7 +7732,10 @@ export class AgentRuntime {
   }
 
   /** Why a (re)transmission must not happen now, or undefined if it may. */
-  private transmissionRefusal(req: TransmitRequest): [TransmissionRefusal, string] | undefined {
+  private transmissionRefusal(
+    req: TransmitRequest,
+    maxAttempts = MAX_TRANSMISSION_ATTEMPTS,
+  ): [TransmissionRefusal, string] | undefined {
     const entry = this.state.outbox[req.messageId];
     if (!entry) return ["unknown-message", "not a message in this agent's outbox"];
     if (wireDigest(entry.wire) !== req.wireDigest)
@@ -7701,12 +7745,17 @@ export class AgentRuntime {
       return ["expired", `message expired at ${message.expiresAt}`];
     const condition = this.conditionFailure(entry);
     if (condition) return ["condition-failed", condition];
-    if (!entry.intent) return undefined; // declared metadata rule: authentic + unexpired
-    const decision = this.authorise(entry.intent, true, message.evidence);
-    if (decision.outcome === "permit") return undefined;
-    if (decision.outcome === "approval-required")
-      return ["approval-required", "the action needs a current owner approval"];
-    return ["not-authorised", `${decision.outcome}: ${decision.reason}`];
+    if (entry.intent) {
+      const decision = this.authorise(entry.intent, true, message.evidence);
+      if (decision.outcome === "approval-required")
+        return ["approval-required", "the action needs a current owner approval"];
+      if (decision.outcome !== "permit")
+        return ["not-authorised", `${decision.outcome}: ${decision.reason}`];
+    }
+    const attempts = this.state.transmissions[req.messageId]?.attempts ?? 0;
+    if (attempts >= maxAttempts)
+      return ["attempt-limit", `${attempts} provider attempts already made`];
+    return undefined;
   }
 
   /**
@@ -8520,7 +8569,8 @@ export class AgentRuntime {
       }
       vocabulary[`${path}.grant`] = { type: "term", values: [reference.grant] };
       vocabulary[`${path}.ref`] = { type: "identifier" };
-      if (reference.ref !== this.identity.descriptionUrl) known.identifiers.add(reference.ref);
+      if (!this.gateMemory.descriptionAddresses.has(reference.ref))
+        known.identifiers.add(reference.ref);
       reference.claimTypes.forEach((claimType, index) => {
         vocabulary[`${path}.claimTypes.${index}`] = {
           type: "code",

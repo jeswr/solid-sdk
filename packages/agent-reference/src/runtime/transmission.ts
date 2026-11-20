@@ -30,8 +30,8 @@
  *    (a timeout does not cancel it); its late settlement is recorded when it arrives;
  *  - otherwise the record stays `uncertain` until positive evidence or an operator decision.
  *
- * This bounds what THIS runtime sends: at most one provider request per message unless the
- * provider declares final absence, and then at most `MAX_TRANSMISSION_ATTEMPTS`. It is not an
+ * A definitive provider rejection ends that attempt. A subsequent, authorised attempt
+ * binds its own reviewed MIME. All attempts count toward the configured limit. It is not an
  * exactly-once delivery guarantee: a request whose outcome stays unknown may or may not have
  * been delivered, and delivery beyond the provider is outside this boundary. Peer-side replay
  * protection of the protocol is separate.
@@ -45,7 +45,7 @@ export function wireDigest(wire: WireMessage): string {
   return digestOf(wire as unknown as Parameters<typeof digestOf>[0]);
 }
 
-/** Maximum provider attempts per message (each after a declared-final "absent"). */
+/** Default maximum provider attempts per message. */
 export const MAX_TRANSMISSION_ATTEMPTS = 3;
 
 export type TransmissionStatus = "attempting" | "sent" | "not-sent" | "uncertain";

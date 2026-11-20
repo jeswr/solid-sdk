@@ -171,6 +171,14 @@ it("a profile-refused opener leaves the conversation available to a different pi
     expected.outbound.map((out) => out.message),
   );
   expect(afterRefusal).toEqual(before);
+
+  const admittedState = store.load();
+  const conflicting = MessageNode.toNode({ ...opener, profile: "urn:test:unsupported-profile" });
+  expect(await runtime.receive(await packet(conflicting, peer))).toMatchObject({
+    disposition: "rejected",
+    reason: "replay-conflict",
+  });
+  expect(store.load()).toEqual(admittedState);
 });
 
 it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
@@ -299,7 +307,10 @@ it("leaves credential references unresolved after a refused message and restores
   const receiver = await testKey("38d/graph-receiver");
   const store = new MemoryStateStore();
   const ledger = new MemoryLedger();
-  const open = (state = new MemoryStateStore()) =>
+  const open = (
+    state = new MemoryStateStore(),
+    evidenceLedger = state === store ? ledger : new MemoryLedger(),
+  ) =>
     AgentRuntime.create({
       identity: { actor: "urn:test:receiver" },
       actorKeys: [receiver],
@@ -307,7 +318,7 @@ it("leaves credential references unresolved after a refused message and restores
       handlers: [],
       trust,
       store: state,
-      ledger: state === store ? ledger : new MemoryLedger(),
+      ledger: evidenceLedger,
       now: () => new Date(at),
     });
   const describe = (
@@ -399,4 +410,27 @@ it("leaves credential references unresolved after a refused message and restores
   delete oldRecord.credentialsAdmitted;
   store.save(oldState);
   expect(await (await open(store)).receive(citingWire)).toMatchObject({ disposition: "accepted" });
+
+  const entries = ledger.entries();
+  const messageIndex = entries.findIndex(
+    ({ record }) => record.type === "message-in" && record.id === carrying.id,
+  );
+  const decisionIndex = entries.findIndex(
+    ({ record }, index) =>
+      index > messageIndex && record.type === "gate-decision" && record.gate === "inbound-gate",
+  );
+  expect(messageIndex).toBeGreaterThanOrEqual(0);
+  expect(decisionIndex).toBeGreaterThan(messageIndex);
+  for (const missing of [messageIndex, decisionIndex]) {
+    const retained = new MemoryLedger();
+    for (const [index, entry] of entries.entries()) {
+      if (index !== missing) retained.append(entry.record, entry.at);
+    }
+    store.save(oldState);
+    expect(await (await open(store, retained)).receive(citingWire)).toMatchObject({
+      disposition: "rejected",
+      reason: "record-unavailable",
+      detail: "A retained legacy credential has no matching recorded admission.",
+    });
+  }
 });

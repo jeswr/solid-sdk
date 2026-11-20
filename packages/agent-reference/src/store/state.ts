@@ -203,6 +203,8 @@ export interface RuntimeState {
   transmissions: Record<Iri, TransmissionRecord>;
   contextItems: Record<Iri, ContextItem[]>;
   knownIdentifiers: Record<Iri, string[]>;
+  /** Current and former local Agent-Description addresses, excluded from knownIdentifiers. */
+  descriptionAddresses?: string[];
   generatedConversations: Record<Iri, true>;
   /** Single-use approvals remain remembered after their permitted release. */
   usedApprovals: Record<Iri, true>;
