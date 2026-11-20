@@ -65,3 +65,46 @@ bundle was rebuilt.
   approval for a weaker configuration in a new conversation with the same party.
 - Build the adapter package that puts both gates around an existing assistant.
 - Decide whether the footer link may ever be configurable (`needs:jesse`).
+
+## Review fixes (38c)
+
+The engine has no offline resolver for a URL advertised in `Agent-Description`.
+Its discovery path verifies a signed `description` message in response to
+`describe`. The pilot uses the same admission path. Both treat the header as
+an unverified hint with no effect on configuration. If the signed description
+leads to a different selection from the discovery configuration, the runtime
+returns `unsupported-configuration`. BL-6, BL-8, the pilot profile, and the
+explorer describe this behavior. Normal pilot email advertises the local
+HTTPS actor's `/description` address. A mail route with no usable HTTPS
+address yields a blocked intent. The Gmail adapter checks the expected address
+when validating a send or reconciling a provider copy.
+
+The pilot runs signature verification before footer parity. Both bindings
+derive one footer variant from the signed message and require it for a
+represented principal in strict parity. Named wording requires the sender's
+own description with a conformance claim in that message. Extra blank lines
+fail strict pilot parity, and the engine reads only MIME parts between lines
+for the declared boundary, up to the closing delimiter. BL-11 and BL-12
+document the signature and parity outcomes. The link tests compare the bytes
+decoded from real MIME across 20 recipients, message IDs, and conversations.
+The strengthened engine test caught a temporary recipient-specific link
+mutation that passed the previous test. The mutation was removed.
+
+The filtered engine run regenerated only
+`mortgage-main--transport-email.json` and
+`mortgage-main--email-readable-copy-differs--transport-email.json`.
+Their ten and three footer records, respectively, now describe the parity
+check and the unverified header. Only those captions and the generation
+metadata changed. Event counts remain 582 and 211. The explorer includes
+the matching copies. The manifest still contains 283 paths, 278 runs,
+zero disagreements, and five blocked paths.
+
+- The agent-reference library-only rebuild passed. The 77 focused tests and
+  three oracle tests passed with `--maxWorkers=2`. Typecheck, lint, and
+  `check:rdf-pipeline` passed. Lint reported repository warnings, and the RDF
+  check reported zero failures and 212 tracked exceptions.
+- All 43 personal-agent email, outbound, and transmission tests passed with
+  `--maxWorkers=2`. Its typecheck and lint passed.
+- All 20 explorer Node tests passed. The engine trace import and
+  `node scripts/bundle-data.mjs` succeeded. The bundled baseline and all 13
+  revised captions matched the source.

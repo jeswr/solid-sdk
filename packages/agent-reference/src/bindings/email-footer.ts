@@ -1,8 +1,27 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+import type { AnyMessage } from "../core/types.js";
+import { conformanceClaimSchema } from "../profile/description.js";
+
 export type FooterVariant = "neutral" | "named";
 export const FOOTER_LINK = "https://answerableagents.org/#/start";
 
 type Names = { agent: string; principal: string };
+
+/** Named wording requires the sender's own conformance claim in this signed message. */
+export function footerVariant(message: AnyMessage): FooterVariant {
+  if (message.kind !== "description") return "neutral";
+  const description = message.body.description;
+  if (
+    description.type !== "ImplementationDescription" ||
+    !message.from.actor ||
+    description.describes !== message.from.actor ||
+    !Array.isArray(description.conformance)
+  )
+    return "neutral";
+  return description.conformance.some((claim) => conformanceClaimSchema.safeParse(claim).success)
+    ? "named"
+    : "neutral";
+}
 
 function displayName(name: string): string {
   return Array.from(name.replace(/[\p{Cc}\u2028\u2029]/gu, " "))

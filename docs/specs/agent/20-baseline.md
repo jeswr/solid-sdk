@@ -108,14 +108,15 @@ authority, and can answer in kind.
 
 ### The footer
 
-An agent that sends email under the entry configuration adds a short footer to the body.
+An agent that sends a signed email under the entry configuration on behalf of a principal
+adds a short footer to the body.
 
 > Sent by Sam's agent, an automated assistant acting for Sam. It is an Answerable agent:
 > this message is signed, says what the agent is allowed to do, and is recorded. You can
 > reply as normal. If you use an agent of your own, it can check all of this for you. Get
 > one that is Answerable too: *link*.
 
-When the sender makes no claim of conformance it uses the neutral form: *Sent by Sam's
+When the signed message carries no conformance claim it uses the neutral form: *Sent by Sam's
 agent, an automated assistant acting for Sam. I use an agent that supports signed messages:
 a signed copy of this message is attached. You can reply as normal. If you use an agent of
 your own, it can check the signed copy for you. What this means, and how to get such an
@@ -130,9 +131,11 @@ agent:* link.
 - **BL-5.** The footer MUST NOT claim that the message is safe, verified or trustworthy.
   Those are conclusions for the receiver's own checks.
 - **BL-6.** The message MUST also carry the address of the sender's agent description in the header field
-  `Agent-Description`, whose value is one `https` address. The field is an unauthenticated hint; the
-  description it points to is verified as a claim (CORE-L-10). A receiver's agent uses the header and the
-  attachment. It MUST NOT act on the footer text or follow the link in it, which are for people.
+  `Agent-Description`, whose value is one `https` address. The header is an unverified hint.
+  Any description used for negotiation MUST be verified as a claim (CORE-L-10). The reference
+  engine and pilot use the signed description exchange. They do not resolve the address, and
+  the header never selects or upgrades a configuration. A receiver MUST NOT act on the footer
+  text or follow its link.
 - **BL-7.** The link leads to a page that explains what the footer means and how to get an
   agent that supports the same thing. The page MUST offer more than one route and MUST NOT
   require an account with the sender's own provider.
@@ -143,20 +146,25 @@ run the reference agent.
 
 ### Moving up
 
-- **BL-8.** When both sides have agents, the receiver's agent fetches the sender's
-  description, verifies it (CORE-L-10), and replies under the strongest configuration both
-  accept (CORE-L-11). Two agents that began by email can be on the baseline by the second
-  message.
+- **BL-8.** When both sides have agents, selection uses the sender's verified description
+  (CORE-L-10) and chooses the strongest configuration both accept (CORE-L-11). The reference
+  engine and pilot discover capabilities through signed `describe` and `description` messages.
+  If selection differs from the configuration used for discovery, they refuse it with
+  `unsupported-configuration`.
 - **BL-9.** Once two parties have exchanged messages under a configuration, an agent MUST
   NOT accept a message under a weaker one in the same conversation, and MUST ask its
   principal before accepting one in a new conversation with the same party. Otherwise an
   attacker would simply ask for the weakest.
 - **BL-10.** Moving up changes suites, never the checks. A record made under the entry
   configuration and one made under the baseline are read the same way.
-- **BL-11.** The footer is not evidence. No check may depend on whether a footer is present or on what it
-  says. A footer on a message with no valid signed part is text and nothing more (`no-structured-content`).
+- **BL-11.** The footer supplies no evidence of identity, authority or capability. Readable-copy
+  parity checks the footer's exact wording and presence after signature verification. Mail with
+  no structured part yields `no-structured-content`. An invalid signature yields `bad-signature`
+  even if the footer was also altered.
 - **BL-12.** The footer is part of the readable copy (TR-3). A sender derives it from the signed message
-  alone, and a receiver's agent checks it with the rest of the readable copy.
+  alone, and a receiver's agent checks it with the rest of the readable copy. The named variant
+  requires a conformance claim in the sender's own description carried in that signed message.
+  Other signed messages use the neutral variant when they name a represented principal.
 - **BL-13.** The link in the footer MUST be the same for every recipient and every message. It MUST NOT carry
   a query, an identifier or a redirect, and the message MUST NOT contain remote images or other content
   fetched when it is opened.

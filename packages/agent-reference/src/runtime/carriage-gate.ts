@@ -5,7 +5,7 @@ import { readA2a } from "../bindings/a2a.js";
 import type { ByteMessage, HttpExchange } from "../bindings/bytes.js";
 import { CarriageError } from "../bindings/bytes.js";
 import { readEmail } from "../bindings/email.js";
-import { type FooterVariant, footerText, splitFooter } from "../bindings/email-footer.js";
+import { footerText, footerVariant } from "../bindings/email-footer.js";
 import {
   type ChannelToken,
   type FictionalAuthorizationServer,
@@ -62,7 +62,7 @@ export function readableCopy(
   message: AnyMessage,
   name: (id: string | undefined) => string,
 ): string {
-  return `Sent by ${name(message.from.actor)}, an automated agent, for ${name(message.from.onBehalfOf)}.\n${message.kind[0]?.toUpperCase()}${message.kind.slice(1)} message:\n${JSON.stringify(display(message.body, name), null, 2)}\n\nThe signed structured part is authoritative. An agent may request a structured reply using the advertised agent description.`;
+  return `Sent by ${name(message.from.actor)}, an automated agent, for ${name(message.from.onBehalfOf)}.\n${message.kind[0]?.toUpperCase()}${message.kind.slice(1)} message:\n${JSON.stringify(display(message.body, name), null, 2)}\n\nThe signed structured part is authoritative. Agents exchange signed descriptions to discover supported configurations.`;
 }
 
 function footerNames(message: AnyMessage, name: (id: string | undefined) => string) {
@@ -108,12 +108,16 @@ export async function signedReadable(
   wire: unknown,
   key: SigningKey,
   name: (id: string | undefined) => string,
-  footer?: FooterVariant,
 ): Promise<string> {
-  const message = await signedMessage(wire, key);
+  return emailReadable(await signedMessage(wire, key), name);
+}
+
+function emailReadable(message: AnyMessage, name: (id: string | undefined) => string): string {
   const readable = readableCopy(message, name);
-  const names = footer && footerNames(message, name);
-  return names && footer ? `${readable}\n\n${footerText({ ...names, variant: footer })}` : readable;
+  const names = footerNames(message, name);
+  return names
+    ? `${readable}\n\n${footerText({ ...names, variant: footerVariant(message) })}`
+    : readable;
 }
 
 /** Only the receive hand-off calls this; existing gates still decide all message semantics. */
@@ -194,20 +198,18 @@ export async function receiveCarriage(
           "no-structured-content",
           "Signed structured content is required for agent mail.",
         );
-      const names = footerNames(checked.message, name);
-      const { body, variant } = names
-        ? splitFooter(readable, names)
-        : { body: readable, variant: "none" };
-      if (body !== readableCopy(checked.message, name))
+      if (readable !== emailReadable(checked.message, name))
         throw new CarriageError(
           "human-parity-mismatch",
           "The readable email says something different from the signed message.",
         );
-      if (variant !== "none")
-        notices.push({
-          caption:
-            "The readable copy ends with the standard footer. It is for people; no check used it.",
-        });
+      // The description URL has no resolver here. Discovery uses an admitted signed message.
+      notices.push({
+        caption:
+          checked.message.from.onBehalfOf === undefined
+            ? "Agent-Description is an unverified hint and does not select a configuration."
+            : "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration.",
+      });
     }
     for (const { caption, fault } of notices)
       gate.emit({ part: "transport", kind: "record", caption, ...(fault ? { fault } : {}) });

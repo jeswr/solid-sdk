@@ -180,7 +180,7 @@
     }
   ],
   "generated": {
-    "commit": "72d380efa4a9a3f6977a46a7560833bd4f00fdad",
+    "commit": "9f9819cac1a8c5c0613a9426efc5cb83efd4646c",
     "core": "scripted"
   },
   "standIns": [
@@ -2849,7 +2849,7 @@
       "agent": "lender",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 68,
@@ -3684,7 +3684,7 @@
       "agent": "sams-agent",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 84,
@@ -5229,7 +5229,7 @@
       "agent": "lender",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 102,
@@ -9868,7 +9868,7 @@
       "agent": "sams-agent",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 210,
@@ -11959,7 +11959,7 @@
       "agent": "lender",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 251,
@@ -12245,7 +12245,7 @@
       "agent": "lender",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 259,
@@ -13380,7 +13380,7 @@
       "agent": "sams-agent",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 280,
@@ -14141,7 +14141,7 @@
       "agent": "lender",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 298,
@@ -14872,7 +14872,7 @@
       "agent": "sams-agent",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 316,
@@ -15594,7 +15594,7 @@
       "agent": "sams-agent",
       "part": "transport",
       "kind": "record",
-      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+      "caption": "The standard footer matched the signed message. Agent-Description is an unverified hint and does not select a configuration."
     },
     {
       "seq": 333,

@@ -245,17 +245,18 @@ Five mutations of these guards were each killed
 Outbound MIME is exactly
 `multipart/mixed(multipart/alternative(text/plain,text/html),application/ld+json)`.
 
-- Inbound parity is strict: plain and HTML must equal the rendering of the signed payload.
-  For a represented principal both parts must carry the same standard footer variant.
+- Inbound admission verifies the signature before checking readable-copy parity. In strict
+  mode, plain and HTML must equal the rendering of the signed payload, including the footer.
+  CRLF and LF are equivalent. Extra blank lines fail parity.
   `--lenient-parity` records `unverified`, never `match`, when the rendering differs.
-- `buildEmail()` defaults to the neutral footer. A caller with a sender description that
-  carries a conformance claim may request `footer: "named"`. A message without a represented
-  principal has no footer. The footer link is for people and has the same address in every
-  message. The runtime verifies the signed part before acting.
-- `buildEmail()` accepts an optional `agentDescription` HTTPS address of at most 200
-  characters. The `Agent-Description` header is an unauthenticated observation in
-  `EmailObservation`. Outbound validation and provider-copy verification compare the footer
-  variant and description header with the caller's expected values.
+- The signed message determines the footer. The named variant requires the sender's own
+  description with a conformance claim in that message. Other messages with a represented
+  principal use the neutral footer. The footer link has the same address in every message.
+- Normal sends include `Agent-Description` at the local HTTPS actor's `/description` address
+  (up to 200 characters). The pilot records it as an unverified hint in `EmailObservation`.
+  Discovery uses signed messages and refuses a selection that differs from the discovery
+  configuration. Outbound and provider-copy validation check the expected address and
+  derive the footer variant from the signed message.
 - Outbound `Message-ID` is derived from the signed message id, and `X-AWP-Message` must equal
   that id.
 

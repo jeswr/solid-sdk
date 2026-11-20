@@ -158,6 +158,17 @@ describe("finding 1 — the provider adapter revalidates the exact outbound byte
     ).toMatch(/source account/);
     expect(
       await refused(
+        withRaw(
+          item,
+          raw.replace(
+            /^Agent-Description: [^\r\n]+/m,
+            "Agent-Description: https://unrelated.example/description",
+          ),
+        ),
+      ),
+    ).toMatch(/Agent-Description differs/);
+    expect(
+      await refused(
         withRaw(item, raw.replace(`To: ${BOB.email}`, "To: attacker@evil.example"), true),
       ),
     ).toMatch(/differs from the reviewed MIME/);

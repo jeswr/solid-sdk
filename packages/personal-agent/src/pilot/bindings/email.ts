@@ -40,6 +40,7 @@ import {
   type FooterVariant,
   footerHtml,
   footerText,
+  footerVariant,
 } from "@jeswr/agent-reference/bindings/email-footer";
 import { isAgentDescriptionAddress } from "@jeswr/agent-reference/bindings/email-mime";
 import { inspectMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
@@ -217,7 +218,8 @@ export function carrierFor(wire: WireMessage): string {
   throw new Error("the email binding carries signed messages only");
 }
 
-function renderCarrier(m: AnyMessage, carrier: string, variant: FooterVariant) {
+function renderCarrier(m: AnyMessage, carrier: string) {
+  const variant = footerVariant(m);
   const body = renderHuman(m);
   const names = m.from.onBehalfOf
     ? { agent: m.from.actor ?? ANONYMOUS_AGENT, principal: m.from.onBehalfOf, variant }
@@ -228,8 +230,10 @@ function renderCarrier(m: AnyMessage, carrier: string, variant: FooterVariant) {
 }
 
 /** The three renderings of one signed message (all derived deterministically). */
-export function renderBodies(m: AnyMessage, wire: WireMessage, footer: FooterVariant = "neutral") {
-  return renderCarrier(m, carrierFor(wire), footer);
+export function renderBodies(m: AnyMessage, wire: WireMessage, footer?: FooterVariant) {
+  if (footer !== undefined && footer !== footerVariant(m))
+    throw new Error("footer variant differs from the signed message");
+  return renderCarrier(m, carrierFor(wire));
 }
 
 type EmailFooterOptions = { footer?: FooterVariant; agentDescription?: string };
@@ -394,7 +398,7 @@ export interface EmailObservation {
 }
 
 function lines(s: string): string {
-  return s.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+  return s.replace(/\r\n/g, "\n");
 }
 
 /** Read the enclosed message for rendering. Admission still verifies the proof. */
@@ -418,7 +422,6 @@ function parityProblem(
   root: MimeNode,
   message: AnyMessage,
   carrierText: string,
-  variants: readonly FooterVariant[],
 ): { footer: FooterVariant | "unverified" } | { problem: string } {
   const shape = shapeOf(root);
   if (shape !== SUPPORTED_SHAPE) return { problem: `unsupported MIME layout ${shape}` };
@@ -426,21 +429,11 @@ function parityProblem(
   const [plain, html, carrier] = parts;
   const plainText = lines(plain?.text ?? "");
   const htmlText = lines(html?.text ?? "");
-  let matched: FooterVariant | undefined;
-  let plainMatches = false;
-  for (const variant of variants) {
-    const expected = renderCarrier(message, carrierText, variant);
-    if (plainText !== lines(expected.human)) continue;
-    plainMatches = true;
-    if (htmlText === lines(expected.html)) {
-      matched = variant;
-      break;
-    }
-  }
-  if (!matched) {
-    const part = plainMatches ? "text/html" : "text/plain";
-    return { problem: `${part} part differs from the signed statement's rendering` };
-  }
+  const expected = renderCarrier(message, carrierText);
+  if (plainText !== lines(expected.human))
+    return { problem: "text/plain part differs from the signed statement's rendering" };
+  if (htmlText !== lines(expected.html))
+    return { problem: "text/html part differs from the signed statement's rendering" };
   const attachment = carrier?.text ?? "";
   if (Buffer.byteLength(attachment) > CARRIER_LIMITS.maxEnvelopeBytes)
     return { problem: "attachment exceeds the structured copy size limit" };
@@ -452,7 +445,7 @@ function parityProblem(
     );
     if (extra.length > 0) return { problem: `unexpected part header ${extra[0]?.[0]}` };
   }
-  return { footer: message.from.onBehalfOf ? matched : "unverified" };
+  return { footer: message.from.onBehalfOf ? footerVariant(message) : "unverified" };
 }
 
 const CARRIER_LIMITS = { ...DEFAULT_LIMITS, maxStringLength: DEFAULT_LIMITS.maxEnvelopeBytes };
@@ -481,15 +474,17 @@ function readCarrier(
   return undefined;
 }
 
-function readEmailCarrier(raw: string | Uint8Array):
-  | Extract<InboundEmailResult, { ok: false }>
-  | {
-      ok: true;
-      wire: WireMessage;
-      carrierText: string;
-      email: EmailObservation;
-      structuredCopies: number;
-    } {
+type EmailCarrier = {
+  ok: true;
+  wire: WireMessage;
+  carrierText: string;
+  email: EmailObservation;
+  structuredCopies: number;
+};
+
+export function readEmailCarrier(
+  raw: string | Uint8Array,
+): EmailCarrier | Extract<InboundEmailResult, { ok: false }> {
   let parsed: ReturnType<typeof parseEmail>;
   try {
     parsed = parseEmail(raw);
@@ -509,7 +504,7 @@ function readEmailCarrier(raw: string | Uint8Array):
       ? { agentDescription: description }
       : {}),
     warnings: parsed.warnings,
-    note: "email headers are unauthenticated observations; they carry no authority",
+    note: "email headers are unauthenticated observations; Agent-Description is an unverified hint and does not select a configuration",
   };
   const copies = new Map<string, WireMessage>();
   let claimed = 0;
@@ -572,21 +567,31 @@ function readEmailCarrier(raw: string | Uint8Array):
   return { ok: true, wire, carrierText, email, structuredCopies: claimed };
 }
 
-/** Parse a provider-delivered email into a wire message, applying the binding rules. */
+/** Inspect MIME and parity without admission, for local MIME validation and diagnostics. */
 export async function parseInboundEmail(
   raw: string | Uint8Array,
   options: { strictParity?: boolean } = {},
 ): Promise<InboundEmailResult> {
-  const strict = options.strictParity ?? true;
   const carried = readEmailCarrier(raw);
   if (!carried.ok) return carried;
-  const { carrierText, wire, email, structuredCopies } = carried;
+  const { wire, email, structuredCopies } = carried;
   const message = await messageOf(wire);
   if (!message)
     return { ok: true, wire, email, parity: "unchecked", footer: "unverified", structuredCopies };
+  return checkEmailParity(raw, carried, message, options.strictParity ?? true);
+}
+
+/** Inbound admission calls this with the message verified by the runtime's integrity gate. */
+export function checkEmailParity(
+  raw: string | Uint8Array,
+  carried: EmailCarrier,
+  message: AnyMessage,
+  strict: boolean,
+): InboundEmailResult {
+  const { carrierText, wire, email, structuredCopies } = carried;
   const mime = parseMime(raw);
   const parity = mime.ok
-    ? parityProblem(mime.root, message, carrierText, ["neutral", "named"])
+    ? parityProblem(mime.root, message, carrierText)
     : { problem: `unparseable MIME: ${mime.detail}` };
   if ("problem" in parity) {
     if (strict) {
@@ -700,9 +705,9 @@ export async function validateOutboundEmail(
         problems.push("Message-ID is not the one derived from the signed message id");
       if (headerValues(mime.root, "x-awp-message")[0] !== message.id)
         problems.push("X-AWP-Message is not the signed message id");
-      const parity = parityProblem(mime.root, message, carried.carrierText, [
-        expected.footer ?? "neutral",
-      ]);
+      if (expected.footer !== undefined && expected.footer !== footerVariant(message))
+        problems.push("footer variant differs from the signed message");
+      const parity = parityProblem(mime.root, message, carried.carrierText);
       if ("problem" in parity) problems.push(parity.problem);
     }
   }
@@ -723,7 +728,11 @@ export async function verifyProviderCopy(
   const parsed = await parseInboundEmail(raw, { strictParity: true });
   if (!parsed.ok) return { ok: false, detail: `${parsed.reason}: ${parsed.detail}` };
   if (parsed.parity !== "match") return { ok: false, detail: "human parity not verified" };
-  if (parsed.footer !== "unverified" && parsed.footer !== (expected.footer ?? "neutral"))
+  if (
+    expected.footer !== undefined &&
+    parsed.footer !== "unverified" &&
+    parsed.footer !== expected.footer
+  )
     return { ok: false, detail: "footer variant differs" };
   if (wireDigest(parsed.wire) !== wireDigest(expectedWire(expected)))
     return { ok: false, detail: "signed envelope differs" };

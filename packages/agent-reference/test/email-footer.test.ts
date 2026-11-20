@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { expect, it } from "vitest";
+import { envelopeBytes } from "../src/bindings/bytes.js";
 import { FOOTER_LINK, footerHtml, footerText, splitFooter } from "../src/bindings/email-footer.js";
+import { readEmail, writeEmail } from "../src/bindings/email-mime.js";
 
 const names = { agent: "Sam's agent", principal: "Sam" };
 
@@ -38,12 +40,23 @@ it("uses the same HTTPS link across recipients, messages and conversations", () 
     hash: "#/start",
   });
   for (let i = 0; i < 20; i++) {
-    const body = `To: recipient-${i}@fictional.example\nMessage: ${i}\nConversation: ${i}`;
+    const to = `recipient-${i}@fictional.example`;
+    const messageId = `message-${i}@fictional.example`;
+    const conversation = `urn:test:conversation:${i}`;
     const variant = i % 2 === 0 ? "neutral" : "named";
     const sender = { agent: `Agent ${i}`, principal: `Principal ${i}` };
-    const mail = `${body}\n\n${footerText({ ...sender, variant })}`;
-    expect(mail.match(/https:\/\/\S+/g)).toEqual([FOOTER_LINK]);
-    expect(splitFooter(mail, sender)).toEqual({ body, variant });
+    const body = `Message ${messageId} in ${conversation}`;
+    const mime = writeEmail(
+      { bytes: envelopeBytes({ messageId, conversation }), mediaType: "application/ld+json" },
+      `${body}\n\n${footerText({ ...sender, variant })}`,
+      "https://fictional.example/description",
+      { to, messageId, from: "sender@fictional.example", date: "Fri, 13 Nov 2026 09:00:00 +0000" },
+    );
+    const { readable } = readEmail(mime);
+    expect(readable.match(/https:\/\/\S+/g)?.map((url) => Buffer.from(url))).toEqual([
+      Buffer.from(FOOTER_LINK),
+    ]);
+    expect(splitFooter(readable, sender)).toEqual({ body, variant });
   }
 });
 

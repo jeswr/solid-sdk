@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import page from '../js/get-an-agent.js';
 
 test('the setup page explains both routes and the fictional research preview', () => {
@@ -34,4 +35,24 @@ test('navigation points to setup and the footer explanation links to it', () => 
   const start = read('../js/start.js');
   assert.match(start, /href="#\/get-an-agent">See how to get an agent/);
   assert.match(start, /FOOTER_LINK = 'https:\/\/answerableagents\.org\/#\/start'/);
+});
+
+test('the rendered footer explanation describes the offline discovery behavior', () => {
+  const AX = { esc: (s) => s, model: {}, buildHash: (route) => '#/' + route };
+  runInNewContext(readFileSync(new URL('../js/start.js', import.meta.url), 'utf8'), { window: { AX } });
+  const root = { innerHTML: '' };
+  AX.render.start(root);
+  assert.match(root.innerHTML, /Agent-Description.*unverified hint/);
+  assert.match(root.innerHTML, /does not fetch the URL or upgrade a conversation from the header/);
+  assert.match(root.innerHTML, /signed description exchange.*discovery configuration/);
+  assert.match(root.innerHTML, /checks the footer as part of the readable copy/);
+});
+
+test('the baseline distinguishes footer parity from missing content and bad signatures', () => {
+  const baseline = readFileSync(new URL('../../../docs/specs/agent/20-baseline.md', import.meta.url), 'utf8');
+  const clause = /\*\*BL-11\.\*\*([^]*?)\*\*BL-12\.\*\*/.exec(baseline)?.[1] ?? '';
+  assert.match(clause, /parity checks the footer.s exact wording/);
+  assert.match(clause, /no-structured-content/);
+  assert.match(clause, /bad-signature/);
+  assert.match(baseline, /unverified hint[^]*never selects or upgrades a configuration/);
 });

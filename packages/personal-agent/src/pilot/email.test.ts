@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
-import { FOOTER_LINK, footerText } from "@jeswr/agent-reference/bindings/email-footer";
+import { FOOTER_LINK, footerHtml, footerText } from "@jeswr/agent-reference/bindings/email-footer";
 import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
 import { testKey } from "@jeswr/agent-reference/reference/keys";
+import { alterDocumentForTest } from "@jeswr/agent-reference/wire/document-faults";
 import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { describe, expect, it } from "vitest";
 import { DirectBus } from "./bindings/direct.js";
@@ -16,15 +17,19 @@ import {
 } from "./bindings/email.js";
 import { leaves, parseMime } from "./bindings/mime.js";
 import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "./domains/scheduling.js";
-import { CONFIG_ED25519 } from "./profile/configurations.js";
+import { CONFIG_ED25519, CONFIG_TRANSPORT_EMAIL } from "./profile/configurations.js";
 import { PILOT_PROFILE } from "./profile/vocabulary.js";
 import type { AgentRuntime, OutboundMessage } from "./runtime/agent.js";
 import { ALICE, BOB, fixedClock, personalPair } from "./scenarios/personal.js";
 import { type ProcessedOutbound, prepareOutbound, processInput, ThreadStore } from "./service.js";
 
-async function setup() {
+async function setup(discoveryConfiguration?: string) {
   const clock = fixedClock();
-  const pair = await personalPair({ now: clock.now });
+  const accepted = discoveryConfiguration ? [CONFIG_ED25519, discoveryConfiguration] : undefined;
+  const pair = await personalPair({
+    now: clock.now,
+    ...(accepted ? { aliceAccepted: accepted, bobAccepted: accepted } : {}),
+  });
   const terms = buildMeetingTerms({
     calendar: pair.alice.calendar,
     title: "catch-up",
@@ -37,8 +42,19 @@ async function setup() {
     operation: SCHEDULE_OP,
     terms: terms as never,
     models: [MEETING_MODEL],
+    ...(discoveryConfiguration ? { configuration: discoveryConfiguration } : {}),
   });
   return { clock, ...pair, start };
+}
+
+function editTextPart(raw: string, kind: "plain" | "html", edit: (text: string) => string): string {
+  const encodedPart =
+    /(Content-Type: text\/(plain|html); charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n)([A-Za-z0-9+/=\r\n]+?)(?=\r\n--)/g;
+  return raw.replace(encodedPart, (part, head, type, body) =>
+    type === kind
+      ? head + Buffer.from(edit(Buffer.from(body, "base64").toString())).toString("base64")
+      : part,
+  );
 }
 
 /** Carry messages between two agents ONLY as provider payloads (Gmail JSON), bounded. */
@@ -84,9 +100,64 @@ async function relayByGmail(
 }
 
 describe("email binding", () => {
-  it("checks each footer variant exactly and rejects different plain and HTML variants", async () => {
-    const { start, clock } = await setup();
+  it("reports a bad signature before checking an edited footer", async () => {
+    const { start, bob, clock } = await setup();
     const out = start.outbound[0] as OutboundMessage;
+    const built = buildEmail({
+      out: { ...out, wire: alterDocumentForTest(out.wire, "triple-changed") as typeof out.wire },
+      from: ALICE.email as string,
+      to: BOB.email as string,
+      date: clock.now(),
+    });
+    const raw = editTextPart(built.raw, "plain", (text) =>
+      text.replace(FOOTER_LINK, "https://edited.example"),
+    );
+    expect(raw).not.toBe(built.raw);
+    const report = await processInput(
+      bob.runtime,
+      { format: "eml", data: raw },
+      {},
+      new ThreadStore(),
+      clock.now(),
+    );
+    expect(report.step?.reason).toBe("bad-signature");
+    expect(report.outbound).toEqual([]);
+  });
+
+  it("rejects extra footer lines under strict parity", async () => {
+    const { start, clock } = await setup();
+    const { raw } = buildEmail({
+      out: start.outbound[0] as OutboundMessage,
+      from: ALICE.email as string,
+      to: BOB.email as string,
+      date: clock.now(),
+    });
+    const edited = editTextPart(raw, "plain", (text) => `${text}\n\n`);
+    expect(edited).not.toBe(raw);
+    expect(await parseInboundEmail(edited)).toMatchObject({
+      ok: false,
+      reason: "human-parity-mismatch",
+    });
+  });
+
+  it("cannot emit named wording for a signed message with no conformance claim", async () => {
+    const { start, clock } = await setup();
+    expect(() =>
+      buildEmail({
+        out: start.outbound[0] as OutboundMessage,
+        from: ALICE.email as string,
+        to: BOB.email as string,
+        date: clock.now(),
+        footer: "named",
+      }),
+    ).toThrow(/footer variant/);
+  });
+
+  it("checks each footer variant exactly and rejects different plain and HTML variants", async () => {
+    const { start, bob, clock } = await setup();
+    const out = start.outbound[0] as OutboundMessage;
+    const reply = (await bob.runtime.receive(out.wire)).outbound[0];
+    if (reply?.kind !== "description") throw new Error("No signed description reply");
     const agentDescription = "https://alice.example/agent-description";
     const input = {
       out,
@@ -95,13 +166,25 @@ describe("email binding", () => {
       date: clock.now(),
       agentDescription,
     };
-    const neutral = buildEmail(input);
-    const named = buildEmail({ ...input, footer: "named" });
-    for (const [built, footer] of [
-      [neutral, "neutral"],
-      [named, "named"],
+    const replyInput = {
+      ...input,
+      out: reply,
+      from: input.to,
+      to: input.from,
+      agentDescription: "https://agents.hostco.example/bob/description",
+    };
+    for (const [mail, footer] of [
+      [input, "neutral"],
+      [replyInput, "named"],
     ] as const) {
-      const expected = { from: input.from, to: input.to, wire: out.wire, footer, agentDescription };
+      const built = buildEmail(mail);
+      const expected = {
+        from: mail.from,
+        to: mail.to,
+        wire: mail.out.wire,
+        footer,
+        agentDescription: mail.agentDescription,
+      };
       const sent = Buffer.from(built.raw);
       const provider = { ...expected, emailMessageId: built.emailMessageId, sent };
       expect(await validateOutboundEmail(built.raw, expected)).toEqual({ ok: true });
@@ -118,27 +201,72 @@ describe("email binding", () => {
       expect(await verifyProviderCopy(sent, { ...provider, footer: other })).toMatchObject({
         ok: false,
       });
-      const different = built.raw.replace(agentDescription, "https://other.example/description");
+      const different = built.raw.replace(
+        mail.agentDescription,
+        "https://other.example/description",
+      );
       expect(await validateOutboundEmail(different, expected)).toMatchObject({ ok: false });
       expect(await verifyProviderCopy(Buffer.from(different), provider)).toMatchObject({
         ok: false,
       });
     }
-    const htmlPart =
-      /Content-Type: text\/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n[A-Za-z0-9+/=\r\n]+(?=--)/;
-    const namedHtml = named.raw.match(htmlPart)?.[0];
-    if (!namedHtml) throw new Error("Missing named HTML part");
-    const mixed = neutral.raw.replace(htmlPart, namedHtml);
-    expect(mixed).not.toBe(neutral.raw);
-    expect(await parseInboundEmail(mixed)).toMatchObject({
-      ok: false,
-      reason: "human-parity-mismatch",
-    });
+    const neutral = buildEmail(input).raw;
+    const names = { agent: ALICE.actor, principal: ALICE.party };
+    const mixed = editTextPart(neutral, "html", (html) =>
+      html.replace(
+        footerHtml({ ...names, variant: "neutral" }),
+        footerHtml({ ...names, variant: "named" }),
+      ),
+    );
+    const swapped = editTextPart(mixed, "plain", (text) =>
+      text.replace(
+        footerText({ ...names, variant: "neutral" }),
+        footerText({ ...names, variant: "named" }),
+      ),
+    );
+    expect(mixed === neutral || swapped === mixed).toBe(false);
+    for (const edited of [mixed, swapped])
+      expect(await parseInboundEmail(edited)).toMatchObject({
+        ok: false,
+        reason: "human-parity-mismatch",
+      });
     expect(await parseInboundEmail(mixed, { strictParity: false })).toMatchObject({
       ok: true,
       parity: "unverified",
       footer: "unverified",
     });
+  });
+
+  it("keeps Agent-Description an unverified hint when discovery selects a different configuration", async () => {
+    const { start, alice, bob, clock } = await setup(CONFIG_TRANSPORT_EMAIL);
+    const opening = start.outbound[0];
+    if (!opening) throw new Error("No signed discovery message");
+    const reply = (await bob.runtime.receive(opening.wire)).outbound[0];
+    if (reply?.kind !== "description") throw new Error("No signed description reply");
+    const agentDescription = "https://unrelated.example/preferred-configuration";
+    const { raw } = buildEmail({
+      out: reply,
+      from: BOB.email as string,
+      to: ALICE.email as string,
+      date: clock.now(),
+      agentDescription,
+    });
+    const report = await processInput(
+      alice.runtime,
+      { format: "eml", data: raw },
+      {},
+      new ThreadStore(),
+      clock.now(),
+    );
+    expect(report.input?.email).toMatchObject({
+      agentDescription,
+      note: expect.stringContaining("unverified hint"),
+    });
+    expect(report.step?.reason).toBe("unsupported-configuration");
+    expect(report.outbound.map(({ kind }) => kind)).toEqual(["unsupported"]);
+    expect(alice.runtime.conversation(opening.conversation)?.configuration).toBe(
+      CONFIG_TRANSPORT_EMAIL,
+    );
   });
 
   it("observes one HTTPS Agent-Description and refuses invalid outbound values", async () => {
@@ -182,6 +310,47 @@ describe("email binding", () => {
     }
   });
 
+  it("renders byte-identical plain and HTML links for different signed messages, recipients and conversations", async () => {
+    const { start, clock } = await setup();
+    const original = start.outbound[0];
+    if (!original) throw new Error("No signed discovery message");
+    const key = await testKey("38c/invariant-email-link");
+    const link = Buffer.from(FOOTER_LINK);
+    for (let i = 0; i < 20; i++) {
+      const to = `recipient-${i}@fictional.example`;
+      const toActor = `urn:test:recipient:${i}`;
+      const message = {
+        ...original.message,
+        id: `urn:test:message:${i}`,
+        conversation: `urn:test:conversation:${i}`,
+        to: { actor: toActor },
+      };
+      const wire = await writeMessagePacket(MessageNode.toNode(message), {
+        suite: "jws",
+        key,
+        verificationMethod: `urn:awp:key:${key.kid}`,
+        created: message.createdAt,
+      });
+      const out = {
+        ...original,
+        message,
+        wire,
+        id: message.id,
+        conversation: message.conversation,
+        toActor,
+      };
+      const { raw } = buildEmail({ out, from: ALICE.email as string, to, date: clock.now() });
+      const mime = parseMime(raw);
+      if (!mime.ok) throw new Error(mime.detail);
+      const [plain, html] = leaves(mime.root);
+      const plainLink = plain?.text?.split("\n").at(-1)?.split(" ").at(-1);
+      const anchor = /<a href="([^"]+)">([^<]+)<\/a>/.exec(html?.text ?? "");
+      expect(
+        [plainLink, anchor?.[1], anchor?.[2]].map((value) => Buffer.from(value ?? "")),
+      ).toEqual([link, link, link]);
+    }
+  }, 20_000);
+
   it("treats a footer pasted into plain mail as no structured content", async () => {
     const footer = footerText({ agent: "Sam's agent", principal: "Sam", variant: "neutral" });
     const raw = `From: sam@fictional.example\r\nTo: lee@fictional.example\r\nAgent-Description: https://sam.example/description\r\n\r\nHello\n\n${footer}`;
@@ -202,6 +371,9 @@ describe("email binding", () => {
       clock.now(),
     );
     expect(first[0]?.email?.to).toBe(BOB.email);
+    expect(first[0]?.email?.raw.split("\r\n", 12)).toContain(
+      "Agent-Description: https://agents.alice.example/personal/description",
+    );
     expect(first[0]?.email?.raw).toMatch(
       /AUTOMATED MESSAGE - SYNTHETIC TEST|QVVUT01BVEVEIE1FU1NBR0U/,
     );

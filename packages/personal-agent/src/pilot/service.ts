@@ -12,11 +12,13 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   buildEmail,
+  checkEmailParity,
   EMAIL_BINDING,
   type EmailObservation,
   gmailSendPayload,
   parseInboundEmail,
   rawFromGmailMessage,
+  readEmailCarrier,
   validateOutboundEmail,
 } from "./bindings/email.js";
 import {
@@ -26,7 +28,7 @@ import {
 } from "./bindings/message-packet.js";
 import { digestBytes } from "./core/canonical.js";
 import { DEFAULT_LIMITS, parseBoundedJson } from "./core/limits.js";
-import type { Iri } from "./core/types.js";
+import type { AnyMessage, Iri } from "./core/types.js";
 import type { AgentRuntime, OutboundMessage, StepResult } from "./runtime/agent.js";
 import { wireDigest } from "./runtime/transmission.js";
 import type { WireMessage } from "./store/state.js";
@@ -176,6 +178,7 @@ export async function prepareOutbound(
   now: Date,
 ): Promise<ProcessedOutbound[]> {
   const items: ProcessedOutbound[] = [];
+  const agentDescription = rt.emailDescriptionAddress();
   for (const out of outbound) {
     const checks: OutboundCheck[] = [];
     const sig = await rt.selfCheck(out.wire);
@@ -196,7 +199,13 @@ export async function prepareOutbound(
     );
     const mailto = endpoints.find((e) => e.startsWith("mailto:"));
     let email: ProcessedOutbound["email"];
-    if (mailto && settings.selfAddress && hasProof(out.wire)) {
+    if (mailto && settings.selfAddress && hasProof(out.wire) && !agentDescription) {
+      checks.push({
+        check: "agent-description-address",
+        ok: false,
+        detail: "the agent identity needs an HTTPS description address of at most 200 characters",
+      });
+    } else if (mailto && settings.selfAddress && hasProof(out.wire) && agentDescription) {
       const to = mailto.slice("mailto:".length);
       const thread = threads.get(out.conversation);
       const lastId = thread?.emailMessageIds.at(-1);
@@ -205,6 +214,7 @@ export async function prepareOutbound(
         from: settings.selfAddress,
         to,
         date: now,
+        agentDescription,
         ...(lastId ? { inReplyToEmailId: lastId } : {}),
         ...(thread ? { references: thread.emailMessageIds } : {}),
       });
@@ -229,6 +239,7 @@ export async function prepareOutbound(
         from: settings.selfAddress,
         to,
         wire: out.wire,
+        agentDescription,
       });
       checks.push({
         check: "exact-outbound-bytes",
@@ -304,6 +315,7 @@ export async function processInput(
   let binding = input.carrier ?? "direct-local/0.1";
   let bindingOutcome = "ok";
   let gmailThreadId = input.gmailThreadId;
+  let verifyEmailParity: ((message: AnyMessage) => string | undefined) | undefined;
 
   try {
     if (input.format === "envelope") {
@@ -331,15 +343,24 @@ export async function processInput(
         raw = rawFromGmailMessage(obj);
         if (typeof obj.threadId === "string") gmailThreadId = obj.threadId;
       }
-      const parsed = await parseInboundEmail(raw, { strictParity: settings.strictParity ?? true });
-      emailObs = parsed.email;
-      copies = parsed.structuredCopies;
-      if (parsed.ok) {
-        wire = parsed.wire;
-        parity = parsed.parity;
+      const carried = readEmailCarrier(raw);
+      emailObs = carried.email;
+      copies = carried.structuredCopies;
+      if (carried.ok) {
+        wire = carried.wire;
+        verifyEmailParity = (message) => {
+          const parsed = checkEmailParity(raw, carried, message, settings.strictParity ?? true);
+          if (parsed.ok) {
+            parity = parsed.parity;
+            return undefined;
+          }
+          bindingOutcome = parsed.reason;
+          parityDetail = parsed.detail;
+          return parsed.detail;
+        };
       } else {
-        bindingOutcome = parsed.reason;
-        parityDetail = parsed.detail;
+        bindingOutcome = carried.reason;
+        parityDetail = carried.detail;
       }
     }
   } catch (error) {
@@ -353,6 +374,13 @@ export async function processInput(
     });
   }
 
+  const step = wire
+    ? await rt.receive(wire, {
+        binding:
+          input.carrier && input.carrier !== binding ? `${binding} via ${input.carrier}` : binding,
+        ...(verifyEmailParity ? { checkEmailParity: verifyEmailParity } : {}),
+      })
+    : undefined;
   const inputSummary = {
     format: input.format,
     digest,
@@ -365,7 +393,7 @@ export async function processInput(
     ...(copies !== undefined ? { structuredCopies: copies } : {}),
   };
 
-  if (!wire) {
+  if (!step || bindingOutcome === "human-parity-mismatch") {
     if (bindingOutcome !== "malformed") {
       rt.recordBindingEvent({
         type: "binding-rejection",
@@ -384,10 +412,6 @@ export async function processInput(
     };
   }
 
-  const step = await rt.receive(wire, {
-    binding:
-      input.carrier && input.carrier !== binding ? `${binding} via ${input.carrier}` : binding,
-  });
   if (step.conversation && emailObs?.emailMessageId)
     threads.note(step.conversation, emailObs.emailMessageId, gmailThreadId);
   if (step.messageId && emailObs) {

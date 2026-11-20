@@ -10,9 +10,9 @@
   var FOOTER_LINK = 'https://answerableagents.org/#/start';
   var FOOTER = [
     "Sent by Sam's agent, an automated assistant acting for Sam.",
-    'It is an Answerable agent: this message is signed, says what the agent is allowed to do, and is recorded.',
-    'You can reply as normal. If you use an agent of your own, it can check all of this for you.',
-    'Get one that is Answerable too: ' + FOOTER_LINK,
+    'I use an agent that supports signed messages: a signed copy of this message is attached.',
+    'You can reply as normal. If you use an agent of your own, it can check the signed copy for you.',
+    'What this means, and how to get such an agent: ' + FOOTER_LINK,
   ].join('\n');
 
   function mail() {
@@ -26,7 +26,7 @@
     h += '<div class="mail-body"><p>Hello. Sam would like to view the flat on Marsh Lane on Thursday after 5 pm. Is a slot free?</p>';
     h += '<p class="mail-footer" id="start-footer">' + esc(FOOTER) + '</p></div>';
     h += '<div class="mail-att"><span class="chip">message.json</span><span class="small muted">the same request in structured, signed form</span></div>';
-    h += '<figcaption>Everyone in this example is fictional. A person reads the body. An agent reads the attachment and the header, never the footer.</figcaption>';
+    h += '<figcaption>Everyone in this example is fictional. A person reads the body. The reference agent verifies the attachment and checks the footer as part of the readable copy.</figcaption>';
     h += '</figure>';
     return h;
   }
@@ -46,7 +46,7 @@
     h += '<li><strong>It says what the agent may do.</strong> Sam\'s instruction to the agent travels with the message, so you can see the agent is acting inside it.</li>';
     h += '<li><strong>It is recorded.</strong> Sam\'s agent keeps a record of what it sent and why it was allowed to.</li>';
     h += '</ul>';
-    h += '<p class="prose">The example uses the name Answerable because the sender claims conformance. The neutral footer says the sender uses an agent that supports signed messages.</p>';
+    h += '<p class="prose">This example uses the neutral footer. The named wording appears when the signed message includes the sender\'s own description with a claim of conformance.</p>';
     h += '<h3 class="sub">What it does not tell you</h3>';
     h += '<p class="prose">It does not say the message is safe, true or trustworthy. A footer is only words. Whether to rely on what the message says is for your own checks, or your own agent\'s.</p>';
     h += '</div></div>';
@@ -57,11 +57,11 @@
     h += '</div>';
 
     h += '<h2>What an agent of your own would check</h2>';
-    h += '<p class="lede">It reads the attachment, not the prose, and asks five questions in order before anything reaches the part that thinks.</p>';
+    h += '<p class="lede">It verifies the signed attachment, compares it with the readable copy, and runs the inbound checks before passing the message on.</p>';
     h += '<ol class="start-checks">' + (M.inboundChecks || []).map(function (c) {
       return '<li><a href="' + AX.buildHash('architecture', { select: c.id }) + '"><span class="qn">' + esc(c.name) + '</span></a><span class="qq">' + esc(c.question || c.summary || '') + '</span></li>';
     }).join('') + '</ol>';
-    h += '<p class="prose">Then the two agents move up. Your agent fetches the sender\'s description, checks it, and replies under the strongest set of rules both support. Two agents that began by email can be exchanging fully structured messages by the second one, and the baseline requires them to keep that level in the same conversation.</p>';
+    h += '<p class="prose">The <code>Agent-Description</code> header is an unverified hint. The reference implementation does not fetch the URL or upgrade a conversation from the header. The agents learn what each supports through a signed description exchange. If the rules they select differ from the discovery configuration, the agent refuses that selection.</p>';
     var mailTrace = (AX.traces || []).filter(function (t) { return t.scenario && t.scenario.id === 'no-agent-on-the-other-side'; })[0];
     var swapTrace = (AX.traces || []).filter(function (t) { return t.scenario && t.scenario.id === 'mortgage-main' && t.configuration && t.configuration.id === 'transport-email'; })[0];
     var links = [];

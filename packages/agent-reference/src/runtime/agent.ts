@@ -20,6 +20,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { randomBytes } from "crypto";
 import type { JWK } from "jose";
 import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
+import { descriptionAddressForActor } from "../bindings/email-mime.js";
 import {
   canonicalJson,
   derivedUrn,
@@ -307,6 +308,12 @@ export interface OutboundMessage {
   readonly wire: WireMessage;
   /** The logical message (for bindings that render human fallbacks). */
   readonly message: AnyMessage;
+}
+
+interface ReceiveMetadata {
+  readonly binding?: string;
+  /** Trusted email adapter hook, run only after integrity succeeds and before dispatch. */
+  readonly checkEmailParity?: (message: AnyMessage) => string | undefined;
 }
 
 export type Disposition = "accepted" | "duplicate" | "rejected" | "pending-approval" | "local";
@@ -1237,6 +1244,12 @@ export class AgentRuntime {
     });
   }
 
+  /** The advertised address is a routing hint derived from this agent's configured identity. */
+  emailDescriptionAddress(): string | undefined {
+    const address = descriptionAddressForActor(this.identity.actor);
+    return address && address.length <= 200 ? address : undefined;
+  }
+
   /**
    * The selected policy module as described to peers and operators: the shared policy
    * profile, the evaluator (name/version/interface) and its CURRENT availability (re-checked
@@ -1591,6 +1604,7 @@ export class AgentRuntime {
       jws: string | WireMessage,
     ): Promise<{ ok: boolean; audienceActor?: Iri; messageId?: Iri; detail: string }>;
     endpointsFor(actor: Iri): readonly string[];
+    emailDescriptionAddress(): string | undefined;
     transmit(req: TransmitRequest, io: TransmissionIo): Promise<TransmitResult>;
     checkTransmission(req: TransmitRequest): Promise<{ ok: true } | TransmitResult>;
   } {
@@ -1643,6 +1657,7 @@ export class AgentRuntime {
           : { ok: false, detail: "message has no audience actor" };
       },
       endpointsFor: (actor) => this.trust.actorEndpoints(actor),
+      emailDescriptionAddress: () => this.emailDescriptionAddress(),
       transmit: (req, io) => this.transmit(req, io),
       checkTransmission: (req) => this.checkTransmission(req),
     };
@@ -4550,7 +4565,7 @@ export class AgentRuntime {
   // ---------------------------------------------------------------- inbound
 
   /** Process one inbound wire message. Never throws on hostile input. */
-  receive(wire: unknown, meta: { binding?: string } = {}): Promise<StepResult> {
+  receive(wire: unknown, meta: ReceiveMetadata = {}): Promise<StepResult> {
     return this.exclusive(() =>
       receiveCarriage(
         wire,
@@ -4563,7 +4578,7 @@ export class AgentRuntime {
     );
   }
 
-  private async receiveGuarded(wire: unknown, meta: { binding?: string }): Promise<StepResult> {
+  private async receiveGuarded(wire: unknown, meta: ReceiveMetadata): Promise<StepResult> {
     try {
       return await this.receiveInner(wire, meta);
     } catch (error) {
@@ -4595,7 +4610,7 @@ export class AgentRuntime {
     throw new RejectError(reason, detail);
   }
 
-  private async receiveInner(wire: unknown, meta: { binding?: string }): Promise<StepResult> {
+  private async receiveInner(wire: unknown, meta: ReceiveMetadata): Promise<StepResult> {
     const at = this.now();
     try {
       this.carriage = isMessagePacket(wire)
@@ -4619,6 +4634,18 @@ export class AgentRuntime {
       this.reject(checked.reason, checked.detail, checked.extra ?? {});
     }
     const msg = checked.message;
+    if (meta.checkEmailParity) {
+      if (!checked.signedBy) {
+        const detail = "Signed structured content is required for agent mail.";
+        admission.failIntegrity("no-structured-content", detail);
+        this.reject("no-structured-content", detail);
+      }
+      const problem = meta.checkEmailParity(msg);
+      if (problem !== undefined) {
+        admission.failIntegrity("human-parity-mismatch", problem);
+        this.reject("human-parity-mismatch", problem);
+      }
+    }
     const msgDigest = digestOf(msg);
     const documentConfig = configurationById(msg.configuration);
     const admittedDocumentDigest = isMessagePacket(wire)

@@ -49,6 +49,7 @@ export interface OutboundVerifier {
     envelope: string | WireMessage,
   ): Promise<{ ok: boolean; audienceActor?: string; messageId?: string; detail: string }>;
   endpointsFor(actor: string): readonly string[];
+  emailDescriptionAddress?(): string | undefined;
   /** The runtime's transmission gate (authorisation at send time + durable records). */
   transmit(req: TransmitRequest, io: TransmissionIo): Promise<TransmitResult>;
   /** Authorisation-only check used by dry runs (records no transmission). */
@@ -157,6 +158,7 @@ export class GmailProviderAdapter {
         to: string;
         from: string;
         wire: WireMessage;
+        agentDescription?: string;
         request: TransmitRequest;
       }
     | { ok: false; reason: string }
@@ -195,10 +197,12 @@ export class GmailProviderAdapter {
     const to = (pinned[0] as string).slice("mailto:".length);
     if (!this.allowed.has(to))
       return { ok: false, reason: "pinned recipient is not in the allow-list" };
+    const agentDescription = this.verifier.emailDescriptionAddress?.();
     const exact = await validateOutboundEmail(raw, {
       from: this.sourceAccount,
       to,
       wire: item.envelope,
+      ...(agentDescription ? { agentDescription } : {}),
     });
     if (!exact.ok) return { ok: false, reason: exact.problems.join("; ") };
     return {
@@ -207,6 +211,7 @@ export class GmailProviderAdapter {
       to,
       from: this.sourceAccount,
       wire: item.envelope,
+      ...(agentDescription ? { agentDescription } : {}),
       request: {
         messageId: own.messageId,
         binding: GMAIL_BINDING,
@@ -261,6 +266,7 @@ export class GmailProviderAdapter {
     to: string;
     from: string;
     wire: WireMessage;
+    agentDescription?: string;
     request: TransmitRequest;
   }): Promise<ProviderLookupResult> {
     const transport = this.transport as GmailTransport;
@@ -288,6 +294,7 @@ export class GmailProviderAdapter {
           from: checked.from,
           to: checked.to,
           wire: checked.wire,
+          ...(checked.agentDescription ? { agentDescription: checked.agentDescription } : {}),
           emailMessageId: checked.request.externalId,
           sent: checked.raw,
         });
