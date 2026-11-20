@@ -5,8 +5,11 @@ import { readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
+import { availableAdapters } from "../src/derive/adapters/index.js";
+import { SPARQ_ZK_RESULT } from "../src/derive/adapters/sparq-zk-result.js";
 import { LabelIndex } from "../src/model/labels.js";
 import type { TraceFile } from "../src/trace/types.js";
+import { missingResultProof, resultProofPaths } from "./helpers/sparq-paths.js";
 
 it("uses ontology and profile RDF labels and retains each replaced identifier as a reference", () => {
   const labels = new LabelIndex();
@@ -30,7 +33,7 @@ it("uses ontology and profile RDF labels and retains each replaced identifier as
   ]);
 });
 
-it("keeps generated captions and rule explanations free of identifiers in every produced scenario trace", () => {
+it("keeps generated captions and rule explanations free of identifiers in every produced scenario trace", async () => {
   const root = join(import.meta.dirname, "..");
   const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")) as {
     paths: {
@@ -38,6 +41,7 @@ it("keeps generated captions and rule explanations free of identifiers in every 
       path: string;
       trace?: string;
       status: string;
+      reason?: string;
       configuration?: string;
     }[];
   };
@@ -57,17 +61,32 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   }
   const baseline = manifest.paths.filter((path) => !path.configuration);
   const alternatives = manifest.paths.filter((path) => path.configuration);
+  const registry = await availableAdapters();
+  const missingPaths = registry.proofSystems.has(SPARQ_ZK_RESULT.method) ? [] : resultProofPaths;
+  const blocked = manifest.paths.filter((path) => path.status === "blocked");
+  expect(
+    blocked
+      .filter((path) => path.reason === missingResultProof)
+      .map((path) => `${path.scenario}/${path.path}`)
+      .sort(),
+  ).toEqual(missingPaths);
+  expect(blocked.map((path) => `${path.scenario}/${path.path}`).sort()).toEqual(
+    [
+      "degree-recognition/main",
+      "insurance-quote/main",
+      "recycled-content/main",
+      "recycled-content/supplier-below-threshold",
+      "trial-eligibility/main",
+      ...missingPaths,
+    ].sort(),
+  );
   expect(manifest.paths).toHaveLength(283);
-  expect(traces).toBe(278);
-  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(167);
-  expect(baseline.filter((path) => path.status === "disagrees")).toEqual([
-    expect.objectContaining({
-      scenario: "pay-an-invoice",
-      path: "branch-1",
-      note: "an effect followed a stop",
-    }),
-  ]);
-  expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(5);
+  expect(traces).toBe(278 - missingPaths.length);
+  expect(baseline.filter((path) => path.status === "runs")).toHaveLength(168 - missingPaths.length);
+  expect(baseline.filter((path) => path.status === "disagrees")).toEqual([]);
+  expect(baseline.filter((path) => path.status === "blocked")).toHaveLength(
+    5 + missingPaths.length,
+  );
   expect(alternatives).toHaveLength(110);
   expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(110);
   expect(alternatives.filter((path) => path.status === "disagrees")).toEqual([]);
@@ -81,8 +100,6 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   ).toMatchObject({
     notReached: [expect.objectContaining({ seq: 131 }), expect.objectContaining({ seq: 153 })],
   });
-  const blocked = manifest.paths.filter((path) => path.status === "blocked");
-  expect(blocked).toHaveLength(5);
   expect(blocked.every((path) => !path.trace)).toBe(true);
   expect(alternatives.filter((path) => path.configuration?.startsWith("transport-"))).toHaveLength(
     10,

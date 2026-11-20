@@ -2,13 +2,14 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { loadSparqZkResult } from "../src/derive/adapters/sparq-zk-result.js";
-import { verifierRegistry } from "../src/derive/verifiers.js";
+import { availableAdapters } from "../src/derive/adapters/index.js";
+import { SPARQ_ZK_RESULT } from "../src/derive/adapters/sparq-zk-result.js";
 import { loadCase } from "../src/engine/load.js";
 import { patch, runScenario } from "../src/engine/run.js";
 import type { Scenario } from "../src/engine/schema.js";
 import { AgentRuntime } from "../src/runtime/agent.js";
 import type { TraceEvent } from "../src/trace/types.js";
+import { missingResultProof } from "./helpers/sparq-paths.js";
 
 const root = new URL("..", import.meta.url).pathname;
 const credit = "https://w3id.org/jeswr/awp#purpose/credit-assessment";
@@ -254,66 +255,69 @@ it("asks the hiring principal even when rejection cites only the original refere
   );
 }, 120_000);
 
-const resultAdapter = await loadSparqZkResult();
-it.skipIf(!resultAdapter)(
-  "withholds an attested right-to-work fact when the receiver requests proved",
-  async () => {
-    const { profile, scenario } = loadCase(root, "right-to-work");
-    const branch = scenario.branches.find((b) => b.id === "hidden-validity-proof")!;
-    const change = branch.change as Pick<Scenario, "script" | "stopAfter">;
-    const request = change.script.find((step) => step.type === "proof-request")!;
-    if (request.type !== "proof-request") throw new Error("Missing proof request fixture");
-    request.assurances = ["proved"];
-    change.stopAfter = "receive-answer";
-    const issue = AgentRuntime.prototype.issueDerivationRequest;
-    const fixture = vi
-      .spyOn(AgentRuntime.prototype, "issueDerivationRequest")
-      .mockImplementation(function (this: AgentRuntime, input) {
-        const registered = issue.call(this, input);
-        // Offer an attested proof for the same nonce through the ordinary inbound gate.
-        return { ...registered, assurances: ["attested"] };
-      });
-    try {
-      const [, path] = await runScenario(
-        profile,
-        { ...scenario, branches: [branch] },
-        {
-          compare: false,
-          registry: verifierRegistry([resultAdapter!]),
-          reportExpectationFailures: true,
-        },
-      );
-      const events = path!.trace!.events;
-      const receiver = events.filter((e) => e.agent === "employer-agent");
-      expect(
-        receiver.some((e) => e.kind === "store" && e.fact?.claimType === "right-to-work.answer"),
-      ).toBe(false);
-      expect(receiver).toContainEqual(
-        expect.objectContaining({
-          part: "inbound-gate",
-          kind: "check",
-          check: "source",
-          verdict: "fail",
-          reason: "assurance-insufficient",
-          rule: expect.objectContaining({ id: "DER-16" }),
-        }),
-      );
-      expect(receiver).toContainEqual(
-        expect.objectContaining({
-          part: "inbound-gate",
-          kind: "check",
-          check: "fitness",
-          verdict: "ask-more",
-          reason: "evidence-missing",
-        }),
-      );
-      expect(
-        receiver.findLast((e) => e.part === "inbound-gate" && e.kind === "decision"),
-      ).toMatchObject({ outcome: "ask-more", reason: "evidence-missing" });
-      expect(fixture).toHaveBeenCalledWith(expect.objectContaining({ assurances: ["proved"] }));
-    } finally {
-      fixture.mockRestore();
+it("withholds attested right-to-work evidence when the receiver requests proved and reports a missing proof adapter", async () => {
+  const { profile, scenario } = loadCase(root, "right-to-work");
+  const branch = scenario.branches.find((b) => b.id === "hidden-validity-proof")!;
+  const change = branch.change as Pick<Scenario, "script" | "stopAfter">;
+  const request = change.script.find((step) => step.type === "proof-request")!;
+  if (request.type !== "proof-request") throw new Error("Missing proof request fixture");
+  request.assurances = ["proved"];
+  change.stopAfter = "receive-answer";
+  const registry = await availableAdapters();
+  const issue = AgentRuntime.prototype.issueDerivationRequest;
+  const fixture = vi
+    .spyOn(AgentRuntime.prototype, "issueDerivationRequest")
+    .mockImplementation(function (this: AgentRuntime, input) {
+      const registered = issue.call(this, input);
+      // Offer an attested proof for the same nonce through the ordinary inbound gate.
+      return { ...registered, assurances: ["attested"] };
+    });
+  try {
+    const [, path] = await runScenario(
+      profile,
+      { ...scenario, branches: [branch] },
+      {
+        compare: false,
+        registry,
+        reportExpectationFailures: true,
+      },
+    );
+    if (!registry.proofSystems.has(SPARQ_ZK_RESULT.method)) {
+      expect(path?.path).toBe("hidden-validity-proof");
+      expect(path?.blocked).toBe(missingResultProof);
+      expect(path?.trace).toBeUndefined();
+      expect(fixture).not.toHaveBeenCalled();
+      return;
     }
-  },
-  180_000,
-);
+    const events = path!.trace!.events;
+    const receiver = events.filter((e) => e.agent === "employer-agent");
+    expect(
+      receiver.some((e) => e.kind === "store" && e.fact?.claimType === "right-to-work.answer"),
+    ).toBe(false);
+    expect(receiver).toContainEqual(
+      expect.objectContaining({
+        part: "inbound-gate",
+        kind: "check",
+        check: "source",
+        verdict: "fail",
+        reason: "assurance-insufficient",
+        rule: expect.objectContaining({ id: "DER-16" }),
+      }),
+    );
+    expect(receiver).toContainEqual(
+      expect.objectContaining({
+        part: "inbound-gate",
+        kind: "check",
+        check: "fitness",
+        verdict: "ask-more",
+        reason: "evidence-missing",
+      }),
+    );
+    expect(
+      receiver.findLast((e) => e.part === "inbound-gate" && e.kind === "decision"),
+    ).toMatchObject({ outcome: "ask-more", reason: "evidence-missing" });
+    expect(fixture).toHaveBeenCalledWith(expect.objectContaining({ assurances: ["proved"] }));
+  } finally {
+    fixture.mockRestore();
+  }
+}, 180_000);

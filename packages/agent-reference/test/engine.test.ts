@@ -9,10 +9,19 @@ import { z } from "zod";
 // @ts-expect-error Standalone artifact writer is deliberately JavaScript.
 import { recordedJoint } from "../scripts/recorded-joint.mjs";
 import { CORE_REASON_CODES } from "../src/core/types.js";
+import { availableAdapters } from "../src/derive/adapters/index.js";
+import { SPARQ_AGGREGATE } from "../src/derive/adapters/sparq-aggregate.js";
+import { SPARQ_ZK_RESULT } from "../src/derive/adapters/sparq-zk-result.js";
 import { loadCase, validateReferences } from "../src/engine/load.js";
 import { patch, resolveTemplate, runScenario } from "../src/engine/run.js";
 import { domainProfileSchema, scenarioSchema } from "../src/engine/schema.js";
 import { outlineOf } from "../src/trace/types.js";
+import {
+  aggregatePaths,
+  missingAggregate,
+  missingResultProof,
+  resultProofPaths,
+} from "./helpers/sparq-paths.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("missing test fixture value");
@@ -27,14 +36,26 @@ it("loads every declared case and preserves every catalogue branch, without clai
   let blocked = 0;
   let recorded = 0;
   const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8"));
+  const registry = await availableAdapters();
+  const expectedPackageBlocks = new Map<string, string>();
+  if (!registry.jointProtocols.has(SPARQ_AGGREGATE.method))
+    for (const path of aggregatePaths) expectedPackageBlocks.set(path, missingAggregate);
+  if (!registry.proofSystems.has(SPARQ_ZK_RESULT.method))
+    for (const path of resultProofPaths) expectedPackageBlocks.set(path, missingResultProof);
+  const packageBlocks = new Map<string, string>();
   for (const file of readdirSync(join(root, "scenarios"))) {
     const { profile, scenario } = loadCase(root, file.slice(0, -5));
-    const results = await runScenario(profile, scenario, { reportExpectationFailures: true });
+    const results = await runScenario(profile, scenario, {
+      reportExpectationFailures: true,
+      registry,
+    });
     expect(results).toHaveLength(
       scenario.branches.filter((branch) => !branch.onlyUnder).length + 1,
     );
     for (const result of results) {
       if (result.blocked) {
+        if (result.blocked.endsWith(" package, which is not installed"))
+          packageBlocks.set(`${scenario.id}/${result.path}`, result.blocked);
         const row = manifest.paths.find(
           (p: { scenario: string; path: string }) =>
             p.scenario === scenario.id && p.path === result.path,
@@ -75,6 +96,7 @@ it("loads every declared case and preserves every catalogue branch, without clai
       }
     }
   }
+  expect(packageBlocks).toEqual(expectedPackageBlocks);
   expect(runs + recorded).toBe(
     manifest.paths.filter(
       (p: { status: string; configuration?: string }) => !p.configuration && p.status !== "blocked",

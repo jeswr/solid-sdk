@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from "fs";
 import { vi } from "vitest";
 import { digestOf } from "../../src/core/canonical.js";
 import type { ActionIntent, Agreement, AnyMessage } from "../../src/core/types.js";
+import type { VerifierRegistry } from "../../src/derive/verifiers.js";
 import { loadCase } from "../../src/engine/load.js";
 import { matrixWorld } from "../../src/engine/matrix.js";
 import { patch, runScenario } from "../../src/engine/run.js";
@@ -177,7 +178,7 @@ export function sampledScenario(
   };
 }
 
-export async function captureModelCorpus(): Promise<Corpus> {
+export async function captureModelCorpus(registry: VerifierRegistry): Promise<Corpus> {
   const root = new URL("../../", import.meta.url).pathname;
   const plan = samplePlan(root);
   const full = process.env.FULL_CORPUS === "1";
@@ -235,7 +236,7 @@ export async function captureModelCorpus(): Promise<Corpus> {
         const selected = plan.groups.get(current + "\0" + (configuration ?? ""));
         if (!full && !selected) continue;
         const input = full ? scenario : sampledScenario(scenario, configuration, selected!);
-        const results = await runScenario(profile, input, { configuration });
+        const results = await runScenario(profile, input, { configuration, registry });
         paths += results.filter((result) => result.trace).length;
         for (const result of results)
           if (result.trace) {

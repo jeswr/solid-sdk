@@ -2,6 +2,8 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
+import { availableAdapters } from "../src/derive/adapters/index.js";
+import { SPARQ_ZK_RESULT } from "../src/derive/adapters/sparq-zk-result.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import {
@@ -12,39 +14,46 @@ import {
 } from "../src/mechanisms/selective.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
+import { missingResultProof } from "./helpers/sparq-paths.js";
 
 const root = join(import.meta.dirname, "..");
 it("admits a verified right-to-work predicate as attested and refuses the passport scan", async () => {
   const { profile, scenario } = loadCase(root, "right-to-work");
-  const paths = await runScenario(profile, scenario);
+  const registry = await availableAdapters();
+  const paths = await runScenario(profile, scenario, { registry });
   expect(paths[0]?.matches).toBe(true);
   expect(paths[1]?.trace?.events.at(-1)).toMatchObject({
     outcome: "stop",
     reason: "excessive-scope",
   });
-  const hidden = paths.find((path) => path.path === "hidden-validity-proof");
-  expect(hidden?.disagrees).toBe(false);
-  expect(hidden?.actual).toEqual({ outcome: "admit", reason: "fit-for-use", check: "fitness" });
-  const answer = hidden?.trace?.events.findLast(
-    (event) => event.kind === "message-in" && event.agent === "employer-agent",
-  )?.packet;
-  expect(answer?.layers.evidence.raw).toEqual([
-    expect.objectContaining({
-      claimType: "right-to-work.answer",
-      value: true,
-      derivation: expect.objectContaining({
-        assurance: "attested",
-        proofBinds: ["rule", "issuers", "fresh"],
-      }),
-    }),
-  ]);
-  expect(JSON.stringify(answer)).not.toContain("2027-06-01");
   const trace = JSON.stringify(paths[0]?.trace);
   expect(trace).not.toContain("fictional-passport-image");
   expect(trace).not.toContain("2027-06-01");
   expect(
     paths[0]?.trace?.events.filter((e) => e.agent === "employer-agent" && e.kind === "store"),
   ).toHaveLength(2);
+  const hidden = paths.find((path) => path.path === "hidden-validity-proof");
+  if (registry.proofSystems.has(SPARQ_ZK_RESULT.method)) {
+    expect(hidden?.disagrees).toBe(false);
+    expect(hidden?.actual).toEqual({ outcome: "admit", reason: "fit-for-use", check: "fitness" });
+    const answer = hidden?.trace?.events.findLast(
+      (event) => event.kind === "message-in" && event.agent === "employer-agent",
+    )?.packet;
+    expect(answer?.layers.evidence.raw).toEqual([
+      expect.objectContaining({
+        claimType: "right-to-work.answer",
+        value: true,
+        derivation: expect.objectContaining({
+          assurance: "attested",
+          proofBinds: ["rule", "issuers", "fresh"],
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(answer)).not.toContain("2027-06-01");
+  } else {
+    expect(hidden?.blocked).toBe(missingResultProof);
+    expect(hidden?.trace).toBeUndefined();
+  }
 });
 
 it("verifies actual salted disclosures and refuses changes to value, claim type, salt, identifier, credential or issuer", async () => {

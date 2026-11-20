@@ -7,14 +7,36 @@ import { expect, it } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
 import { BoundsError, resolveLimits } from "../src/core/limits.js";
 import { MESSAGE_KINDS } from "../src/core/types.js";
+import { availableAdapters } from "../src/derive/adapters/index.js";
+import { SPARQ_AGGREGATE } from "../src/derive/adapters/sparq-aggregate.js";
 import { materializeAttachments } from "../src/model/attachments.js";
 import { ActionIntentNode, AgreementNode, MessageNode } from "../src/model/message-nodes.js";
 import { readAttachmentDocument, writeAttachmentDocument } from "../src/wire/attachments.js";
 import { readDocument, writeDocument } from "../src/wire/document.js";
 import { captureModelCorpus } from "./helpers/model-corpus.js";
 
+// These capacity entries come from live aggregate paths, even when the manifest
+// keeps the same paths as verified recordings.
+const aggregateInvokeKeys = new Set(
+  [
+    "cohort-count/urn:awp:engine-cohort-count-main:computer-agent:0025",
+    "cohort-count/urn:awp:engine-cohort-count-branch-1:computer-agent:0024",
+    "platform-income/urn:awp:engine-platform-income-main:computer-agent:0021",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0004",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0008",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0012",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0016",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0020",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0024",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:requester-agent:0028",
+    "salary-benchmark/urn:awp:engine-salary-benchmark-main:computer-agent:0029",
+  ].map((field) => `Message/invoke\0${field}`),
+);
+
 async function roundTripCorpus(): Promise<void> {
-  const corpus = await captureModelCorpus();
+  const registry = await availableAdapters();
+  const aggregateAvailable = registry.jointProtocols.has(SPARQ_AGGREGATE.method);
+  const corpus = await captureModelCorpus(registry);
   const failures: { type: string; field: string; error: string }[] = [];
   let messages = 0,
     intents = 0,
@@ -170,8 +192,12 @@ async function roundTripCorpus(): Promise<void> {
     expect(agreements).toBeGreaterThan(0);
   }
   expect(failures).toEqual([]);
-  for (const [key, count] of requiredCounts)
-    expect(carriageCounts.get(key) ?? 0, key).toBeGreaterThanOrEqual(count);
+  for (const key of aggregateInvokeKeys) expect(requiredCounts.get(key), key).toBe(1);
+  for (const [key, count] of requiredCounts) {
+    const carried = carriageCounts.get(key) ?? 0;
+    if (!aggregateAvailable && aggregateInvokeKeys.has(key)) expect(carried, key).toBe(0);
+    else expect(carried, key).toBeGreaterThanOrEqual(count);
+  }
 }
 
 it(
