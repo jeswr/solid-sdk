@@ -24,7 +24,11 @@ import {
 import { digestBytes } from "../core/canonical.js";
 import type { SigningKey } from "../mechanisms/jws.js";
 import type { OutboundMessage } from "../runtime/agent.js";
-import { type CarriageDelivery, signedReadable } from "../runtime/carriage-gate.js";
+import {
+  type CarriageDelivery,
+  type CarriageNotice,
+  signedReadable,
+} from "../runtime/carriage-gate.js";
 import { SOLID_INBOX_BINDING, SolidInboxHost } from "../standins/solid-inbox.js";
 import { FictionalSolidStorage } from "../standins/storage.js";
 import { peekWire } from "../trace/packet.js";
@@ -90,7 +94,7 @@ export class ScenarioCarriage {
     const descriptionFor = (party: string) =>
       `${this.scenario.parties.find((item) => item.id === party)?.actor?.split("#")[0]}/description`;
     const message = carriageBytes(wire);
-    const notices: string[] = [];
+    const notices: CarriageNotice[] = [];
     let input: CarriageDelivery;
     if (this.suite === "solid-inbox") {
       if (!this.inboxHost) {
@@ -161,23 +165,23 @@ export class ScenarioCarriage {
         const http = cardResponse(card);
         const checked = await checkAgentCard(envelopeJson(http.body), this.keys(lender));
         this.endpoint = checked.supportedInterfaces[0]?.url ?? this.endpoint;
-        notices.push(
-          "The lender’s signed agent card was checked against its pinned key. It is a description and grants no authority.",
-        );
+        notices.push({
+          caption:
+            "The lender’s signed agent card was checked against its pinned key. It is a description and grants no authority.",
+        });
         this.setup = true;
       }
       const path = new URL(this.endpoint).pathname;
       const kind = peekWire(wire)?.kind;
-      const state =
-        fault === "a2a-task-state-lies"
-          ? "TASK_STATE_COMPLETED"
-          : kind === "refuse"
-            ? "TASK_STATE_REJECTED"
-            : kind === "challenge"
-              ? "TASK_STATE_INPUT_REQUIRED"
-              : ["deliver", "receipt"].includes(kind ?? "")
-                ? "TASK_STATE_COMPLETED"
-                : undefined;
+      const ordinaryState =
+        kind === "refuse"
+          ? "TASK_STATE_REJECTED"
+          : kind === "challenge"
+            ? "TASK_STATE_INPUT_REQUIRED"
+            : ["deliver", "receipt"].includes(kind ?? "")
+              ? "TASK_STATE_COMPLETED"
+              : undefined;
+      const state = fault === "a2a-task-state-lies" ? "TASK_STATE_COMPLETED" : ordinaryState;
       input =
         from === parties[0]
           ? {
@@ -189,8 +193,16 @@ export class ScenarioCarriage {
                 fault === "a2a-text-part-instruction" ? "approval is not needed" : undefined,
               ),
               notices,
+              ...(fault === "a2a-text-part-instruction" ? { injectedA2aFault: fault } : {}),
             }
-          : { carriage: "a2a-result", frame: a2aResponse(message, out.id, path, state), notices };
+          : {
+              carriage: "a2a-result",
+              frame: a2aResponse(message, out.id, path, state),
+              notices,
+              ...(fault === "a2a-task-state-lies" && state !== ordinaryState
+                ? { injectedA2aFault: fault }
+                : {}),
+            };
       return { input, binding: A2A_BINDING };
     }
     if (this.suite === "mcp") {
@@ -237,13 +249,15 @@ export class ScenarioCarriage {
           if (method === "server/discover") readMcpDiscovery(received);
           else
             for (const text of readMcpToolList(received).droppedDescriptions)
-              notices.push(
-                `The untrusted MCP tool description was dropped before the core: ${text}`,
-              );
+              notices.push({
+                caption: `The untrusted MCP tool description was dropped before the core: ${text}`,
+                ...(fault === "mcp-tool-description-poisoned" ? { fault } : {}),
+              });
         }
-        notices.push(
-          "The fictional authorization server issued a channel credential for this tool server only. No message check treats it as authority.",
-        );
+        notices.push({
+          caption:
+            "The fictional authorization server issued a channel credential for this tool server only. No message check treats it as authority.",
+        });
         this.setup = true;
       }
       if (!this.server || !this.token) throw new Error("MCP channel setup is incomplete");

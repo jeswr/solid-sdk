@@ -32,10 +32,12 @@ import {
   readMcpResult,
   readMcpToolList,
 } from "../src/bindings/mcp.js";
+import { compareBranch } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
-import { runScenario } from "../src/engine/run.js";
+import { type PathResult, runScenario } from "../src/engine/run.js";
 import { testKey } from "../src/reference/keys.js";
 import { signedReadable } from "../src/runtime/carriage-gate.js";
+import { outlineOf } from "../src/trace/types.js";
 
 const root = join(import.meta.dirname, "..");
 const payload: ByteMessage = {
@@ -288,12 +290,18 @@ describe("MCP research subset", () => {
 
 it("runs the transport-specific adversarial branches through separately keyed agents and their real gates", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
-  const results = await runScenario(profile, scenario, { configuration: "all" });
-  const events = (path: string) => {
-    const trace = results.find((result) => result.path === path)?.trace;
-    if (!trace) throw new Error(`Missing branch ${path}`);
-    return trace.events;
+  const results: PathResult[] = [];
+  for (const configuration of ["transport-email", "transport-a2a", "transport-mcp"])
+    results.push(...(await runScenario(profile, scenario, { configuration })));
+  const pathResult = (path: string, configuration?: string) => {
+    const result = results.find(
+      (result) =>
+        result.path === path && (!configuration || result.configuration === configuration),
+    );
+    if (!result?.trace) throw new Error(`Missing path ${path}/${configuration ?? "default"}`);
+    return { ...result, trace: result.trace };
   };
+  const events = (path: string) => pathResult(path).trace.events;
   expect(
     events("email-readable-copy-differs").some(
       (event) =>
@@ -302,29 +310,70 @@ it("runs the transport-specific adversarial branches through separately keyed ag
         event.verdict === "fail",
     ),
   ).toBe(true);
-  for (const path of ["a2a-text-part-instruction", "mcp-tool-description-poisoned"]) {
-    const trace = events(path);
-    expect(
-      trace.some(
-        (event) => event.part === "transport" && event.caption.includes("dropped before the core"),
-      ),
-    ).toBe(true);
+  for (const [path, configuration] of [
+    ["a2a-text-part-instruction", "transport-a2a"],
+    ["mcp-tool-description-poisoned", "transport-mcp"],
+  ] as const) {
+    const branch = pathResult(path, configuration);
+    const main = pathResult("main", configuration);
+    const trace = branch.trace.events;
+    expect(branch.note).toBeUndefined();
+    expect(trace.filter((event) => event.fault)).toMatchObject([
+      { part: "transport", kind: "record", fault: path },
+    ]);
+    expect(main.trace.events.some((event) => event.fault)).toBe(false);
+    expect(outlineOf({ events: trace.filter((event) => event.fault !== path) })).toEqual(
+      outlineOf(main.trace),
+    );
     expect(trace.some((event) => event.kind === "ask-principal")).toBe(true);
     expect(
       trace.some((event) => event.kind === "message-in" && event.packet?.kind === "receipt"),
     ).toBe(true);
   }
-  const refusal = events("a2a-task-state-lies");
+  const refusalPath = pathResult("a2a-task-state-lies");
+  expect(refusalPath.note).toBeUndefined();
+  expect(refusalPath.disagrees).toBe(false);
+  const refusal = refusalPath.trace.events;
   expect(
-    refusal.some((event) => event.kind === "message-in" && event.packet?.kind === "refuse"),
-  ).toBe(true);
+    compareBranch(
+      pathResult("main", "transport-a2a").trace,
+      { events: refusal.filter((event) => !event.fault) },
+      { witness: { outcome: "admit", check: "integrity", reason: "intact" } },
+    ).diverges,
+  ).toBe(false);
+  const ignored = refusal.find((event) => event.fault === "a2a-task-state-lies");
+  expect(ignored).toMatchObject({ part: "transport", kind: "record" });
+  const inbound = refusal.find(
+    (event) => event.kind === "message-in" && event.packet?.kind === "refuse",
+  );
+  expect(inbound).toBeDefined();
+  expect(inbound!.seq).toBeGreaterThan(ignored!.seq);
+  expect(
+    refusal.find(
+      (event) =>
+        event.seq > inbound!.seq && event.kind === "decision" && event.agent === inbound!.agent,
+    ),
+  ).toMatchObject({ part: "inbound-gate", outcome: "admit" });
+  const header = inbound?.packet?.layers.header.raw as { conversation?: string } | undefined;
+  const conversation = header?.conversation;
+  expect(conversation).toBeTruthy();
+  expect(
+    refusal.some(
+      (event) =>
+        event.seq > inbound!.seq &&
+        event.kind === "message-out" &&
+        event.agent === inbound!.agent &&
+        (event.packet?.layers.header.raw as { conversation?: string })?.conversation ===
+          conversation,
+    ),
+  ).toBe(false);
+  // The conversation-state assertion in this path's script requires the terminal "refused" phase.
   expect(
     refusal.some(
       (event) =>
         event.kind === "message-out" && event.packet?.kind === "refuse" && event.agent === "lender",
     ),
   ).toBe(true);
-  expect(refusal.at(-1)?.caption).toBeDefined();
   expect(
     events("mcp-token-passed-on").some(
       (event) => event.outcome === "refuse" && event.reason === "not-authorised",

@@ -128,6 +128,8 @@ export interface TraceEvent {
   readonly reason?: string;
   readonly rule?: { readonly id: string; readonly text: string };
   readonly packet?: PacketView;
+  /** On a transport record, the scenario fault the transport dropped or ignored. */
+  readonly fault?: string;
   readonly settlement?: import("../settlement/types.js").SettlementTrace;
   readonly segment?: "payment" | "added";
   readonly segmentEnd?: "payment" | "added";

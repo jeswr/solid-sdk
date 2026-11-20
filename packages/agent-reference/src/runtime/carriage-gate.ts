@@ -27,12 +27,19 @@ import {
 } from "../wire/message-packet.js";
 import type { StepResult } from "./agent.js";
 
+export interface CarriageNotice {
+  readonly caption: string;
+  readonly fault?: string;
+}
+
 export interface CarriageDelivery {
   readonly carriage: "email" | "a2a-request" | "a2a-result" | "mcp-request" | "mcp-result";
   readonly frame: ByteMessage | HttpExchange;
   readonly server?: FictionalAuthorizationServer;
   readonly token?: ChannelToken;
-  readonly notices?: readonly string[];
+  readonly notices?: readonly (string | CarriageNotice)[];
+  /** Scenario provenance stays outside the frame and affects only the transport record. */
+  readonly injectedA2aFault?: "a2a-text-part-instruction" | "a2a-task-state-lies";
 }
 const isDelivery = (value: unknown): value is CarriageDelivery =>
   !!value && typeof value === "object" && "carriage" in value && "frame" in value;
@@ -111,10 +118,11 @@ export async function receiveCarriage(
   let wire: unknown;
   let readable: string | undefined;
   try {
-    const notices: string[] = [];
+    const notices: CarriageNotice[] = [];
     if (!isDelivery(input)) wire = carriageWire(input as ByteMessage);
     else {
-      notices.push(...(input.notices ?? []));
+      for (const notice of input.notices ?? [])
+        notices.push(typeof notice === "string" ? { caption: notice } : notice);
       switch (input.carriage) {
         case "email": {
           const recovered = readEmail(input.frame as ByteMessage);
@@ -124,13 +132,24 @@ export async function receiveCarriage(
         }
         case "a2a-request":
         case "a2a-result": {
-          const recovered = readA2a(input.frame as HttpExchange);
+          const recovered = readA2a(
+            input.frame as HttpExchange,
+            input.injectedA2aFault === "a2a-text-part-instruction",
+          );
           wire = carriageWire(recovered.message);
-          notices.push(...recovered.dropped);
+          for (const caption of recovered.dropped)
+            notices.push({
+              caption,
+              ...(recovered.droppedFault ? { fault: recovered.droppedFault } : {}),
+            });
           if (recovered.taskState)
-            notices.push(
-              "The A2A task state is a carriage hint; the signed message determines the outcome.",
-            );
+            notices.push({
+              caption:
+                "The A2A task state is a carriage hint; the signed message determines the outcome.",
+              ...(input.injectedA2aFault === "a2a-task-state-lies"
+                ? { fault: input.injectedA2aFault }
+                : {}),
+            });
           break;
         }
         case "mcp-request": {
@@ -161,7 +180,8 @@ export async function receiveCarriage(
           "The readable email says something different from the signed message.",
         );
     }
-    for (const caption of notices) gate.emit({ part: "transport", kind: "record", caption });
+    for (const { caption, fault } of notices)
+      gate.emit({ part: "transport", kind: "record", caption, ...(fault ? { fault } : {}) });
   } catch (error) {
     const reason = error instanceof CarriageError ? error.reason : "malformed";
     const admission = gate.arrive(wire, meta.binding, peekWire(wire));

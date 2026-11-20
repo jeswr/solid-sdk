@@ -1128,6 +1128,7 @@ export const scenarioSchema = z.strictObject({
       id: slug,
       what: z.string(),
       onlyUnder: slug.optional(),
+      judgedAgent: slug.optional(),
       change: object,
       profileChange: object.optional(),
       expect: expectation,

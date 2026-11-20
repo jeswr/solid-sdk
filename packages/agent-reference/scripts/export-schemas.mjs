@@ -6,10 +6,22 @@ import { z } from "zod";
 import { domainProfileSchema, scenarioSchema } from "../dist/engine/schema.js";
 import { traceFileSchema } from "../dist/trace/schema.js";
 
+// The runtime trace schema passes through optional event fields.
+const exportedTraceSchema = traceFileSchema.extend({
+  events: z.array(
+    traceFileSchema.shape.events.element.extend({
+      fault: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*$/)
+        .optional(),
+    }),
+  ),
+});
+
 for (const [name, schema] of [
   ["domain-profile", domainProfileSchema],
   ["agent-scenario", scenarioSchema],
-  ["agent-trace", traceFileSchema],
+  ["agent-trace", exportedTraceSchema],
 ]) {
   const path = new URL(`../schemas/${name}.schema.json`, import.meta.url);
   const value = {

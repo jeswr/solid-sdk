@@ -201,9 +201,13 @@ const envelopeSchema = z.object({
     })
     .optional(),
 });
-export function readA2a(http: HttpExchange): {
+export function readA2a(
+  http: HttpExchange,
+  injectedTextPart = false,
+): {
   message: ByteMessage;
   dropped: string[];
+  droppedFault?: "a2a-text-part-instruction";
   taskState?: string;
 } {
   if (http.method !== "POST") throw new A2aProtocolError(-32600, "A2A messages require POST.");
@@ -238,11 +242,13 @@ export function readA2a(http: HttpExchange): {
   const message = oneCopy(copies);
   if (messages.length !== 1 || (envelope.params && envelope.method !== "SendMessage"))
     throw new CarriageError("malformed", "A2A must contain one request or one reply variant.");
+  const dropped = parts
+    .filter((part) => part.data === undefined)
+    .map(() => "An untrusted A2A text or file part was dropped before the core.");
   return {
     message,
-    dropped: parts
-      .filter((part) => part.data === undefined)
-      .map(() => "An untrusted A2A text or file part was dropped before the core."),
+    dropped,
+    ...(dropped.length && injectedTextPart ? { droppedFault: "a2a-text-part-instruction" } : {}),
     ...(envelope.result?.task ? { taskState: envelope.result.task.status.state } : {}),
   };
 }
