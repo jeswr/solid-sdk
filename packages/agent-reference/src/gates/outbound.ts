@@ -745,6 +745,7 @@ export class OutboundGate {
           recipient: peer.party,
           at: now,
           until,
+          reader: peer,
           retentionDays: offer.data.retentionDays,
           recipientAllowed: (label) => this.recipientAllows(peer.party, intent.operation, label),
         }).verdict !== "pass"
@@ -3188,7 +3189,7 @@ export class OutboundGate {
     return false;
   }
 
-  /** Evidence and the transport hand-off are recorded only after a successful checkMessage. */
+  /** Seal the evidence now and return the announcement to emit when releasing the message. */
   seal(
     message: AnyMessage,
     wire: WireMessage,
@@ -3198,7 +3199,7 @@ export class OutboundGate {
       vocabulary?: ContentVocabulary;
       known?: KnownContent;
     },
-  ): void {
+  ): () => void {
     const envelope =
       message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
     const verdicts: CheckVerdict[] = [];
@@ -3230,23 +3231,25 @@ export class OutboundGate {
         },
       },
     );
-    this.decide(
-      "go",
-      `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
-    );
-    this.emit({
-      part: "transport",
-      kind: "message-out",
-      packet: packetView(message, wire, {
-        carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
-        carriageSummary: "Handed to the carriage.",
-        name: this.name,
-        vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
-        known: opts.known,
-      }),
-      ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
-      caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
-    });
+    return () => {
+      this.decide(
+        "go",
+        `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
+      );
+      this.emit({
+        part: "transport",
+        kind: "message-out",
+        packet: packetView(message, wire, {
+          carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
+          carriageSummary: "Handed to the carriage.",
+          name: this.name,
+          vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
+          known: opts.known,
+        }),
+        ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
+        caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
+      });
+    };
   }
 
   stopDisclosure(subject: string, reason = "excessive-scope"): void {

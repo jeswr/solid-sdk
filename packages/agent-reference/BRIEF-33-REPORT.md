@@ -68,3 +68,29 @@ order. The other two traces and all outlines matched their original bytes.
 - Seven focused Vitest files passed 36 tests under Node 24 with `--maxWorkers=2`. The live oracle matched all 164 baseline paths and its committed snapshot was byte-identical.
 - Both Solid main paths passed C1–C5. Repeating the targeted scenario runs reproduced the three updated traces byte-for-byte.
 - The TypeScript build, generated-file copy, schema check, typecheck, Biome, agent-layer guard and RDF pipeline passed. The RDF pipeline reported zero new failures.
+
+## Review fixes, round 2
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+| Finding | Fix | Regression |
+|---|---|---|
+| 2. Reader restrictions across the lease | The gate checks `read` and applicable `use` prohibitions for the reader's actor and represented party at every time boundary inside the end-exclusive lease. Solid access-control translation validates the supplier policy and the agreement against the proposed rule's actual interval. | Both release configurations refuse a supplier prohibition that applies for a single instant mid-lease. Translation also rejects an agreement prohibition that starts mid-lease and accepts a lease ending at that boundary. |
+| 3. Uncertain ACL PUT still in flight | The journal saves the original `If-Match` validator. When the rule is absent and that validator is still current, cleanup conditionally writes the same ACL bytes to advance its revision. The stand-in assigns a fresh validator even when the bytes repeat. Cleanup retains the journal until it can establish that the grant is absent and the original PUT can no longer commit. | A delayed PUT outlives a failed cleanup attempt. Recovery preserves the ACL bytes, clears the journal after advancing the validator, and the delayed PUT returns 412. |
+| 4. Due withdrawal retries | A stop before execution leaves a valid expiry withdrawal planned under the authority of its original grant. Recovery revalidates the exact duty, effect parameters and intent before retrying. | With the mandate revoked, the first gate refusal leaves the duty pending and the ACL alone. Recovery retries the planned effect, discharges the duty and the pod returns 403. |
+| 5. Delivery decision before outbox commit | The release records the actual `message-out` and emits `go` after the snapshot commits the outbox entry and expiry duties. The ACL cleanup journal already exists at the commit boundary. | A fault injected at the snapshot save observes a durable cleanup journal and no delivery decision or delivery record. Recovery removes the ACL rule. |
+| 6. Deletion tied to the retained grant | Each admitted read saves its gate statement and the deletion duty for that item and grant in the same snapshot, before the operation stores its copy. The runtime refuses a reference read if the operation has no erasure hook. Deadline processing uses the duty's grant after the current pointer changes. | Replacing the pointer for a retained statement leaves the older grant's deletion deadline in force for both payloads. An operation without an erasure hook admits neither payload. |
+| Final independent record flush | The release stages the confirmed grant, signed delivery seal and transfer records, then requires the independent flush before inserting the outbox entry. A failed flush aborts the release and rolls back the grant. | The final flush observes the grant and seal before any outbox save. Making that flush fail leaves no delivery and removes the reader rule. |
+
+The reference agent has no legacy deployments. The withdrawal change keeps current
+effects retryable before execution, and the erasure change relies on duties created at
+current admission. Round 2 removes the pointer-based backfill and adds no migration
+for historical effects or retained copies.
+
+Both Solid main paths passed C1–C5. Targeted regeneration ran all five paths and
+updated three traces, each with one additional ledger entry for the delivery seal.
+The other two traces, all outlines, the trace index and the scenario manifest matched
+their previous bytes. The live oracle matched all 164 paths against the byte-identical
+baseline. Seven focused Vitest files passed 61 tests under Node 24 with `--maxWorkers=2`.
+The TypeScript build and typecheck, schema check, Biome, agent-layer guard
+and RDF pipeline passed. The RDF pipeline reported 0 failures and 213 allowances.

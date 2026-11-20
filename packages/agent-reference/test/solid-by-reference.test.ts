@@ -8,7 +8,7 @@ import { DataFactory } from "n3";
 import { beforeAll, expect, it, vi } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import type { EvidenceItem } from "../src/core/types.js";
-import { ConsumerMortgageHandler } from "../src/domains/mortgage.js";
+import { ConsumerMortgageHandler, LenderPrequalHandler } from "../src/domains/mortgage.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import { OutboundGate } from "../src/gates/outbound.js";
@@ -20,10 +20,10 @@ import {
 import { accessDocument } from "../src/model/solid-storage.js";
 import { testKey } from "../src/reference/keys.js";
 import type { OutboundMessage } from "../src/runtime/agent.js";
-import { EvidencePod, type PodGrant } from "../src/standins/pod-access.js";
+import { EvidencePod, type PodGrant, WITHDRAW_ACCESS } from "../src/standins/pod-access.js";
 import { FictionalSolidStorage } from "../src/standins/storage.js";
 import type { MemoryLedger } from "../src/store/ledger.js";
-import { MemoryStateStore } from "../src/store/state.js";
+import { domainValue, MemoryStateStore, type RuntimeState } from "../src/store/state.js";
 import { INBOUND_CHECKS, type TraceFile } from "../src/trace/types.js";
 import { inspectEvidenceJws } from "../src/wire/evidence-jws.js";
 
@@ -48,22 +48,24 @@ async function run(
     stopAfter,
     branch,
     change,
+    mode = configuration,
   }: {
     stopAfter?: string;
     branch?: string;
     change?: (scenario: ReturnType<typeof load>["scenario"]) => void;
+    mode?: string;
   } = {},
 ) {
   const { profile, scenario } = load();
   scenario.branches = [];
-  const entry = scenario.configurations.find((e) => e.id === configuration)!;
+  const entry = scenario.configurations.find((e) => e.id === mode)!;
   entry.world.branches = branch
     ? (entry.world.branches as Array<{ id: string }>).filter((b) => b.id === branch)
     : [];
   scenario.stopAfter = stopAfter;
   change?.(scenario);
   const paths = await runScenario(profile, scenario, {
-    configuration,
+    configuration: mode,
     testOnly: true,
     beforeSolidStep,
   });
@@ -519,6 +521,46 @@ it.each([30, 59])("checks the lease and copy against the supplier's %i-day limit
   }
 }, 300_000);
 
+it.each([
+  [configuration, "actor", "read"],
+  ["usage-control-solid-access-control", "party", "use"],
+] as const)(
+  "%s checks a mid-lease prohibition on the reader's %s",
+  async (mode, reader, action) => {
+    const { pointer } = pointerOf(delivery);
+    const midpoint = new Date(Date.parse(pointer.validFrom) + day).toISOString();
+    let fixture: Fixture | undefined;
+    const path = await run(
+      (input) => {
+        if (input.step.id === "terms-arrive") fixture = input;
+      },
+      {
+        mode,
+        stopAfter: "terms-arrive",
+        change(scenario) {
+          const terms = scenario.statements.find((s) => s.id === "deposit")!.terms!;
+          const prohibitions = (terms.policy as { prohibitions: unknown[] }).prohibitions;
+          prohibitions.push({
+            type: "prohibition",
+            action,
+            target: item,
+            assignee: pointer.reader[reader],
+            constraints: [{ leftOperand: "dateTime", operator: "eq", rightOperand: midpoint }],
+          });
+        },
+      },
+    );
+    expect(path.trace!.events).toContainEqual(
+      expect.objectContaining({ check: "data-terms", verdict: "fail", reason: "prohibited" }),
+    );
+    expect(records(fixture!, "sam-agent").some((r) => r.type === "access-grant-intended")).toBe(
+      false,
+    );
+    expect(await acl(fixture!.pod)).not.toContain(lender);
+  },
+  300_000,
+);
+
 solidTest("reconciles an ACL PUT whose response was lost during a pod outage", async () => {
   let fixture: Fixture | undefined;
   let putSucceeded = false;
@@ -599,6 +641,68 @@ solidTest("reconciles an ACL PUT whose response was lost during a pod outage", a
   );
 });
 
+solidTest("fences an in-flight ACL PUT before clearing its cleanup journal", async () => {
+  let finishPut = () => {};
+  const putMayComplete = new Promise<void>((resolve) => {
+    finishPut = resolve;
+  });
+  let inFlight: Promise<Response> | undefined;
+  let fixture: Fixture | undefined;
+  let journal: MemoryStateStore | undefined;
+  let firstBarrier = true;
+  const save = MemoryStateStore.prototype.save;
+  const snapshot = vi.spyOn(MemoryStateStore.prototype, "save").mockImplementation(function (
+    this: MemoryStateStore,
+    state,
+  ) {
+    save.call(this, state);
+    if (Object.keys(state.pendingPodGrants).length) journal = this;
+  });
+  try {
+    await run(
+      (input) => {
+        if (input.step.id !== "consent") return;
+        fixture = input;
+        const storage = input.pod.storage;
+        const client = storage.client.bind(storage);
+        vi.spyOn(storage, "client").mockImplementation((...args) => {
+          const request = client(...args);
+          return async (url, init) => {
+            if (String(url) === aclUrl && init?.method === "PUT") {
+              if (!inFlight) {
+                inFlight = putMayComplete.then(() => request(url, init));
+                throw new Error("The connection closed before the ACL PUT completed");
+              }
+              if (firstBarrier) {
+                firstBarrier = false;
+                return new Response(null, { status: 503 });
+              }
+            }
+            return request(url, init);
+          };
+        });
+      },
+      { stopAfter: "consent" },
+    );
+    expect(inFlight).toBeDefined();
+    const { pod, runtimes } = fixture!;
+    const before = await acl(pod);
+    expect(before).not.toContain(lender);
+    expect(Object.keys(journal!.load().pendingPodGrants)).toHaveLength(1);
+    await runtimes.get("sam-agent")!.recover();
+    expect(journal!.load().pendingPodGrants).toEqual({});
+    expect(await acl(pod)).toBe(before);
+    finishPut();
+    expect((await inFlight!).status).toBe(412);
+    expect(await acl(pod)).toBe(before);
+  } finally {
+    finishPut();
+    await inFlight;
+    snapshot.mockRestore();
+    if (fixture) vi.mocked(fixture.pod.storage.client).mockRestore();
+  }
+});
+
 it.each([
   "expired",
   "revoked",
@@ -625,6 +729,54 @@ it.each([
     expect.objectContaining({ type: "access-withdrawn", reason: "expiry" }),
   );
 }, 300_000);
+
+solidTest("retries a due withdrawal that was stopped before execution", async () => {
+  const release = OutboundGate.prototype.release;
+  let stopped = false;
+  const gate = vi.spyOn(OutboundGate.prototype, "release").mockImplementation(function (
+    this: OutboundGate,
+    intent,
+    decision,
+  ) {
+    if (!stopped && decision.policy.evaluator === "grant-withdrawal") {
+      stopped = true;
+      return { outcome: "stop", verdicts: [], decision: { ...decision, outcome: "deny" } };
+    }
+    return release.call(this, intent, decision);
+  });
+  const snapshots = vi.spyOn(MemoryStateStore.prototype, "save");
+  try {
+    await run(
+      async (input) => {
+        if (input.step.id !== "balance-read") return;
+        const sender = input.runtimes.get("sam-agent")!;
+        const read = input.pod.storage.client(lender, await testKey("engine/north-agent/actor"));
+        expect(await sender.revokeMandate()).toMatchObject({ revoked: true });
+        input.advance(59 * day + 1);
+        await sender.dischargeDuties();
+        expect(stopped).toBe(true);
+        const state = snapshots.mock.calls.at(-1)?.[0];
+        expect(Object.values(state?.effects ?? {})).toContainEqual(
+          expect.objectContaining({
+            activityType: WITHDRAW_ACCESS,
+            status: "planned",
+            attempts: 0,
+          }),
+        );
+        expect((await read(resource)).status).toBe(200);
+        await sender.recover();
+        expect((await read(resource)).status).toBe(403);
+        expect(records(input, "sam-agent")).toContainEqual(
+          expect.objectContaining({ type: "access-withdrawn", reason: "expiry" }),
+        );
+      },
+      { stopAfter: "balance-read" },
+    );
+  } finally {
+    snapshots.mockRestore();
+    gate.mockRestore();
+  }
+});
 
 solidTest("a failed final readiness check leaves neither a delivery record nor a go", async () => {
   let fixture: Fixture | undefined;
@@ -668,6 +820,99 @@ solidTest("a failed final readiness check leaves neither a delivery record nor a
   }
 });
 
+solidTest("records no delivery go before the durable outbox commit", async () => {
+  let fixture: Fixture | undefined;
+  let boundary:
+    | { go: boolean; messageOut: boolean; journaled: boolean; committed: boolean }
+    | undefined;
+  const save = MemoryStateStore.prototype.save;
+  const snapshots = vi.spyOn(MemoryStateStore.prototype, "save").mockImplementation(function (
+    this: MemoryStateStore,
+    state,
+  ) {
+    const entry = Object.values(state.outbox).find(
+      (entry) => entry.kind === "deliver" && entry.message?.evidence?.some(isAccessPointer),
+    );
+    if (!boundary && entry && fixture) {
+      const ledger = records(fixture, "sam-agent");
+      const release = ledger.slice(
+        ledger.findIndex((r) => r.type === "message-release-intended" && r.id === entry.id),
+      );
+      const prior = this.load();
+      boundary = {
+        go: release.some((r) => r.type === "gate-decision" && r.outcome === "go"),
+        messageOut: release.some((r) => r.type === "message-out" && r.id === entry.id),
+        journaled: Object.keys(prior.pendingPodGrants).length > 0,
+        committed: !!prior.outbox[entry.id],
+      };
+      throw new Error("Interrupted before the outbox snapshot committed");
+    }
+    save.call(this, state);
+  });
+  try {
+    await run(
+      (input) => {
+        if (input.step.id === "consent") fixture = input;
+      },
+      { stopAfter: "consent" },
+    );
+    expect(boundary).toEqual({ go: false, messageOut: false, journaled: true, committed: false });
+    await fixture!.runtimes.get("sam-agent")!.recover();
+    expect(await acl(fixture!.pod)).not.toContain(lender);
+  } finally {
+    snapshots.mockRestore();
+  }
+});
+
+solidTest("flushes the confirmed grant and seal before committing the outbox", async () => {
+  let fixture: Fixture | undefined;
+  let flush: { grant: boolean; sealed: boolean; outbox: boolean } | undefined;
+  const snapshots = vi.spyOn(MemoryStateStore.prototype, "save");
+  const ensureRecord = OutboundGate.prototype.ensureRecord;
+  const ready = vi.spyOn(OutboundGate.prototype, "ensureRecord").mockImplementation(async function (
+    this: OutboundGate,
+    subject,
+  ) {
+    if (fixture) {
+      const ledger = records(fixture, "sam-agent");
+      if (ledger.some((r) => r.type === "message-release-sealed" && r.id === subject)) {
+        flush = {
+          grant: ledger.some((r) => r.type === "access-granted" && r.pointer && r.pointerDigest),
+          sealed: ledger.some(
+            (r) => r.type === "message-release-sealed" && r.id === subject && r.wireDigest,
+          ),
+          outbox: snapshots.mock.calls.some(([state]) => !!state.outbox[subject]),
+        };
+        return false;
+      }
+    }
+    return ensureRecord.call(this, subject);
+  });
+  try {
+    const path = await run(
+      (input) => {
+        if (input.step.id === "consent") fixture = input;
+      },
+      { stopAfter: "consent" },
+    );
+    expect(flush).toEqual({ grant: true, sealed: true, outbox: false });
+    expect(path.trace!.events).not.toContainEqual(
+      expect.objectContaining({
+        agent: "sams-agent",
+        kind: "message-out",
+        packet: expect.objectContaining({ kind: "deliver" }),
+      }),
+    );
+    expect(records(fixture!, "sam-agent")).toContainEqual(
+      expect.objectContaining({ type: "message-release-aborted" }),
+    );
+    expect(await acl(fixture!.pod)).not.toContain(lender);
+  } finally {
+    ready.mockRestore();
+    snapshots.mockRestore();
+  }
+});
+
 solidTest("erases both the purpose-store copy and the gate statement at deleteBy", async () => {
   let fixture: Fixture | undefined;
   await run(
@@ -687,6 +932,23 @@ solidTest("erases both the purpose-store copy and the gate statement at deleteBy
   await reader.dischargeDuties();
   expect(held()).toBeDefined();
   expect(store.has(item)).toBe(true);
+  // A replacement delivery changes the pointer used for the next read. The older copy
+  // keeps its own deletion deadline even after that lookup changes.
+  const state = Reflect.get(reader, "state") as RuntimeState;
+  const key = `_reference:${item}`;
+  const original = domainValue(state.domain[key]) as { pointer: AccessPointer } & Record<
+    string,
+    unknown
+  >;
+  const { pointer: first } = original;
+  const replacement = {
+    ...first,
+    terms: { ...first.terms, grant: { ...first.terms.grant, id: "urn:replacement:grant" } },
+  };
+  state.domain[key] = {
+    ...original,
+    pointer: replacement,
+  } as unknown as RuntimeState["domain"][string];
   advance(day);
   const snapshots = vi.spyOn(MemoryStateStore.prototype, "save");
   try {
@@ -700,6 +962,13 @@ solidTest("erases both the purpose-store copy and the gate statement at deleteBy
       retained.every((entry) => entry.statement === undefined && entry.original === undefined),
     ).toBe(true);
     expect(saved?.precedenceHolds[item]).toBeUndefined();
+    expect(saved?.duties.work).toEqual(
+      expect.objectContaining({
+        [Object.values(state.duties.work).find(
+          (duty) => duty.referenceCopy?.grant === first.terms.grant.id,
+        )!.id]: expect.objectContaining({ status: "discharged" }),
+      }),
+    );
   } finally {
     snapshots.mockRestore();
   }
@@ -711,6 +980,37 @@ solidTest("erases both the purpose-store copy and the gate statement at deleteBy
   expect(records(fixture!, "north-agent")).toContainEqual(
     expect.objectContaining({ type: "duty-discharged", kind: "delete", items: [item] }),
   );
+});
+
+solidTest("refuses to retain a reference when its operation cannot erase the copy", async () => {
+  let fixture: Fixture | undefined;
+  const prototype = LenderPrequalHandler.prototype;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "eraseReferenceCopy")!;
+  try {
+    await run(
+      (input) => {
+        if (input.step.id !== "balance-read") return;
+        fixture = input;
+        Object.defineProperty(prototype, "eraseReferenceCopy", { ...descriptor, value: undefined });
+      },
+      { stopAfter: "balance-read" },
+    );
+    expect(fixture!.stores.get("north-store")!.has(item)).toBe(false);
+    expect(
+      fixture!.runtimes
+        .get("north-agent")!
+        .admittedStatements()
+        .some((s) => s.id === item),
+    ).toBe(false);
+    expect(records(fixture!, "north-agent")).toContainEqual(
+      expect.objectContaining({
+        type: "reference-read-refused",
+        reason: "terms-not-acceptable",
+      }),
+    );
+  } finally {
+    Object.defineProperty(prototype, "eraseReferenceCopy", descriptor);
+  }
 });
 
 solidTest(

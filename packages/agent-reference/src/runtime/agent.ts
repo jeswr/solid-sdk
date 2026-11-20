@@ -1947,9 +1947,21 @@ export class AgentRuntime {
         throw new Error("No admitted pod reference for this item");
       const { pointer, conversation, delivery } = admitted;
       const conv = this.mustConversation(conversation);
-      const handler = conv.operation && this.handlers.get(operationKey(conv.operation));
+      const operation = conv.operation;
+      const handler = operation && this.handlers.get(operationKey(operation));
       const at = this.now();
-      const expired = Date.parse(pointer.validUntil) <= Date.parse(at);
+      if (!operation || !handler?.eraseReferenceCopy) {
+        this.record({
+          type: "reference-read-refused",
+          pointer: pointer.id,
+          at,
+          reason: "terms-not-acceptable",
+        });
+        return this.result("rejected", { reason: "terms-not-acceptable", outbound: [] });
+      }
+      const expired = !(
+        Math.min(Date.parse(pointer.validUntil), Date.parse(pointer.copy.deleteBy)) > Date.parse(at)
+      );
       const response = expired
         ? undefined
         : await pod.read(pointer, this.identity.actor, key).catch(() => undefined);
@@ -1977,7 +1989,7 @@ export class AgentRuntime {
             receiptValid: response?.receiptValid ?? false,
             digestMatches: response?.digestMatches ?? false,
             readOnly: response?.readOnly ?? false,
-            evidenceSchema: handler?.referenceEvidenceSchema,
+            evidenceSchema: handler.referenceEvidenceSchema,
           },
         },
       );
@@ -1993,13 +2005,11 @@ export class AgentRuntime {
         this.persist();
         return this.result("rejected", { reason: result.reason, outbound: [] });
       }
-      if (conv.operation) {
-        this.scheduleReferenceErasure(pointer, conv.operation);
-        this.persist(); // The deadline is durable before the handler writes the purpose-store copy.
-      }
+      this.scheduleReferenceErasure(pointer, operation);
+      this.persist(); // The admitted statement and its grant's deadline are saved together.
       const fact = this.gateMemory.facts.get(item);
       const reply =
-        fact?.statement && handler?.onReferenceRead
+        fact?.statement && handler.onReferenceRead
           ? await handler.onReferenceRead(this.context(conv), pointer, copyData(fact))
           : undefined;
       const outbound =
@@ -2094,7 +2104,10 @@ export class AgentRuntime {
     )
       return undefined;
     const checked = this.withdrawalPlan(duty, reason);
-    return plan.key === checked.key && actionDigest(plan.intent) === actionDigest(checked.intent)
+    return plan.key === checked.key &&
+      plan.activityType === checked.activityType &&
+      digestOf(plan.params) === digestOf(checked.params) &&
+      actionDigest(plan.intent) === actionDigest(checked.intent)
       ? duty
       : undefined;
   }
@@ -5408,21 +5421,6 @@ export class AgentRuntime {
           items: rule.items,
           due: rule.by,
         });
-    // Older snapshots can already contain an admitted copy without a scheduled deletion.
-    if (this.options.gates?.accessPod)
-      for (const [key, state] of Object.entries(this.state.domain)) {
-        if (!key.startsWith("_reference:")) continue;
-        const reference = domainValue(state) as unknown as {
-          pointer: AccessPointer;
-          conversation: string;
-        };
-        const { pointer } = reference;
-        const operation = this.state.conversations[reference.conversation]?.operation;
-        const admitted =
-          this.gateMemory.facts.get(pointer.item.id) ?? this.state.precedenceHolds[pointer.item.id];
-        if (operation && admitted?.dataUseGrant?.id === pointer.terms.grant.id)
-          this.scheduleReferenceErasure(pointer, operation);
-      }
     const work = this.dutyExecutor().audit();
     for (const duty of work)
       if (
@@ -5853,12 +5851,14 @@ export class AgentRuntime {
     this.outbound.holdEmailContext(undefined);
     for (const verdict of this.outbound.takeEmailContextVerdicts()) this.record(verdict);
     this.recordReleaseDigest = undefined;
+    const adapter = this.effectAdapters.get(plan.adapter);
+    // A due withdrawal still owes cleanup when the gate cannot authorize an attempt now.
+    if (expiryGrant && (decision.outcome !== "permit" || !adapter)) return [];
     if (decision.outcome === "ask-more") return [];
     if (decision.outcome === "approval-required") {
       this.park(ownerId, plan.intent, { type: "effect", plan, basis });
       return [];
     }
-    const adapter = this.effectAdapters.get(plan.adapter);
     const at = this.now();
     this.record({
       type: "activity",
@@ -5881,12 +5881,14 @@ export class AgentRuntime {
         "direct-response",
       );
     }
-    if (!(await this.redeemForEffect(plan)))
+    if (!(await this.redeemForEffect(plan))) {
+      if (expiryGrant) return [];
       return this.conclude(
         planned,
         { conclusion: "not-executed", reason: "single-use check refused" },
         "direct-response",
       );
+    }
     if (!(await this.outbound.ensureRecord(plan.key))) {
       if (expiryGrant) return [];
       return this.conclude(
@@ -7690,6 +7692,7 @@ export class AgentRuntime {
         this.result("rejected", { reason: "record-unavailable", outbound: [] }),
       );
     const signing = cfg.integrity;
+    let announceReference: (() => void) | undefined;
     const prepareRelease = async (pointers?: ReadonlyMap<string, EvidenceItem>) => {
       if (pointers) {
         let count = 0;
@@ -7811,18 +7814,25 @@ export class AgentRuntime {
         this.record({ type: "message-release-intended", ...deliveryRecord });
         if (!(await this.outbound.ensureRecord(message.id)))
           throw new Error("The reference delivery record is unavailable");
-        if (opts.intent?.purpose)
-          this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
-        if (nextConversation) this.saveConversation(nextConversation);
-      }
-      this.record({ type: "message-out", ...deliveryRecord });
+      } else this.record({ type: "message-out", ...deliveryRecord });
       // Evidence and the write-ahead record must succeed before the outbox can expose it.
-      this.outbound.seal(message, wire, {
+      const announce = this.outbound.seal(message, wire, {
         vocabulary,
         known,
         ...(opts.intent ? { intent: opts.intent } : {}),
         ...(this.operationOf(conv) ? { operation: this.operationOf(conv) as Iri } : {}),
       });
+      if (pointers) {
+        this.record({
+          type: "message-release-sealed",
+          ...deliveryRecord,
+          wireDigest: digestOf(wire),
+        });
+        announceReference = () => {
+          this.record({ type: "message-out", ...deliveryRecord });
+          announce();
+        };
+      } else announce();
       this.gateMemory.rememberIdentifiers(message.conversation, message);
       if (opts.intent) {
         const standing = this.standingAccess(opts.intent);
@@ -7856,11 +7866,16 @@ export class AgentRuntime {
         };
       this.retainedMessageViews.set(message.id, message);
       this.recordItemTransfer(message, conv, false);
-      // Mirror the seal, decision and transfer entries before exposing the message to carriage.
-      if (!pointers && !(await this.outbound.ensureRecord(message.id)))
+      // Mirror the staged records before exposing the message to carriage.
+      if (!(await this.outbound.ensureRecord(message.id)))
         throw new MessageReleaseError(
           this.result("rejected", { reason: "record-unavailable", outbound: [] }),
         );
+      if (pointers) {
+        if (opts.intent?.purpose)
+          this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
+        if (nextConversation) this.saveConversation(nextConversation);
+      }
       return entry;
     };
 
@@ -7879,6 +7894,7 @@ export class AgentRuntime {
       return publish(await prepareRelease());
 
     const grants = copyData(this.outbound.accessGrants(opts.intent));
+    let out: OutboundMessage;
     try {
       if (
         !grants?.length ||
@@ -7922,7 +7938,7 @@ export class AgentRuntime {
           due: grant.pointer.validUntil,
         }),
       );
-      const out = publish(entry);
+      out = publish(entry);
       const pendingPodGrants = { ...this.state.pendingPodGrants };
       for (const { pointer } of grants) delete this.state.pendingPodGrants[pointer.id];
       try {
@@ -7940,11 +7956,13 @@ export class AgentRuntime {
         this.state.pendingPodGrants = pendingPodGrants;
         throw error;
       }
-      return out;
     } catch {
       this.saveConversation(conv);
       delete this.state.recordMessages[message.id];
       this.retainedMessageViews.delete(message.id);
+      this.state.duties.transfers = this.state.duties.transfers.filter(
+        (transfer) => transfer.message !== message.id,
+      );
       this.record({ type: "message-release-aborted", id: message.id, reason: "execution-failed" });
       this.outbound.stopAccessRelease();
       throw new MessageReleaseError(
@@ -7955,6 +7973,8 @@ export class AgentRuntime {
         }),
       );
     }
+    announceReference?.();
+    return out;
   }
 
   private purposeOf(id: Iri): Iri | undefined {

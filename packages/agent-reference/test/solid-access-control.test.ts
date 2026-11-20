@@ -166,6 +166,44 @@ it("a rule that names no policy, or a policy not in the terms, is prohibited", (
   expect(withinTerms(rule!, constrained)).toBe(false);
 });
 
+it("validates the translated interval against a restriction in the agreement", () => {
+  const at = Date.parse(pointer.validFrom);
+  const until = new Date(at + 20).toISOString();
+  const cutoff = new Date(at + 10).toISOString();
+  const terms: TranslationTerms = {
+    supplier: pointer.terms.supplier.policy,
+    grant: pointer.terms.grant,
+    mandate: { type: "permission", action: "distribute", target: "urn:op:disclosure" },
+    item: pointer.item.id,
+    resource: pointer.resource,
+    agent: pointer.reader.actor,
+    recipient: pointer.reader.party,
+    purpose: pointer.purpose,
+    mandateTarget: "urn:op:disclosure",
+    at: pointer.validFrom,
+    until,
+  };
+  const { rule } = translateTerms(terms);
+  if (!rule) throw new Error("The fixture must permit Read");
+  const withRestriction: TranslationTerms = {
+    ...terms,
+    grant: {
+      ...terms.grant,
+      prohibitions: [
+        {
+          type: "prohibition",
+          action: "read",
+          target: `${pointer.agreement}#evidence`,
+          constraints: [{ leftOperand: "dateTime", operator: "gteq", rightOperand: cutoff }],
+        },
+      ],
+    },
+  };
+  expect(translateTerms(withRestriction).rule).toBeUndefined();
+  expect(withinTerms(rule, withRestriction)).toBe(false);
+  expect(withinTerms({ ...rule, until: cutoff }, withRestriction)).toBe(true);
+});
+
 it("what access rules cannot say still travels as terms", () => {
   expect(pointer.remainder?.join(" ")).toMatch(/purpose.*onward.*deletion/i);
   const fact = last.runtimes

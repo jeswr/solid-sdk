@@ -24,6 +24,7 @@ export interface PodGrant {
 export interface PodGrantAttempt {
   grant: PodGrant;
   before: string;
+  beforeEtag: string;
   after: string;
   actionDigest: string;
 }
@@ -107,19 +108,29 @@ export class EvidencePod {
     grant: PodGrant,
     reason: WithdrawalReason,
     record: RecordAccess,
-    restore?: { before: string; after: string },
+    attempt?: PodGrantAttempt,
   ): Promise<void> {
     const { pointer: p, fragment } = grant;
+    if (attempt && !attempt.beforeEtag) throw new Error("The original ACL validator is missing");
     const acl = await this.acl(p.resource);
     const url = `${p.resource}.acl`;
     let response = acl.response;
-    if (await hasAccessRule(acl.body, url, fragment)) {
-      const removed =
-        restore && acl.body === restore.after
-          ? restore.before
+    const present = await hasAccessRule(acl.body, url, fragment);
+    if (present || attempt?.beforeEtag === acl.etag) {
+      // An unchanged validator still allows the original PUT to commit. Advance the
+      // ACL revision even when the fragment is absent, so that PUT cannot commit later.
+      const removed = !present
+        ? acl.body
+        : attempt && acl.body === attempt.after
+          ? attempt.before
           : await accessDocument(url, [], acl.body, fragment);
       response = await this.writeAcl(p.resource, acl.etag, removed);
-      if (!response.ok || (await hasAccessRule((await this.acl(p.resource)).body, url, fragment)))
+      if (!response.ok) throw new Error("Withdrawal could not be confirmed");
+      const confirmed = await this.acl(p.resource);
+      if (
+        confirmed.etag === attempt?.beforeEtag ||
+        (await hasAccessRule(confirmed.body, url, fragment))
+      )
         throw new Error("Withdrawal could not be confirmed");
     }
     record({
@@ -167,7 +178,13 @@ export class EvidencePod {
           ...(p.policies ? { policies: p.policies } : {}),
         };
         const after = await accessDocument(url, [rule], before.body);
-        const attempt = { grant, before: before.body, after, actionDigest };
+        const attempt = {
+          grant,
+          before: before.body,
+          beforeEtag: before.etag,
+          after,
+          actionDigest,
+        };
         journal?.prepare(attempt);
         attempted.push(attempt);
         const response = await this.writeAcl(p.resource, before.etag, after);
@@ -205,15 +222,15 @@ export class EvidencePod {
         const entry = records.find((entry) => entry.pointer === p.id);
         if (entry) entry.pointerDigest = digestBytes(value);
       }
-      const result = await release(pointers);
       for (const entry of records) record(entry);
-      return result;
+      return await release(pointers);
     } catch (error) {
       if (applying) record({ type: "access-grant-failed", actionDigest });
       let rollbackIncomplete = false;
-      for (const { grant, before, after } of attempted.reverse()) {
+      for (const attempt of attempted.reverse()) {
+        const { grant } = attempt;
         try {
-          await this.withdraw(grant, "release-failed", record, { before, after });
+          await this.withdraw(grant, "release-failed", record, attempt);
           journal?.clear(grant.pointer.id);
         } catch {
           rollbackIncomplete = true;

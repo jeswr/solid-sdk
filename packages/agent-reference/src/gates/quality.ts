@@ -9,7 +9,12 @@
 import { z } from "zod";
 import type { Iri } from "../core/types.js";
 import { OUTSIDE_EFFECT_ACTIONS, type PILOT_ODRL_SUBSET } from "../mechanisms/mandate.js";
-import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import {
+  type PolicyEngine,
+  policyInstants,
+  referenceReadUnrestricted,
+  solidOdrlEngine,
+} from "../mechanisms/policy-engine.js";
 import type { QualityInput, StatementQualityNode } from "../model/quality.js";
 import type { Namer } from "../trace/packet.js";
 import type { ItemTerms, RelianceProfile } from "./common.js";
@@ -240,6 +245,7 @@ export function evaluateItemTerms(
     readonly at: string;
     /** End-exclusive period for an ongoing release authorized by these terms. */
     readonly until?: string;
+    readonly reader?: { actor: Iri; party: Iri };
     readonly recipientAllowed?: (task: string) => boolean;
   },
   engine: PolicyEngine = solidOdrlEngine,
@@ -356,21 +362,17 @@ export function evaluateItemTerms(
       return { verdict: "fail", reason: "terms-not-acceptable", text: "Invalid release period." };
     retentionDays = Math.max(retentionDays ?? 0, (end - start) / DAY);
     keep = Math.min(terms.deleteWithinDays ?? Infinity, ...policyDeletionDays(terms));
-    // For the supported date comparisons, permission can change only at or just after a boundary.
-    const boundaries = new Set<number>();
-    for (const rule of [...(rules.permissions ?? []), ...(rules.prohibitions ?? [])])
-      for (const constraint of rule.constraints ?? []) {
-        if (constraint.leftOperand !== "dateTime") continue;
-        const values = Array.isArray(constraint.rightOperand)
-          ? constraint.rightOperand
-          : [constraint.rightOperand];
-        for (const value of values) {
-          const instant = Date.parse(String(value));
-          for (const at of [instant, instant + 1]) if (at > start && at < end) boundaries.add(at);
-        }
-      }
-    for (const at of boundaries) {
-      const effect = engine.evaluate(rules, { ...request, at: new Date(at).toISOString() }).effect;
+    if (
+      need.reader &&
+      !referenceReadUnrestricted(rules, need.reader, { ...request, until: need.until })
+    )
+      return {
+        verdict: "fail",
+        reason: "prohibited",
+        text: "Its terms restrict this reader during the release period.",
+      };
+    for (const at of policyInstants(rules, need.at, need.until).slice(1)) {
+      const effect = engine.evaluate(rules, { ...request, at }).effect;
       if (
         effect !== "permit" &&
         !(effect === "not-applicable" && terms.inherited && !rules.permissions?.length)
