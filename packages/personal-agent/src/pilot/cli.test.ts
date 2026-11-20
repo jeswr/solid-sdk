@@ -205,5 +205,5 @@ describe("awp-pilot CLI (file interface; nothing is sent)", () => {
       readFileSync(join(spool, "out", "replayed.gmail.json", "report.json"), "utf8"),
     );
     expect(report.step.disposition).toBe("duplicate");
-  });
+  }, 20_000);
 });

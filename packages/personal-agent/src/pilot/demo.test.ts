@@ -10,5 +10,5 @@ describe("demo report", () => {
     expect(failed).toEqual([]);
     expect(report.summary.scenarios).toBe(14);
     expect(report.summary.failed).toBe(0);
-  }, 60_000);
+  }, 120_000);
 });

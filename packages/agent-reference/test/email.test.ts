@@ -782,6 +782,28 @@ it("uses the durable file checkpoint and treats a missing historical approval ke
   }
 });
 
+it("retains checkpointed binding observations through recovery of an uncommitted suffix", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-binding-checkpoint-"));
+  const f = await fixture({ stateDir: dir });
+  try {
+    const type = "test-binding-observation";
+    const binding = "urn:test:binding";
+    await f.runtime.commitBindingEvent({ type, binding, disposition: "received" });
+    f.runtime.recordBindingEvent({ type, binding, disposition: "uncommitted" });
+    await f.reopen();
+    await f.runtime.commitBindingEvent({ type, binding, disposition: "processed" });
+    expect(
+      f.ledger
+        .entries()
+        .filter((entry) => entry.record.type === type)
+        .map((entry) => entry.record.disposition),
+    ).toEqual(["received", "processed"]);
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 it.each([
   "appended observation",
   "reconstructed suffix",

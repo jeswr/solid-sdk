@@ -335,7 +335,25 @@ export class InboundGate {
         unsigned: !declared.signed,
         limits: nativeDocumentLimits(limits),
       });
-      if (!checked.ok) return { ok: false, reason: checked.reason, detail: checked.detail };
+      if (!checked.ok) {
+        if (
+          declared.signed &&
+          (checked.reason === "bad-signature" || checked.reason === "unknown-key")
+        ) {
+          const failure: VerificationResult = {
+            type: "verification",
+            protectedObject: digestBytes(wire.jsonld),
+            property: "integrity-and-key-attribution",
+            mechanism: suite,
+            verifier: identity.actor,
+            at,
+            outcome: checked.reason === "bad-signature" ? "invalid" : "unknown-key",
+            limitations: [checked.detail],
+          };
+          this.deps.record(failure);
+        }
+        return { ok: false, reason: checked.reason, detail: checked.detail };
+      }
       const node = requireMessageNode(checked.root, checked.dataset);
       bindCredentialResolver(node.dataset, (digest) => this.credentialBytes.get(digest));
       graphMessage = node.live;

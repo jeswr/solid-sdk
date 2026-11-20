@@ -621,24 +621,22 @@ describe("phase-3 review — the generic transmission contract", () => {
     expect(g.sends()).toBe(1);
   });
 
-  it("a malformed send result is uncertain, never sent", async () => {
-    for (const bad of [
-      { outcome: "acepted", providerRef: "p1" },
-      { outcome: "accepted" },
-      { outcome: "accepted", providerRef: "p 1\n" },
-      { outcome: "accepted", providerRef: "p1", extra: true },
-      { outcome: "rejected" },
-      null,
-      "accepted",
-    ]) {
-      const g = await gate();
-      const r = await g.transmit({ send: async () => bad });
-      expect(r, JSON.stringify(bad)).toEqual({
-        status: "uncertain",
-        detail: "malformed provider send result",
-      });
-      expect(g.alice.runtime.transmissions()[0]?.status).toBe("uncertain");
-    }
+  it.each([
+    { outcome: "acepted", providerRef: "p1" },
+    { outcome: "accepted" },
+    { outcome: "accepted", providerRef: "p 1\n" },
+    { outcome: "accepted", providerRef: "p1", extra: true },
+    { outcome: "rejected" },
+    null,
+    "accepted",
+  ])("a malformed send result (%#) is uncertain, never sent", async (bad) => {
+    const g = await gate();
+    const r = await g.transmit({ send: async () => bad });
+    expect(r, JSON.stringify(bad)).toEqual({
+      status: "uncertain",
+      detail: "malformed provider send result",
+    });
+    expect(g.alice.runtime.transmissions()[0]?.status).toBe("uncertain");
   });
 
   it("a malformed lookup result is unknown: no reconciliation and no resend", async () => {

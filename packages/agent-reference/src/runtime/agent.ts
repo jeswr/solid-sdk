@@ -1538,6 +1538,14 @@ export class AgentRuntime {
     this.record({ ...record, at: this.now() });
   }
 
+  /** Checkpoint a binding observation before the binding proceeds to its next recoverable step. */
+  commitBindingEvent(record: Parameters<AgentRuntime["recordBindingEvent"]>[0]): Promise<void> {
+    return this.exclusive(async () => {
+      this.recordBindingEvent(record);
+      this.persist();
+    });
+  }
+
   /** Verify one of this agent's own outbound envelopes (pre-send self-check). */
   async selfCheck(wire: WireMessage): Promise<{ ok: boolean; detail: string }> {
     if (isMessagePacket(wire)) {

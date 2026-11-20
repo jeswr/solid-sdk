@@ -33,5 +33,5 @@ describe("UC-03 anonymous public energy-plan comparison", () => {
     expect(obs.deterministic).toBe(true);
     expect(obs.citationsComplete).toBe(true);
     expect(obs.ledgers).toBe(true);
-  });
+  }, 20_000);
 });

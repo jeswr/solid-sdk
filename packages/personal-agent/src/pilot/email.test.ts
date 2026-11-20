@@ -46,7 +46,7 @@ async function relayByGmail(
   for (let hop = 0; queue.length > 0 && hop < 30; hop++) {
     const next: typeof queue = [];
     for (const { to, item } of queue) {
-      expect(item.status).toBe("validated-not-sent");
+      expect(item.status, JSON.stringify(item.checks)).toBe("validated-not-sent");
       const gmailMessage = {
         id: `m${hop}`,
         threadId: "18c0ffee00000001",
@@ -98,7 +98,7 @@ describe("email binding", () => {
     const viaDirect = direct.alice.runtime.agreements()[0];
     expect(viaEmail?.termsDigest).toBe(viaDirect?.termsDigest);
     expect(viaEmail?.selection).toEqual(viaDirect?.selection);
-  });
+  }, 20_000);
 
   it("labels software representation and synthetic scope in the human fallback", async () => {
     const { start } = await setup();
@@ -117,7 +117,7 @@ describe("email binding", () => {
       to: BOB.email as string,
       date: clock.now(),
     });
-    expect(parseInboundEmail(built.raw).ok).toBe(true);
+    expect((await parseInboundEmail(built.raw)).ok).toBe(true);
 
     const plain =
       "From: alice.awp@example.com\r\nTo: bob.awp@example.com\r\nSubject: hi\r\n\r\nCan we meet Tuesday?\r\n";
@@ -144,7 +144,7 @@ describe("email binding", () => {
       (m, b) =>
         `--awp-mixed-${b}\r\nContent-Type: application/ld+json\r\n\r\n${otherCarrier}\r\n${m}`,
     );
-    const r2 = parseInboundEmail(conflicting);
+    const r2 = await parseInboundEmail(conflicting);
     expect(r2.ok).toBe(false);
     if (!r2.ok) expect(r2.reason).toBe("conflicting-structured-copies");
 

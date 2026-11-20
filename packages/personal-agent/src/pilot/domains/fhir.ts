@@ -63,6 +63,7 @@ export const patientAuthorisationSchema = z
   .object({
     type: z.literal("PatientAuthorisation"),
     id: z.string().max(512),
+    issuer: z.string().max(512),
     patient: z.string().max(512),
     patientId: z.string().max(64),
     client: z.string().max(512),
@@ -431,7 +432,12 @@ export class AuthorisationServerHandler implements OperationHandler {
       schema: patientAuthorisationSchema,
     });
     const pa = check.payload;
-    if (!pa || check.verification.outcome !== "valid" || check.signer?.subject !== pa.patient)
+    if (
+      !pa ||
+      check.verification.outcome !== "valid" ||
+      check.signer?.subject !== pa.issuer ||
+      pa.issuer !== pa.patient
+    )
       return deny("not-authorised", "patient authorisation not verified");
     if (
       pa.patient !== ctx.peer.party ||

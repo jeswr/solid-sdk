@@ -3,6 +3,7 @@ import { DataFactory } from "n3";
 import { expect, it } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
+import type { VerificationResult } from "../src/core/types.js";
 import { GateMemory } from "../src/gates/common.js";
 import { InboundGate } from "../src/gates/inbound.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
@@ -36,12 +37,13 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
       subject,
     })),
   });
+  const records: unknown[] = [];
   const gate = new InboundGate({
     identity: { actor: "urn:test:receiver" },
     trust,
     limits: DEFAULT_LIMITS,
     now: () => at,
-    record: () => {},
+    record: (record) => records.push(record),
     gate: {},
     memory: new GateMemory(),
     agreementTerms: () => undefined,
@@ -86,9 +88,32 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
   };
   const first = make("first");
   first.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
-  const accepted = await gate.verifyIntegrity(await packet(first), {}, () => false);
+  const signed = await packet(first);
+  const accepted = await gate.verifyIntegrity(signed, {}, () => false);
   expect(accepted.ok).toBe(true);
   if (!accepted.ok) throw new Error(accepted.detail);
+  expect(records).toContainEqual(
+    expect.objectContaining({
+      type: "verification",
+      protectedObject: digestBytes(signed.jsonld),
+      outcome: "valid",
+      attributedTo: "urn:test:sender",
+    }),
+  );
+  const doc = JSON.parse(signed.jsonld);
+  doc.expiresAt = "2026-11-13T09:30:00.000Z";
+  const tampered = { ...signed, jsonld: JSON.stringify(doc) };
+  expect(await gate.verifyIntegrity(tampered, {}, () => false)).toMatchObject({
+    ok: false,
+    reason: "bad-signature",
+  });
+  const refused = records.at(-1) as VerificationResult;
+  expect(refused).toMatchObject({
+    type: "verification",
+    protectedObject: digestBytes(tampered.jsonld),
+    outcome: "invalid",
+  });
+  expect(refused).not.toHaveProperty("attributedTo");
   expect(accepted.message).toBeInstanceOf(MessageNode);
   expect(accepted.message.body).toBeInstanceOf(CoreNode);
   const view = accepted.message as unknown as MessageNode;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { copyData } from "@jeswr/agent-reference/model/copy";
 import { describe, expect, it, vi } from "vitest";
 import { type ConversationState, openConversation, transition } from "./core/conversation.js";
 import { DEFAULT_LIMITS } from "./core/limits.js";
@@ -366,7 +367,7 @@ it.each([
   if (!delivery) throw new Error("missing delivery");
   const receiver = deliveryRole === "offeror" ? acceptor : offeror;
   const sender = cast.get(deliveryRole === "offeror" ? WATTLE.name : SOUTHERN.name);
-  const before = structuredClone(receiver.conversation(delivery.message.conversation));
+  const before = copyData(receiver.conversation(delivery.message.conversation));
   for (const [i, change] of [
     { operation: { ...operation, id: "urn:unrequested" } },
     { operation: { ...operation, version: "unrequested" } },
@@ -383,7 +384,7 @@ it.each([
       disposition: "rejected",
       reason: "protocol-violation",
     });
-    expect(receiver.conversation(delivery.message.conversation)).toEqual(before);
+    expect(copyData(receiver.conversation(delivery.message.conversation))).toEqual(before);
     expect(onDeliver).not.toHaveBeenCalled();
   }
   expect((await receiver.receive(delivery.wire)).disposition).toBe("accepted");
@@ -436,7 +437,7 @@ it("rejects signed, miscorrelated deliveries before committing state or dispatch
   if (!invocation) throw new Error("missing invocation");
   const response = (await service.receive(invocation.wire)).outbound[0];
   if (response?.message.kind !== "deliver") throw new Error("missing delivery");
-  const before = structuredClone(client.conversation(invocation.message.conversation));
+  const before = copyData(client.conversation(invocation.message.conversation));
   const bad = [
     { operation: otherOperation },
     { operation: { ...ENERGY_PLANS_OP, version: "999" } },
@@ -453,7 +454,7 @@ it("rejects signed, miscorrelated deliveries before committing state or dispatch
     const result = await client.receive(wire);
     expect(result.disposition).toBe("rejected");
     expect(result.reason).toBe("protocol-violation");
-    expect(client.conversation(invocation.message.conversation)).toEqual(before);
+    expect(copyData(client.conversation(invocation.message.conversation))).toEqual(before);
     expect(onExpected).not.toHaveBeenCalled();
     expect(onOther).not.toHaveBeenCalled();
   }
