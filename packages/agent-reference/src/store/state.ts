@@ -149,6 +149,7 @@ export interface MandateRevocation {
 
 export interface RuntimeState {
   duties: import("../runtime/duties.js").DutyState;
+  pendingPodGrants: Record<string, import("../standins/pod-access.js").PodGrantAttempt>;
   recordMessages: Record<
     string,
     { direction: "in" | "out"; conversation: string; digest: string; jws: string }
@@ -246,6 +247,7 @@ export function emptyState(): RuntimeState {
   return {
     version: 1,
     duties: { transfers: [], incoming: [], work: {} },
+    pendingPodGrants: {},
     precedenceHolds: {},
     recordMessages: {},
     conversations: {},

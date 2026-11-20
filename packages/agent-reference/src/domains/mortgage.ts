@@ -458,6 +458,16 @@ export function grantFromTerms(
 }
 
 export class LenderPrequalHandler implements OperationHandler {
+  readonly referenceEvidenceSchema = evidenceSchema;
+
+  eraseReferenceCopy(item: Iri, grant: Iri): boolean {
+    const result = this.cfg.store.purgeExpired(1, { item, grant });
+    return (
+      !result.evidencePending.length &&
+      !this.cfg.store.inventory().some((stored) => stored.id === item && stored.grant === grant)
+    );
+  }
+
   readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription;

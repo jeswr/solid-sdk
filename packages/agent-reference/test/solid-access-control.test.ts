@@ -148,6 +148,10 @@ it("a rule that names no policy, or a policy not in the terms, is prohibited", (
     { agent: "https://another.example/#reader" },
     { resource: "https://another.example/resource" },
     { modes: ["Read", "Write"] as const },
+    { public: true },
+    { authenticated: true },
+    { defaults: true },
+    { agentGroup: "urn:group:unapproved" },
   ])
     expect(withinTerms({ ...rule!, ...wider }, terms)).toBe(false);
   const earlier = new Date(Date.parse(pointer.validUntil) - 1000).toISOString();

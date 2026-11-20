@@ -121,7 +121,7 @@ import {
 import { PILOT_PROFILE } from "../profile/vocabulary.js";
 import { SettlementError } from "../settlement/adapter.js";
 import { readCarried } from "../settlement/carried.js";
-import { POD_ACCESS_ADAPTER, WITHDRAW_ACCESS } from "../standins/pod-access.js";
+import { POD_ACCESS_ADAPTER, type PodGrant, WITHDRAW_ACCESS } from "../standins/pod-access.js";
 import {
   type EvidenceLedger,
   type LedgerEntry,
@@ -520,10 +520,7 @@ export class AgentRuntime {
         id: POD_ACCESS_ADAPTER,
         bindsParameters: true,
         execute: (_key, params) => this.executeWithdrawal(params),
-        reconcile: async (_key, params) =>
-          this.state.duties.work[String(params?.duty)]?.status === "discharged"
-            ? { conclusion: "completed", observed: { duty: String(params?.duty) } }
-            : { conclusion: "uncertain", reason: "The withdrawal has not been confirmed" },
+        reconcile: (_key, params) => this.executeWithdrawal(params ?? {}),
       });
     for (const k of options.actorKeys ?? []) this.keysByAlg.set(k.alg, k);
     this.state = this.store.load();
@@ -696,11 +693,16 @@ export class AgentRuntime {
       },
       referenceAgreementId: (intent) => {
         const conv = this.state.conversations[intent.conversation];
-        return (
-          conv?.agreement ??
-          (conv?.openProposal &&
-            this.agreementId(conv.openProposal.id, conv.openProposal.termsDigest))
-        );
+        if (!conv) return undefined;
+        const digest = intent.parameters.termsDigest;
+        if (conv.agreement) {
+          const agreement = this.state.agreements[conv.agreement];
+          return agreement && agreement.termsDigest === digest ? agreement.id : undefined;
+        }
+        const offer = conv.openProposal;
+        if (offer && offer.termsDigest === digest)
+          return this.agreementId(offer.id, offer.termsDigest);
+        return undefined;
       },
       recordRelease: (intent) => this.recordReleaseDigest === actionDigest(intent),
       recordBacks: (claim, recipient) => this.recordBacks(claim, recipient),
@@ -1944,6 +1946,8 @@ export class AgentRuntime {
       )
         throw new Error("No admitted pod reference for this item");
       const { pointer, conversation, delivery } = admitted;
+      const conv = this.mustConversation(conversation);
+      const handler = conv.operation && this.handlers.get(operationKey(conv.operation));
       const at = this.now();
       const expired = Date.parse(pointer.validUntil) <= Date.parse(at);
       const response = expired
@@ -1973,6 +1977,7 @@ export class AgentRuntime {
             receiptValid: response?.receiptValid ?? false,
             digestMatches: response?.digestMatches ?? false,
             readOnly: response?.readOnly ?? false,
+            evidenceSchema: handler?.referenceEvidenceSchema,
           },
         },
       );
@@ -1988,8 +1993,10 @@ export class AgentRuntime {
         this.persist();
         return this.result("rejected", { reason: result.reason, outbound: [] });
       }
-      const conv = this.mustConversation(conversation);
-      const handler = conv.operation && this.handlers.get(operationKey(conv.operation));
+      if (conv.operation) {
+        this.scheduleReferenceErasure(pointer, conv.operation);
+        this.persist(); // The deadline is durable before the handler writes the purpose-store copy.
+      }
       const fact = this.gateMemory.facts.get(item);
       const reply =
         fact?.statement && handler?.onReferenceRead
@@ -2011,6 +2018,19 @@ export class AgentRuntime {
           : [];
       this.persist();
       return this.result("accepted", { conversation, outbound });
+    });
+  }
+
+  private scheduleReferenceErasure(pointer: AccessPointer, operation: OperationRef): void {
+    this.dutyExecutor().add({
+      kind: "delete",
+      source: pointer.id,
+      items: [pointer.item.id],
+      due: pointer.copy.deleteBy,
+      referenceCopy: {
+        operation: { id: operation.id, version: operation.version },
+        grant: pointer.terms.grant.id,
+      },
     });
   }
 
@@ -2047,6 +2067,58 @@ export class AgentRuntime {
     }
   }
 
+  private ownsPodGrant(grant: PodGrant): boolean {
+    const pod = this.options.gates?.accessPod;
+    const { pointer, fragment } = grant;
+    return (
+      !!pod &&
+      pod.actor === this.identity.actor &&
+      pointer.issuer === pod.actor &&
+      pointer.owner === pod.owner &&
+      pointer.resource.startsWith(pod.folder) &&
+      pointer.id === `${pointer.resource}.acl#${fragment}`
+    );
+  }
+
+  private withdrawalEffectDuty(plan: EffectPlan) {
+    const duty = this.state.duties.work[String(plan.params.duty)];
+    const reason = plan.params.reason;
+    if (
+      duty?.kind !== "withdraw-access" ||
+      duty.status !== "pending" ||
+      !duty.grant ||
+      !this.ownsPodGrant(duty.grant) ||
+      (reason !== "principal" && reason !== "expiry") ||
+      (reason === "expiry" &&
+        !(Date.parse(this.now()) >= Date.parse(duty.grant.pointer.validUntil)))
+    )
+      return undefined;
+    const checked = this.withdrawalPlan(duty, reason);
+    return plan.key === checked.key && actionDigest(plan.intent) === actionDigest(checked.intent)
+      ? duty
+      : undefined;
+  }
+
+  private async reconcilePodGrants() {
+    const pod = this.options.gates?.accessPod;
+    if (!pod) return;
+    for (const [id, attempt] of Object.entries(this.state.pendingPodGrants)) {
+      if (!this.ownsPodGrant(attempt.grant)) continue;
+      try {
+        await pod.withdraw(attempt.grant, "release-failed", (event) => this.record(event), attempt);
+      } catch {
+        this.record({
+          type: "access-withdrawal-failed",
+          pointer: id,
+          actionDigest: attempt.actionDigest,
+        });
+        continue;
+      }
+      delete this.state.pendingPodGrants[id];
+      this.persist();
+    }
+  }
+
   private async executeWithdrawal(
     params: Readonly<Record<string, unknown>>,
   ): ReturnType<EffectAdapter["execute"]> {
@@ -2055,16 +2127,19 @@ export class AgentRuntime {
     const pod = this.options.gates?.accessPod;
     if (
       !pod ||
-      pod.actor !== this.identity.actor ||
       !duty?.grant ||
       duty.kind !== "withdraw-access" ||
+      (duty.status !== "pending" && duty.status !== "discharged") ||
+      !this.ownsPodGrant(duty.grant) ||
       (reason !== "principal" && reason !== "expiry") ||
-      (reason === "expiry" && Date.parse(this.now()) < Date.parse(duty.due))
+      (reason === "expiry" &&
+        !(Date.parse(this.now()) >= Date.parse(duty.grant.pointer.validUntil)))
     )
       return { conclusion: "not-executed", reason: "No authorized withdrawal duty" };
     if (duty.status !== "discharged") {
       await pod.withdraw(duty.grant, reason, (event) => this.record(event));
       this.dutyExecutor().withdrawn(duty.id);
+      this.persist();
     }
     return { conclusion: "completed", observed: { duty: duty.id } };
   }
@@ -4882,7 +4957,11 @@ export class AgentRuntime {
    * The outbound gate's release around the pilot's mandate decision. `quiet` re-authorises
    * at transmission or reconciliation without showing a new release.
    */
-  private authorise(intent: ActionIntent, quiet = false): AuthorisationDecision {
+  private authorise(
+    intent: ActionIntent,
+    quiet = false,
+    withdrawalGrant?: PodGrant,
+  ): AuthorisationDecision {
     // Invalid core proposals retain the existing fail-closed scope checks.
     if (intent.target && intent.conversation) intent = ActionIntentNode.toNode(intent).live;
     const at = this.now();
@@ -4891,7 +4970,23 @@ export class AgentRuntime {
       if (Date.parse(a.validUntil) > Date.parse(at) && (quiet || !this.state.usedApprovals[a.id]))
         approvals.set(digest, { id: a.id, decision: a.decision });
     }
-    const decision = this.mandateDecision(intent, at, approvals);
+    const decision: AuthorisationDecision = withdrawalGrant
+      ? {
+          type: "authorisation-decision",
+          at,
+          action: intent,
+          actionDigest: actionDigest(intent),
+          decider: this.identity.actor,
+          policy: {
+            id: withdrawalGrant.pointer.id,
+            digest: digestOf(withdrawalGrant),
+            evaluator: "grant-withdrawal",
+          },
+          outcome: "permit",
+          basis: "autonomous",
+          reason: "grant-expired",
+        }
+      : this.mandateDecision(intent, at, approvals);
     let effective = decision;
     if (!quiet && !this.resuming) this.outbound.propose(intent, this.proposalOrigin);
     this.reauthorising = quiet;
@@ -5192,6 +5287,47 @@ export class AgentRuntime {
     });
   }
 
+  private eraseReferenceStatement(item: string, grant: string): void {
+    let other: import("../gates/common.js").ContextItem | undefined;
+    let erased = false;
+    for (const [scope, items] of Object.entries(this.state.contextItems)) {
+      this.state.contextItems[scope] = items.map((fact) => {
+        if (fact.id !== item) return fact;
+        if (fact.dataUseGrant?.id !== grant) {
+          if (fact.accepted && fact.statement) other = fact;
+          return fact;
+        }
+        const {
+          statement: _payload,
+          identifiers: _values,
+          original: _original,
+          ...tombstone
+        } = fact;
+        if (!_payload && !_original) return fact;
+        erased = true;
+        return {
+          ...tombstone,
+          accepted: false,
+          kind: "memory",
+          label: `Discarded input: ${fact.label}`,
+        };
+      });
+    }
+    if (this.gateMemory.facts.get(item)?.dataUseGrant?.id === grant) {
+      erased = true;
+      if (other) this.gateMemory.facts.set(item, other);
+      else this.gateMemory.facts.delete(item);
+    }
+    if (this.state.precedenceHolds[item]?.dataUseGrant?.id === grant) {
+      erased = true;
+      delete this.state.precedenceHolds[item];
+    }
+    if (erased) {
+      this.record({ type: "reference-statement-deleted", item, grant });
+      this.persist();
+    }
+  }
+
   private eraseRequested(message: Message<"invoke">): JsonObject {
     const subject = String(message.body.input.subject);
     const items = message.body.input.items as string[];
@@ -5272,6 +5408,21 @@ export class AgentRuntime {
           items: rule.items,
           due: rule.by,
         });
+    // Older snapshots can already contain an admitted copy without a scheduled deletion.
+    if (this.options.gates?.accessPod)
+      for (const [key, state] of Object.entries(this.state.domain)) {
+        if (!key.startsWith("_reference:")) continue;
+        const reference = domainValue(state) as unknown as {
+          pointer: AccessPointer;
+          conversation: string;
+        };
+        const { pointer } = reference;
+        const operation = this.state.conversations[reference.conversation]?.operation;
+        const admitted =
+          this.gateMemory.facts.get(pointer.item.id) ?? this.state.precedenceHolds[pointer.item.id];
+        if (operation && admitted?.dataUseGrant?.id === pointer.terms.grant.id)
+          this.scheduleReferenceErasure(pointer, operation);
+      }
     const work = this.dutyExecutor().audit();
     for (const duty of work)
       if (
@@ -5279,7 +5430,16 @@ export class AgentRuntime {
         duty.status === "pending" &&
         Date.parse(duty.due) <= Date.parse(this.now())
       ) {
-        this.erasePayloads(new Set(duty.items));
+        if (duty.referenceCopy) {
+          const { operation, grant } = duty.referenceCopy;
+          const handler = this.handlers.get(operationKey(operation));
+          const item = duty.items[0];
+          if (!item) continue;
+          this.eraseReferenceStatement(item, grant);
+          if (!handler?.eraseReferenceCopy?.(item, grant)) continue;
+        } else {
+          this.erasePayloads(new Set(duty.items));
+        }
         const stored = this.state.duties.work[duty.id];
         if (stored) stored.status = "discharged";
         this.record({ type: "duty-discharged", ...duty, status: "discharged", at: this.now() });
@@ -5317,6 +5477,7 @@ export class AgentRuntime {
 
   dischargeDuties(): Promise<StepResult> {
     return this.exclusive(async () => {
+      await this.reconcilePodGrants();
       this.auditDuties();
       const outbound: OutboundMessage[] = [];
       for (const duty of Object.values(this.state.duties.work)) {
@@ -5613,12 +5774,9 @@ export class AgentRuntime {
 
   private async runEffect(ownerId: Iri, plan: EffectPlan, basis: Iri): Promise<OutboundMessage[]> {
     const boundary = this.effectAdapters.get(plan.adapter);
-    if (
-      plan.adapter === POD_ACCESS_ADAPTER &&
-      (plan.intent.operation !== WITHDRAW_ACCESS ||
-        plan.intent.target !== WITHDRAW_ACCESS ||
-        plan.intent.action !== "use")
-    ) {
+    const withdrawal =
+      plan.adapter === POD_ACCESS_ADAPTER ? this.withdrawalEffectDuty(plan) : undefined;
+    if (plan.adapter === POD_ACCESS_ADAPTER && !withdrawal) {
       for (const verdict of this.outbound.rejectEffect(plan.intent, "not-authorised"))
         this.record(verdict);
       return [];
@@ -5690,7 +5848,8 @@ export class AgentRuntime {
     this.recordReleaseDigest =
       scoped?.releasesRecord || scoped?.purposeScoped ? actionDigest(plan.intent) : undefined;
     this.outbound.holdEmailContext(emailContext);
-    const decision = this.authorise(plan.intent);
+    const expiryGrant = plan.params.reason === "expiry" ? withdrawal?.grant : undefined;
+    const decision = this.authorise(plan.intent, false, expiryGrant);
     this.outbound.holdEmailContext(undefined);
     for (const verdict of this.outbound.takeEmailContextVerdicts()) this.record(verdict);
     this.recordReleaseDigest = undefined;
@@ -5728,19 +5887,23 @@ export class AgentRuntime {
         { conclusion: "not-executed", reason: "single-use check refused" },
         "direct-response",
       );
-    if (!(await this.outbound.ensureRecord(plan.key)))
+    if (!(await this.outbound.ensureRecord(plan.key))) {
+      if (expiryGrant) return [];
       return this.conclude(
         planned,
         { conclusion: "not-executed", reason: "record-unavailable" },
         "direct-response",
       );
+    }
     this.outbound.sealEffect(plan.intent, plan.key);
-    if (!(await this.outbound.ensureRecord(plan.key)))
+    if (!(await this.outbound.ensureRecord(plan.key))) {
+      if (expiryGrant) return [];
       return this.conclude(
         planned,
         { conclusion: "not-executed", reason: "record-unavailable" },
         "direct-response",
       );
+    }
     const attempting: EffectState = {
       ...planned,
       status: "attempting",
@@ -5876,6 +6039,7 @@ export class AgentRuntime {
    */
   recover(): Promise<StepResult> {
     return this.exclusive(async () => {
+      await this.reconcilePodGrants();
       this.notificationDuties();
       const outbound: OutboundMessage[] = [];
       for (const effect of Object.values(this.state.effects)) {
@@ -5889,7 +6053,11 @@ export class AgentRuntime {
             (p) => p.actionDigest === effect.intentDigest,
           );
           if (parked) continue;
-          if (!plan || ownerClosed) {
+          const pendingExpiry =
+            plan?.adapter === POD_ACCESS_ADAPTER &&
+            plan.params.reason === "expiry" &&
+            this.withdrawalEffectDuty(plan);
+          if (!plan || (ownerClosed && !pendingExpiry)) {
             outbound.push(
               ...(await this.conclude(
                 effect,
@@ -7548,7 +7716,9 @@ export class AgentRuntime {
             messageDigest: await documentDigest(prepared.document, suite),
           };
       }
-      if (opts.intent?.purpose) this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
+      if (!pointers && opts.intent?.purpose)
+        this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
+      let nextConversation: ConversationState | undefined;
       if (!opts.force || !isTerminal(conv.phase)) {
         const next = transition(
           conv,
@@ -7576,9 +7746,8 @@ export class AgentRuntime {
           }
           if (!opts.force)
             throw new Error(`internal: outbound ${kind} violates state machine: ${next.detail}`);
-        } else {
-          this.saveConversation(next.state);
-        }
+        } else if (pointers) nextConversation = next.state;
+        else this.saveConversation(next.state);
       }
       let wire: WireMessage;
       if (anonymousRequester) {
@@ -7627,8 +7796,7 @@ export class AgentRuntime {
         ...(opts.intent ? { intent: opts.intent } : {}),
         ...(opts.conditions ? { conditions: opts.conditions } : {}),
       };
-      this.record({
-        type: "message-out",
+      const deliveryRecord = {
         id: message.id,
         kind,
         conversation: conversationId,
@@ -7638,7 +7806,16 @@ export class AgentRuntime {
         ...(approvalBindingRecord ? { approvalBinding: approvalBindingRecord } : {}),
         // The payload-free authorisation basis of a protected disclosure (kind + reference).
         ...(opts.conditions ? { conditions: opts.conditions } : {}),
-      });
+      };
+      if (pointers) {
+        this.record({ type: "message-release-intended", ...deliveryRecord });
+        if (!(await this.outbound.ensureRecord(message.id)))
+          throw new Error("The reference delivery record is unavailable");
+        if (opts.intent?.purpose)
+          this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
+        if (nextConversation) this.saveConversation(nextConversation);
+      }
+      this.record({ type: "message-out", ...deliveryRecord });
       // Evidence and the write-ahead record must succeed before the outbox can expose it.
       this.outbound.seal(message, wire, {
         vocabulary,
@@ -7680,7 +7857,7 @@ export class AgentRuntime {
       this.retainedMessageViews.set(message.id, message);
       this.recordItemTransfer(message, conv, false);
       // Mirror the seal, decision and transfer entries before exposing the message to carriage.
-      if (!(await this.outbound.ensureRecord(message.id)))
+      if (!pointers && !(await this.outbound.ensureRecord(message.id)))
         throw new MessageReleaseError(
           this.result("rejected", { reason: "record-unavailable", outbound: [] }),
         );
@@ -7723,19 +7900,52 @@ export class AgentRuntime {
         actionDigest(opts.intent),
         (event) => this.record(event),
         prepareRelease,
-        (grant) => {
-          this.dutyExecutor().add({
-            kind: "withdraw-access",
-            grant,
-            source: grant.pointer.agreement,
-            items: [grant.pointer.item.id],
-            due: grant.pointer.validUntil,
-          });
+        {
+          prepare: (attempt) => {
+            const id = attempt.grant.pointer.id;
+            if (this.state.pendingPodGrants[id]) throw new Error("An earlier grant needs cleanup");
+            this.state.pendingPodGrants[id] = attempt;
+            this.persist(); // The rule and its cleanup are durable before the conditional PUT.
+          },
+          clear: (id) => {
+            delete this.state.pendingPodGrants[id];
+            this.persist();
+          },
         },
       );
-      return publish(entry);
+      const duties = grants.map((grant) =>
+        this.dutyExecutor().add({
+          kind: "withdraw-access",
+          grant,
+          source: grant.pointer.agreement,
+          items: [grant.pointer.item.id],
+          due: grant.pointer.validUntil,
+        }),
+      );
+      const out = publish(entry);
+      const pendingPodGrants = { ...this.state.pendingPodGrants };
+      for (const { pointer } of grants) delete this.state.pendingPodGrants[pointer.id];
+      try {
+        this.persist(); // Publish the outbox and expiry duties in the same snapshot.
+      } catch (error) {
+        delete this.state.outbox[entry.id];
+        const seen = this.current && this.state.seen[this.current.id];
+        if (this.current && seen) {
+          this.state.seen[this.current.id] = {
+            ...seen,
+            responses: seen.responses.filter((id) => id !== entry.id),
+          };
+        }
+        for (const duty of duties) delete this.state.duties.work[duty.id];
+        this.state.pendingPodGrants = pendingPodGrants;
+        throw error;
+      }
+      return out;
     } catch {
       this.saveConversation(conv);
+      delete this.state.recordMessages[message.id];
+      this.retainedMessageViews.delete(message.id);
+      this.record({ type: "message-release-aborted", id: message.id, reason: "execution-failed" });
       this.outbound.stopAccessRelease();
       throw new MessageReleaseError(
         this.result("rejected", {

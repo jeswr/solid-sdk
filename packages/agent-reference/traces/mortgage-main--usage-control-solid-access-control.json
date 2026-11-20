@@ -14076,7 +14076,7 @@
       "agent": "sams-agent",
       "part": "record",
       "kind": "record",
-      "caption": "222 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "223 entries in this agent's hash-chained record; the chain verifies."
     },
     {
       "seq": 353,
@@ -14084,7 +14084,7 @@
       "agent": "lender",
       "part": "record",
       "kind": "record",
-      "caption": "122 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "123 entries in this agent's hash-chained record; the chain verifies."
     },
     {
       "seq": 354,

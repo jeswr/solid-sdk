@@ -37,3 +37,34 @@ The restart interrupted the all-scenario build and full package Vitest invocatio
 - Removing each of the three decisive checks made its focused test fail with the expected verdict missing. All three files were restored after the isolated runs. The engine report records each mutation and result.
 - The live oracle matched all 164 baseline paths after the repository installer verified and loaded the pinned local SPARQ aggregate archive. The first run reached 158 paths while that optional adapter was absent.
 - Final regeneration reproduced all five trace files byte-for-byte. The workspace agent-layer check and `git diff --check` passed.
+
+## Review fixes
+
+| Finding | Fix | Regression | Changed paths |
+|---|---|---|---|
+| High — unchecked WAC selectors | The gate accepts only the declared translation fields. The ACL writer builds a resource-specific Read rule from the checked pointer and its verified policy links. | The translation test rejects extra public, authenticated, default and group selectors. | `src/mechanisms/access-translation.ts`, `src/gates/outbound.ts`, `src/standins/pod-access.ts`, `test/solid-access-control.test.ts` |
+| High — inconsistent retention inputs | The gate binds the terms digest to the conversation's current offer or agreement and bounds the actual lease by the agreed copy deadline. It checks the lease's authorization period and the copy's retention against the supplier's signed terms. | The core reports one day while the proposed lease is 59 days and the copy is due after 60 days. A supplier limit of 30 days blocks both and a limit of 59 days blocks the copy. | `src/gates/outbound.ts`, `src/gates/quality.ts`, `src/runtime/agent.ts`, `test/solid-by-reference.test.ts` |
+| High — orphaned grants after an uncertain PUT | The runtime persists the fragment and cleanup details before the ACL PUT. Recovery and duty processing retry unresolved removals. The cleanup confirms the fragment is absent and uses the current ACL validator, preserving concurrent changes. | The pod commits the PUT, loses the response and stays unavailable through rollback. The test observes the write-ahead snapshot and verifies that recovery removes the grant while preserving a separately added rule. | `src/runtime/agent.ts`, `src/store/state.ts`, `src/standins/pod-access.ts`, `src/model/solid-storage.ts`, `test/solid-by-reference.test.ts` |
+| High — late expiry after the mandate ends | The outbound effect accepts authority from the original grant for removal of that exact ACL fragment once the lease is due. Attempted removals can be reconciled by the same idempotent operation. | Two cases discharge the duty after the original mandate expires or is revoked and confirm that the pod then returns 403. | `src/runtime/agent.ts`, `src/gates/outbound.ts`, `src/standins/pod-access.ts`, `test/solid-by-reference.test.ts` |
+| Medium — premature delivery record and go | The Solid release records its intent for the final readiness check, then records and emits the delivery after readiness succeeds. A failed release records the abort and compensates the ACL write. | A failed readiness check after the PUT leaves no delivery record or delivery go and removes the reader rule. | `src/runtime/agent.ts`, `test/solid-by-reference.test.ts` |
+| Medium — reference payloads survive `deleteBy` | A durable deletion duty covers the gate statement and the matching purpose-store revision. Deadline processing erases both payloads and retains audit metadata. | Both payloads exist before the deadline. After discharge, the gate statement is gone and the store holds a tombstone for the copy. | `src/runtime/agent.ts`, `src/runtime/duties.ts`, `src/runtime/operations.ts`, `src/domains/mortgage.ts`, `src/domains/purpose-store.ts`, `test/solid-by-reference.test.ts` |
+| Medium — malformed statement admitted | The inbound gate checks the verified statement against the operation's evidence schema at fitness, before admission and retention. | A correctly signed deposit statement with a string balance passes integrity, source, authority and terms, then fails fitness with `evidence-invalid` before retention. | `src/gates/inbound.ts`, `src/runtime/agent.ts`, `src/runtime/operations.ts`, `src/domains/mortgage.ts`, `test/solid-by-reference.test.ts` |
+
+### Regenerated artifacts
+
+The two targeted configuration runs reproduced five running paths. Three traces show
+the new sender release-intent and receiver deletion-duty records in their ledger counts.
+
+- `traces/mortgage-main--data-access-by-reference-solid.json`
+- `traces/mortgage-main--read-after-withdrawal--data-access-by-reference-solid.json`
+- `traces/mortgage-main--usage-control-solid-access-control.json`
+
+The manifest and trace index rows were byte-identical after preserving their original
+order. The other two traces and all outlines matched their original bytes.
+
+### Verification after review
+
+- All nine regression cases failed on an isolated copy of `d726fb751` and passed with the fixes. The final erasure test also verified that the saved runtime snapshot held only a tombstone.
+- Seven focused Vitest files passed 36 tests under Node 24 with `--maxWorkers=2`. The live oracle matched all 164 baseline paths and its committed snapshot was byte-identical.
+- Both Solid main paths passed C1–C5. Repeating the targeted scenario runs reproduced the three updated traces byte-for-byte.
+- The TypeScript build, generated-file copy, schema check, typecheck, Biome, agent-layer guard and RDF pipeline passed. The RDF pipeline reported zero new failures.

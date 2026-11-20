@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import type { OdrlPolicy, OdrlRule } from "@jeswr/solid-odrl";
+import { z } from "zod";
 import type { AccessMode } from "../model/solid-storage.js";
 
 export interface TranslatedRule {
@@ -23,6 +24,14 @@ export interface TranslationTerms {
   at: string;
   until: string;
 }
+
+const ruleShape = z.strictObject({
+  resource: z.string(),
+  agent: z.string(),
+  modes: z.tuple([z.literal("Read")]),
+  until: z.iso.datetime(),
+  policies: z.array(z.string()),
+});
 
 const readable = new Set(["read", "use", "distribute"]);
 function scopeMatches(rule: OdrlRule, terms: TranslationTerms, target: string): boolean {
@@ -114,10 +123,9 @@ export function withinTerms(rule: TranslatedRule, t: TranslationTerms): boolean 
   const groups = governingPermissions(t);
   return (
     !!groups &&
+    ruleShape.safeParse(rule).success &&
     rule.resource === t.resource &&
     rule.agent === t.agent &&
-    rule.modes.length === 1 &&
-    rule.modes[0] === "Read" &&
     Date.parse(rule.until) > Date.parse(t.at) &&
     Date.parse(rule.until) <= Date.parse(endOf(t, groups.flat())) &&
     groups.every((group) => group.some((r) => r.id && rule.policies.includes(r.id))) &&

@@ -2065,6 +2065,7 @@ export class InboundGate {
         digestMatches: boolean;
         readOnly: boolean;
         expired: boolean;
+        evidenceSchema?: z.ZodType;
       };
     },
   ): Promise<{ admitted: number; refused: number; reason?: ReasonCode }> {
@@ -2255,10 +2256,16 @@ export class InboundGate {
                 : ("read" as const),
           }
         : opts;
+      const termsPassed =
+        sourceOk && (await this.claimChecks(ev, opts.subject, termsNeed, "terms", cache, termsOk));
+      if (reference && termsPassed && !reference.evidenceSchema?.safeParse(r.claim).success)
+        return refuseReference(
+          "fitness",
+          "evidence-invalid",
+          "The signed statement does not match the operation's evidence schema.",
+        );
       const ok =
-        sourceOk &&
-        (await this.claimChecks(ev, opts.subject, termsNeed, "terms", cache, termsOk)) &&
-        (await this.claimChecks(ev, opts.subject, opts, "fitness", cache, termsOk));
+        termsPassed && (await this.claimChecks(ev, opts.subject, opts, "fitness", cache, termsOk));
       if (!ok) {
         refused++;
         const reason =

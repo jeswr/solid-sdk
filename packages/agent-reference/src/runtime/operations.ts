@@ -199,6 +199,8 @@ export interface OperationHandler {
   /** Validates proposal terms (negotiate) or invocation input (invoke). */
   readonly termsSchema?: z.ZodType<JsonObject>;
   readonly inputSchema?: z.ZodType<JsonObject>;
+  readonly referenceEvidenceSchema?: z.ZodType;
+  eraseReferenceCopy?(item: Iri, grant: Iri): boolean;
   /** Peer must present a representation statement covering this operation. */
   readonly requiresRepresentation: boolean;
   /**

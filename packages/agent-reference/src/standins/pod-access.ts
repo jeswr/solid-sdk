@@ -3,9 +3,13 @@ import { digestBytes, digestOf } from "../core/canonical.js";
 import { DEFAULT_LIMITS } from "../core/limits.js";
 import type { EvidenceItem } from "../core/types.js";
 import { type AccessPointer, signAccessPointer } from "../mechanisms/access-pointer.js";
-import type { TranslatedRule } from "../mechanisms/access-translation.js";
 import { type SigningKey, verifyCompact } from "../mechanisms/jws.js";
-import { type AccessRule, accessDocument, accessModes } from "../model/solid-storage.js";
+import {
+  type AccessRule,
+  accessDocument,
+  accessModes,
+  hasAccessRule,
+} from "../model/solid-storage.js";
 import type { FictionalSolidStorage } from "./storage.js";
 
 export const WITHDRAW_ACCESS = "urn:op:pod-access-withdraw";
@@ -16,7 +20,12 @@ type StoredItem = AccessPointer["item"] & { resource: string; digest: string };
 export interface PodGrant {
   pointer: AccessPointer;
   fragment: string;
-  translated?: TranslatedRule;
+}
+export interface PodGrantAttempt {
+  grant: PodGrant;
+  before: string;
+  after: string;
+  actionDigest: string;
 }
 
 function receipt(response: Response): string {
@@ -83,7 +92,7 @@ export class EvidencePod {
     const response = await this.storage.client(this.actor, this.key)(`${resource}.acl`);
     const etag = response.headers.get("etag");
     if (!response.ok || !etag) throw new Error("The access document is unavailable");
-    return { body: await response.text(), etag };
+    return { body: await response.text(), etag, response };
   }
 
   private async writeAcl(resource: string, etag: string, body: string): Promise<Response> {
@@ -103,13 +112,16 @@ export class EvidencePod {
     const { pointer: p, fragment } = grant;
     const acl = await this.acl(p.resource);
     const url = `${p.resource}.acl`;
-    const removed =
-      restore && acl.body === restore.after
-        ? restore.before
-        : await accessDocument(url, [], acl.body, fragment);
-    const response = await this.writeAcl(p.resource, acl.etag, removed);
-    if (!response.ok || (await this.acl(p.resource)).body !== removed)
-      throw new Error("Withdrawal could not be confirmed");
+    let response = acl.response;
+    if (await hasAccessRule(acl.body, url, fragment)) {
+      const removed =
+        restore && acl.body === restore.after
+          ? restore.before
+          : await accessDocument(url, [], acl.body, fragment);
+      response = await this.writeAcl(p.resource, acl.etag, removed);
+      if (!response.ok || (await hasAccessRule((await this.acl(p.resource)).body, url, fragment)))
+        throw new Error("Withdrawal could not be confirmed");
+    }
     record({
       type: "access-withdrawn",
       reason,
@@ -125,9 +137,12 @@ export class EvidencePod {
     actionDigest: string,
     record: RecordAccess,
     release: (pointers: ReadonlyMap<string, EvidenceItem>) => Promise<T>,
-    registerWithdrawal?: (grant: PodGrant) => void,
+    journal?: {
+      prepare: (attempt: PodGrantAttempt) => void;
+      clear: (pointer: string) => void;
+    },
   ): Promise<T> {
-    const applied: Array<{ grant: PodGrant; before: string; after: string }> = [];
+    const attempted: PodGrantAttempt[] = [];
     const records: Parameters<RecordAccess>[0][] = [];
     const pointers = new Map<string, EvidenceItem>();
     let applying = true;
@@ -136,6 +151,7 @@ export class EvidencePod {
         const { pointer: p, fragment } = grant;
         record({
           type: "access-grant-intended",
+          fragment,
           resource: p.resource,
           reader: p.reader,
           validUntil: p.validUntil,
@@ -143,15 +159,23 @@ export class EvidencePod {
         });
         const url = `${p.resource}.acl`;
         const before = await this.acl(p.resource);
-        const rule = grant.translated ?? {
+        const rule: AccessRule = {
+          fragment,
           agent: p.reader.actor,
-          modes: p.modes,
+          modes: ["Read"],
           resource: p.resource,
+          ...(p.policies ? { policies: p.policies } : {}),
         };
-        const after = await accessDocument(url, [{ ...rule, fragment }], before.body);
+        const after = await accessDocument(url, [rule], before.body);
+        const attempt = { grant, before: before.body, after, actionDigest };
+        journal?.prepare(attempt);
+        attempted.push(attempt);
         const response = await this.writeAcl(p.resource, before.etag, after);
+        if (response.status === 412) {
+          attempted.pop();
+          journal?.clear(p.id);
+        }
         if (!response.ok) throw new Error("The access grant could not be written");
-        applied.push({ grant, before: before.body, after });
         const confirmed = await this.acl(p.resource);
         const modes = await accessModes(confirmed.body, url, p.resource, p.reader.actor, false);
         if (confirmed.body !== after || modes.size !== 1 || !modes.has("Read"))
@@ -183,14 +207,14 @@ export class EvidencePod {
       }
       const result = await release(pointers);
       for (const entry of records) record(entry);
-      for (const grant of grants) registerWithdrawal?.(grant);
       return result;
     } catch (error) {
       if (applying) record({ type: "access-grant-failed", actionDigest });
       let rollbackIncomplete = false;
-      for (const { grant, before, after } of applied.reverse()) {
+      for (const { grant, before, after } of attempted.reverse()) {
         try {
           await this.withdraw(grant, "release-failed", record, { before, after });
+          journal?.clear(grant.pointer.id);
         } catch {
           rollbackIncomplete = true;
           record({ type: "access-withdrawal-failed", pointer: grant.pointer.id, actionDigest });

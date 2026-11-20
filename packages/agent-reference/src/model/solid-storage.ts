@@ -22,21 +22,23 @@ export interface AccessRule {
   fragment?: string;
   policies?: readonly string[];
 }
+
+function parseAccessDocument(body: string, url: string) {
+  return parseRdf(body, "text/turtle", { baseIRI: url, maxBytes: 65536, maxQuads: 1024 });
+}
+
+export async function hasAccessRule(body: string, url: string, fragment: string): Promise<boolean> {
+  const dataset = await parseAccessDocument(body, url);
+  return dataset.match(DataFactory.namedNode(`${url}#${fragment}`)).size > 0;
+}
+
 export async function accessDocument(
   url: string,
   rules: readonly AccessRule[],
   current?: string,
   remove?: string,
 ): Promise<string> {
-  const dataset = current
-    ? new Store(
-        await parseRdf(current, "text/turtle", {
-          baseIRI: url,
-          maxBytes: 65536,
-          maxQuads: 1024,
-        }),
-      )
-    : new Store();
+  const dataset = current ? new Store(await parseAccessDocument(current, url)) : new Store();
   const acl = new AclResource(dataset, DataFactory);
   if (remove) dataset.deleteMatches(DataFactory.namedNode(`${url}#${remove}`));
   for (const [i, value] of rules.entries()) {
@@ -64,11 +66,7 @@ export async function accessModes(
   agent: string | undefined,
   inherited: boolean,
 ): Promise<Set<AccessMode>> {
-  const dataset = await parseRdf(body, "text/turtle", {
-    baseIRI: aclUrl,
-    maxBytes: 65536,
-    maxQuads: 1024,
-  });
+  const dataset = await parseAccessDocument(body, aclUrl);
   const acl = new AclResource(dataset, DataFactory);
   const modes = new Set<AccessMode>();
   for (const rule of acl.authorizations) {

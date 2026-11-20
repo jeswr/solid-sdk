@@ -8,8 +8,10 @@ import { DataFactory } from "n3";
 import { beforeAll, expect, it, vi } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import type { EvidenceItem } from "../src/core/types.js";
+import { ConsumerMortgageHandler } from "../src/domains/mortgage.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
+import { OutboundGate } from "../src/gates/outbound.js";
 import {
   type AccessPointer,
   isAccessPointer,
@@ -21,6 +23,7 @@ import type { OutboundMessage } from "../src/runtime/agent.js";
 import { EvidencePod, type PodGrant } from "../src/standins/pod-access.js";
 import { FictionalSolidStorage } from "../src/standins/storage.js";
 import type { MemoryLedger } from "../src/store/ledger.js";
+import { MemoryStateStore } from "../src/store/state.js";
 import { INBOUND_CHECKS, type TraceFile } from "../src/trace/types.js";
 import { inspectEvidenceJws } from "../src/wire/evidence-jws.js";
 
@@ -32,6 +35,7 @@ const lender = "https://northbank.example/agents/intake#agent";
 const origin = "https://fictional-evidence-pod.example";
 const resource = origin + "/sam/evidence/harbourbank-deposit-2026-10";
 const aclUrl = resource + ".acl";
+const day = 86_400_000;
 const root = new URL("..", import.meta.url).pathname;
 const load = () => loadCase(root, "mortgage-main");
 const solidTest = (name: string, test: () => Promise<void> | void) => it(name, test, 300_000);
@@ -43,9 +47,11 @@ async function run(
   {
     stopAfter,
     branch,
+    change,
   }: {
     stopAfter?: string;
     branch?: string;
+    change?: (scenario: ReturnType<typeof load>["scenario"]) => void;
   } = {},
 ) {
   const { profile, scenario } = load();
@@ -55,6 +61,7 @@ async function run(
     ? (entry.world.branches as Array<{ id: string }>).filter((b) => b.id === branch)
     : [];
   scenario.stopAfter = stopAfter;
+  change?.(scenario);
   const paths = await runScenario(profile, scenario, {
     configuration,
     testOnly: true,
@@ -369,21 +376,29 @@ solidTest("the reader refuses a pointer made out to someone else, and an expired
     action,
     record,
     release,
+    journal,
   ) {
     const key = await testKey("engine/sam-agent/actor");
-    return original.call(this, grants, action, record, async (items) => {
-      const wrong = new Map(items);
-      for (const { pointer } of grants)
-        wrong.set(pointer.item.id, {
-          role: "grant",
-          format: "jws-compact",
-          value: await signAccessPointer(key, {
-            ...pointer,
-            reader: { ...pointer.reader, actor: sam },
-          }),
-        });
-      return release(wrong);
-    });
+    return original.call(
+      this,
+      grants,
+      action,
+      record,
+      async (items) => {
+        const wrong = new Map(items);
+        for (const { pointer } of grants)
+          wrong.set(pointer.item.id, {
+            role: "grant",
+            format: "jws-compact",
+            value: await signAccessPointer(key, {
+              ...pointer,
+              reader: { ...pointer.reader, actor: sam },
+            }),
+          });
+        return release(wrong);
+      },
+      journal,
+    );
   });
   try {
     const path = await run(() => {}, { stopAfter: "evidence-arrives" });
@@ -465,3 +480,276 @@ solidTest("access ends at the stated time", async () => {
   )(resource);
   expect(response.status).toBe(403);
 });
+
+it.each([30, 59])("checks the lease and copy against the supplier's %i-day limit", async (days) => {
+  const disclose = ConsumerMortgageHandler.prototype.onProposal;
+  const core = vi
+    .spyOn(ConsumerMortgageHandler.prototype, "onProposal")
+    .mockImplementation(function (this: ConsumerMortgageHandler, ...args) {
+      const reply = disclose.apply(this, args);
+      if (reply.type === "accept" && reply.intent?.parameters.access)
+        reply.intent.parameters.retentionDays = 1;
+      return reply;
+    });
+  try {
+    let fixture: Fixture | undefined;
+    const path = await run(
+      (input) => {
+        if (input.step.id === "terms-arrive") fixture = input;
+      },
+      {
+        stopAfter: "terms-arrive",
+        change(scenario) {
+          const deposit = scenario.statements.find((s) => s.id === "deposit")!;
+          const policy = deposit.terms!.policy as {
+            obligations: { constraints: { rightOperand: string }[] }[];
+          };
+          policy.obligations[0]!.constraints[0]!.rightOperand = `P${days}D`;
+        },
+      },
+    );
+    expect(path.trace!.events).toContainEqual(
+      expect.objectContaining({ check: "data-terms", verdict: "fail", reason: "prohibited" }),
+    );
+    expect(records(fixture!, "sam-agent").some((r) => r.type === "access-grant-intended")).toBe(
+      false,
+    );
+  } finally {
+    core.mockRestore();
+  }
+}, 300_000);
+
+solidTest("reconciles an ACL PUT whose response was lost during a pod outage", async () => {
+  let fixture: Fixture | undefined;
+  let putSucceeded = false;
+  let journalStore: MemoryStateStore | undefined;
+  let journalBeforePut: string[] = [];
+  let restoreClient: (() => void) | undefined;
+  const save = MemoryStateStore.prototype.save;
+  const snapshot = vi.spyOn(MemoryStateStore.prototype, "save").mockImplementation(function (
+    this: MemoryStateStore,
+    state,
+  ) {
+    save.call(this, state);
+    if (Object.keys(state.pendingPodGrants ?? {}).length) journalStore = this;
+  });
+  try {
+    const path = await run(
+      (input) => {
+        if (input.step.id !== "consent") return;
+        fixture = input;
+        const storage = input.pod.storage;
+        const client = storage.client.bind(storage);
+        const spy = vi.spyOn(storage, "client").mockImplementation((...args) => {
+          const request = client(...args);
+          return async (url, init) => {
+            if (!putSucceeded && String(url) === aclUrl && init?.method === "PUT")
+              journalBeforePut = Object.keys(journalStore?.load().pendingPodGrants ?? {});
+            const response = await request(url, init);
+            if (!putSucceeded && String(url) === aclUrl && init?.method === "PUT" && response.ok) {
+              putSucceeded = true;
+              storage.available = false;
+              throw new Error("The pod lost the response after committing the ACL");
+            }
+            return response;
+          };
+        });
+        restoreClient = () => spy.mockRestore();
+      },
+      { stopAfter: "consent" },
+    );
+    expect(putSucceeded).toBe(true);
+    expect(path.trace!.events).not.toContainEqual(
+      expect.objectContaining({
+        agent: "sams-agent",
+        kind: "message-out",
+        packet: expect.objectContaining({ kind: "deliver" }),
+      }),
+    );
+  } finally {
+    snapshot.mockRestore();
+    restoreClient?.();
+    if (fixture) fixture.pod.storage.available = true;
+  }
+  const { pod, runtimes } = fixture!;
+  const read = pod.storage.client(lender, await testKey("engine/north-agent/actor"));
+  expect((await read(resource)).status).toBe(200);
+  const unrelated = origin + "/#other-reader";
+  const otherKey = await testKey("brief33/other-reader");
+  pod.storage.introduce(unrelated, otherKey);
+  const updated = await accessDocument(
+    aclUrl,
+    [{ resource, fragment: "other-read", agent: unrelated, modes: ["Read"] }],
+    await acl(pod),
+  );
+  pod.storage.alterAtRest(aclUrl, () => updated);
+  await runtimes.get("sam-agent")!.recover();
+  expect((await read(resource)).status).toBe(403);
+  expect((await pod.storage.client(unrelated, otherKey)(resource)).status).toBe(200);
+  expect(journalBeforePut).toEqual([expect.stringContaining(`${aclUrl}#reference-`)]);
+  expect(journalStore?.load().pendingPodGrants).toEqual({});
+  expect(records(fixture!, "sam-agent")).toContainEqual(
+    expect.objectContaining({
+      type: "access-grant-intended",
+      fragment: expect.stringMatching(/^reference-/),
+    }),
+  );
+  expect(records(fixture!, "sam-agent")).toContainEqual(
+    expect.objectContaining({ type: "access-withdrawn", reason: "release-failed" }),
+  );
+});
+
+it.each([
+  "expired",
+  "revoked",
+] as const)("withdraws a due grant after its original mandate is %s", async (status) => {
+  let fixture: Fixture | undefined;
+  await run(
+    async (input) => {
+      if (input.step.id !== "balance-read") return;
+      fixture = input;
+      const sender = input.runtimes.get("sam-agent")!;
+      if (status === "revoked") {
+        expect(await sender.revokeMandate()).toMatchObject({ revoked: true });
+        input.advance(59 * day + 1);
+      } else {
+        input.advance(90 * day);
+      }
+      await sender.dischargeDuties();
+    },
+    { stopAfter: "balance-read" },
+  );
+  const reader = fixture!.pod.storage.client(lender, await testKey("engine/north-agent/actor"));
+  expect((await reader(resource)).status).toBe(403);
+  expect(records(fixture!, "sam-agent")).toContainEqual(
+    expect.objectContaining({ type: "access-withdrawn", reason: "expiry" }),
+  );
+}, 300_000);
+
+solidTest("a failed final readiness check leaves neither a delivery record nor a go", async () => {
+  let fixture: Fixture | undefined;
+  let checkedAfterPut = false;
+  const ensureRecord = OutboundGate.prototype.ensureRecord;
+  const ready = vi.spyOn(OutboundGate.prototype, "ensureRecord").mockImplementation(async function (
+    this: OutboundGate,
+    subject,
+  ) {
+    if (
+      fixture?.pod.storage.accessLog.some(
+        (e) => e.actor === sam && e.method === "PUT" && e.url === aclUrl && e.status === 204,
+      )
+    ) {
+      checkedAfterPut = true;
+      return false;
+    }
+    return ensureRecord.call(this, subject);
+  });
+  try {
+    const path = await run(
+      (input) => {
+        if (input.step.id === "consent") fixture = input;
+      },
+      { stopAfter: "consent" },
+    );
+    expect(checkedAfterPut).toBe(true);
+    expect(records(fixture!, "sam-agent")).not.toContainEqual(
+      expect.objectContaining({ type: "message-out", kind: "deliver" }),
+    );
+    expect(path.trace!.events).not.toContainEqual(
+      expect.objectContaining({
+        agent: "sams-agent",
+        outcome: "go",
+        caption: expect.stringContaining("deliver"),
+      }),
+    );
+    expect(await acl(fixture!.pod)).not.toContain(lender);
+  } finally {
+    ready.mockRestore();
+  }
+});
+
+solidTest("erases both the purpose-store copy and the gate statement at deleteBy", async () => {
+  let fixture: Fixture | undefined;
+  await run(
+    (input) => {
+      if (input.step.id === "balance-read") fixture = input;
+    },
+    { stopAfter: "balance-read" },
+  );
+  const { runtimes, stores, advance } = fixture!;
+  const reader = runtimes.get("north-agent")!;
+  const store = stores.get("north-store")!;
+  const held = () => reader.admittedStatements().find((fact) => fact.id === item);
+  expect(held()).toMatchObject({ balance: 90000 });
+  expect(store.has(item)).toBe(true);
+  const { pointer } = pointerOf(delivery);
+  advance(Date.parse(pointer.copy.deleteBy) - Date.parse(pointer.validFrom) - day);
+  await reader.dischargeDuties();
+  expect(held()).toBeDefined();
+  expect(store.has(item)).toBe(true);
+  advance(day);
+  const snapshots = vi.spyOn(MemoryStateStore.prototype, "save");
+  try {
+    await reader.dischargeDuties();
+    const saved = snapshots.mock.calls.at(-1)?.[0];
+    const retained = Object.values(saved?.contextItems ?? {})
+      .flat()
+      .filter((entry) => entry.id === item);
+    expect(retained).toContainEqual(expect.objectContaining({ accepted: false, kind: "memory" }));
+    expect(
+      retained.every((entry) => entry.statement === undefined && entry.original === undefined),
+    ).toBe(true);
+    expect(saved?.precedenceHolds[item]).toBeUndefined();
+  } finally {
+    snapshots.mockRestore();
+  }
+  expect({ stored: store.has(item), retained: held() !== undefined }).toEqual({
+    stored: false,
+    retained: false,
+  });
+  expect(store.tombstones()).toContainEqual(expect.objectContaining({ id: item }));
+  expect(records(fixture!, "north-agent")).toContainEqual(
+    expect.objectContaining({ type: "duty-discharged", kind: "delete", items: [item] }),
+  );
+});
+
+solidTest(
+  "refuses a signed statement outside the operation schema before retaining it",
+  async () => {
+    let fixture: Fixture | undefined;
+    const path = await run(
+      (input) => {
+        if (input.step.id === "balance-read") fixture = input;
+      },
+      {
+        stopAfter: "balance-read",
+        change(scenario) {
+          scenario.statements.find((s) => s.id === "deposit")!.value.balance = "90000";
+        },
+      },
+    );
+    const { checks, decision } = readDecision(path.trace!, "evidence-invalid");
+    expect(checks.map((e) => [e.check, e.verdict])).toEqual([
+      ["integrity", "pass"],
+      ["source", "pass"],
+      ["authority", "pass"],
+      ["terms", "pass"],
+      ["fitness", "fail"],
+    ]);
+    expect(decision.outcome).toBe("refuse");
+    expect(
+      fixture!.runtimes
+        .get("north-agent")!
+        .admittedStatements()
+        .some((s) => s.id === item),
+    ).toBe(false);
+    expect(fixture!.stores.get("north-store")!.has(item)).toBe(false);
+    expect(path.trace!.events).not.toContainEqual(
+      expect.objectContaining({
+        agent: "lender",
+        kind: "store",
+        fact: expect.objectContaining({ id: item }),
+      }),
+    );
+  },
+);

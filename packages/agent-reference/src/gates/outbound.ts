@@ -7,7 +7,6 @@ import {
   referenceTerms,
 } from "../mechanisms/access-pointer.js";
 import {
-  type TranslatedRule,
   type TranslationTerms,
   translateTerms,
   withinTerms,
@@ -637,7 +636,7 @@ export class OutboundGate {
     const end = this.deps.mandate()?.validUntil;
     if (!end) return 0;
     const daysRemaining = (Date.parse(end) - Date.parse(this.deps.now())) / 86_400_000;
-    // Withdrawal is an ordinary action. Leave it time before the authorizing mandate ends.
+    // Keep the issued lease strictly within the period covered by the releasing mandate.
     return Math.max(0, Math.min(agreedDays, Math.ceil(daysRemaining) - 1));
   }
 
@@ -687,6 +686,7 @@ export class OutboundGate {
     const peer = this.deps.referencePeer?.(intent.conversation);
     if (
       !pod ||
+      pod.actor !== this.deps.identity.actor ||
       !access.success ||
       !agreement ||
       !offer.success ||
@@ -702,12 +702,12 @@ export class OutboundGate {
     const translated =
       this.deps.gate.configuration?.layers["usage-control"] === "solid-access-control";
     const grant = referenceGrant(agreement, offer.data, pod.owner, peer.party).policy;
+    const deleteBy = deadline(now, offer.data.retentionDays);
     for (const request of access.data) {
       const stored = pod.stored(request.item);
       const supplier = this.deps.memory.facts.get(request.item)?.terms;
       if (!stored || !supplier) return undefined;
       let until = deadline(now, request.retentionDays);
-      let validatedRule: TranslatedRule | undefined;
       let policies: string[] | undefined;
       let remainder: string[] | undefined;
       if (translated) {
@@ -729,15 +729,30 @@ export class OutboundGate {
         const rule =
           proposed.rule && (this.deps.gate.translateAccess?.(proposed.rule) ?? proposed.rule);
         if (!rule || !withinTerms(rule, inputs)) return undefined;
-        validatedRule = rule;
         policies = [...rule.policies];
         remainder = [...proposed.remainder];
         until = rule.until;
       }
+      if (
+        Date.parse(until) > Date.parse(deleteBy) ||
+        // Check the lease's authorization window and the copy's agreed retention against
+        // the signed supplier terms, independent of the core's summary retentionDays.
+        evaluateItemTerms(supplier, {
+          agent: this.deps.identity.actor,
+          action: "distribute",
+          target: request.item,
+          purpose: intent.purpose,
+          recipient: peer.party,
+          at: now,
+          until,
+          retentionDays: offer.data.retentionDays,
+          recipientAllowed: (label) => this.recipientAllows(peer.party, intent.operation, label),
+        }).verdict !== "pass"
+      )
+        return undefined;
       const fragment = `reference-${digestOf({ agreement, item: stored.id }).replace(/[^a-z0-9-]/gi, "")}`;
       grants.push({
         fragment,
-        ...(validatedRule ? { translated: validatedRule } : {}),
         pointer: {
           id: `${stored.resource}.acl#${fragment}`,
           issuer: pod.actor,
@@ -752,7 +767,7 @@ export class OutboundGate {
           validFrom: now,
           validUntil: until,
           terms: referenceTerms(supplier, grant),
-          copy: { permitted: true, deleteBy: deadline(now, offer.data.retentionDays) },
+          copy: { permitted: true, deleteBy },
           ...(policies && remainder ? { policies, remainder } : {}),
         },
       });
@@ -860,8 +875,10 @@ export class OutboundGate {
     if (selected && !alternativeInstalled(this.deps.gate, selected))
       decision = { ...decision, outcome: "deny", reason: "unsupported-configuration" };
     const statusFailure =
-      this.deps.gate.mandateCredential?.outbound() ??
-      this.deps.gate.authorizationGrant?.outbound?.();
+      decision.policy.evaluator === "grant-withdrawal"
+        ? undefined
+        : (this.deps.gate.mandateCredential?.outbound() ??
+          this.deps.gate.authorizationGrant?.outbound?.());
     if (statusFailure) decision = { ...decision, outcome: "deny", reason: statusFailure };
     const scope = IntentScopeNode.fromIntent(intent);
     this.activePayment = undefined;
@@ -1049,7 +1066,9 @@ export class OutboundGate {
       subject,
       "mandate",
       "pass",
-      `${this.owner}'s mandate covers this action${matched?.withApproval ? ", with approval" : ""}.`,
+      decision.policy.evaluator === "grant-withdrawal"
+        ? "The original grant authorizes removal of its own access rule at expiry."
+        : `${this.owner}'s mandate covers this action${matched?.withApproval ? ", with approval" : ""}.`,
       ruleRef,
     );
 
@@ -2021,6 +2040,8 @@ export class OutboundGate {
       return undefined;
     }
     let blocked: string | undefined;
+    const access = this.deps.gate.accessPod && p.access !== undefined;
+    const requests = access ? accessRequests.safeParse(p.access).data : undefined;
     const ruledItems = p.evidence.map((id) => {
       const fact = this.deps.memory.facts.get(String(id));
       const terms: ItemTerms | undefined = fact?.terms;
@@ -2031,14 +2052,15 @@ export class OutboundGate {
         target: String(id),
         ...(scope.purpose ? { purpose: scope.purpose } : {}),
         ...(scope.recipient ? { recipient: scope.recipient } : {}),
-        ...(typeof p.retentionDays === "number" ? { retentionDays: p.retentionDays } : {}),
+        ...(typeof p.retentionDays === "number" && !requests?.some((request) => request.item === id)
+          ? { retentionDays: p.retentionDays }
+          : {}),
         at: this.deps.now(),
         recipientAllowed: (label) => this.recipientAllows(scope.recipient, scope.operation, label),
       });
       return { id: String(id), fact, terms, t };
     });
     const allRulesPermit = ruledItems.every(({ t }) => t.verdict === "pass");
-    const access = this.deps.gate.accessPod && p.access !== undefined;
     const accessPlan = access && allRulesPermit ? this.planAccess(intent, mandate) : undefined;
     if (access) this.checkedAccess.delete(subject);
 
@@ -2064,11 +2086,7 @@ export class OutboundGate {
           text = `${text} ${this.name(scope.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
         }
       }
-      if (
-        access &&
-        verdict === "pass" &&
-        accessRequests.safeParse(p.access).data?.some((a) => a.item === id)
-      ) {
+      if (access && verdict === "pass" && requests?.some((a) => a.item === id)) {
         if (!accessPlan) {
           verdict = "fail";
           reason = "prohibited";

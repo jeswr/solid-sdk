@@ -32,6 +32,7 @@ export interface DutyWork {
   id: string;
   kind: "delete" | "notify" | "inform-onward" | "withdraw-access";
   grant?: import("../standins/pod-access.js").PodGrant;
+  referenceCopy?: { operation: import("../core/types.js").OperationRef; grant: string };
   source: string;
   items: string[];
   subject?: string;
