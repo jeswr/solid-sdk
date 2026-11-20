@@ -8,7 +8,7 @@ import test from 'node:test';
 import phone from '../js/phone.js';
 
 function trace(key) {
-  return JSON.parse(readFileSync(new URL(`../data/traces/${key}.json`, import.meta.url), 'utf8'));
+  return JSON.parse(readFileSync(new URL(`../traces/${key}.json`, import.meta.url), 'utf8'));
 }
 const opt = { principal: 'Sam, the fictional applicant', agentName: 'Sam’s agent' };
 const base = trace('mortgage-main--baseline');
