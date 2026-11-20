@@ -12,6 +12,51 @@ import {
 import { ALICE, MemoryPod, parse, ROOT } from "./contacts-support";
 
 describe("contacts injected transport", () => {
+  test("preserves RangeError transport failures and abort reasons", async () => {
+    const reason = new RangeError("cancelled body");
+    const controller = new AbortController();
+    const transport = new ContactsTransport(
+      ROOT,
+      async () =>
+        new Response(
+          new ReadableStream(
+            {
+              pull() {
+                controller.abort(reason);
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+        ),
+    );
+    await expect(transport.read(ALICE, () => {}, controller.signal)).rejects.toThrow(
+      "cancelled body",
+    );
+    const failed = new ContactsTransport(
+      ROOT,
+      async () =>
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              controller.error(new RangeError("transport range failure"));
+            },
+          }),
+        ),
+    );
+    await expect(failed.read(ALICE, () => {})).rejects.toThrow("transport range failure");
+  });
+  test("rejects malformed UTF-8 before application accessors run", async () => {
+    const parse = vi.fn();
+    const transport = new ContactsTransport(
+      ROOT,
+      async () =>
+        new Response(new Uint8Array([255]), {
+          headers: { "content-type": "text/turtle" },
+        }),
+    );
+    await expect(transport.read(ALICE, parse)).rejects.toThrow();
+    expect(parse).not.toHaveBeenCalled();
+  });
   test("requires preconditions on deletion and rejects malformed ETags before writes", async () => {
     const pod = new MemoryPod();
     const transport = new ContactsTransport(ROOT, pod.fetch);

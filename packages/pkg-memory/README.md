@@ -274,3 +274,7 @@ assertion would invalidate its content-derived identifier. The reference builder
 implicit `health:` and `core:` prefixes in `parseAssertion` stay legacy for the
 same reason. Use typed templates or explicitly declare canonical prefixes when
 authoring new Turtle assertions. Existing Python fixture identifiers remain valid.
+
+`SPECIAL_CATEGORIES` is the frozen, readonly inventory behind `isSpecialCategory`.
+Browser consumers can import it from `@jeswr/pkg-memory/categories`, which has no Node
+or RDF imports. The root entry also exports it; financial data remains separate.

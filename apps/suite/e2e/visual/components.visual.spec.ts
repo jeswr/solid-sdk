@@ -6,12 +6,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { fixtureNames } from "../../src/app/dev/components/fixture-names";
+import { BASELINED } from "./baselines";
 
 // Fixtures that show relative times ("2 minutes ago", "tomorrow 5pm") read this clock.
 const FIXED_NOW = new Date("2026-10-26T10:00:00Z");
-// Baselines are kept for the two corner projects only (about 16 MB rather than 48 MB);
-// axe still runs at every width and theme.
-const BASELINED = new Set(["375-light", "1280-dark"]);
 
 // Routes with their own page under src/app/dev/components (the catalog index links them).
 const standaloneRoutes = [

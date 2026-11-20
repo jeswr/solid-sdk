@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+export { dpvPurposeLabel } from "@/shell/lib/dpv-labels";
 export { aggregateHoldings, classifyAgent, modeLabel, roleForModes, roleLabel } from "./aggregate";
 export { type ClientMetadata, isClientIdDocument, resolveClientName } from "./client";
-export { dpvPurposeLabel } from "./dpvLabels";
 export { readGrantRecords } from "./records";
 export {
   AclConflictError,

@@ -2,6 +2,21 @@
 import { z } from "zod";
 
 const https = z.url({ protocol: /^https$/ });
+const mcpUrl = https.refine((value) => {
+  try {
+    const url = new URL(value);
+    return (
+      url.pathname === "/mcp" &&
+      !url.username &&
+      !url.password &&
+      !value.includes("?") &&
+      !value.includes("#") &&
+      value === url.href
+    );
+  } catch {
+    return false;
+  }
+}, "Expected an HTTPS MCP endpoint");
 const capabilities = z.strictObject({
   selfRegistration: z.boolean().optional(),
   publicLinks: z.boolean().optional(),
@@ -26,6 +41,7 @@ const jsonCapabilities = z
   .pipe(capabilities);
 
 export const suiteEnvSchema = z.object({
+  NEXT_PUBLIC_SUITE_MCP_URL: mcpUrl.optional(),
   NEXT_PUBLIC_SUITE_IDP: https.optional(),
   NEXT_PUBLIC_SUITE_IDP_NAME: z.string().trim().min(1).default("your provider"),
   NEXT_PUBLIC_SUITE_IDP_ACCOUNT_URL: https.optional(),
@@ -80,6 +96,7 @@ let cached: SuiteEnv | undefined;
 export function suiteEnv(): SuiteEnv {
   if (cached) return cached;
   const record: Record<string, unknown> = {
+    NEXT_PUBLIC_SUITE_MCP_URL: process.env.NEXT_PUBLIC_SUITE_MCP_URL,
     NEXT_PUBLIC_SUITE_IDP: process.env.NEXT_PUBLIC_SUITE_IDP,
     NEXT_PUBLIC_SUITE_IDP_NAME: process.env.NEXT_PUBLIC_SUITE_IDP_NAME,
     NEXT_PUBLIC_SUITE_IDP_ACCOUNT_URL: process.env.NEXT_PUBLIC_SUITE_IDP_ACCOUNT_URL,

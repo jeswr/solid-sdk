@@ -70,3 +70,7 @@ New templates write canonical `https://jeswr.org/ns/sectors/health#` and
 reference parser's implicit legacy prefixes unchanged: they are hash inputs.
 For new Turtle bodies, declare canonical prefixes explicitly. Read legacy and
 mixed graphs without rewriting the terms or their content-derived identifiers.
+
+For category inventories, import the frozen `SPECIAL_CATEGORIES` list instead of copying it.
+Browser code must use `@jeswr/pkg-memory/categories`; the root entry includes Node modules.
+The policy's private membership set is built from the same list and cannot be mutated by callers.
