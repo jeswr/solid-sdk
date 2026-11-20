@@ -44,6 +44,8 @@ import {
 } from "@jeswr/agent-reference/bindings/email-footer";
 import { isAgentDescriptionAddress } from "@jeswr/agent-reference/bindings/email-mime";
 import { copyData } from "@jeswr/agent-reference/model/copy";
+import { bindCredentialResolver } from "@jeswr/agent-reference/model/evidence-item";
+import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
 import { inspectMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { isValidEmailAddress, parseEmail } from "@jeswr/agentic-legacy-bridge";
 import { canonicalJson, digestBytes } from "../core/canonical.js";
@@ -268,10 +270,17 @@ export async function buildEmail(
     throw new Error("Agent-Description must be one HTTPS address of at most 200 characters");
   const wire = structuredClone(input.out.wire);
   const carrierText = carrierFor(wire);
-  const outboundMessage = canonicalJson(copyData(input.out.message));
+  const outboundMessage = copyData(input.out.message);
   const m = await messageOf(wire);
   if (!m) throw new Error("signed email wire does not decode");
-  if (canonicalJson(copyData(m)) !== outboundMessage)
+  if (m instanceof MessageNode) {
+    // A digest reference in the wire only resolves to the matching credential bytes.
+    const credentials = new Map<string, string>(
+      (outboundMessage.evidence ?? []).map(({ value }) => [digestBytes(value), value]),
+    );
+    bindCredentialResolver(m.dataset, (digest) => credentials.get(digest));
+  }
+  if (canonicalJson(copyData(m)) !== canonicalJson(outboundMessage))
     throw new Error("outbound message differs from the signed message");
   if (footer !== undefined && footer !== footerVariant(m))
     throw new Error("footer variant differs from the signed message");

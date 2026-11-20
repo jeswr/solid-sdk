@@ -36,6 +36,7 @@ import { wireDigest } from "../runtime/transmission.js";
 import type { ProcessedOutbound } from "../service.js";
 import type { WireMessage } from "../store/state.js";
 import {
+  emailDigest,
   emailMessageIdFor,
   rawFromGmailMessage,
   validateReviewedEmail,
@@ -232,6 +233,7 @@ export class GmailProviderAdapter {
         binding: GMAIL_BINDING,
         externalId: emailMessageIdFor(own.messageId),
         wireDigest: wireDigest(wire),
+        mimeDigest: emailDigest(raw),
       },
     };
   }

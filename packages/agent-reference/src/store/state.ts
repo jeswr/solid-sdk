@@ -172,7 +172,7 @@ export interface RuntimeState {
       digest: string;
       jws: string;
       /** Inbound credential bytes are eligible for reuse only after completed admission. */
-      credentialsAdmitted?: true;
+      credentialsAdmitted?: boolean;
     }
   >;
   precedenceHolds: Record<string, import("../gates/common.js").AdmittedFact>;

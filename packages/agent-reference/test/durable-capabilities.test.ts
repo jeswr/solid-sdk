@@ -26,7 +26,8 @@ function required<T>(value: T | undefined): T {
 
 const task = "urn:task:pay",
   purpose = "urn:purpose:pay",
-  op = "urn:op:pay";
+  op = "urn:op:pay",
+  descriptionUrl = "https://fictional.example/payer/description";
 async function fixture(action = "pay", canApprove = true, extra: Partial<GateContext> = {}) {
   let time = new Date("2026-11-13T09:00:00.000Z");
   const now = () => time;
@@ -183,7 +184,7 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
   // Each restart loads the same independently provisioned anchors.
   const make = async () => {
     const rtOptions = {
-      identity: { actor: p.identity.actor, party: p.identity.party },
+      identity: { actor: p.identity.actor, party: p.identity.party, descriptionUrl },
       actorKeys: [p.actorKey],
       trust: await TrustStore.load(cast.trust.get("payer")),
       mandateJws: p.mandateJws,
@@ -242,7 +243,13 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
   const supplier =
     action === "pay" ? (await cast.runtime("payee", [serviceHandler])).runtime : undefined;
   const agreements = new Map<string, { digest: string; invoice: string }>();
-  const pay = async (runtime: AgentRuntime, key: string, amount = 500, reuse?: string) => {
+  const pay = async (
+    runtime: AgentRuntime,
+    key: string,
+    amount = 500,
+    reuse?: string,
+    reference?: string,
+  ) => {
     let held = agreements.get(reuse ?? key);
     if (action === "pay" && !held) {
       const invoice = await required(supplier).mintIdentifier();
@@ -291,7 +298,7 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
                   account: "urn:account:payee",
                   amount,
                   currency: "GBP",
-                  reference: required(held).invoice,
+                  reference: reference ?? required(held).invoice,
                   agreement: required(held).digest,
                   instalment: 1,
                   validUntil: "2026-12-31T09:00:00.000Z",
@@ -305,7 +312,7 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
                 account: "urn:account:payee",
                 amount,
                 currency: "GBP",
-                reference: required(held).invoice,
+                reference: reference ?? required(held).invoice,
                 agreement: required(held).digest,
                 instalment: 1,
                 validUntil: "2026-12-31T09:00:00.000Z",
@@ -330,6 +337,17 @@ async function fixture(action = "pay", canApprove = true, extra: Partial<GateCon
     },
   };
 }
+it("does not treat the configured email description as a known payment reference", async () => {
+  const f = await fixture();
+  expect(f.rt.outboundVerifier().emailDescriptionAddress?.()).toBe(descriptionUrl);
+  await f.pay(f.rt, "metadata-reference", 500, undefined, descriptionUrl);
+  expect(f.recorder.events()).toContainEqual(
+    expect.objectContaining({ check: "P4", verdict: "fail", reason: "structured-form-required" }),
+  );
+  expect(f.effects()).toBe(0);
+  await f.pay(f.rt, "admitted-reference");
+  expect(f.effects()).toBe(1);
+});
 it("persists monthly totals before release, refuses the fifth payment across restart, and starts a new calendar month", async () => {
   const f = await fixture();
   for (let i = 0; i < 4; i++) await f.pay(f.rt, String(i));

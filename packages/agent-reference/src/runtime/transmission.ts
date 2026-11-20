@@ -56,6 +56,8 @@ export interface TransmissionRecord {
   /** Stable provider-visible identifier (the RFC 5322 Message-ID). */
   readonly externalId: string;
   readonly wireDigest: string;
+  /** Digest of the exact MIME submitted to Gmail. Absent on pre-digest attempts. */
+  readonly mimeDigest?: string;
   readonly status: TransmissionStatus;
   readonly attempts: number;
   readonly providerRef?: string;
@@ -160,6 +162,8 @@ export interface TransmitRequest {
   readonly externalId: string;
   /** Digest of the wire unit the binding is about to send (must equal the outbox entry's). */
   readonly wireDigest: string;
+  /** Gmail sets this to the digest of the exact reviewed MIME used for send and lookup. */
+  readonly mimeDigest?: string;
 }
 
 /** Transmission records that still need an authoritative resolution. */

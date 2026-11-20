@@ -11,7 +11,11 @@ import { CoreNode } from "../src/model/core-node.js";
 import { EvidenceItemNode } from "../src/model/evidence-item.js";
 import { MessageNode } from "../src/model/message-nodes.js";
 import { StatementQualityNode } from "../src/model/quality.js";
-import { CONFIG_ED25519, CONFIG_PUBLIC } from "../src/profile/configurations.js";
+import {
+  CONFIG_ED25519,
+  CONFIG_PUBLIC,
+  CONFIG_TRANSPORT_EMAIL,
+} from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
 import { AgentRuntime } from "../src/runtime/agent.js";
@@ -71,13 +75,15 @@ it.each([
 
 async function credentialFixture() {
   const actor = await testKey("22d/graph-actor"),
-    source = await testKey("22d/graph-source");
+    source = await testKey("22d/graph-source"),
+    peer = await testKey("38e/graph-peer");
   const trust = await TrustStore.load({
     version: 1,
     owner: "urn:test:receiver",
     sourceAuthority: [],
     keys: [
       { ...actor, role: "actor", subject: "urn:test:sender" },
+      { ...peer, role: "actor", subject: "urn:test:peer" },
       { ...source, role: "issuer", subject: "urn:test:source" },
     ].map(({ kid, alg, publicJwk, role, subject }) => ({
       kid,
@@ -94,23 +100,78 @@ async function credentialFixture() {
     subject: "urn:test:sender",
     count: 1,
   });
-  const packet = async (node: MessageNode) => {
+  const packet = async (node: MessageNode, key = actor) => {
     const prepared = await writeAttachmentDocument(node);
     return {
       format: "awp-jsonld/0.1" as const,
       jsonld: JSON.stringify(
         await sign(prepared.document, {
           suite: "jws",
-          key: actor,
-          verificationMethod: "urn:awp:key:" + actor.kid,
+          key,
+          verificationMethod: "urn:awp:key:" + key.kid,
           created: at,
         }),
       ),
       attachments: prepared.attachments,
     };
   };
-  return { trust, jws, packet };
+  return { trust, jws, packet, peer };
 }
+
+it("a profile-refused opener leaves the conversation available to a different pinned peer", async () => {
+  const { trust, jws, packet, peer } = await credentialFixture();
+  const receiver = await testKey("38e/graph-receiver");
+  const store = new MemoryStateStore();
+  const open = (store: MemoryStateStore) =>
+    AgentRuntime.create({
+      identity: { actor: "urn:test:receiver" },
+      actorKeys: [receiver],
+      accepted: [CONFIG_ED25519],
+      handlers: [],
+      trust,
+      store,
+      ledger: new MemoryLedger(),
+      now: () => new Date(at),
+      newId: () => "urn:test:description-response",
+    });
+  const opener = {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_ED25519,
+    id: "urn:test:valid-opener",
+    conversation: "urn:test:shared-conversation",
+    kind: "describe",
+    from: { actor: "urn:test:peer" },
+    to: { actor: "urn:test:receiver" },
+    createdAt: at,
+    expiresAt: "2026-11-13T10:00:00.000Z",
+    body: {},
+  } as const;
+  const refused = MessageNode.toNode({
+    ...opener,
+    id: "urn:test:profile-refused-opener",
+    profile: "urn:test:unsupported-profile",
+    from: { actor: "urn:test:sender" },
+    evidence: [{ role: "credential", format: "jws-compact", value: jws }],
+  });
+  const valid = await packet(MessageNode.toNode(opener), peer);
+  const control = await open(new MemoryStateStore());
+  const expected = await control.receive(valid);
+  expect(expected).toMatchObject({ disposition: "accepted", phase: "described" });
+
+  const runtime = await open(store);
+  await runtime.compact();
+  const before = store.load();
+  expect(await runtime.receive(await packet(refused))).toMatchObject({
+    reason: "unsupported-profile",
+  });
+  const afterRefusal = store.load();
+  const actual = await runtime.receive(valid);
+  expect(actual).toMatchObject({ disposition: expected.disposition, phase: expected.phase });
+  expect(actual.outbound.map((out) => out.message)).toEqual(
+    expected.outbound.map((out) => out.message),
+  );
+  expect(afterRefusal).toEqual(before);
+});
 
 it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
   const { trust, jws, packet } = await credentialFixture();
@@ -233,10 +294,11 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
   });
 });
 
-it("leaves credential references unresolved after a refused message", async () => {
+it("leaves credential references unresolved after a refused message and restores older admissions", async () => {
   const { trust, jws, packet } = await credentialFixture();
   const receiver = await testKey("38d/graph-receiver");
   const store = new MemoryStateStore();
+  const ledger = new MemoryLedger();
   const open = (state = new MemoryStateStore()) =>
     AgentRuntime.create({
       identity: { actor: "urn:test:receiver" },
@@ -245,16 +307,20 @@ it("leaves credential references unresolved after a refused message", async () =
       handlers: [],
       trust,
       store: state,
-      ledger: new MemoryLedger(),
+      ledger: state === store ? ledger : new MemoryLedger(),
       now: () => new Date(at),
     });
   const describe = (
     id: string,
-    { to = "urn:test:receiver", profile = PILOT_PROFILE }: { to?: string; profile?: string } = {},
+    {
+      to = "urn:test:receiver",
+      profile = PILOT_PROFILE,
+      configuration = CONFIG_ED25519,
+    }: { to?: string; profile?: string; configuration?: string } = {},
   ) =>
     MessageNode.toNode({
       profile,
-      configuration: CONFIG_ED25519,
+      configuration,
       id: `urn:test:${id}`,
       conversation: `urn:test:conversation:${id}`,
       kind: "describe",
@@ -304,10 +370,33 @@ it("leaves credential references unresolved after a refused message", async () =
     reason: "unsupported-profile",
   });
   expect(await runtime.receive(citingWire)).toEqual(baseline);
-  expect(await (await open(store)).receive(citingWire)).toEqual(baseline);
-  const admitted = await runtime.receive(carryingWire);
+  const unaccepted = describe("unaccepted", { configuration: CONFIG_TRANSPORT_EMAIL });
+  unaccepted.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  expect(
+    await runtime.receive(await packet(unaccepted), { binding: "email-mime/0.1" }),
+  ).toMatchObject({
+    disposition: "accepted",
+    reason: "unsupported-configuration",
+  });
+  // Older snapshots may say transport accepted even when the inbound gate refused.
+  const refusedState = store.load();
+  const refusedRecord = refusedState.recordMessages[unaccepted.id];
+  if (!refusedRecord) throw new Error("Missing refused message record");
+  delete refusedRecord.credentialsAdmitted;
+  store.save(refusedState);
+  const resumed = await open(store);
+  expect(await resumed.receive(citingWire)).toEqual(baseline);
+  const admitted = await resumed.receive(carryingWire);
   expect(admitted.disposition, `${admitted.reason}: ${admitted.detail}`).toBe("accepted");
+  const oldState = store.load();
   const restarted = await open(store);
-  for (const rt of [runtime, restarted])
+  for (const rt of [resumed, restarted])
     expect(await rt.receive(citingWire)).toMatchObject({ disposition: "accepted" });
+
+  // Reopen a pre-marker snapshot captured after the first admitted packet.
+  const oldRecord = oldState.recordMessages[carrying.id];
+  if (!oldRecord) throw new Error("Missing admitted message record");
+  delete oldRecord.credentialsAdmitted;
+  store.save(oldState);
+  expect(await (await open(store)).receive(citingWire)).toMatchObject({ disposition: "accepted" });
 });

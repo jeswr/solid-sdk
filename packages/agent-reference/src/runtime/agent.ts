@@ -670,10 +670,15 @@ export class AgentRuntime {
       this.state.relianceHolds,
       this.state.relianceBindings,
       this.state.precedenceHolds,
+      this.identity.descriptionUrl,
     );
     this.gateMemory = memory;
     memory.rememberIdentifiers("*", {
-      identity: this.identity,
+      identity: {
+        actor: this.identity.actor,
+        party: this.identity.party,
+        operator: this.identity.operator,
+      },
       trust: this.trust.data,
       descriptions: options.handlers.map((h) => h.description),
       core: options.core,
@@ -1062,17 +1067,58 @@ export class AgentRuntime {
         /* Without its admitted RDF offer this record cannot authorize a payment. */
       }
     }
+    let legacyAdmissions: ReadonlyMap<string, string> | undefined;
     for (const [id, record] of Object.entries(rt.state.recordMessages)) {
       const read = await verifyRecordedMessage(record.jws, rt.trust);
-      if (read) {
-        rt.retainedMessageViews.set(id, read.message);
-        const remember = rt.inbound.stageCredentials(read.message);
-        if (record.direction === "out" || record.credentialsAdmitted) remember();
+      if (!read) continue;
+      rt.retainedMessageViews.set(id, read.message);
+      const remember = rt.inbound.stageCredentials(read.message);
+      if (record.direction === "out" || record.credentialsAdmitted) {
+        remember();
+      } else if (record.credentialsAdmitted === undefined) {
+        legacyAdmissions ??= rt.legacyCredentialAdmissions();
+        if (legacyAdmissions.get(id) === record.digest) {
+          record.credentialsAdmitted = true;
+          remember();
+        }
       }
     }
     if (rt.ledgerAuditTrusted || !rt.ledger.recoverUncommittedSuffix) rt.notificationDuties();
     if (rt.ledger.requiresTrustedCheckpoint && rt.ledgerAuditTrusted) rt.persist();
     return rt;
+  }
+
+  /**
+   * Older snapshots keep the admission verdict in the ledger. A seen entry can also
+   * be marked accepted when dispatch issued a refusal notice, so use the gate verdict.
+   */
+  private legacyCredentialAdmissions(): ReadonlyMap<string, string> {
+    const admitted = new Map<string, string>();
+    let message: { id: string; digest: string } | undefined;
+    for (const { record } of this.auditEntries()) {
+      if (
+        record.type === "message-in" &&
+        typeof record.id === "string" &&
+        typeof record.digest === "string"
+      ) {
+        message = { id: record.id, digest: record.digest };
+      } else if (
+        record.type === "gate-decision" &&
+        record.gate === "inbound-gate" &&
+        record.agent === this.identity.actor &&
+        message
+      ) {
+        const seen = this.state.seen[message.id];
+        if (
+          record.outcome === "admit" &&
+          (!seen || (seen.disposition === "accepted" && seen.digest === message.digest))
+        )
+          admitted.set(message.id, message.digest);
+        else admitted.delete(message.id);
+        message = undefined;
+      }
+    }
+    return admitted;
   }
 
   /**
@@ -4652,6 +4698,12 @@ export class AgentRuntime {
         this.reject("human-parity-mismatch", problem);
       }
     }
+    if (msg.profile !== PILOT_PROFILE && !this.isUnsupportedClosingNotice(msg)) {
+      const detail = `${msg.profile} / ${msg.configuration} not accepted`;
+      admission.failIntegrity("unsupported-profile", detail);
+      this.reject("unsupported-profile", detail);
+    }
+
     const msgDigest = digestOf(msg);
     const documentConfig = configurationById(msg.configuration);
     const admittedDocumentDigest = isMessagePacket(wire)
@@ -4831,6 +4883,7 @@ export class AgentRuntime {
         conversation: msg.conversation,
         digest: msgDigest,
         jws: isMessagePacket(wire) ? encodeMessageProof(wire) : (wire as { jws: string }).jws,
+        credentialsAdmitted: false,
       };
     this.retainedMessageViews.set(msg.id, msg);
     const outbound = await this.dispatch(msg);
@@ -4877,21 +4930,11 @@ export class AgentRuntime {
     let conv = this.state.conversations[msg.conversation];
     let created = false;
 
-    // Profile and configuration acceptance. One exception: a peer that does not accept our
-    // configuration can only answer under one of its own. Such an authenticated notice may
-    // close a conversation WE opened (it can only stop us, never cause an action).
-    const closingNotice =
-      Boolean(conv) &&
-      conv?.role === "initiator" &&
-      msg.kind === "unsupported" &&
-      (msg.body.reason === "unsupported-configuration" ||
-        msg.body.reason === "unsupported-profile");
     if (
-      !closingNotice &&
-      (msg.profile !== PILOT_PROFILE || !this.options.accepted.includes(msg.configuration))
+      !this.options.accepted.includes(msg.configuration) &&
+      !this.isUnsupportedClosingNotice(msg)
     ) {
-      const reason: ReasonCode =
-        msg.profile !== PILOT_PROFILE ? "unsupported-profile" : "unsupported-configuration";
+      const reason = "unsupported-configuration";
       if (!conv && opening && msg.from.actor && this.acceptedAnyway(msg)) {
         this.admission?.refuse(reason, "configuration not accepted");
         const created = this.createResponder(msg);
@@ -5005,6 +5048,16 @@ export class AgentRuntime {
       case "receipt":
         return this.onReceipt(conv, msg);
     }
+  }
+
+  /** An authenticated unsupported notice can only close a conversation we opened. */
+  private isUnsupportedClosingNotice(msg: AnyMessage): boolean {
+    return (
+      msg.kind === "unsupported" &&
+      (msg.body.reason === "unsupported-configuration" ||
+        msg.body.reason === "unsupported-profile") &&
+      this.state.conversations[msg.conversation]?.role === "initiator"
+    );
   }
 
   /** An unsupported opening message from a pinned actor still earns an explicit answer. */
@@ -7349,6 +7402,7 @@ export class AgentRuntime {
       binding: req.binding,
       externalId: req.externalId,
       wireDigest: req.wireDigest,
+      ...(prior?.mimeDigest === undefined ? {} : { mimeDigest: prior.mimeDigest }),
       attempts: prior?.attempts ?? 0,
       createdAt: prior?.createdAt ?? at,
       ...(prior?.providerRef ? { providerRef: prior.providerRef } : {}),
@@ -7443,7 +7497,8 @@ export class AgentRuntime {
       rec &&
       (rec.binding !== req.binding ||
         rec.externalId !== req.externalId ||
-        rec.wireDigest !== req.wireDigest)
+        rec.wireDigest !== req.wireDigest ||
+        (rec.mimeDigest !== undefined && rec.mimeDigest !== req.mimeDigest))
     ) {
       return {
         result: this.refuseTransmission(
@@ -7567,6 +7622,7 @@ export class AgentRuntime {
     // Write-ahead: the attempt is durable before the provider sees anything.
     this.noteTransmission(req, "attempting", {
       attempts: attempts + 1,
+      ...(req.mimeDigest === undefined ? {} : { mimeDigest: req.mimeDigest }),
       ...(resend
         ? { detail: "identical resend after an unresolved attempt (receiver deduplicates)" }
         : {}),
@@ -8464,7 +8520,7 @@ export class AgentRuntime {
       }
       vocabulary[`${path}.grant`] = { type: "term", values: [reference.grant] };
       vocabulary[`${path}.ref`] = { type: "identifier" };
-      known.identifiers.add(reference.ref);
+      if (reference.ref !== this.identity.descriptionUrl) known.identifiers.add(reference.ref);
       reference.claimTypes.forEach((claimType, index) => {
         vocabulary[`${path}.claimTypes.${index}`] = {
           type: "code",

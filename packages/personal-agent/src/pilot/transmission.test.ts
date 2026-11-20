@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DirectBus } from "./bindings/direct.js";
-import { emailMessageIdFor } from "./bindings/email.js";
+import { emailDigest, emailMessageIdFor } from "./bindings/email.js";
 import {
   createGmailRestTransport,
   GmailProviderAdapter,
@@ -315,41 +315,81 @@ describe("review item 2 — durable provider-send records", () => {
   });
 
   it.each([
+    "header",
+    "footer",
+  ] as const)("refuses a replacement review with a different %s after restart", async (part) => {
+    const { alice, bob, clock, open } = await world({ dir: true });
+    const { propose } = await alicePropose(alice, bob, clock.now());
+    const reviewed = await item(alice, propose, clock.now());
+    if (!reviewed.email) throw new Error("No reviewed email");
+    const original = reviewed.email.raw;
+    const replacement =
+      part === "header"
+        ? original.replace(/^Subject: .*\r$/m, "Subject: A different review\r")
+        : historicalEmail(original);
+    expect(replacement).not.toBe(original);
+    const mb = mailbox();
+    mb.set("lose-response");
+    expect((await adapter(alice, mb.transport).sendReviewed(reviewed)).status).toBe("uncertain");
+    alice.runtime.close();
+    const restarted = await open();
+    const gmail = adapter(restarted, mb.transport);
+    const copy = mb.accepted[0];
+    if (!copy) throw new Error("Provider did not record the original send");
+    copy.raw = replacement;
+    const revised = {
+      ...reviewed,
+      email: {
+        ...reviewed.email,
+        raw: replacement,
+        gmailSend: { raw: Buffer.from(replacement).toString("base64url") },
+      },
+    };
+    expect(await gmail.sendReviewed(revised)).toMatchObject({
+      status: "refused",
+      reason: expect.stringContaining("different payload"),
+    });
+    expect(restarted.runtime.transmissions()).toMatchObject([
+      { status: "uncertain", mimeDigest: emailDigest(original) },
+    ]);
+    copy.raw = original;
+    expect(await gmail.sendReviewed(reviewed)).toEqual({
+      status: "sent",
+      providerId: "g1",
+      reconciled: true,
+    });
+    expect(mb.sends()).toBe(1);
+    restarted.runtime.close();
+  });
+
+  it.each([
     { label: "with a footer", historical: false },
     { label: "before the footer existed", historical: true },
   ])("reconciles a headerless email reviewed $label", async ({ historical }) => {
-    const { alice, bob, clock } = await world();
+    const { alice, bob, clock, open } = await world({ dir: true });
     const { propose } = await alicePropose(alice, bob, clock.now());
     const reviewed = await item(alice, propose, clock.now());
     if (!reviewed.email) throw new Error("No reviewed email");
     const headerless = reviewed.email.raw.replace(/^Agent-Description: [^\r\n]+\r\n/im, "");
-    const raw = historical
-      ? headerless.replace(
-          /(Content-Type: text\/(?:plain|html); charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n)([A-Za-z0-9+/=\r\n]+?)(?=\r\n--)/g,
-          (_, head: string, body: string) => {
-            const text = Buffer.from(body, "base64").toString("utf8");
-            const oldRendering = text.replace(/\n\nSent by [\s\S]+$|<p>Sent by [\s\S]+?<\/p>/, "");
-            expect(oldRendering).not.toBe(text);
-            return head + Buffer.from(oldRendering).toString("base64");
-          },
-        )
-      : headerless;
+    const raw = historical ? historicalEmail(headerless) : headerless;
     const legacy = {
       ...reviewed,
       email: { ...reviewed.email, raw, gmailSend: { raw: Buffer.from(raw).toString("base64url") } },
     };
     const mb = mailbox();
     const verifier = alice.runtime.outboundVerifier();
-    const open = (agentDescription?: string) =>
+    const gmail = (runtime: PersonalAgent["runtime"], agentDescription?: string) =>
       new GmailProviderAdapter(mb.transport, {
         allowedRecipients: [BOB.email as string],
         sourceAccount: ALICE.email as string,
-        verifier: { ...verifier, emailDescriptionAddress: () => agentDescription },
+        verifier: {
+          ...runtime.outboundVerifier(),
+          emailDescriptionAddress: () => agentDescription,
+        },
         dryRun: false,
       });
     const url = "https://descriptions.example/alice/v2";
-    const current = open(url);
-    expect(await current.sendReviewed(legacy)).toMatchObject({
+    expect(await gmail(alice.runtime, url).sendReviewed(legacy)).toMatchObject({
       status: "refused",
       reason: expect.stringContaining("Agent-Description differs"),
     });
@@ -370,6 +410,10 @@ describe("review item 2 — durable provider-send records", () => {
       },
     );
     expect(attempt).toMatchObject({ status: "uncertain" });
+    alice.runtime.close();
+    const restarted = await open();
+    const current = gmail(restarted.runtime, url);
+    expect(restarted.runtime.transmissions()[0]).not.toHaveProperty("mimeDigest");
     const copy = mb.accepted[0];
     if (!copy) throw new Error("Provider did not record the original send");
     expect(copy.raw).toBe(raw);
@@ -386,6 +430,8 @@ describe("review item 2 — durable provider-send records", () => {
       reconciled: true,
     });
     expect(mb.sends()).toBe(1);
+    expect(restarted.runtime.transmissions()[0]).not.toHaveProperty("mimeDigest");
+    restarted.runtime.close();
   });
 
   it("process death after provider acceptance is reconciled after restart without a duplicate", async () => {
@@ -436,6 +482,20 @@ describe("review item 2 — durable provider-send records", () => {
     expect(r2).toEqual({ status: "not-sent", reason: "HTTP 400" });
   });
 });
+
+function historicalEmail(raw: string): string {
+  return raw
+    .replace(/^Agent-Description: [^\r\n]+\r\n/im, "")
+    .replace(
+      /(Content-Type: text\/(?:plain|html); charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n)([A-Za-z0-9+/=\r\n]+?)(?=\r\n--)/g,
+      (_, head: string, body: string) => {
+        const text = Buffer.from(body, "base64").toString("utf8");
+        const oldRendering = text.replace(/\n\nSent by [\s\S]+$|<p>Sent by [\s\S]+?<\/p>/, "");
+        expect(oldRendering).not.toBe(text);
+        return head + Buffer.from(oldRendering).toString("base64");
+      },
+    );
+}
 
 /** A deferred value, resolved by the test. */
 function deferred<T>() {

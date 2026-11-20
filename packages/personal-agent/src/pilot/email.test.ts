@@ -1,14 +1,20 @@
 // AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import { FOOTER_LINK, footerHtml, footerText } from "@jeswr/agent-reference/bindings/email-footer";
+import {
+  bindCredentialResolver,
+  EvidenceItemNode,
+} from "@jeswr/agent-reference/model/evidence-item";
 import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
 import { testKey } from "@jeswr/agent-reference/reference/keys";
+import { signCompact } from "@jeswr/agent-reference/wire/jws-compact";
 import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { describe, expect, it } from "vitest";
 import { DirectBus } from "./bindings/direct.js";
 import {
   buildEmail,
   carrierFor,
+  emailDigest,
   parseInboundEmail,
   renderHuman,
   validateOutboundEmail,
@@ -106,6 +112,47 @@ async function relayByGmail(
 }
 
 describe("email binding", () => {
+  it("builds and validates MIME for a signed credential-by-digest packet", async () => {
+    const { start, clock } = await setup();
+    const original = start.outbound[0];
+    if (!original) throw new Error("No signed discovery message");
+    const key = await testKey("38e/email-credential");
+    const credential = await signCompact(key, "awp-statement+jws", {
+      issuer: original.message.from.actor,
+      subject: original.message.from.actor,
+      claimType: "count",
+      count: 1,
+    });
+    const node = MessageNode.toNode(original.message);
+    const digest = emailDigest(credential);
+    node.evidence = [
+      EvidenceItemNode.byDigest(
+        { role: "credential", format: "jws-compact", digest },
+        "urn:test:email-credential-reference",
+        node.dataset,
+      ),
+    ];
+    bindCredentialResolver(node.dataset, (reference) =>
+      reference === digest ? credential : undefined,
+    );
+    const wire = await writeMessagePacket(node, {
+      suite: "jws",
+      key,
+      verificationMethod: `urn:awp:key:${key.kid}`,
+      created: node.live.createdAt,
+    });
+    const from = ALICE.email as string;
+    const to = BOB.email as string;
+    const { raw } = await buildEmail({
+      out: { ...original, message: node.live, wire },
+      from,
+      to,
+      date: clock.now(),
+    });
+    expect(wire.jsonld).toContain(digest);
+    expect(await validateOutboundEmail(raw, { from, to, wire })).toEqual({ ok: true });
+  });
+
   it("reports a bad signature before checking an edited footer", async () => {
     const { start, bob, clock } = await setup();
     const out = start.outbound[0] as OutboundMessage;

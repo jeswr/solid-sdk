@@ -143,3 +143,36 @@ blocked**. The explorer bundle includes the revised BL-6.
 - All 47 personal-agent email, outbound, and transmission tests passed, along with
   typecheck and lint. The Vitest runs used `--maxWorkers=2`.
 - All 20 explorer Node tests and `node scripts/bundle-data.mjs` passed.
+
+## Review fixes (38e)
+
+- The runtime refuses an unsupported profile before creating replay, conversation,
+  identifier, or credential state. The regression sends a valid opener from a different
+  pinned peer on the same conversation and compares its decision and reply with a clean
+  runtime. It also compares the stored state before and after the refusal.
+- The configured `Agent-Description` address is excluded from the known-identifier
+  registry. The payment regression verifies that the reference check fails for that
+  URL and that an admitted invoice reference reaches the payment adapter.
+- Gmail records the SHA-256 digest of the reviewed MIME before sending. After restart,
+  replacement reviews with a changed subject or historical footer cannot reconcile
+  against matching provider copies. The original MIME still reconciles. Attempts made
+  before MIME digests use the recorded envelope and original review, including
+  headerless messages from before the footer was introduced.
+- `buildEmail` binds a resolver before comparing the decoded packet with the supplied
+  message. The regression builds MIME from a signed credential-by-digest packet and
+  verifies the rendered output.
+- Restart restores legacy inbound credentials when the ledger records their admission
+  and backfills the admission marker. The tests also cover a legacy refusal whose
+  transport disposition was accepted because it issued an unsupported-configuration
+  response.
+
+Each regression reproduced its finding on `84343be6f`. Both recorded mortgage email
+traces matched fresh in-memory runs after excluding generation metadata. The main run
+has 582 events and the readable-copy fault branch has 211. The manifest remains at
+**283 paths, 278 runs, 0 disagreements, and 5 blocked**.
+
+- The agent-reference library-only rebuild, 92 focused tests, three oracle tests,
+  typecheck, lint, and `check:rdf-pipeline` passed. Lint reported existing warnings.
+  The RDF check reported zero failures and 212 tracked exceptions.
+- All 50 personal-agent email, outbound, and transmission tests passed, along with
+  typecheck and lint. Both Vitest runs used `--maxWorkers=2`.
