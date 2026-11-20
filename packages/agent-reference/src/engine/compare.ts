@@ -137,6 +137,7 @@ export interface RefusedStatement {
   readonly id: string;
   readonly claimDigest: string;
   readonly wireDigest: string;
+  readonly wire?: string;
   readonly statement: JsonObject;
 }
 
@@ -406,53 +407,62 @@ function refusedContent(refused: RefusedStatement) {
     derivation: _derivation,
     ...fields
   } = refused.statement;
-  const references = [refused.id, refused.claimDigest, refused.wireDigest];
-  const cites = (value: string) => references.some((reference) => value.includes(reference));
+  const references = [refused.id, refused.claimDigest, refused.wireDigest, refused.wire];
   // Issuer and subject identifiers can independently appear as protocol participants.
   const participants = new Set(claimText([refused.statement.issuer, refused.statement.subject]));
-  const texts = [
-    ...claimText(fields).filter((text) => !participants.has(text)),
-    ...claimText(fields.value),
-  ];
   const scalars = new Set(claimScalars(fields));
+  const texts = [
+    ...new Set([
+      ...claimText(fields).filter((text) => !participants.has(text)),
+      ...claimText(fields.value),
+      // Short numbers and booleans occur routinely in unrelated prose and identifiers.
+      ...[...scalars].filter((text) => text.replace(/\D/g, "").length >= 3),
+    ]),
+  ];
   const claimFields = Object.entries(fields);
-  const contains = (value: unknown, matchLiterals: boolean, field?: string): boolean => {
+  const contains = (value: unknown, field?: string): boolean => {
     const original = field === undefined ? undefined : fields[field];
-    const matchField = matchLiterals || field === "value";
     if (typeof value === "string") {
-      if (cites(value)) return true;
+      if (references.some((reference) => reference && value.includes(reference))) return true;
       const plaintext = value.toLowerCase();
-      if (matchLiterals && texts.some((text) => plaintext.includes(text))) return true;
-      if (matchField && typeof original === "string" && plaintext === original.toLowerCase())
-        return true;
+      if (texts.some((text) => plaintext.includes(text))) return true;
+      if (typeof original === "string" && plaintext === original.toLowerCase()) return true;
       if (
-        matchField &&
         (typeof original === "number" || typeof original === "boolean") &&
         plaintext === String(original)
       )
         return true;
       if (
-        matchLiterals &&
         field === "text" &&
         (plaintext.match(/\b(?:true|false|\d+(?:\.\d+)?)\b/g) ?? []).some((token) =>
           scalars.has(token),
         )
       )
         return true;
-      try {
-        if (/^[\w-]+\.[\w-]+\.[\w-]+$/.test(value))
-          return (
-            digestBytes(value) === refused.wireDigest ||
-            contains(decodeCompactPayload(value), matchLiterals)
-          );
-        if (/^\s*(?:\{|\[)/.test(value)) return contains(decodeAdapterJson(value), matchLiterals);
-      } catch {
-        // Text fields can resemble an encoded statement.
+      // Look ahead so a dotted word preceding a compact JWS cannot swallow the token.
+      for (const [, token] of value.matchAll(/(?<![\w-])(?=([\w-]+\.[\w-]+\.[\w-]+))/g)) {
+        if (!token) continue;
+        if (digestBytes(token) === refused.wireDigest) return true;
+        let decoded: unknown;
+        try {
+          decoded = decodeCompactPayload(token);
+        } catch {
+          continue; // A dotted string can resemble an encoded statement.
+        }
+        if (contains(decoded)) return true;
+      }
+      if (/^\s*(?:\{|\[)/.test(value)) {
+        let decoded: unknown;
+        try {
+          decoded = decodeAdapterJson(value);
+        } catch {
+          return false; // A text field can start with a brace or bracket.
+        }
+        return contains(decoded);
       }
       return false;
     }
-    const expected =
-      (matchField ? original : undefined) ?? (object(value) ? fields.value : undefined);
+    const expected = original ?? (object(value) ? fields.value : undefined);
     if (
       expected !== undefined &&
       expected !== null &&
@@ -466,8 +476,8 @@ function refusedContent(refused: RefusedStatement) {
         field === "bytes" &&
         value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
       )
-        return contains(new TextDecoder().decode(Uint8Array.from(value)), matchLiterals);
-      return value.some((item) => contains(item, matchLiterals, field));
+        return contains(new TextDecoder().decode(Uint8Array.from(value)));
+      return value.some((item) => contains(item, field));
     }
     const record = object(value);
     if (!record) return false;
@@ -484,24 +494,9 @@ function refusedContent(refused: RefusedStatement) {
       )
     )
       return true;
-    return Object.entries(record).some(
-      ([key, child]) => cites(key) || contains(child, matchLiterals, key),
-    );
+    return Object.entries(record).some(([key, child]) => contains(key) || contains(child, key));
   };
-  return (value: unknown, store: boolean) => {
-    const record = object(value);
-    const source = record?.issuer ?? record?.source;
-    // A different claim admitted from a different source can share an individual literal.
-    // Its complete claim fields and all references are still checked for a copy.
-    const independent =
-      store &&
-      typeof source === "string" &&
-      typeof refused.statement.issuer === "string" &&
-      source !== refused.statement.issuer &&
-      typeof record?.claimType === "string" &&
-      record.claimType !== refused.statement.claimType;
-    return contains(value, !independent);
-  };
+  return contains;
 }
 
 export function stoppedReleaseProblem(
@@ -537,8 +532,7 @@ export function stoppedReleaseProblem(
   }
 
   const withheld = [refusedContent(refused)];
-  const containsRefused = (value: unknown, store = false) =>
-    withheld.some((contains) => contains(value, store));
+  const containsRefused = (value: unknown) => withheld.some((contains) => contains(value));
   const allowed = new Map<number, TraceEvent>();
   let preceding: TraceEvent | undefined;
   for (const event of later) {
@@ -564,8 +558,8 @@ export function stoppedReleaseProblem(
       const payload = run.payloads?.get(event.seq);
       if (
         (!event.fact && payload === undefined) ||
-        containsRefused(event.fact, true) ||
-        containsRefused(payload, true) ||
+        containsRefused(event.fact) ||
+        containsRefused(payload) ||
         preceding?.part !== "inbound-gate" ||
         preceding.outcome !== "admit" ||
         !sameScriptStep(run, preceding, event)
@@ -762,9 +756,15 @@ function prefixGuard(
   });
   const dropped = new Set(notReached);
   const mainBars = mainDecisions.filter((event) => !passing(event) && !dropped.has(event));
+  const sameBar = (expected: TraceEvent, actual: TraceEvent) => {
+    if (!sameDecision(expected, actual)) return false;
+    if (!main.steps && !branch.steps) return true;
+    const id = main.steps?.get(expected.seq)?.id;
+    return id !== undefined && id === branch.steps?.get(actual.seq)?.id;
+  };
   const changed = branchBars.find((event, i) => {
     const expected = mainBars[i];
-    return !expected || !sameDecision(expected, event);
+    return !expected || !sameBar(expected, event);
   });
   // A bar must occur before every shared release it preceded on the main path.
   const missing = mainBars.find((bar, index) => {
@@ -772,6 +772,7 @@ function prefixGuard(
     const match = branchBars[index];
     return (
       !match ||
+      !sameBar(bar, match) ||
       releases.some(
         (release) => (aligned.get(release.seq)?.seq ?? 0) > bar.seq && match.seq > release.seq,
       )

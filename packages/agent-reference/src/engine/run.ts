@@ -828,6 +828,7 @@ async function runPath(
         id: statement.id,
         claimDigest: digestOf(statement),
         wireDigest: digestBytes(evidence.value),
+        wire: evidence.value,
         statement,
       });
   });

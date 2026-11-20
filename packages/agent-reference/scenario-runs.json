@@ -15104,7 +15104,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "A message gives new bank details for a known supplier",
-      "status": "runs",
+      "status": "disagrees",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -15167,6 +15167,7 @@
           "reason": "source-not-authoritative"
         }
       ],
+      "note": "an effect followed a stop",
       "trace": "pay-an-invoice--branch-1--baseline.json"
     },
     {

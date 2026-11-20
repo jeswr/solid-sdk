@@ -21,7 +21,12 @@ import { CONFIG_EMAIL } from "../src/profile/configurations.js";
 import { testKey } from "../src/reference/keys.js";
 import { AgentRuntime, type AgentRuntimeOptions } from "../src/runtime/agent.js";
 import { Cast, mandateOf } from "../src/scenarios/common.js";
-import { FileLedger, type LedgerBounds, MemoryLedger } from "../src/store/ledger.js";
+import {
+  FileLedger,
+  LEDGER_GENESIS,
+  type LedgerBounds,
+  MemoryLedger,
+} from "../src/store/ledger.js";
 import { FileStateStore, MemoryStateStore } from "../src/store/state.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
 import { TrustResolver } from "../src/trust/resolver.js";
@@ -200,16 +205,23 @@ async function fixture({
     },
     core: { id: "urn:scripted-reader", version: "1", kind: "scripted" },
   } satisfies Omit<AgentRuntimeOptions, "store" | "trust">;
-  const open = async (includeHistoricalKey = true) =>
-    AgentRuntime.create({
-      ...options,
-      trust: await TrustStore.load({
-        ...trust,
-        keys: [...trust.keys, ...(includeHistoricalKey ? [oldKey] : [])],
-      }),
-      store: statePath ? new FileStateStore(statePath) : memoryStore,
-      ledger,
-    });
+  const open = async (includeHistoricalKey = true) => {
+    const store = statePath ? new FileStateStore(statePath) : memoryStore;
+    try {
+      return await AgentRuntime.create({
+        ...options,
+        trust: await TrustStore.load({
+          ...trust,
+          keys: [...trust.keys, ...(includeHistoricalKey ? [oldKey] : [])],
+        }),
+        store,
+        ledger,
+      });
+    } catch (error) {
+      store.close();
+      throw error;
+    }
+  };
   let runtime = await open();
   const send = (id = "urn:send", text = "Is the item available?") =>
     runtime.sendEmail({ taskId: id, adapter: "urn:mail", to: address, text, purpose });
@@ -941,6 +953,48 @@ it("resumes bounded retention on new writes after recovering the saved audit pre
     );
   } finally {
     f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("resumes ledger writes after the first startup is interrupted before its mandate checkpoint", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-first-checkpoint-"));
+  const path = join(dir, "record.jsonl");
+  const save = FileStateStore.prototype.save;
+  const interrupted = vi.spyOn(FileStateStore.prototype, "save").mockImplementation(function (
+    this: FileStateStore,
+    state,
+  ) {
+    if (state.ledgerAuditHead?.seq) throw new Error("interrupted first mandate checkpoint");
+    save.call(this, state);
+  });
+  try {
+    await expect(fixture({ stateDir: dir })).rejects.toThrow(
+      "interrupted first mandate checkpoint",
+    );
+    interrupted.mockRestore();
+    const ledger = new FileLedger(path);
+    expect(ledger.entries().some(({ record }) => record.type === "grant")).toBe(true);
+    ledger.append({ type: "interrupted-startup", observedBy: "urn:test" }, "2026-11-13T09:00:00Z");
+    const f = await fixture({ stateDir: dir });
+    try {
+      f.runtime.recordObservation({ type: "after-startup", observedBy: "urn:test" });
+      expect(f.ledger.entries()[0]).toMatchObject({ seq: 1, prev: LEDGER_GENESIS.hash });
+      expect(f.ledger.entries().filter(({ record }) => record.type === "grant")).toHaveLength(1);
+      expect(f.ledger.entries().at(-1)?.record.type).toBe("after-startup");
+      expect(f.ledger.entries().some(({ record }) => record.type === "interrupted-startup")).toBe(
+        false,
+      );
+      expect(await f.runtime.auditRecord()).toMatchObject({ ok: true, entry: expect.anything() });
+      const checkpoint = f.runtime.recordHead();
+      await f.reopen();
+      expect(f.ledger.entries()).toContainEqual(expect.objectContaining(checkpoint));
+      expect((await f.runtime.exportRecord("urn:unrelated")).jws).toBeTruthy();
+    } finally {
+      f.runtime.close();
+    }
+  } finally {
+    interrupted.mockRestore();
     rmSync(dir, { recursive: true, force: true });
   }
 });

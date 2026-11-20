@@ -1034,6 +1034,9 @@ export class AgentRuntime {
         })
       : options.trust;
     const rt = new AgentRuntime({ ...options, trust });
+    // Establish the recovery anchor before startup appends its first mandate records.
+    if (rt.ledger.requiresTrustedCheckpoint && rt.ledgerAuditTrusted && !rt.state.ledgerAuditHead)
+      rt.persist();
     await rt.loadMandateInto(
       undefined,
       !rt.ledgerAuditTrusted && !!rt.ledger.recoverUncommittedSuffix,
