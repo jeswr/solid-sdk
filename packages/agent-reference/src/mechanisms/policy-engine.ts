@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Declared policy module seam: which ODRL evaluator decides ONE policy for ONE request.
  *
@@ -26,6 +27,53 @@ export interface EngineRequest {
   readonly recipient?: Iri;
   /** Evaluation time (ISO instant). */
   readonly at: string;
+}
+
+/** A policy can change at a date comparison boundary or at the next millisecond. */
+export function policyInstants(policy: OdrlPolicy, at: string, until: string): string[] {
+  const start = Date.parse(at);
+  const end = Date.parse(until);
+  if (!(end > start)) return [];
+  const instants = new Set([start]);
+  for (const rule of [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])])
+    for (const { leftOperand, rightOperand } of rule.constraints ?? []) {
+      if (leftOperand !== "dateTime") continue;
+      for (const value of Array.isArray(rightOperand) ? rightOperand : [rightOperand]) {
+        const bound = Date.parse(String(value));
+        for (const time of [bound, bound + 1]) if (time > start && time < end) instants.add(time);
+      }
+    }
+  return [...instants].map((time) => new Date(time).toISOString());
+}
+
+/** The sender's authority to share does not override restrictions on the named reader. */
+export function referenceReadUnrestricted(
+  policy: OdrlPolicy,
+  reader: { actor: Iri; party: Iri },
+  scope: { target: Iri; purpose?: Iri; at: string; until: string },
+): boolean {
+  const restrictions = {
+    id: policy.id,
+    assignee: policy.assignee,
+    prohibitions: policy.prohibitions,
+  };
+  const instants = policyInstants(restrictions, scope.at, scope.until);
+  return (
+    instants.length > 0 &&
+    instants.every((at) =>
+      [reader.actor, reader.party].every(
+        (agent) =>
+          solidOdrlEngine.evaluate(restrictions, {
+            agent,
+            action: "read",
+            target: scope.target,
+            purpose: scope.purpose,
+            recipient: reader.party,
+            at,
+          }).effect === "not-applicable",
+      ),
+    )
+  );
 }
 
 export interface EngineVerdict {

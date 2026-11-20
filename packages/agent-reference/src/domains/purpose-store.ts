@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Reference enterprise data service with a purpose-aware ENFORCEMENT POINT (framework A5,
  * profile C1): data received under an agreement is stored with the grant derived from the
@@ -425,12 +426,14 @@ export class PurposeBoundStore {
    * now. Each becomes a payload-free tombstone; the store file is rewritten, then one
    * payload-free `data-erased` record per item is appended. Erases THIS store's copy only.
    */
-  purgeExpired(limit = MAX_PURGE_PER_CALL): PurgeReport {
+  purgeExpired(limit = MAX_PURGE_PER_CALL, scope?: { item: Iri; grant: Iri }): PurgeReport {
     // Evidence of earlier interrupted commits first (reported separately).
     const repairedEvidence = this.#repairEvidence();
     const at = this.now().toISOString();
     const expired = [...this.#items.values()].filter(
-      (i) => !(Date.parse(i.grant.validUntil) > Date.parse(at)),
+      (i) =>
+        (!scope || (i.id === scope.item && i.grant.id === scope.grant)) &&
+        !(Date.parse(i.grant.validUntil) > Date.parse(at)),
     );
     const batch = expired.slice(0, Math.max(0, Math.min(limit, MAX_PURGE_PER_CALL)));
     if (batch.length === 0)

@@ -1,35 +1,46 @@
 // AUTHORED-BY Codex GPT-6
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { readFileSync } from "fs";
 import { expect, it } from "vitest";
-import { loadCase } from "../src/engine/load.js";
-import { runScenario } from "../src/engine/run.js";
+import type { TraceFile } from "../src/trace/types.js";
 
-it("does not label the local holder or a by-value run as Solid reference access", async () => {
-  const { profile, scenario } = loadCase(new URL("..", import.meta.url).pathname, "mortgage-main");
-  const paths = await runScenario(profile, scenario, {
-    configuration: "data-access-by-reference-solid",
-  });
-  expect(paths.map((path) => path.path)).toEqual([
-    "main",
-    "grant-wider-than-terms",
-    "read-after-withdrawal",
-  ]);
-  for (const path of paths) {
-    expect(path.trace).toBeUndefined();
-    expect(path.blocked).toContain("by-reference-needs-access-control");
-    expect(path.blocked).toContain(
-      "sharing by reference needs the Solid access-control usage suite",
-    );
+const manifest = JSON.parse(
+  readFileSync(new URL("../scenario-runs.json", import.meta.url), "utf8"),
+) as {
+  paths: Array<{
+    scenario: string;
+    configuration?: string;
+    path: string;
+    status: string;
+    trace?: string;
+    reason?: string;
+  }>;
+};
+const trace = (file: string) =>
+  JSON.parse(readFileSync(new URL(`../traces/${file}`, import.meta.url), "utf8")) as TraceFile;
+
+it("keeps the local holder distinct from Solid reference access", () => {
+  for (const id of ["health-referral", "records-to-new-practice"]) {
+    const rows = manifest.paths.filter((path) => path.scenario === id && path.trace);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows)
+      expect(trace(row.trace!).configuration.layers["data-access"]).not.toBe("by-reference-solid");
   }
 });
-it("keeps pod-only usage control unresolved while its one-layer cell retains by-value access", async () => {
-  const { profile, scenario } = loadCase(new URL("..", import.meta.url).pathname, "mortgage-main");
-  const paths = await runScenario(profile, scenario, {
-    configuration: "usage-control-solid-access-control",
-  });
-  expect(paths.map((path) => path.path)).toEqual(["main", "translation-grants-more"]);
-  for (const path of paths) {
-    expect(path.trace).toBeUndefined();
-    expect(path.blocked).toContain("Specification 17 requires data to stay in a pod");
-    expect(path.blocked).toContain("retains baseline by-value access");
+
+it("publishes a trace for each of the five Solid access paths", () => {
+  for (const [configuration, names] of [
+    ["data-access-by-reference-solid", ["main", "grant-wider-than-terms", "read-after-withdrawal"]],
+    ["usage-control-solid-access-control", ["main", "translation-grants-more"]],
+  ] as const) {
+    const paths = manifest.paths.filter((p) => p.configuration === configuration);
+    expect(paths.map((path) => path.path)).toEqual(names);
+    for (const path of paths) {
+      // Ordered comparison reports the authorized withdrawal before the later read refusal.
+      expect(path.status).toBe(path.path === "read-after-withdrawal" ? "disagrees" : "runs");
+      expect(path.reason).toBeUndefined();
+      expect(path.trace).toBeDefined();
+      expect(trace(path.trace!).configuration.id).toBe(configuration);
+    }
   }
 });

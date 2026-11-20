@@ -41,6 +41,13 @@ interface Resource {
   body: string;
   type: string;
   container: boolean;
+  aclRevision?: number;
+}
+function validator(resource: Resource | undefined): string | undefined {
+  if (!resource) return undefined;
+  return resource.aclRevision === undefined
+    ? `"${digestBytes(resource.body)}"`
+    : `"acl-${resource.aclRevision}"`;
 }
 export function modeForRequest(method: string, url: string): AccessMode {
   if (new URL(url).pathname.toLowerCase().replace(/\/$/, "").endsWith(".acl")) return "Control";
@@ -54,6 +61,8 @@ export class FictionalSolidStorage {
   private readonly identities = new Map<string, PublicKeyRecord & { actor: string }>();
   private readonly nonces = new Set<string>();
   private next = 0;
+  // Restoring identical ACL bytes must never revive an earlier If-Match validator.
+  private nextAclRevision = 0;
   constructor(
     readonly origin: string,
     readonly identity: string,
@@ -92,13 +101,18 @@ export class FictionalSolidStorage {
       ]),
       type: "text/turtle",
       container: false,
+      aclRevision: ++this.nextAclRevision,
     });
   }
   /** Deliberately hostile operator, used only by the changed-at-rest branch. */
   alterAtRest(url: string, change: (body: string) => string): void {
     const resource = this.resources.get(url);
     if (!resource) throw new Error("Missing resource for hostile storage mutation");
-    resource.body = change(resource.body);
+    this.resources.set(url, {
+      ...resource,
+      body: change(resource.body),
+      ...(resource.aclRevision === undefined ? {} : { aclRevision: ++this.nextAclRevision }),
+    });
   }
   private async modes(url: string, actor?: string): Promise<Set<AccessMode>> {
     const protectedUrl = url.endsWith(".acl") ? url.slice(0, -4) : url;
@@ -191,7 +205,7 @@ export class FictionalSolidStorage {
         identity.actor ? {} : { "www-authenticate": "FictionalSignature" },
       );
     const resource = this.resources.get(request.url);
-    const etag = resource ? `"${digestBytes(resource.body)}"` : undefined;
+    const etag = validator(resource);
     if (request.headers.has("if-match") && request.headers.get("if-match") !== etag)
       return reply(412);
     if (request.headers.get("if-none-match") === "*" && resource) return reply(412);
@@ -238,11 +252,20 @@ export class FictionalSolidStorage {
           } catch {
             return reply(400);
           }
+          // ACL parsing yields. Recheck the validator immediately before mutation.
+          const current = this.resources.get(request.url);
+          if (
+            request.headers.has("if-match") &&
+            request.headers.get("if-match") !== validator(current)
+          )
+            return reply(412);
+          if (request.headers.get("if-none-match") === "*" && current) return reply(412);
         }
         this.resources.set(request.url, {
           body,
           type: request.headers.get("content-type") ?? "application/octet-stream",
           container,
+          ...(request.url.endsWith(".acl") ? { aclRevision: ++this.nextAclRevision } : {}),
         });
         return reply(resource ? 204 : 201, "", { link });
       }

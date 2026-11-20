@@ -30,7 +30,9 @@ export interface Transfer {
 }
 export interface DutyWork {
   id: string;
-  kind: "delete" | "notify" | "inform-onward";
+  kind: "delete" | "notify" | "inform-onward" | "withdraw-access";
+  grant?: import("../standins/pod-access.js").PodGrant;
+  referenceCopy?: { operation: import("../core/types.js").OperationRef; grant: string };
   source: string;
   items: string[];
   subject?: string;
@@ -132,6 +134,12 @@ export class DutyExecutor {
         this.record({ type: "duty-missed", ...work });
       }
     return structuredClone(Object.values(this.state.work));
+  }
+  withdrawn(id: string) {
+    const work = this.state.work[id];
+    if (work?.kind !== "withdraw-access" || work.status !== "pending") return;
+    work.status = "discharged";
+    this.record({ type: "duty-discharged", ...work });
   }
   sent(id: string, message: string, conversation: string) {
     const work = this.state.work[id];

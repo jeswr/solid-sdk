@@ -130,10 +130,21 @@ export const BASELINE: Configuration = {
 export const SUITE_CONSTRAINTS: readonly SuiteConstraint[] = [
   {
     id: "by-reference-needs-access-control",
-    text: "sharing by reference needs the Solid access-control usage suite",
-    violated: (l) =>
-      l["data-access"] === "by-reference-solid" && l["usage-control"] !== "solid-access-control"
+    text: "sharing by reference needs access control enforced at the pod",
+    violated: (l, suite) =>
+      l["data-access"] === "by-reference-solid" &&
+      suite("data-access")?.mode === "by-reference" &&
+      !suite("data-access")?.accessControl &&
+      l["usage-control"] !== "solid-access-control"
         ? "data-access"
+        : undefined,
+  },
+  {
+    id: "solid-access-control-needs-reference",
+    text: "Solid access control translates terms for data kept in the pod",
+    violated: (l) =>
+      l["usage-control"] === "solid-access-control" && l["data-access"] !== "by-reference-solid"
+        ? "usage-control"
         : undefined,
   },
   {

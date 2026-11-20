@@ -638,6 +638,9 @@ const step = z.discriminatedUnion("type", [
     purpose: iri,
   }),
   z.strictObject({ ...base, type: z.literal("notifications") }),
+  z.strictObject({ ...base, type: z.literal("pod-store"), statements: strings.min(1) }),
+  z.strictObject({ ...base, type: z.literal("withdraw-access"), statement: slug }),
+  z.strictObject({ ...base, type: z.literal("reference-read"), item: iri, purpose: iri }),
   z.strictObject({ ...base, type: z.literal("duties") }),
   z.strictObject({ ...base, type: z.literal("show-mandate") }),
   z.strictObject({ ...base, type: z.literal("revoke-mandate") }),
@@ -822,7 +825,12 @@ export const scenarioSchema = z.strictObject({
   solid: z
     .strictObject({
       fault: z
-        .enum(["mirror-unreachable", "translation-grants-more", "profile-key-swapped"])
+        .enum([
+          "mirror-unreachable",
+          "translation-grants-more",
+          "profile-key-swapped",
+          "grant-wider-than-terms",
+        ])
         .optional(),
       at: slug.optional(),
     })

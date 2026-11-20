@@ -62,11 +62,11 @@ it("keeps generated captions and rule explanations free of identifiers in every 
   // run, fault-was-the-principals disagrees (Sam is asked before the record-backed stop).
   // Brief 31 §2.9 runs reputation-post: main and post-about-a-person run,
   // evidence-not-publishable disagrees (the disclosure check stops it before the terms).
-  // Brief 36 finds earlier successful decisions that differ in anonymous-asks-for-more,
-  // approval-reused and prose-as-evidence. Their registered later failures still occur.
+  // The integration snapshot includes the Brief 36b classifications.
+  // The five Solid access paths are still blocked in this snapshot, pending regeneration.
   expect(alternatives).toHaveLength(110);
-  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(96);
-  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(9);
+  expect(alternatives.filter((path) => path.status === "runs")).toHaveLength(97);
+  expect(alternatives.filter((path) => path.status === "disagrees")).toHaveLength(8);
   const blocked = alternatives.filter((path) => path.status === "blocked");
   expect(blocked).toHaveLength(5);
   expect(blocked.every((path) => !path.trace)).toBe(true);

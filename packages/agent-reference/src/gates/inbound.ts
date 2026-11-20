@@ -1,5 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2 Sol
+import {
+  type AccessPointer,
+  deadline,
+  isAccessPointer,
+  referenceAgreement,
+  referenceGrant,
+  referenceTerms,
+  verifyAccessPointer,
+} from "../mechanisms/access-pointer.js";
 import { readCarried } from "../settlement/carried.js";
 // AUTHORED-BY Codex GPT-6
 
@@ -940,6 +949,66 @@ export class InboundGate {
       : label;
   }
 
+  async pointerAtDelivery(
+    item: EvidenceItem,
+    msg: AnyMessage,
+  ): Promise<{ pointer: AccessPointer; claim: Claim } | { reason: ReasonCode }> {
+    const at = this.deps.now();
+    const checked = await verifyAccessPointer(item.value, {
+      trust: this.deps.trust,
+      limits: this.deps.limits,
+      verifier: this.deps.identity.actor,
+      at,
+    });
+    this.deps.record(checked.verification);
+    const p = checked.payload as AccessPointer | undefined;
+    if (
+      !p ||
+      checked.verification.outcome !== "valid" ||
+      checked.signer?.subject !== p.issuer ||
+      p.issuer !== msg.from.actor ||
+      checked.signer.party !== p.owner ||
+      p.owner !== msg.from.onBehalfOf
+    )
+      return { reason: "evidence-invalid" };
+    if (p.reader.actor !== this.deps.identity.actor || p.reader.party !== this.deps.identity.party)
+      return { reason: "not-authorised" };
+    if (Date.parse(p.validUntil) <= Date.parse(at)) return { reason: "grant-expired" };
+    const agreement = referenceAgreement.safeParse(this.deps.agreementTerms(msg.conversation));
+    if (
+      msg.kind !== "deliver" ||
+      msg.body.basis.kind !== "agreement" ||
+      p.agreement !== msg.body.basis.agreement ||
+      !agreement.success ||
+      p.owner !== agreement.data.application.applicant ||
+      p.purpose !== agreement.data.purpose ||
+      Date.parse(p.validFrom) > Date.parse(at) ||
+      Date.parse(p.validFrom) >= Date.parse(p.validUntil) ||
+      Date.parse(p.validUntil) > Date.parse(deadline(p.validFrom, agreement.data.retentionDays)) ||
+      p.copy.deleteBy !== deadline(p.validFrom, agreement.data.retentionDays) ||
+      !agreement.data.evidenceRequest.some((r) => r.claimType === p.item.claimType) ||
+      !p.resource.startsWith(`${this.deps.gate.accessPod?.storage.origin}/`) ||
+      p.resource.endsWith("/") ||
+      p.terms.termsDigest !== referenceTerms(p.terms.supplier, p.terms.grant).termsDigest ||
+      digestOf(p.terms.grant) !==
+        digestOf(referenceGrant(p.agreement, agreement.data, p.owner, p.reader.party).policy)
+    )
+      return { reason: "evidence-invalid" };
+    const lookup = {
+      evaluator: this.deps.identity.actor,
+      source: p.item.issuer,
+      claimType: p.item.claimType,
+      subject: p.owner,
+      at,
+    };
+    const accepted =
+      this.deps.gate.resolver?.resolveSource(lookup) ?? this.deps.trust.assessSource(lookup);
+    const sources = this.deps.gate.claimSources?.[p.item.claimType];
+    if (accepted.outcome !== "accepted" || (sources && !sources.includes(p.item.issuer)))
+      return { reason: "evidence-invalid" };
+    return { pointer: p, claim: { ...p.item, subject: p.owner, terms: p.terms.supplier } };
+  }
+
   /** Source: who stands behind one relayed claim, and is that source accepted for it? */
   async assessClaim(
     item: EvidenceItem,
@@ -1334,6 +1403,7 @@ export class InboundGate {
       taskId?: string;
       carriedBy?: string;
       messageEvidence?: readonly EvidenceItem[];
+      referenceTermsChecked?: "read" | "translated-read";
     },
     phase: "source" | "terms" | "fitness",
     cache: Map<string, Awaited<ReturnType<InboundGate["assessClaim"]>>>,
@@ -1640,10 +1710,16 @@ export class InboundGate {
         ...(need.retentionDays !== undefined ? { retentionDays: need.retentionDays } : {}),
         at,
       });
+      const access =
+        need.referenceTermsChecked === "translated-read"
+          ? " The pod reports Read only, and the rule cites permissions in the signed terms."
+          : need.referenceTermsChecked === "read"
+            ? " The pod reports Read only."
+            : "";
       this.verdictEvent(
         "terms",
         t.verdict,
-        `${label}: ${t.text.charAt(0).toLowerCase()}${t.text.slice(1)}`,
+        `${label}: ${t.text.charAt(0).toLowerCase()}${t.text.slice(1)}${t.verdict === "pass" ? access : ""}`,
         {
           ...(t.reason ? { reason: t.reason } : {}),
           rule: { id: terms?.policy?.id ?? "default-terms", text: t.text },
@@ -2012,12 +2088,62 @@ export class InboundGate {
       readonly taskId?: Iri;
       readonly operation?: Iri;
       readonly policyMetadata?: boolean;
+      readonly reference?: {
+        pointer: AccessPointer;
+        conversation: string;
+        status: number;
+        receiptValid: boolean;
+        digestMatches: boolean;
+        readOnly: boolean;
+        expired: boolean;
+        evidenceSchema?: z.ZodType;
+      };
     },
-  ): Promise<{ admitted: number; refused: number }> {
+  ): Promise<{ admitted: number; refused: number; reason?: ReasonCode }> {
     let admitted = 0;
     let refused = 0;
+    const reference = opts.reference;
+    const refuseReference = (check: InboundCheck, reason: ReasonCode, detail: string) => {
+      this.verdictEvent(check, "fail", detail, { reason });
+      this.decisionEvent("refuse", "The reference read is refused.", reason);
+      return { admitted: 0, refused: 1, reason };
+    };
+    if (reference) {
+      if (
+        !reference.expired &&
+        (!reference.receiptValid || (reference.status === 200 && !reference.digestMatches))
+      )
+        return refuseReference(
+          "integrity",
+          "evidence-invalid",
+          "The pod receipt or the digest of the bytes does not match the signed reference.",
+        );
+      if (reference.status !== 200) {
+        this.verdictEvent(
+          "integrity",
+          "pass",
+          reference.expired
+            ? "The reference was admitted in a signed delivery."
+            : "The signed reference and the pod’s signed refusal receipt are intact.",
+        );
+        const reason = reference.expired
+          ? "grant-expired"
+          : [401, 403].includes(reference.status)
+            ? "not-authorised"
+            : "lookup-failed";
+        return refuseReference(
+          "source",
+          reason,
+          reference.expired
+            ? "The read grant has expired."
+            : reason === "not-authorised"
+              ? "The pod refused the read because access has ended."
+              : "The pod did not return the referenced statement.",
+        );
+      }
+    }
     const candidates: Claim[] = [];
-    for (const item of items) {
+    for (const item of reference ? [] : items) {
       const checked = await this.assessClaim(
         { role: "credential", format: item.format ?? "jws-compact", value: item.jws },
         opts.subject,
@@ -2051,6 +2177,12 @@ export class InboundGate {
       const r = await this.assessClaim(ev, opts.subject);
       cache.set(item.jws, r);
       const label = r.claim ? this.labelOf(r.claim) : "A statement";
+      if (reference && (r.reason === "evidence-invalid" || r.reason === "unknown-key" || !r.claim))
+        return refuseReference(
+          "integrity",
+          "bad-signature",
+          "The referenced statement’s own signature could not be verified.",
+        );
       if (r.reason === "evidence-invalid" || r.reason === "unknown-key") {
         this.verdictEvent("integrity", "fail", `${label} does not verify against a pinned key.`, {
           reason: r.reason,
@@ -2062,26 +2194,109 @@ export class InboundGate {
       this.verdictEvent(
         "integrity",
         "pass",
-        ev.format === "origin-hosted"
-          ? `${label} was fetched directly from the source’s registered address; it is unsigned and cannot be forwarded as evidence.`
-          : `${label} is intact and signed with ${this.name(r.claim?.issuer)}'s pinned key.`,
+        reference
+          ? `${label} matches the signed pointer and the pod’s signed receipt, and verifies with ${this.name(r.claim?.issuer)}'s pinned key.`
+          : ev.format === "origin-hosted"
+            ? `${label} was fetched directly from the source’s registered address; it is unsigned and cannot be forwarded as evidence.`
+            : `${label} is intact and signed with ${this.name(r.claim?.issuer)}'s pinned key.`,
       );
+      if (reference && r.claim) {
+        const p = reference.pointer;
+        const request = referenceAgreement.safeParse(
+          this.deps.agreementTerms(reference.conversation),
+        );
+        if (
+          r.claim.id !== p.item.id ||
+          r.claim.claimType !== p.item.claimType ||
+          r.claim.issuer !== p.item.issuer ||
+          r.claim.subject !== p.owner ||
+          !request.success ||
+          !request.data.evidenceRequest.some(
+            (v) => v.claimType === r.claim?.claimType && v.currency === r.claim?.currency,
+          )
+        )
+          return refuseReference(
+            "source",
+            "source-not-authoritative",
+            "The statement the pod returned is outside the signed reference or agreed request.",
+          );
+      }
       const sourceOk = await this.claimChecks(ev, opts.subject, opts, "source", cache);
       if (!sourceOk && r.claim)
         this.deps.memory.refusals[
           `${this.deps.gate.taskId ?? opts.taskId ?? opts.task}|${r.claim.claimType}|${r.claim.subject ?? ""}`
         ] = r.reason ?? "source-not-authoritative";
-      this.verdictEvent(
-        "authority",
-        "not-applicable",
-        `${label} asks for nothing, so there is no authority to check.`,
-        { reason: NOT_APPLICABLE.noAction },
-      );
+      if (reference) {
+        if (!sourceOk) {
+          this.decisionEvent(
+            "refuse",
+            "The reference read is refused.",
+            "source-not-authoritative",
+          );
+          return { admitted: 0, refused: 1, reason: "source-not-authoritative" };
+        }
+        const earlier = this.authorityByConversation.get(reference.conversation);
+        if (!earlier || earlier.party !== reference.pointer.owner)
+          return refuseReference(
+            "authority",
+            "representation-invalid",
+            "No accepted representation in this conversation covers the reference.",
+          );
+        this.verdictEvent(
+          "authority",
+          "pass",
+          "The representation established in the signed delivery covers this statement.",
+          { reason: "established-earlier" },
+        );
+        const { pointer: p } = reference;
+        const policyIds = new Set(
+          [
+            ...(p.terms.supplier.policy.permissions ?? []),
+            ...(p.terms.grant.permissions ?? []),
+          ].map((permission) => permission.id),
+        );
+        const translated =
+          this.deps.gate.configuration?.layers["usage-control"] === "solid-access-control";
+        if (
+          !r.claim?.terms ||
+          digestOf(r.claim.terms) !== digestOf(p.terms.supplier) ||
+          !reference.readOnly ||
+          opts.purpose !== p.purpose ||
+          (translated && (!p.policies?.length || !p.policies.every((id) => policyIds.has(id))))
+        )
+          return refuseReference(
+            "terms",
+            "terms-not-acceptable",
+            "The statement terms, policy provenance or effective access do not match the signed reference.",
+          );
+      } else {
+        this.verdictEvent(
+          "authority",
+          "not-applicable",
+          `${label} asks for nothing, so there is no authority to check.`,
+          { reason: NOT_APPLICABLE.noAction },
+        );
+      }
       const termsOk = new Map<string, boolean>();
+      const termsNeed = reference
+        ? {
+            ...opts,
+            referenceTermsChecked:
+              this.deps.gate.configuration?.layers["usage-control"] === "solid-access-control"
+                ? ("translated-read" as const)
+                : ("read" as const),
+          }
+        : opts;
+      const termsPassed =
+        sourceOk && (await this.claimChecks(ev, opts.subject, termsNeed, "terms", cache, termsOk));
+      if (reference && termsPassed && !reference.evidenceSchema?.safeParse(r.claim).success)
+        return refuseReference(
+          "fitness",
+          "evidence-invalid",
+          "The signed statement does not match the operation's evidence schema.",
+        );
       const ok =
-        sourceOk &&
-        (await this.claimChecks(ev, opts.subject, opts, "terms", cache, termsOk)) &&
-        (await this.claimChecks(ev, opts.subject, opts, "fitness", cache, termsOk));
+        termsPassed && (await this.claimChecks(ev, opts.subject, opts, "fitness", cache, termsOk));
       if (!ok) {
         refused++;
         const reason =
@@ -2092,23 +2307,31 @@ export class InboundGate {
         const request =
           r.claim && reason ? this.requiredFailure(r.claim, reason, opts.operation) : undefined;
         this.decisionEvent(
-          request ? "ask-more" : (this.getClaimFailure()?.outcome ?? "refuse"),
+          reference
+            ? "refuse"
+            : request
+              ? "ask-more"
+              : (this.getClaimFailure()?.outcome ?? "refuse"),
           request ?? `${label} is refused and kept out of memory.`,
           reason,
         );
+        if (reference) return { admitted: 0, refused: 1, reason: reason as ReasonCode };
         continue;
       }
       this.decisionEvent("admit", `${label} is admitted.`);
       const claim = (cache.get(item.jws)?.claim ?? r.claim) as Claim;
       this.storeEvent(claim);
       const fact = this.deps.memory.facts.get(claim.id ?? digestOf(claim));
-      if (fact && !opts.policyMetadata)
+      if (fact && !opts.policyMetadata) {
+        const granted = reference ? { ...fact, dataUseGrant: reference.pointer.terms.grant } : fact;
+        if (reference) this.deps.memory.facts.set(fact.id, granted);
         this.deps.memory.enter(this.deps.gate.taskId ?? opts.taskId ?? "*", {
-          ...fact,
+          ...granted,
           accepted: true,
           kind: "statement",
           digest: digestOf(claim),
         });
+      }
       admitted++;
     }
     const conflict = this.resolvePrecedence(opts.purpose);
@@ -2126,6 +2349,11 @@ export class Admission {
   private sourceFailure?: { reason: ReasonCode; detail: string };
   private claimsAdmitted = true;
   private admittedClaims: Claim[] = [];
+  private readonly pointers = new Map<string, AccessPointer>();
+
+  get admittedPointers(): readonly AccessPointer[] {
+    return this.outcome === "admit" ? [...this.pointers.values()] : [];
+  }
   /** Set when the authority check asks the sender for a stronger approval. */
   askedFor: { approval: Iri; label: string } | undefined;
 
@@ -2195,7 +2423,10 @@ export class Admission {
 
   private claims(msg: AnyMessage): EvidenceItem[] {
     return (msg.evidence ?? []).filter(
-      (e) => isClaimEvidence(e) || (e.format === "origin-hosted" && !!this.deps.gate.originHosted),
+      (e) =>
+        isClaimEvidence(e) ||
+        (e.format === "origin-hosted" && !!this.deps.gate.originHosted) ||
+        (!!this.deps.gate.accessPod && isAccessPointer(e)),
     );
   }
 
@@ -2365,6 +2596,32 @@ export class Admission {
       return;
     }
     for (const item of claims) {
+      if (this.deps.gate.accessPod && isAccessPointer(item)) {
+        const result = await this.gate.pointerAtDelivery(item, msg);
+        if (
+          "reason" in result ||
+          [...this.pointers.values()].some((p) => p.item.id === result.pointer.item.id)
+        ) {
+          const reason = "reason" in result ? result.reason : "evidence-invalid";
+          const detail = "The signed pod reference did not meet the receiver’s conditions.";
+          this.gate.verdictEvent("source", "fail", detail, { reason });
+          this.sourceFailure = { reason, detail };
+          return;
+        }
+        this.pointers.set(item.value, result.pointer);
+        this.claimCache.set(item.value, {
+          verdict: "pass",
+          reason: "source-accepted",
+          claim: result.claim,
+        });
+        this.gate.verdictEvent(
+          "source",
+          "pass",
+          "The signed pod reference names this reader and an accepted source for the requested statement.",
+          { reason: "source-accepted" },
+        );
+        continue;
+      }
       const ok = await this.gate.claimChecks(
         item,
         msg.from.onBehalfOf,
@@ -2634,6 +2891,12 @@ export class Admission {
           termsOk,
         );
       for (const item of passed) {
+        if (this.pointers.has(item.value) && termsOk.get(item.value) !== true) {
+          const reason = "terms-not-acceptable";
+          const detail = "The reference carries supplier terms the receiver cannot accept.";
+          this.refuse(reason, detail);
+          return { ok: false, reason, detail };
+        }
         const c = this.claimCache.get(item.value)?.claim;
         const reason = c && this.deps.memory.refusals[`statement:${c.id ?? digestOf(c)}`];
         if (termsOk.get(item.value) !== true && reason === "unsupported-term") {
@@ -2648,6 +2911,17 @@ export class Admission {
           .filter((claim): claim is Claim => !!claim),
       );
       for (const item of passed) {
+        if (this.pointers.has(item.value)) {
+          this.gate.verdictEvent(
+            "fitness",
+            "not-applicable",
+            "The statement’s fitness will be checked after the read.",
+            {
+              reason: NOT_APPLICABLE.noClaims,
+            },
+          );
+          continue;
+        }
         const r = this.claimCache.get(item.value);
         const ok = await this.gate.claimChecks(
           item,

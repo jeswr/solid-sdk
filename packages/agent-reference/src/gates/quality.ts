@@ -9,7 +9,12 @@
 import { z } from "zod";
 import type { Iri } from "../core/types.js";
 import { OUTSIDE_EFFECT_ACTIONS, type PILOT_ODRL_SUBSET } from "../mechanisms/mandate.js";
-import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import {
+  type PolicyEngine,
+  policyInstants,
+  referenceReadUnrestricted,
+  solidOdrlEngine,
+} from "../mechanisms/policy-engine.js";
 import type { QualityInput, StatementQualityNode } from "../model/quality.js";
 import type { Namer } from "../trace/packet.js";
 import type { ItemTerms, RelianceProfile } from "./common.js";
@@ -238,6 +243,9 @@ export function evaluateItemTerms(
     readonly retentionDays?: number;
     readonly minimumGroup?: number;
     readonly at: string;
+    /** End-exclusive period for an ongoing release authorized by these terms. */
+    readonly until?: string;
+    readonly reader?: { actor: Iri; party: Iri };
     readonly recipientAllowed?: (task: string) => boolean;
   },
   engine: PolicyEngine = solidOdrlEngine,
@@ -345,12 +353,42 @@ export function evaluateItemTerms(
         : `Its terms do not allow this purpose (${summary}).`,
     };
   }
-  const keep = deletionDays(terms);
-  if (keep !== undefined && (need.retentionDays ?? 0) > keep)
+  let keep = deletionDays(terms);
+  let retentionDays = need.retentionDays;
+  if (need.until !== undefined) {
+    const start = Date.parse(need.at);
+    const end = Date.parse(need.until);
+    if (!(end > start))
+      return { verdict: "fail", reason: "terms-not-acceptable", text: "Invalid release period." };
+    retentionDays = Math.max(retentionDays ?? 0, (end - start) / DAY);
+    keep = Math.min(terms.deleteWithinDays ?? Infinity, ...policyDeletionDays(terms));
+    if (
+      need.reader &&
+      !referenceReadUnrestricted(rules, need.reader, { ...request, until: need.until })
+    )
+      return {
+        verdict: "fail",
+        reason: "prohibited",
+        text: "Its terms restrict this reader during the release period.",
+      };
+    for (const at of policyInstants(rules, need.at, need.until).slice(1)) {
+      const effect = engine.evaluate(rules, { ...request, at }).effect;
+      if (
+        effect !== "permit" &&
+        !(effect === "not-applicable" && terms.inherited && !rules.permissions?.length)
+      )
+        return {
+          verdict: "fail",
+          reason: "terms-not-acceptable",
+          text: "Its terms do not permit the full release period.",
+        };
+    }
+  }
+  if (keep !== undefined && (retentionDays ?? 0) > keep)
     return {
       verdict: "fail",
       reason: "terms-not-acceptable",
-      text: `Its terms say delete within ${keep} days; this needs ${need.retentionDays}.`,
+      text: `Its terms say delete within ${keep} days; this needs ${retentionDays}.`,
     };
   return { verdict: "pass", text: `Its terms allow this: ${summary}.` };
 }
@@ -360,12 +398,15 @@ export function evaluateItemTerms(
  * `elapsedTime` constraint (`P<n>D`) inside the policy, else the older side field.
  */
 export function deletionDays(terms: ItemTerms): number | undefined {
+  return policyDeletionDays(terms).next().value ?? terms.deleteWithinDays;
+}
+
+function* policyDeletionDays(terms: ItemTerms): Generator<number, undefined> {
   for (const duty of terms.policy.obligations ?? []) {
     if (duty.action !== "delete") continue;
     for (const c of duty.constraints ?? []) {
       const m = c.leftOperand === "elapsedTime" ? /^P(\d+)D$/.exec(String(c.rightOperand)) : null;
-      if (m) return Number(m[1]);
+      if (m) yield Number(m[1]);
     }
   }
-  return terms.deleteWithinDays;
 }

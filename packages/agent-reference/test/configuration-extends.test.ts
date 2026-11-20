@@ -145,3 +145,31 @@ it("refuses DID aliases for policy identifiers and refuses two parties sharing o
     );
   }
 });
+
+it("confines Solid reference additions to the receipt field and the withdrawal permission", () => {
+  const { profile, scenario } = loadCase(root, "mortgage-main");
+  const id = "data-access-by-reference-solid";
+  const entry = scenario.configurations.find((candidate) => candidate.id === id)!;
+  expect(patchDifferences(scenario, entry, profile)).toEqual([]);
+
+  const wrongVocabulary = withEntry(scenario, id, {
+    profileChange: {
+      vocabulary: {
+        "observed.pendingReferences": { type: "number" },
+        "observed.otherField": { type: "number" },
+      },
+    },
+  });
+  expect(patchDifferences(wrongVocabulary.scenario, wrongVocabulary.entry, profile)).toContain(
+    "profile.vocabulary is outside the data-access layer",
+  );
+
+  const mandates = matrixWorld(scenario, entry).mandates;
+  const owner = mandates.find(({ agent }) => agent === "sam-agent")!;
+  const rule = owner.autonomous.find(({ id }) => id === "urn:rule:use:pod-access-withdraw")!;
+  rule.action = "distribute";
+  const wrongAction = withEntry(scenario, id, { world: { ...entry.world, mandates } });
+  expect(patchDifferences(wrongAction.scenario, wrongAction.entry, profile)).toContain(
+    "mandate:sam-agent#autonomous adds a rule outside a new operation",
+  );
+});

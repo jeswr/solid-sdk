@@ -4719,7 +4719,8 @@
           "enum": [
             "mirror-unreachable",
             "translation-grants-more",
-            "profile-key-swapped"
+            "profile-key-swapped",
+            "grant-wider-than-terms"
           ]
         },
         "at": {
@@ -11175,6 +11176,155 @@
               "id",
               "agent",
               "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "segmentEnd": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "const": "pod-store"
+              },
+              "statements": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "statements"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "segmentEnd": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "const": "withdraw-access"
+              },
+              "statement": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "statement"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "segment": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "segmentEnd": {
+                "type": "string",
+                "enum": [
+                  "payment",
+                  "added"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "const": "reference-read"
+              },
+              "item": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              },
+              "purpose": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type",
+              "item",
+              "purpose"
             ],
             "additionalProperties": false
           },

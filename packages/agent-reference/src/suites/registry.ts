@@ -47,6 +47,7 @@ export interface TransportSuite extends SuiteBase<"transport"> {
 /** How the content gets there. */
 export interface DataAccessSuite extends SuiteBase<"data-access"> {
   readonly mode: "by-value" | "by-reference" | "by-query";
+  readonly accessControl?: "wac";
 }
 /** How a party or agent is named and its keys found. */
 export interface IdentitySuite extends SuiteBase<"identity"> {
@@ -131,7 +132,10 @@ export type ConfigurationProblem =
 export interface SuiteConstraint {
   readonly id: string;
   readonly text: string;
-  readonly violated: (layers: Readonly<Record<LayerId, SuiteId>>) => LayerId | undefined;
+  readonly violated: (
+    layers: Readonly<Record<LayerId, SuiteId>>,
+    suite: <L extends LayerId>(layer: L) => SuiteByLayer[L] | undefined,
+  ) => LayerId | undefined;
 }
 
 export class SuiteRegistry {
@@ -175,7 +179,7 @@ export class SuiteRegistry {
     if (problems.length === 0) {
       const layers = config.layers as Readonly<Record<LayerId, SuiteId>>;
       for (const c of this.constraints) {
-        const layer = c.violated(layers);
+        const layer = c.violated(layers, (layer) => this.suite(layer, layers[layer]));
         if (layer) problems.push({ layer, problem: "constraint", detail: `${c.id}: ${c.text}` });
       }
     }

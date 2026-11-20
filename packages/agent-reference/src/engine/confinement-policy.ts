@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { canonicalJson } from "../core/canonical.js";
 import { didWebUrl } from "../standins/did.js";
+import { WITHDRAW_ACCESS } from "../standins/pod-access.js";
 import type { ScenarioConfiguration } from "./matrix.js";
 import type { DomainProfile, Scenario } from "./schema.js";
 
@@ -143,6 +144,7 @@ export function configurationPolicyDifferences(
 ): string[] {
   const problems: string[] = [];
   const [layer, suite] = Object.entries(entry.change)[0]!;
+  const solidReference = layer === "data-access" && suite === "by-reference-solid";
   const worldCommon = [
     "parties",
     "statements",
@@ -181,6 +183,17 @@ export function configurationPolicyDifferences(
       .map(({ id }) => id),
   );
   for (const key of changes(baseline, configured)) {
+    if (
+      solidReference &&
+      key === "vocabulary" &&
+      changes(baseline.vocabulary, configured.vocabulary).every(
+        (field) =>
+          field === "observed.pendingReferences" &&
+          !baseline.vocabulary[field] &&
+          same(configured.vocabulary[field], { type: "number" }),
+      )
+    )
+      continue;
     if (
       ["identity", "meaning", "usage-control", "accountability"].includes(layer) &&
       ["operations", "claims", "purposes", "labels", "vocabulary"].includes(key)
@@ -275,13 +288,27 @@ export function configurationPolicyDifferences(
       const rules = mandate[field] ?? [];
       if (!keeps(prior, rules))
         problems.push(`mandate:${mandate.agent}#${field} changes existing rules`);
-      for (const rule of rules.filter((value) => !prior.some((v) => same(v, value))))
+      for (const rule of rules.filter((value) => !prior.some((v) => same(v, value)))) {
+        // The runtime binds this permission to an owned grant and its exact withdrawal duty.
+        if (
+          solidReference &&
+          mandate.agent === "sam-agent" &&
+          field === "autonomous" &&
+          same(rule, {
+            id: "urn:rule:use:pod-access-withdraw",
+            type: "permission",
+            action: "use",
+            target: WITHDRAW_ACCESS,
+          })
+        )
+          continue;
         if (
           (field !== "autonomous" && field !== "withApproval") ||
           typeof object(rule).target !== "string" ||
           !operations.has(String(object(rule).target))
         )
           problems.push(`mandate:${mandate.agent}#${field} adds a rule outside a new operation`);
+      }
     }
     if (!same(before?.limits, mandate.limits))
       problems.push(`mandate:${mandate.agent}#limits changes its limits`);

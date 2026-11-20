@@ -143,6 +143,11 @@ export interface HandlerContext {
   /** Runtime-minted identifiers are registered before any outgoing classification. */
   mintIdentifier(): Iri;
   admittedStatement(id: Iri, digest: string): boolean;
+  referenceResource?(
+    id: Iri,
+    retentionDays: number,
+  ): { resource: string; retentionDays: number } | undefined;
+  readonly pendingReferences?: readonly import("../mechanisms/access-pointer.js").AccessPointer[];
   /**
    * Gate-written summaries of evidence in this message that the inbound gate did not admit.
    * Labels and the reason only: the refused claim's value never reaches a handler
@@ -175,6 +180,18 @@ export interface HandlerContext {
   ): Promise<RepresentationAssessment>;
 }
 
+export interface ReferenceReadReceipt {
+  readonly type: "receipt";
+  readonly activity: Iri;
+  readonly outcome: "completed";
+  readonly final: false;
+  readonly observed: {
+    readonly stage: "received-and-checked";
+    readonly missing: string[];
+    readonly completeness: "incomplete" | "all-requested-types-accepted";
+  };
+}
+
 export interface OperationHandler {
   readonly description: OperationDescription;
   /** Vocabulary and purpose boundaries of this operation's installed domain profile. */
@@ -182,6 +199,8 @@ export interface OperationHandler {
   /** Validates proposal terms (negotiate) or invocation input (invoke). */
   readonly termsSchema?: z.ZodType<JsonObject>;
   readonly inputSchema?: z.ZodType<JsonObject>;
+  readonly referenceEvidenceSchema?: z.ZodType;
+  eraseReferenceCopy?(item: Iri, grant: Iri): boolean;
   /** Peer must present a representation statement covering this operation. */
   readonly requiresRepresentation: boolean;
   /**
@@ -217,6 +236,11 @@ export interface OperationHandler {
     body: InvokeBody,
     evidence: readonly EvidenceItem[],
   ): Promise<HandlerReply> | HandlerReply;
+  onReferenceRead?(
+    ctx: HandlerContext,
+    pointer: import("../mechanisms/access-pointer.js").AccessPointer,
+    fact: import("../gates/common.js").AdmittedFact,
+  ): ReferenceReadReceipt | undefined | Promise<ReferenceReadReceipt | undefined>;
   onDeliver?(
     ctx: HandlerContext,
     body: DeliverBody,

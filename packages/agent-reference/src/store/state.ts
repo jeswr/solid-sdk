@@ -159,6 +159,7 @@ export interface RuntimeState {
   auditApprovalProofs: Record<Iri, string>;
   emailChallenges: Record<string, string>;
   duties: import("../runtime/duties.js").DutyState;
+  pendingPodGrants: Record<string, import("../standins/pod-access.js").PodGrantAttempt>;
   recordMessages: Record<
     string,
     { direction: "in" | "out"; conversation: string; digest: string; jws: string }
@@ -256,6 +257,7 @@ export function emptyState(): RuntimeState {
   return {
     version: 1,
     duties: { transfers: [], incoming: [], work: {} },
+    pendingPodGrants: {},
     precedenceHolds: {},
     recordMessages: {},
     auditApprovalProofs: {},

@@ -1,5 +1,17 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2 Sol
+import {
+  accessRequests,
+  deadline,
+  referenceAgreement,
+  referenceGrant,
+  referenceTerms,
+} from "../mechanisms/access-pointer.js";
+import {
+  type TranslationTerms,
+  translateTerms,
+  withinTerms,
+} from "../mechanisms/access-translation.js";
 import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
 import { tightenUsage } from "../mechanisms/usage-model.js";
 import { MessageEnvelopeNode } from "../model/envelope.js";
@@ -11,6 +23,7 @@ import { SettlementError } from "../settlement/adapter.js";
 import { carry } from "../settlement/carried.js";
 import { selectedSettlement } from "../settlement/configurations.js";
 import type { ProtocolObjects, SettlementSuite } from "../settlement/types.js";
+import type { PodGrant } from "../standins/pod-access.js";
 import { negotiatedRequestMatches } from "../suites/meaning-negotiated.js";
 import { decodeJws } from "../wire/inspect.js";
 import { documentConfiguration, isMessagePacket, packetProofInfo } from "../wire/message-packet.js";
@@ -106,6 +119,8 @@ type PrincipalUseVerdict = Omit<TermsVerdict, "verdict"> & {
 
 export interface OutboundDeps {
   readonly settlement?: SettlementSuite;
+  readonly referencePeer?: (conversation: string) => { actor: string; party: string } | undefined;
+  readonly referenceAgreementId?: (intent: ActionIntent) => string | undefined;
   readonly recordRelease?: (intent: ActionIntent) => boolean;
   /** Brief 32: whether the agent's own record supports a record-backed outgoing statement. */
   readonly recordBacks?: (claim: Readonly<Record<string, unknown>>, recipient: string) => boolean;
@@ -679,11 +694,182 @@ export class OutboundGate {
       ].filter(Boolean);
       return `${who} asks for ${labels.length === 1 ? "one" : labels.length === 2 ? "two" : labels.length} of your statements: ${listWords(labels)}. They would ${listWords(uses)}.${
         limitText ? ` ${limitText}` : ""
-      } May I share them?`;
+      }${this.referenceApproval(intent)} May I share them?`;
     }
     return `${who} asks me to ${this.describeAction(intent)}${
       scope.purpose ? ` for ${idWords(scope.purpose, this.name)}` : ""
     }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
+  }
+
+  private referenceApproval(intent: ActionIntent): string {
+    if (!this.deps.gate.accessPod) return "";
+    const access = accessRequests.safeParse(intent.parameters.access);
+    if (!access.success) return "";
+    const grants = this.accessGrants(intent) ?? [];
+    return grants
+      .map(
+        ({ pointer }) =>
+          ` ${this.name(intent.recipient)}'s agent will be able to read ${this.deps.memory.facts.get(pointer.item.id)?.label ?? "the statement"} in your storage until ${pointer.validUntil.slice(0, 10)}.`,
+      )
+      .join("");
+  }
+
+  private readonly checkedAccess = new Map<string, readonly PodGrant[]>();
+
+  accessGrants(intent: ActionIntent): readonly PodGrant[] | undefined {
+    return this.checkedAccess.get(actionDigest(intent));
+  }
+
+  stopAccessRelease(): void {
+    this.decide(
+      "stop",
+      "The pod grant and reference delivery could not be completed.",
+      "execution-failed",
+    );
+  }
+
+  referenceRetentionDays(agreedDays: number): number {
+    const end = this.deps.mandate()?.validUntil;
+    if (!end) return 0;
+    const daysRemaining = (Date.parse(end) - Date.parse(this.deps.now())) / 86_400_000;
+    // Keep the issued lease strictly within the period covered by the releasing mandate.
+    return Math.max(0, Math.min(agreedDays, Math.ceil(daysRemaining) - 1));
+  }
+
+  private checkAccessScope(intent: ActionIntent, retentionDays: number | undefined): boolean {
+    const pod = this.deps.gate.accessPod;
+    if (!pod || pod.actor !== this.deps.identity.actor) return true;
+    const items = Array.isArray(intent.parameters.evidence) ? intent.parameters.evidence : [];
+    const held = items.filter((id) => typeof id === "string" && pod.stored(id));
+    const access = accessRequests.safeParse(intent.parameters.access);
+    if (!held.length) return intent.parameters.access === undefined;
+    if (
+      !access.success ||
+      access.data.length !== held.length ||
+      new Set(access.data.map((a) => a.item)).size !== held.length
+    )
+      return false;
+    const peer = this.deps.referencePeer?.(intent.conversation);
+    return (
+      !!peer &&
+      peer.party === intent.recipient &&
+      retentionDays !== undefined &&
+      access.data.every(
+        (a) =>
+          held.includes(a.item) &&
+          pod.stored(a.item)?.resource === a.resource &&
+          a.reader === peer.actor &&
+          a.retentionDays <= this.referenceRetentionDays(retentionDays),
+      )
+    );
+  }
+
+  private planAccess(
+    intent: ActionIntent,
+    mandate: OdrlRule | undefined,
+  ):
+    | {
+        grants: PodGrant[];
+        translated: boolean;
+      }
+    | undefined {
+    const pod = this.deps.gate.accessPod;
+    const access = accessRequests.safeParse(intent.parameters.access);
+    const agreement = this.deps.referenceAgreementId?.(intent);
+    const offer = referenceAgreement.safeParse(
+      this.deps.offerTerms(String(intent.parameters.termsDigest)),
+    );
+    const peer = this.deps.referencePeer?.(intent.conversation);
+    if (
+      !pod ||
+      pod.actor !== this.deps.identity.actor ||
+      !access.success ||
+      !agreement ||
+      !offer.success ||
+      !peer ||
+      !intent.purpose ||
+      intent.purpose !== offer.data.purpose ||
+      offer.data.application.applicant !== pod.owner
+    )
+      return undefined;
+
+    const now = this.deps.now();
+    const grants: PodGrant[] = [];
+    const translated =
+      this.deps.gate.configuration?.layers["usage-control"] === "solid-access-control";
+    const grant = referenceGrant(agreement, offer.data, pod.owner, peer.party).policy;
+    const deleteBy = deadline(now, offer.data.retentionDays);
+    for (const request of access.data) {
+      const stored = pod.stored(request.item);
+      const supplier = this.deps.memory.facts.get(request.item)?.terms;
+      if (!stored || !supplier) return undefined;
+      let until = deadline(now, request.retentionDays);
+      let policies: string[] | undefined;
+      let remainder: string[] | undefined;
+      if (translated) {
+        if (!mandate) return undefined;
+        const inputs: TranslationTerms = {
+          supplier: supplier.policy,
+          grant,
+          mandate,
+          item: stored.id,
+          resource: stored.resource,
+          agent: peer.actor,
+          recipient: peer.party,
+          purpose: intent.purpose,
+          mandateTarget: intent.target,
+          at: now,
+          until,
+        };
+        const proposed = translateTerms(inputs);
+        const rule =
+          proposed.rule && (this.deps.gate.translateAccess?.(proposed.rule) ?? proposed.rule);
+        if (!rule || !withinTerms(rule, inputs)) return undefined;
+        policies = [...rule.policies];
+        remainder = [...proposed.remainder];
+        until = rule.until;
+      }
+      if (
+        Date.parse(until) > Date.parse(deleteBy) ||
+        // Check the lease's authorization window and the copy's agreed retention against
+        // the signed supplier terms, independent of the core's summary retentionDays.
+        evaluateItemTerms(supplier, {
+          agent: this.deps.identity.actor,
+          action: "distribute",
+          target: request.item,
+          purpose: intent.purpose,
+          recipient: peer.party,
+          at: now,
+          until,
+          reader: peer,
+          retentionDays: offer.data.retentionDays,
+          recipientAllowed: (role) => this.recipientAllows(peer.party, role),
+        }).verdict !== "pass"
+      )
+        return undefined;
+      const fragment = `reference-${digestOf({ agreement, item: stored.id }).replace(/[^a-z0-9-]/gi, "")}`;
+      grants.push({
+        fragment,
+        pointer: {
+          id: `${stored.resource}.acl#${fragment}`,
+          issuer: pod.actor,
+          owner: pod.owner,
+          resource: stored.resource,
+          digest: stored.digest,
+          agreement,
+          purpose: intent.purpose,
+          item: { id: stored.id, claimType: stored.claimType, issuer: stored.issuer },
+          reader: peer,
+          modes: ["Read"],
+          validFrom: now,
+          validUntil: until,
+          terms: referenceTerms(supplier, grant),
+          copy: { permitted: true, deleteBy },
+          ...(policies && remainder ? { policies, remainder } : {}),
+        },
+      });
+    }
+    return { grants, translated };
   }
 
   private paymentPayeeLabel(party: string | undefined): string {
@@ -791,8 +977,10 @@ export class OutboundGate {
     if (selected && !alternativeInstalled(this.deps.gate, selected))
       decision = { ...decision, outcome: "deny", reason: "unsupported-configuration" };
     const statusFailure =
-      this.deps.gate.mandateCredential?.outbound() ??
-      this.deps.gate.authorizationGrant?.outbound?.();
+      decision.policy.evaluator === "grant-withdrawal"
+        ? undefined
+        : (this.deps.gate.mandateCredential?.outbound() ??
+          this.deps.gate.authorizationGrant?.outbound?.());
     if (statusFailure) decision = { ...decision, outcome: "deny", reason: statusFailure };
     const scope = IntentScopeNode.fromIntent(intent);
     this.activePayment = undefined;
@@ -980,7 +1168,9 @@ export class OutboundGate {
       subject,
       "mandate",
       "pass",
-      `${this.owner}'s mandate covers this action${matched?.withApproval ? ", with approval" : ""}.`,
+      decision.policy.evaluator === "grant-withdrawal"
+        ? "The original grant authorizes removal of its own access rule at expiry."
+        : `${this.owner}'s mandate covers this action${matched?.withApproval ? ", with approval" : ""}.`,
       ruleRef,
     );
 
@@ -1237,7 +1427,8 @@ export class OutboundGate {
     }
     const blocked =
       ctx.configuration || this.deps.recordRelease?.(intent)
-        ? (this.disclosure(verdicts, subject, intent) ?? this.dataTerms(verdicts, subject, intent))
+        ? (this.disclosure(verdicts, subject, intent) ??
+          this.dataTerms(verdicts, subject, intent, undefined, matched?.rule))
         : undefined;
     if (blocked) {
       this.decide("stop", "The action is stopped; nothing leaves.", blocked);
@@ -1722,11 +1913,27 @@ export class OutboundGate {
         );
         return "missing-context";
       }
+      if (
+        !this.checkAccessScope(
+          intent,
+          typeof offer?.retentionDays === "number" ? offer.retentionDays : undefined,
+        )
+      ) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "fail",
+          "The requested pod grant exceeds the agreed resource, reader or retention.",
+          { reason: "excessive-scope" },
+        );
+        return "excessive-scope";
+      }
       const extra = items.filter((f) => !f || !requested.includes(f.claimType));
       const missing = requested.filter((t) => !items.some((f) => f?.claimType === t));
       const rule = {
         id: String(p.termsDigest),
-        text: `The request asks for ${listWords(requested.map((t) => idWords(t)))}; by value is the only form in this configuration.`,
+        text: `The request asks for ${listWords(requested.map((t) => idWords(t)))}; ${p.access ? "a pod grant covers only an agreed statement, the verified reader and the agreed retention" : "by value is the only form in this configuration"}.`,
       };
       if (extra.length > 0) {
         this.verdict(
@@ -1909,6 +2116,7 @@ export class OutboundGate {
     subject: string,
     intent: ActionIntent,
     release?: { readonly approved: boolean; asked?: boolean },
+    mandate?: OdrlRule,
   ): string | undefined {
     const scope = IntentScopeNode.fromIntent(intent);
     const p = intent.parameters;
@@ -1972,6 +2180,8 @@ export class OutboundGate {
       return undefined;
     }
     let blocked: string | undefined;
+    const access = this.deps.gate.accessPod && p.access !== undefined;
+    const requests = access ? accessRequests.safeParse(p.access).data : undefined;
     const ruledItems = p.evidence.map((id) => {
       const fact = this.deps.memory.facts.get(String(id));
       const terms: ItemTerms | undefined = fact?.terms;
@@ -1982,13 +2192,18 @@ export class OutboundGate {
         target: String(id),
         ...(scope.purpose ? { purpose: scope.purpose } : {}),
         ...(scope.recipient ? { recipient: scope.recipient } : {}),
-        ...(typeof p.retentionDays === "number" ? { retentionDays: p.retentionDays } : {}),
+        ...(typeof p.retentionDays === "number" && !requests?.some((request) => request.item === id)
+          ? { retentionDays: p.retentionDays }
+          : {}),
         at: this.deps.now(),
         recipientAllowed: (label) => this.recipientAllows(scope.recipient, label),
       });
       return { id: String(id), fact, terms, t };
     });
     const allRulesPermit = ruledItems.every(({ t }) => t.verdict === "pass");
+    const accessPlan = access && allRulesPermit ? this.planAccess(intent, mandate) : undefined;
+    if (access) this.checkedAccess.delete(subject);
+
     for (const { id, fact, terms, t: rules } of ruledItems) {
       const own = release ? this.principalUse(fact, scope, release.approved) : undefined;
       const t: PrincipalUseVerdict =
@@ -2003,6 +2218,16 @@ export class OutboundGate {
           text = `Its terms allow sharing only with ${terms.recipientMustBe.label}; ${this.name(scope.recipient)} is not shown to be one.`;
         } else {
           text = `${text} ${this.name(scope.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
+        }
+      }
+      if (access && verdict === "pass" && requests?.some((a) => a.item === id)) {
+        if (!accessPlan) {
+          verdict = "fail";
+          reason = "prohibited";
+          text = "The proposed access rule grants more than the terms and mandate allow.";
+        } else if (accessPlan.translated) {
+          text +=
+            " The access rule was translated from the bank's terms and the agreement and grants no more than they allow.";
         }
       }
       // An undecided own-statement use is held only when no other item already stops it.
@@ -2035,6 +2260,7 @@ export class OutboundGate {
         },
       );
     }
+    if (!blocked && accessPlan) this.checkedAccess.set(subject, accessPlan.grants);
     return blocked;
   }
 
@@ -3150,7 +3376,7 @@ export class OutboundGate {
     return false;
   }
 
-  /** Evidence and the transport hand-off are recorded only after a successful checkMessage. */
+  /** Seal the evidence now and return the announcement to emit when releasing the message. */
   seal(
     message: AnyMessage,
     wire: WireMessage,
@@ -3160,7 +3386,7 @@ export class OutboundGate {
       vocabulary?: ContentVocabulary;
       known?: KnownContent;
     },
-  ): void {
+  ): (recordConsumption?: OutboundDeps["consumeApproval"]) => void {
     const envelope =
       message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
     const verdicts: CheckVerdict[] = [];
@@ -3191,27 +3417,29 @@ export class OutboundGate {
         },
       },
     );
-    this.decide(
-      "go",
-      `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
-      undefined,
-      { messageId: envelope.id, messageDigest: digestOf(message) },
-    );
-    if (opts.intent) this.deps.consumeApproval?.(opts.intent);
-    this.emit({
-      part: "transport",
-      kind: "message-out",
-      messageId: envelope.id,
-      packet: packetView(message, wire, {
-        carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
-        carriageSummary: "Handed to the carriage.",
-        name: this.name,
-        vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
-        known: opts.known,
-      }),
-      ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
-      caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
-    });
+    return (recordConsumption = this.deps.consumeApproval) => {
+      this.decide(
+        "go",
+        `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
+        undefined,
+        { messageId: envelope.id, messageDigest: digestOf(message) },
+      );
+      if (opts.intent) recordConsumption?.(opts.intent);
+      this.emit({
+        part: "transport",
+        kind: "message-out",
+        messageId: envelope.id,
+        packet: packetView(message, wire, {
+          carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
+          carriageSummary: "Handed to the carriage.",
+          name: this.name,
+          vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
+          known: opts.known,
+        }),
+        ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
+        caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
+      });
+    };
   }
 
   stopDisclosure(subject: string, reason = "excessive-scope"): void {

@@ -5225,3 +5225,145 @@ inbound checks on each; the host vouches for nothing.
     requires it for. Result: `fitness`, ask-more, `structured-form-required`.
   - `step-back-down`: a later prose email from the lender is refused at `source` with
     `unsigned-not-allowed`.
+
+## Brief 33
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The two Solid configurations use the existing mortgage journey and matrix. Sam stores
+the exact admitted bank-signed statement in a separately keyed fictional pod. The
+disclosure gate binds the address, reader and retention to Sam’s approval and checks
+them against held evidence and the verified lender description. An ACL update and
+confirmation precede pointer signing and publication of the ordinary delivery.
+A release failure triggers conditional removal of the specific grant. The lender
+admits the pointer with the income statement, reports the pending balance, reads the
+balance through guarded in-process HTTP, and admits it through the ordinary inbound
+checks with additional receipt, digest and WAC checks. The new receipt follows the
+read through the same application conversation. Principal withdrawal and the expiry
+duty use the same parameter-bound outbound effect.
+
+### Gate and runtime edits
+
+- `src/gates/common.ts` accepts the configured evidence pod and fixture hooks, carries
+  the accepted data-use grant beside supplier terms, and scopes each Solid advertisement
+  to its own configuration.
+- `src/gates/outbound.ts` verifies the resource, reader and retention at disclosure.
+  At data terms it binds the supplier terms and agreed grant to the pointer and
+  independently bounds translated modes, scope, time and provenance. The approval
+  question describes the read grant. The gate records execution failure if the grant
+  and delivery cannot be completed.
+- `src/gates/inbound.ts` checks the pointer at source during signed delivery admission.
+  It evaluates the supplier terms in their ordinary position and defers statement
+  fitness until the read. The read supplies receipt, digest, item identity and
+  effective access conditions to `admitStatements` and retains both policies with the
+  admitted fact.
+- `src/runtime/agent.ts` passes the retained verified description and agreement to
+  the gate, stores exact admitted proof bytes, retains admitted pointers with their
+  signed deliveries, and invokes the read, copy and receipt path. The release seam
+  couples ACL confirmation, pointer evidence, the ledger and outbox publication.
+  The runtime refuses core-supplied pointers or a direct delivery of evidence held in
+  the pod without a checked access intent. A scope or translation stop closes locally.
+  The parameter-bound withdrawal adapter and the duty dispatcher share the normal
+  effect executor.
+- `src/runtime/duties.ts` records the grant as withdrawal work and records its discharge.
+- `src/runtime/operations.ts` provides the protected-resource lookup, admitted pending
+  references, and the handler hook for an admitted read.
+
+### Stand-ins
+
+The independently keyed fictional evidence pod executes authenticated HTTP calls in
+process. Key introduction stands in for Solid-OIDC. The operator sees who reads
+each resource and can read the stored statement. Its receipt vouches for carriage.
+The folder-grant branch changes the core’s proposed address. The translation branch
+adds Write to the translator’s proposal. Both proposals go to the ordinary gate.
+
+### Not from a specification
+
+The grant uses one direct WAC Read authorization and conditional ACL updates. A
+signed pointer binds the admitted supplier proof to the lender and the accepted
+agreement. The repository’s existing compact-JWS evidence wrapper carries the
+pointer under the grant role. A timed grant depends on a runtime withdrawal duty,
+and the reader refuses to fetch after expiry. Direct ACL evidence includes the
+permission links from the attached policies. The mandate independently constrains
+translation and stays local. The pod-access SDK translates and compares already
+normalized storage policies. The small ODRL comparator here also checks the exact
+resource, named reader, end time and attached permission IDs. D2, D6, D7 and D8
+are pending maintainer decisions.
+
+### Measured paths and confinement
+
+| Configuration | Path | Measured result | Added exchanges |
+|---|---|---|---:|
+| `data-access-by-reference-solid` | `main` | Disclosure and data terms pass. The lender admits the pointer and all five read checks pass. Sam admits the second intake receipt. The final application receipt equals the baseline's. | 1 |
+| `data-access-by-reference-solid` | `grant-wider-than-terms` | `disclosure`, `excessive-scope`, `stop` before asking Sam. | 0 |
+| `data-access-by-reference-solid` | `read-after-withdrawal` | The withdrawal effect goes and removes the rule. The signed 403 passes integrity, then `source`, `not-authorised`, `refuse`. The first copy remains. | 1 |
+| `usage-control-solid-access-control` | `main` | The data-terms check accepts the translated rule. The inbound terms check accepts Read only and the permission links. The final application receipt matches the prerequisite. | 1 |
+| `usage-control-solid-access-control` | `translation-grants-more` | Disclosure passes, then `data-terms`, `prohibited`, `stop`. | 0 |
+
+All three failure paths match their registered expectations. Both main paths return
+empty results for C1/C4, C2/C5 and C3. The usage-control comparisons use the by-reference
+world and trace. Both main manifest rows still measure the inherited step-up challenge
+at authority as `ask-more` / `assurance-insufficient`. The final application receipt
+records indicative eligibility. The added record-only storage step and the added read and receipt
+segment close as declared. Sam’s second receipt uses the existing conversation rules.
+
+The manifest has 283 paths before and after. The totals move from **251 runs /
+18 disagreements / 14 blocked** to **256 runs / 18 disagreements / 9 blocked**.
+The five affected rows contain trace and added-exchange data. All other manifest rows,
+existing outlines, local-holder traces and the 164-path oracle file retain their starting
+content. The five new traces' prose audit found no raw HTTP or URN identifiers.
+
+### Additional implementation decisions
+
+The receipt gets an identifier derived from the pointer and delivery. That preserves
+the identifiers in the later mortgage receipt. A configuration-local vocabulary entry
+declares the pending reference count as numeric. A current holder’s undirected
+supplier permission to use the data grants no read to a different party. The supplier
+share permission and the agreement read permission supply both external provenance
+links. The mandate constrains the result separately. A rollback restores the exact
+previous document when no other update intervened. If pod availability also prevents
+rollback, the sender records the unresolved withdrawal and withholds the pointer.
+The 60-day agreed retention period would put a full-length pod grant two minutes
+past the signed mandate. The proposed lease is the lesser of the agreed period and
+the whole days ending strictly before that mandate, giving 59 days in this journey.
+The approval binds that duration and the copy keeps its 60-day deletion date.
+Discharging after the lease but during the current mandate exercises the same
+ordinary effect and removes the rule. A late discharge still needs a valid mandate.
+
+### Validation
+
+The pre-restart package build completed TypeScript, generated-file copy, schema drift
+and the five primer traces. The restart interrupted the all-scenario generation and
+full Vitest attempt. The orchestrator owns the full gate under the resume instruction.
+Both selected scenario generations completed and published their five paths. The
+RDF pipeline reports **0 failures and 213 allowances**. The unchanged C1–C5 functions
+were exercised directly for both configured main runs.
+
+### Check-removal evidence
+
+Each mutation ran the named focused test on a local copy of the package. The test
+failed with the missing registered verdict shown below. Each source file was restored
+and compared byte-for-byte with the worktree version. The unmodified tests passed.
+
+| Removed check | Focused test | Observed test failure |
+|---|---|---|
+| The resource, reader and retention check at disclosure | `grant-wider-than-terms stops at disclosure` | Missing `disclosure / excessive-scope → stop` |
+| The HTTP refusal check at inbound source | `read-after-withdrawal is refused at the source and the copy remains` | Missing `source / not-authorised → refuse` |
+| The independently bounded ACL translation at data terms | `translation-grants-more stops at data-terms before any grant` | Missing `data-terms / prohibited → stop` |
+
+### Local command results
+
+All commands used Node 24. Focused Vitest commands used `--maxWorkers=2`.
+
+| Command | Result |
+|---|---|
+| `pnpm exec tsc -p tsconfig.build.json`, `node scripts/copy-generated.mjs`, `node scripts/export-schemas.mjs --check` | Passed. |
+| `pnpm run typecheck` and `pnpm run lint` | Passed. Lint reported 473 warnings and 522 informational diagnostics. |
+| `node scripts/check-rdf-pipeline.mjs` | Passed with 0 failures and 213 allowances. |
+| `node scripts/run-scenarios.mjs --scenario=mortgage-main --configuration=<configuration>` | Both configurations passed and produced five traces and outlines. |
+| `pnpm exec vitest run` on the two new files plus `solid-reference-status`, `registry`, `labels`, `solid-storage` and `oracle-snapshot` | 33 passed in seven files. The two new files passed all 15 tests again after the final release guard. |
+| `pnpm exec vitest run test/confinement.test.ts -t 'applies a prerequisite'` | Passed. The dedicated comparison on the two published main traces also passed C1–C5. |
+| Artifact audit and `git diff --check` | Passed. The five manifest rows changed as specified and every other row retained its content. |
+| `pnpm exec vitest run test/oracle.test.ts --maxWorkers=2` | Passed all 164 baseline path comparisons with the hash-verified local SPARQ aggregate adapter. The first run reached 158 paths while the optional adapter was absent after restart. The repository installer verified commit `61989f5`’s archive into a temporary directory, and the rerun used `ANSWERABLE_SPARQ_AGGREGATE`. No manifest dependency, lockfile or oracle entry was edited. |
+| `pnpm run check:agent-layers` from the workspace root | Passed. |
+| Final regeneration and `sha256sum -c` for the five requested traces | Passed. All five compiled-runtime reruns reproduced the same bytes. |

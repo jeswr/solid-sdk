@@ -18,6 +18,7 @@
  *   valuation branch: fee → consumer `compensate` action → approval → instruction
  *   submitted; settlement unknown ⇒ obligation fulfilment unresolved.
  */
+
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
 import { z } from "zod";
 import { digestOf } from "../core/canonical.js";
@@ -31,6 +32,7 @@ import type {
   JsonObject,
   ProposeBody,
 } from "../core/types.js";
+import { referenceGrant } from "../mechanisms/access-pointer.js";
 import { TYP } from "../mechanisms/statements.js";
 import { confidenceMeasurementSchema } from "../model/reliance-confidence.js";
 import type { OperationDescription } from "../profile/description.js";
@@ -292,6 +294,13 @@ export class ConsumerMortgageHandler implements OperationHandler {
     t: EvidenceRequestTerms,
     termsDigest: string,
   ): ActionIntent {
+    const matching = this.matching(t, ctx);
+    const access = matching.flatMap(({ statement }) => {
+      const held = ctx.referenceResource?.(statement.id, t.retentionDays);
+      return held && ctx.peer.actor
+        ? [{ item: statement.id, ...held, reader: ctx.peer.actor }]
+        : [];
+    });
     return {
       operation: PREQUAL_OP.id,
       action: "distribute",
@@ -300,9 +309,8 @@ export class ConsumerMortgageHandler implements OperationHandler {
       ...(ctx.peer.party ? { recipient: ctx.peer.party } : {}),
       parameters: {
         termsDigest,
-        evidence: this.matching(t, ctx)
-          .map((w) => w.statement.id)
-          .sort(),
+        ...(access.length ? { access } : {}),
+        evidence: matching.map((w) => w.statement.id).sort(),
         onward: t.onward.map((o) => o.recipient).sort(),
         retentionDays: t.retentionDays,
       },
@@ -446,56 +454,20 @@ export function grantFromTerms(
   consumer: Iri,
   lender: Iri,
 ): { target: Iri; policy: OdrlPolicy } {
-  const target = `${agreement.id}#evidence`;
-  return {
-    target,
-    policy: {
-      id: `${agreement.id}#grant`,
-      type: "Agreement",
-      assigner: consumer,
-      assignee: lender,
-      conflict: "prohibit",
-      permissions: [
-        {
-          id: `${agreement.id}#read-for-purpose`,
-          type: "permission",
-          action: "read",
-          target,
-          constraints: [{ leftOperand: "purpose", operator: "isAnyOf", rightOperand: [t.purpose] }],
-        },
-        ...t.onward.map((o, i) => ({
-          id: `${agreement.id}#onward-${i}`,
-          type: "permission" as const,
-          action: "distribute" as const,
-          target,
-          constraints: [
-            {
-              leftOperand: "purpose" as const,
-              operator: "isAnyOf" as const,
-              rightOperand: [o.purpose],
-            },
-            {
-              leftOperand: "recipient" as const,
-              operator: "isAnyOf" as const,
-              rightOperand: [o.recipient],
-            },
-          ],
-        })),
-      ],
-      prohibitions: t.prohibitedPurposes.map((p, i) => ({
-        id: `${agreement.id}#prohibited-${i}`,
-        type: "prohibition" as const,
-        action: "use" as const,
-        target,
-        constraints: [
-          { leftOperand: "purpose" as const, operator: "isAnyOf" as const, rightOperand: [p] },
-        ],
-      })),
-    },
-  };
+  return referenceGrant(agreement.id, t, consumer, lender);
 }
 
 export class LenderPrequalHandler implements OperationHandler {
+  readonly referenceEvidenceSchema = evidenceSchema;
+
+  eraseReferenceCopy(item: Iri, grant: Iri): boolean {
+    const result = this.cfg.store.purgeExpired(1, { item, grant });
+    return (
+      !result.evidencePending.length &&
+      !this.cfg.store.inventory().some((stored) => stored.id === item && stored.grant === grant)
+    );
+  }
+
   readonly contentProfile = MORTGAGE_CONTENT;
   readonly agreementDelivery = "acceptor";
   readonly description: OperationDescription;
@@ -602,6 +574,7 @@ export class LenderPrequalHandler implements OperationHandler {
       };
     const terms = evidenceRequestTerms.parse(ctx.getState<JsonObject>(`terms:${agreement}`) ?? {});
     const subject = ctx.peer.party;
+    const pending = ctx.pendingReferences ?? [];
     const checked: JsonObject[] = [];
     const accepted: Array<{ s: EvidenceStatement; digest: string }> = [];
     for (const item of evidence.filter((e) => e.role === "credential")) {
@@ -770,6 +743,7 @@ export class LenderPrequalHandler implements OperationHandler {
       .filter((r) => !r.optional && !accepted.some((a) => a.s.claimType === r.claimType))
       .map((r) => r.claimType);
     ctx.setState(`stored:${ctx.conversation.id}`, stored);
+    if (pending.length) ctx.setState(`reference-missing:${ctx.conversation.id}`, missing);
     ctx.setState(`application:${ctx.conversation.id}`, terms.application as unknown as JsonObject);
     return {
       type: "receipt",
@@ -782,8 +756,57 @@ export class LenderPrequalHandler implements OperationHandler {
         checked,
         ...(derived ? { derived } : {}),
         missing,
+        ...(pending.length ? { pendingReferences: pending.length } : {}),
         completeness: missing.length === 0 ? "all-requested-types-accepted" : "incomplete",
         notClaimed: ["approval", "truth-of-income", "complete-finances"],
+      },
+    };
+  }
+
+  onReferenceRead(
+    ctx: HandlerContext,
+    pointer: import("../mechanisms/access-pointer.js").AccessPointer,
+    fact: import("../gates/common.js").AdmittedFact,
+  ): import("../runtime/operations.js").ReferenceReadReceipt | undefined {
+    const terms = evidenceRequestTerms.parse(
+      ctx.getState<JsonObject>(`terms:${pointer.agreement}`),
+    );
+    const s = evidenceSchema.parse(fact.statement);
+    if (
+      !terms.evidenceRequest.some((r) => r.claimType === s.claimType && r.currency === s.currency)
+    )
+      return undefined;
+    const stored = ctx.getState<string[]>(`stored:${ctx.conversation.id}`) ?? [];
+    if (stored.includes(s.id)) return undefined;
+    this.cfg.store.put({
+      id: s.id,
+      claimType: s.claimType,
+      subject: s.subject,
+      source: s.issuer,
+      data: s as unknown as JsonObject,
+      grant: {
+        id: pointer.terms.grant.id,
+        target: `${pointer.agreement}#evidence`,
+        policy: pointer.terms.grant,
+        assignee: this.cfg.lender,
+        validUntil: pointer.copy.deleteBy,
+      },
+    });
+    ctx.record({ type: "reference-copy-stored", item: s.id, deleteBy: pointer.copy.deleteBy });
+    ctx.setState(`stored:${ctx.conversation.id}`, [...stored, s.id]);
+    const missing = (
+      ctx.getState<string[]>(`reference-missing:${ctx.conversation.id}`) ?? []
+    ).filter((claimType) => claimType !== s.claimType);
+    ctx.setState(`reference-missing:${ctx.conversation.id}`, missing);
+    return {
+      type: "receipt",
+      activity: ctx.identifierFor({ conversation: ctx.conversation.id, item: "reference-read" }),
+      outcome: "completed",
+      final: false,
+      observed: {
+        stage: "received-and-checked",
+        missing,
+        completeness: missing.length ? "incomplete" : "all-requested-types-accepted",
       },
     };
   }

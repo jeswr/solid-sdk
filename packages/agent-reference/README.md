@@ -225,8 +225,8 @@ Each executable main path passes confinement and has a configuration-only failur
 | `transport-solid-inbox` | Receiver-description discovery, authenticated POST, receiver listing and read of the original signed bytes. | Changed stored signature: `integrity` / `bad-signature`. |
 | `accountability-pod-mirror` | Sam's signed ledger entries reach independent, principal-controlled storage before release. | Provider unavailable: `evidence` / `record-unavailable`; release waits until recovery. |
 | `identity-webid` | Safely fetched Controlled Identifier Multikey profiles, bound to independently signed register thumbprints and key lifetimes. | Changed profile key: `integrity` / `sender-key-mismatch`. |
-| `data-access-by-reference-solid` | Not run. The registry requires Solid usage control too, contradicting the single-layer matrix rule. Atomic grant/pointer release and five-check reference-message admission are also absent. | Both declared failure branches remain blocked, with no trace. |
-| `usage-control-solid-access-control` | Not run. Its specification keeps data in a pod, while the single-layer cell retains by-value delivery. The protected-reference transaction is absent. | The declared translation failure remains blocked, with no trace. |
+| `data-access-by-reference-solid` | Sam grants Read on the balance statement and releases a signed pointer. The lender admits the delivery, then reads and checks the statement. | Folder grant: `disclosure` / `excessive-scope`. Read after withdrawal: `source` / `not-authorised`. |
+| `usage-control-solid-access-control` | Builds on reference access. The signed evidence terms and agreement govern the translated WAC grant, which records its permission provenance. | Write mode in the translation: `data-terms` / `prohibited`. |
 
 The shared storage is a fictional provider with its own signing key, WAC on each supported
 HTTP operation, guarded in-process fetches and an operator-visible read log. Its request
