@@ -21,6 +21,7 @@ import {
   envelopeJson,
 } from "../src/bindings/bytes.js";
 import { readEmail, writeEmail } from "../src/bindings/email.js";
+import { FOOTER_LINK, footerText } from "../src/bindings/email-footer.js";
 import {
   channelCredential,
   exchangeTool,
@@ -33,12 +34,18 @@ import {
   readMcpResult,
   readMcpToolList,
 } from "../src/bindings/mcp.js";
+import { ScenarioCarriage } from "../src/engine/carriage.js";
 import { compareBranch } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { type PathResult, runScenario } from "../src/engine/run.js";
+import { alternativeWireId } from "../src/profile/configurations.js";
 import { testKey } from "../src/reference/keys.js";
-import { signedReadable } from "../src/runtime/carriage-gate.js";
+import { type CarriageDelivery, signedReadable } from "../src/runtime/carriage-gate.js";
+import { Cast, mandateOf } from "../src/scenarios/common.js";
+import type { TraceEventInput } from "../src/trace/types.js";
 import { outlineOf } from "../src/trace/types.js";
+import { carriageBytes } from "../src/wire/carriage.js";
+import { alterDocumentForTest } from "../src/wire/document-faults.js";
 
 const root = join(import.meta.dirname, "..");
 const payload: ByteMessage = {
@@ -103,6 +110,135 @@ describe("opaque MIME carriage", () => {
       signedReadable({ message: { kind: "deliver" } }, await testKey("sender"), () => "Sam"),
     ).rejects.toMatchObject({ reason: "no-structured-content" });
   });
+});
+
+const footerNote =
+  "The readable copy ends with the standard footer. It is for people; no check used it.";
+const footerNames = { agent: "Sam's agent", principal: "Sam" };
+
+async function signedEmail() {
+  const { scenario } = loadCase(root, "mortgage-main");
+  const cast = new Cast(() => new Date("2026-11-13T09:00:00Z"));
+  const senderId = "sam-agent";
+  const receiverId = "north-agent";
+  const senderActor = "urn:test:sender";
+  const senderParty = "urn:test:principal";
+  const peer = { actor: "urn:test:receiver", party: "urn:test:lender" };
+  await cast.add(
+    { name: senderId, actor: senderActor, party: senderParty },
+    mandateOf(senderId, []),
+    [],
+  );
+  await cast.add({ name: receiverId, ...peer }, mandateOf(receiverId, []), []);
+  cast.introduce(senderId, receiverId);
+  const name = (iri: string | undefined) =>
+    iri === senderActor
+      ? footerNames.agent
+      : iri === senderParty
+        ? footerNames.principal
+        : (iri ?? "Unknown");
+  const events: TraceEventInput[] = [];
+  const configuration = [alternativeWireId("transport-email")];
+  const { runtime: sender } = await cast.runtime(senderId, [], [], configuration);
+  const { runtime: receiver } = await cast.runtime(receiverId, [], [], configuration, {
+    gates: { name, sink: { agent: receiverId, emit: (event) => events.push(event) } },
+  });
+  const start = await sender.startNegotiation({
+    peer,
+    operation: { id: "urn:test:operation", version: "1" },
+    terms: {},
+    models: [],
+  });
+  const out = start.outbound[0];
+  if (!out) throw new Error("No signed discovery message");
+  const carry = async (description = sender.description()) => {
+    const carriage = new ScenarioCarriage(
+      scenario,
+      "email",
+      (party) => cast.get(party).actorKey,
+      name,
+      () => description,
+    );
+    const carried = await carriage.carry(out, out.wire, senderId, receiverId, "describe-lender");
+    return { input: carried.input as CarriageDelivery, binding: carried.binding };
+  };
+  return { carry, out, sender, events, receiver };
+}
+
+it("admits a transport-email message with a footer and records one transport note", async () => {
+  const { carry, events, receiver } = await signedEmail();
+  const { input, binding } = await carry();
+  expect(binding).toBe("email-mime/0.1");
+  expect(
+    readEmail(input.frame as ByteMessage).readable.endsWith(
+      footerText({ ...footerNames, variant: "neutral" }),
+    ),
+  ).toBe(true);
+  expect(await receiver.receive(input, { binding })).toMatchObject({ disposition: "accepted" });
+  expect(events.filter((event) => event.part === "transport" && event.kind === "record")).toEqual([
+    { part: "transport", kind: "record", caption: footerNote },
+  ]);
+});
+
+it("refuses a changed footer with human-parity-mismatch", async () => {
+  const { carry, events, receiver } = await signedEmail();
+  const { input, binding } = await carry();
+  const { message, readable, description } = readEmail(input.frame as ByteMessage);
+  const frame = writeEmail(
+    message,
+    readable.replace(FOOTER_LINK, `${FOOTER_LINK}?changed`),
+    description,
+  );
+  expect(await receiver.receive({ ...input, frame }, { binding })).toMatchObject({
+    disposition: "rejected",
+    reason: "human-parity-mismatch",
+  });
+  expect(events.some((event) => event.caption === footerNote)).toBe(false);
+});
+
+it("keeps the signature refusal and treats a footer in plain mail as conversation", async () => {
+  const { carry, out, events, receiver } = await signedEmail();
+  const { input, binding } = await carry();
+  const { readable, description } = readEmail(input.frame as ByteMessage);
+  const frame = writeEmail(
+    carriageBytes(alterDocumentForTest(out.wire, "triple-changed")),
+    readable,
+    description,
+  );
+  expect(await receiver.receive({ ...input, frame }, { binding })).toMatchObject({
+    disposition: "rejected",
+    reason: "bad-signature",
+  });
+  const plain = {
+    mediaType: "text/plain",
+    bytes: new TextEncoder().encode(
+      `Content-Type: text/plain\r\n\r\nHello\n\n${footerText({ ...footerNames, variant: "neutral" })}`,
+    ),
+  };
+  expect(await receiver.receive({ ...input, frame: plain }, { binding })).toMatchObject({
+    disposition: "rejected",
+    reason: "no-structured-content",
+  });
+  expect(events.some((event) => event.caption === footerNote)).toBe(false);
+});
+
+it("uses named wording only for a sender description with a conformance claim", async () => {
+  const { carry, sender } = await signedEmail();
+  const unclaimed = sender.description();
+  const claimed = {
+    ...unclaimed,
+    conformance: [
+      { claim: "Fictional test", level: "self-test-real-crypto", evidence: "test fixture" },
+    ],
+  } as const;
+  for (const [description, variant] of [
+    [unclaimed, "neutral"],
+    [claimed, "named"],
+  ] as const) {
+    const { input } = await carry(description);
+    const { readable } = readEmail(input.frame as ByteMessage);
+    expect(readable.endsWith(footerText({ ...footerNames, variant }))).toBe(true);
+  }
 });
 
 describe("A2A research subset", () => {

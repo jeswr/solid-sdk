@@ -1962,6 +1962,7 @@ async function runPath(
     (party) =>
       cast.agents.has(party) ? cast.get(party).actorKey : required(sourceKeys.get(party)),
     name,
+    (party) => required(runtimes.get(party)).description(),
     () => now().toISOString(),
     (party) => recorder.sink(parties.get(party)?.traceId ?? party),
   );

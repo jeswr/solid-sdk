@@ -23,6 +23,7 @@ import {
 } from "../bindings/mcp.js";
 import { digestBytes } from "../core/canonical.js";
 import type { SigningKey } from "../mechanisms/jws.js";
+import type { ImplementationDescription } from "../profile/description.js";
 import type { OutboundMessage } from "../runtime/agent.js";
 import {
   type CarriageDelivery,
@@ -47,6 +48,7 @@ export class ScenarioCarriage {
     private readonly suite: string,
     private readonly keys: (party: string) => SigningKey,
     private readonly name: (id: string | undefined) => string,
+    private readonly description: (party: string) => Pick<ImplementationDescription, "conformance">,
     private readonly now: () => string = () => new Date().toISOString(),
     private readonly sink?: (party: string) => TraceSink,
   ) {}
@@ -136,7 +138,8 @@ export class ScenarioCarriage {
       return { input, binding: SOLID_INBOX_BINDING };
     }
     if (this.suite === "email") {
-      let readable = await signedReadable(out.wire, this.keys(from), this.name);
+      const variant = this.description(from).conformance.length ? "named" : "neutral";
+      let readable = await signedReadable(out.wire, this.keys(from), this.name, variant);
       if (fault === "email-readable-copy-differs")
         readable = readable.replace(/\b380000\b/g, "999999");
       input = {

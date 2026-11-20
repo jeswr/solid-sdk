@@ -246,7 +246,16 @@ Outbound MIME is exactly
 `multipart/mixed(multipart/alternative(text/plain,text/html),application/ld+json)`.
 
 - Inbound parity is strict: plain and HTML must equal the rendering of the signed payload.
-  `--lenient-parity` records `unverified`, never `match`.
+  For a represented principal both parts must carry the same standard footer variant.
+  `--lenient-parity` records `unverified`, never `match`, when the rendering differs.
+- `buildEmail()` defaults to the neutral footer. A caller with a sender description that
+  carries a conformance claim may request `footer: "named"`. A message without a represented
+  principal has no footer. The footer link is for people and has the same address in every
+  message. The runtime verifies the signed part before acting.
+- `buildEmail()` accepts an optional `agentDescription` HTTPS address of at most 200
+  characters. The `Agent-Description` header is an unauthenticated observation in
+  `EmailObservation`. Outbound validation and provider-copy verification compare the footer
+  variant and description header with the caller's expected values.
 - Outbound `Message-ID` is derived from the signed message id, and `X-AWP-Message` must equal
   that id.
 

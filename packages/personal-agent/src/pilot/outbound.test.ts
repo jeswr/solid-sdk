@@ -4,6 +4,7 @@
  * inbound strict parity covers every human-visible part. The transport is a local
  * capturing stub — nothing is sent anywhere.
  */
+import { footerText } from "@jeswr/agent-reference/bindings/email-footer";
 import { describe, expect, it } from "vitest";
 import { buildEmail, parseInboundEmail, renderHuman } from "./bindings/email.js";
 import { GmailProviderAdapter, type GmailTransport } from "./bindings/gmail.js";
@@ -273,8 +274,8 @@ describe("finding 7 — strict parity covers every human-visible part", () => {
       to: BOB.email as string,
       date: clock.now(),
     });
-    expect(decodePart(again.raw, "text/plain")).toBe(
-      renderHuman((start.outbound[0] as OutboundMessage).message),
-    );
+    const { message } = start.outbound[0] as OutboundMessage;
+    const footer = footerText({ agent: ALICE.actor, principal: ALICE.party, variant: "neutral" });
+    expect(decodePart(again.raw, "text/plain")).toBe(`${renderHuman(message)}\n\n${footer}`);
   });
 });

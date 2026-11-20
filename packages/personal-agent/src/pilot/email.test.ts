@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
+import { FOOTER_LINK, footerText } from "@jeswr/agent-reference/bindings/email-footer";
 import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
 import { testKey } from "@jeswr/agent-reference/reference/keys";
 import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
@@ -11,7 +12,9 @@ import {
   parseInboundEmail,
   renderHuman,
   validateOutboundEmail,
+  verifyProviderCopy,
 } from "./bindings/email.js";
+import { leaves, parseMime } from "./bindings/mime.js";
 import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "./domains/scheduling.js";
 import { CONFIG_ED25519 } from "./profile/configurations.js";
 import { PILOT_PROFILE } from "./profile/vocabulary.js";
@@ -81,6 +84,114 @@ async function relayByGmail(
 }
 
 describe("email binding", () => {
+  it("checks each footer variant exactly and rejects different plain and HTML variants", async () => {
+    const { start, clock } = await setup();
+    const out = start.outbound[0] as OutboundMessage;
+    const agentDescription = "https://alice.example/agent-description";
+    const input = {
+      out,
+      from: ALICE.email as string,
+      to: BOB.email as string,
+      date: clock.now(),
+      agentDescription,
+    };
+    const neutral = buildEmail(input);
+    const named = buildEmail({ ...input, footer: "named" });
+    for (const [built, footer] of [
+      [neutral, "neutral"],
+      [named, "named"],
+    ] as const) {
+      const expected = { from: input.from, to: input.to, wire: out.wire, footer, agentDescription };
+      const sent = Buffer.from(built.raw);
+      const provider = { ...expected, emailMessageId: built.emailMessageId, sent };
+      expect(await validateOutboundEmail(built.raw, expected)).toEqual({ ok: true });
+      expect(await parseInboundEmail(built.raw)).toMatchObject({
+        ok: true,
+        parity: "match",
+        footer,
+      });
+      expect(await verifyProviderCopy(sent, provider)).toEqual({ ok: true });
+      const other = footer === "neutral" ? "named" : "neutral";
+      expect(await validateOutboundEmail(built.raw, { ...expected, footer: other })).toMatchObject({
+        ok: false,
+      });
+      expect(await verifyProviderCopy(sent, { ...provider, footer: other })).toMatchObject({
+        ok: false,
+      });
+      const different = built.raw.replace(agentDescription, "https://other.example/description");
+      expect(await validateOutboundEmail(different, expected)).toMatchObject({ ok: false });
+      expect(await verifyProviderCopy(Buffer.from(different), provider)).toMatchObject({
+        ok: false,
+      });
+    }
+    const htmlPart =
+      /Content-Type: text\/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n[A-Za-z0-9+/=\r\n]+(?=--)/;
+    const namedHtml = named.raw.match(htmlPart)?.[0];
+    if (!namedHtml) throw new Error("Missing named HTML part");
+    const mixed = neutral.raw.replace(htmlPart, namedHtml);
+    expect(mixed).not.toBe(neutral.raw);
+    expect(await parseInboundEmail(mixed)).toMatchObject({
+      ok: false,
+      reason: "human-parity-mismatch",
+    });
+    expect(await parseInboundEmail(mixed, { strictParity: false })).toMatchObject({
+      ok: true,
+      parity: "unverified",
+      footer: "unverified",
+    });
+  });
+
+  it("observes one HTTPS Agent-Description and refuses invalid outbound values", async () => {
+    const { start, clock } = await setup();
+    const out = start.outbound[0] as OutboundMessage;
+    const input = { out, from: ALICE.email as string, to: BOB.email as string, date: clock.now() };
+    const agentDescription = "https://alice.example/agent-description";
+    const built = buildEmail({ ...input, agentDescription });
+    expect(built.raw).toContain(`\r\nAgent-Description: ${agentDescription}\r\n`);
+    expect(await parseInboundEmail(built.raw)).toMatchObject({
+      ok: true,
+      email: { agentDescription, note: expect.stringContaining("unauthenticated") },
+    });
+    for (const invalid of [
+      `${agentDescription}\rInjected: yes`,
+      `${agentDescription}\nInjected: yes`,
+      "http://alice.example/description",
+      `https://alice.example/${"x".repeat(200)}`,
+    ])
+      expect(() => buildEmail({ ...input, agentDescription: invalid })).toThrow(
+        /Agent-Description/,
+      );
+  });
+
+  it("puts the recipient in To only and uses the fixed link without remote content", async () => {
+    const { start, clock } = await setup();
+    const out = start.outbound[0] as OutboundMessage;
+    const to = BOB.email as string;
+    const { raw } = buildEmail({ out, from: ALICE.email as string, to, date: clock.now() });
+    expect(raw.split("\r\n").filter((line) => line.includes(to))).toEqual([`To: ${to}`]);
+    expect(raw).not.toMatch(/<img|https?:\/\/\S*\?/i);
+    const mime = parseMime(raw);
+    if (!mime.ok) throw new Error(mime.detail);
+    const [plain, html, carrier] = leaves(mime.root);
+    expect(plain?.text).toContain(FOOTER_LINK);
+    expect(html?.text).toContain(`</pre><p>Sent by ${ALICE.actor}`);
+    expect(html?.text).toContain(`<a href="${FOOTER_LINK}">${FOOTER_LINK}</a></p><script`);
+    for (const part of [plain, html, carrier]) {
+      expect(part?.text).not.toMatch(/<img|https?:\/\/[^\s"<>]*\?/i);
+      expect(part?.text).not.toContain(to);
+    }
+  });
+
+  it("treats a footer pasted into plain mail as no structured content", async () => {
+    const footer = footerText({ agent: "Sam's agent", principal: "Sam", variant: "neutral" });
+    const raw = `From: sam@fictional.example\r\nTo: lee@fictional.example\r\nAgent-Description: https://sam.example/description\r\n\r\nHello\n\n${footer}`;
+    expect(await parseInboundEmail(raw)).toMatchObject({
+      ok: false,
+      reason: "no-structured-content",
+      structuredCopies: 0,
+    });
+  });
+
   it("completes the same negotiation when every hop is a Gmail raw payload", async () => {
     const { clock, alice, bob, start } = await setup();
     const first = await prepareOutbound(

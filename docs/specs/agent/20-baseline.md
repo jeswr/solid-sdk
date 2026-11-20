@@ -115,6 +115,12 @@ An agent that sends email under the entry configuration adds a short footer to t
 > reply as normal. If you use an agent of your own, it can check all of this for you. Get
 > one that is Answerable too: *link*.
 
+When the sender makes no claim of conformance it uses the neutral form: *Sent by Sam's
+agent, an automated assistant acting for Sam. I use an agent that supports signed messages:
+a signed copy of this message is attached. You can reply as normal. If you use an agent of
+your own, it can check the signed copy for you. What this means, and how to get such an
+agent:* link.
+
 - **BL-3.** The footer MUST say that the message was sent by an automated agent and name
   whom it acts for (CORE-M-10).
 - **BL-4.** The footer MUST NOT appear on a message that does not carry a verifiable
@@ -123,15 +129,17 @@ An agent that sends email under the entry configuration adds a short footer to t
   what the sender hopes to be.
 - **BL-5.** The footer MUST NOT claim that the message is safe, verified or trustworthy.
   Those are conclusions for the receiver's own checks.
-- **BL-6.** The message MUST also carry, in a header field, the address of the sender's
-  agent description. A receiver's agent uses the header and the attachment. It MUST NOT act
-  on the footer text or follow the link in it, which are for people.
+- **BL-6.** The message MUST also carry the address of the sender's agent description in the header field
+  `Agent-Description`, whose value is one `https` address. The field is an unauthenticated hint; the
+  description it points to is verified as a claim (CORE-L-10). A receiver's agent uses the header and the
+  attachment. It MUST NOT act on the footer text or follow the link in it, which are for people.
 - **BL-7.** The link leads to a page that explains what the footer means and how to get an
   agent that supports the same thing. The page MUST offer more than one route and MUST NOT
   require an account with the sender's own provider.
 
-The page behind the link is deployment, not specification. The intended routes are: add an
-adapter to an assistant the person already uses; sign up with a hosted agent; run one's own.
+The page behind the link describes deployment options. The intended routes are adding an
+adapter to an assistant the person already uses or using a hosted agent. Builders can also
+run the reference agent.
 
 ### Moving up
 
@@ -145,6 +153,13 @@ adapter to an assistant the person already uses; sign up with a hosted agent; ru
   attacker would simply ask for the weakest.
 - **BL-10.** Moving up changes suites, never the checks. A record made under the entry
   configuration and one made under the baseline are read the same way.
+- **BL-11.** The footer is not evidence. No check may depend on whether a footer is present or on what it
+  says. A footer on a message with no valid signed part is text and nothing more (`no-structured-content`).
+- **BL-12.** The footer is part of the readable copy (TR-3). A sender derives it from the signed message
+  alone, and a receiver's agent checks it with the rest of the readable copy.
+- **BL-13.** The link in the footer MUST be the same for every recipient and every message. It MUST NOT carry
+  a query, an identifier or a redirect, and the message MUST NOT contain remote images or other content
+  fetched when it is opened.
 
 The same path continues above the baseline. A sector adopts a profile, then swaps in the
 suites its risks call for: selective disclosure where data is sensitive, a claim route where
@@ -153,6 +168,5 @@ answer.
 
 ## Open questions
 
-- The header field for BL-6, and whether an existing one can be reused.
 - Whether the entry configuration should allow `register-chain`, so that an email from a
   bank can be checked against a register on first contact.

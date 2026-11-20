@@ -403,14 +403,14 @@
           "id": "P7.2",
           "title": "Email footer upgrade path",
           "detail": "\"I use an agent that supports this\" with a link; plain email still works, and both sides upgrade when they can.",
-          "status": "next",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P7.3",
           "title": "Setup page",
-          "detail": "How to get an agent: connect an existing assistant through an adapter, or sign up to a hosted one.",
-          "status": "next",
+          "detail": "How to get an agent: connect an existing assistant through an adapter, or use a hosted agent. See what can be tried today.",
+          "status": "done",
           "owner": "Fable (design), Opus (plumbing)"
         },
         {

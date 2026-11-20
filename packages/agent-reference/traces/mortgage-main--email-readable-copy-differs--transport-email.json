@@ -183,7 +183,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "72d380efa4a9a3f6977a46a7560833bd4f00fdad",
     "core": "scripted"
   },
   "standIns": [
@@ -2851,6 +2851,14 @@
       "step": 4,
       "agent": "lender",
       "part": "transport",
+      "kind": "record",
+      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+    },
+    {
+      "seq": 68,
+      "step": 4,
+      "agent": "lender",
+      "part": "transport",
       "kind": "message-in",
       "messageId": "urn:awp:engine-mortgage-main-email-readable-copy-differs:sam-agent:0004",
       "packet": {
@@ -2940,7 +2948,7 @@
       "gateRun": 1
     },
     {
-      "seq": 68,
+      "seq": 69,
       "step": 4,
       "agent": "lender",
       "part": "inbound-gate",
@@ -2968,7 +2976,7 @@
       "gateRun": 1
     },
     {
-      "seq": 69,
+      "seq": 70,
       "step": 4,
       "agent": "lender",
       "part": "inbound-gate",
@@ -2992,7 +3000,7 @@
       "gateRun": 1
     },
     {
-      "seq": 70,
+      "seq": 71,
       "step": 4,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3011,7 +3019,7 @@
       "gateRun": 1
     },
     {
-      "seq": 71,
+      "seq": 72,
       "step": 4,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3035,7 +3043,7 @@
       "gateRun": 1
     },
     {
-      "seq": 72,
+      "seq": 73,
       "step": 4,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3054,7 +3062,7 @@
       "gateRun": 1
     },
     {
-      "seq": 73,
+      "seq": 74,
       "step": 4,
       "agent": "lender",
       "part": "inbound-gate",
@@ -3067,7 +3075,7 @@
       "gateRun": 1
     },
     {
-      "seq": 74,
+      "seq": 75,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3100,7 +3108,7 @@
       "gateRun": 1
     },
     {
-      "seq": 75,
+      "seq": 76,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3133,7 +3141,7 @@
       "gateRun": 1
     },
     {
-      "seq": 76,
+      "seq": 77,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3161,7 +3169,7 @@
       "gateRun": 1
     },
     {
-      "seq": 77,
+      "seq": 78,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3189,7 +3197,7 @@
       "gateRun": 1
     },
     {
-      "seq": 78,
+      "seq": 79,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3217,7 +3225,7 @@
       "gateRun": 1
     },
     {
-      "seq": 79,
+      "seq": 80,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3254,7 +3262,7 @@
       "gateRun": 1
     },
     {
-      "seq": 80,
+      "seq": 81,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3276,7 +3284,7 @@
       "gateRun": 1
     },
     {
-      "seq": 81,
+      "seq": 82,
       "step": 4,
       "agent": "lender",
       "actionDigest": "sha-256:d5c06593ae6c6859b6b1b2afea6a7a13c194dabb997bb8127282686ada0ddc6b",
@@ -3674,7 +3682,15 @@
       "gateRun": 1
     },
     {
-      "seq": 82,
+      "seq": 83,
+      "step": 4,
+      "agent": "sams-agent",
+      "part": "transport",
+      "kind": "record",
+      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+    },
+    {
+      "seq": 84,
       "step": 4,
       "agent": "sams-agent",
       "part": "transport",
@@ -4645,7 +4661,7 @@
       "gateRun": 2
     },
     {
-      "seq": 83,
+      "seq": 85,
       "step": 4,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -4673,7 +4689,7 @@
       "gateRun": 2
     },
     {
-      "seq": 84,
+      "seq": 86,
       "step": 4,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -4697,7 +4713,7 @@
       "gateRun": 2
     },
     {
-      "seq": 85,
+      "seq": 87,
       "step": 4,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -4716,7 +4732,7 @@
       "gateRun": 2
     },
     {
-      "seq": 86,
+      "seq": 88,
       "step": 4,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -4740,7 +4756,7 @@
       "gateRun": 2
     },
     {
-      "seq": 87,
+      "seq": 89,
       "step": 4,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -4759,7 +4775,7 @@
       "gateRun": 2
     },
     {
-      "seq": 88,
+      "seq": 90,
       "step": 4,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -4772,7 +4788,7 @@
       "gateRun": 2
     },
     {
-      "seq": 89,
+      "seq": 91,
       "step": 4,
       "agent": "sams-agent",
       "part": "core",
@@ -4780,7 +4796,7 @@
       "caption": "The core proposes to take the next step in Mortgage decision in principle with The fictional lender."
     },
     {
-      "seq": 90,
+      "seq": 92,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -4818,7 +4834,7 @@
       "gateRun": 3
     },
     {
-      "seq": 91,
+      "seq": 93,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -4877,7 +4893,7 @@
       "gateRun": 3
     },
     {
-      "seq": 92,
+      "seq": 94,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -4906,7 +4922,7 @@
       "gateRun": 3
     },
     {
-      "seq": 93,
+      "seq": 95,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -4935,7 +4951,7 @@
       "gateRun": 3
     },
     {
-      "seq": 94,
+      "seq": 96,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -4964,7 +4980,7 @@
       "gateRun": 3
     },
     {
-      "seq": 95,
+      "seq": 97,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -4993,7 +5009,7 @@
       "gateRun": 3
     },
     {
-      "seq": 96,
+      "seq": 98,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -5031,7 +5047,7 @@
       "gateRun": 3
     },
     {
-      "seq": 97,
+      "seq": 99,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -5054,7 +5070,7 @@
       "gateRun": 3
     },
     {
-      "seq": 98,
+      "seq": 100,
       "step": 4,
       "agent": "sams-agent",
       "actionDigest": "sha-256:d01e68a13b17ff6385309cae9293779d0ae53f919f835ca19387361f68b2c8dd",
@@ -5211,7 +5227,15 @@
       "gateRun": 3
     },
     {
-      "seq": 99,
+      "seq": 101,
+      "step": 5,
+      "agent": "lender",
+      "part": "transport",
+      "kind": "record",
+      "caption": "The readable copy ends with the standard footer. It is for people; no check used it."
+    },
+    {
+      "seq": 102,
       "step": 5,
       "agent": "lender",
       "part": "transport",
@@ -5376,7 +5400,7 @@
       "gateRun": 2
     },
     {
-      "seq": 100,
+      "seq": 103,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -5404,7 +5428,7 @@
       "gateRun": 2
     },
     {
-      "seq": 101,
+      "seq": 104,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -5428,7 +5452,7 @@
       "gateRun": 2
     },
     {
-      "seq": 102,
+      "seq": 105,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -5451,7 +5475,7 @@
       "gateRun": 2
     },
     {
-      "seq": 103,
+      "seq": 106,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -5475,7 +5499,7 @@
       "gateRun": 2
     },
     {
-      "seq": 104,
+      "seq": 107,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -5494,7 +5518,7 @@
       "gateRun": 2
     },
     {
-      "seq": 105,
+      "seq": 108,
       "step": 5,
       "agent": "lender",
       "part": "inbound-gate",
@@ -5507,7 +5531,7 @@
       "gateRun": 2
     },
     {
-      "seq": 106,
+      "seq": 109,
       "step": 5,
       "agent": "lender",
       "part": "core",
@@ -5515,7 +5539,7 @@
       "caption": "The core proposes to take the next step in Mortgage decision in principle with Sam, the fictional applicant."
     },
     {
-      "seq": 107,
+      "seq": 110,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5553,7 +5577,7 @@
       "gateRun": 2
     },
     {
-      "seq": 108,
+      "seq": 111,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5607,7 +5631,7 @@
       "gateRun": 2
     },
     {
-      "seq": 109,
+      "seq": 112,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5636,7 +5660,7 @@
       "gateRun": 2
     },
     {
-      "seq": 110,
+      "seq": 113,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5665,7 +5689,7 @@
       "gateRun": 2
     },
     {
-      "seq": 111,
+      "seq": 114,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5694,7 +5718,7 @@
       "gateRun": 2
     },
     {
-      "seq": 112,
+      "seq": 115,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5723,7 +5747,7 @@
       "gateRun": 2
     },
     {
-      "seq": 113,
+      "seq": 116,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5761,7 +5785,7 @@
       "gateRun": 2
     },
     {
-      "seq": 114,
+      "seq": 117,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -5784,7 +5808,7 @@
       "gateRun": 2
     },
     {
-      "seq": 115,
+      "seq": 118,
       "step": 5,
       "agent": "lender",
       "actionDigest": "sha-256:c7ff61e880c7b1d65b21e04eb8d7bcda21d9f918145da028c7a35149a5dd2dc5",
@@ -6027,7 +6051,7 @@
       "gateRun": 2
     },
     {
-      "seq": 116,
+      "seq": 119,
       "step": 6,
       "agent": "sams-agent",
       "part": "core",
@@ -6035,7 +6059,7 @@
       "caption": "The core proposes to take the next step in Request a balance statement with Sam’s fictional bank."
     },
     {
-      "seq": 117,
+      "seq": 120,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6069,7 +6093,7 @@
       "gateRun": 4
     },
     {
-      "seq": 118,
+      "seq": 121,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6114,7 +6138,7 @@
       "gateRun": 4
     },
     {
-      "seq": 119,
+      "seq": 122,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6143,7 +6167,7 @@
       "gateRun": 4
     },
     {
-      "seq": 120,
+      "seq": 123,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6172,7 +6196,7 @@
       "gateRun": 4
     },
     {
-      "seq": 121,
+      "seq": 124,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6201,7 +6225,7 @@
       "gateRun": 4
     },
     {
-      "seq": 122,
+      "seq": 125,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6230,7 +6254,7 @@
       "gateRun": 4
     },
     {
-      "seq": 123,
+      "seq": 126,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6268,7 +6292,7 @@
       "gateRun": 4
     },
     {
-      "seq": 124,
+      "seq": 127,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6291,7 +6315,7 @@
       "gateRun": 4
     },
     {
-      "seq": 125,
+      "seq": 128,
       "step": 6,
       "agent": "sams-agent",
       "actionDigest": "sha-256:15f34ce8bd2af0f7cb825be0f17a486323600a360d4b9542a192fb2aab6efb0e",
@@ -6441,7 +6465,7 @@
       "gateRun": 4
     },
     {
-      "seq": 126,
+      "seq": 129,
       "step": 7,
       "agent": "bank",
       "part": "transport",
@@ -6591,7 +6615,7 @@
       "gateRun": 1
     },
     {
-      "seq": 127,
+      "seq": 130,
       "step": 7,
       "agent": "bank",
       "part": "inbound-gate",
@@ -6619,7 +6643,7 @@
       "gateRun": 1
     },
     {
-      "seq": 128,
+      "seq": 131,
       "step": 7,
       "agent": "bank",
       "part": "inbound-gate",
@@ -6643,7 +6667,7 @@
       "gateRun": 1
     },
     {
-      "seq": 129,
+      "seq": 132,
       "step": 7,
       "agent": "bank",
       "part": "inbound-gate",
@@ -6666,7 +6690,7 @@
       "gateRun": 1
     },
     {
-      "seq": 130,
+      "seq": 133,
       "step": 7,
       "agent": "bank",
       "part": "inbound-gate",
@@ -6678,7 +6702,7 @@
       "gateRun": 1
     },
     {
-      "seq": 131,
+      "seq": 134,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6712,7 +6736,7 @@
       "gateRun": 1
     },
     {
-      "seq": 132,
+      "seq": 135,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6766,7 +6790,7 @@
       "gateRun": 1
     },
     {
-      "seq": 133,
+      "seq": 136,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6795,7 +6819,7 @@
       "gateRun": 1
     },
     {
-      "seq": 134,
+      "seq": 137,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6824,7 +6848,7 @@
       "gateRun": 1
     },
     {
-      "seq": 135,
+      "seq": 138,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6853,7 +6877,7 @@
       "gateRun": 1
     },
     {
-      "seq": 136,
+      "seq": 139,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6891,7 +6915,7 @@
       "gateRun": 1
     },
     {
-      "seq": 137,
+      "seq": 140,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -6914,7 +6938,7 @@
       "gateRun": 1
     },
     {
-      "seq": 138,
+      "seq": 141,
       "step": 7,
       "agent": "bank",
       "actionDigest": "sha-256:2b6df8c50a85f898ad047196072045146a7754f9a58be45adacddfc4c764456d",
@@ -7044,7 +7068,7 @@
       "gateRun": 1
     },
     {
-      "seq": 139,
+      "seq": 142,
       "step": 7,
       "agent": "sams-agent",
       "part": "transport",
@@ -7176,7 +7200,7 @@
       "gateRun": 3
     },
     {
-      "seq": 140,
+      "seq": 143,
       "step": 7,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7204,7 +7228,7 @@
       "gateRun": 3
     },
     {
-      "seq": 141,
+      "seq": 144,
       "step": 7,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7228,7 +7252,7 @@
       "gateRun": 3
     },
     {
-      "seq": 142,
+      "seq": 145,
       "step": 7,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7247,7 +7271,7 @@
       "gateRun": 3
     },
     {
-      "seq": 143,
+      "seq": 146,
       "step": 7,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7271,7 +7295,7 @@
       "gateRun": 3
     },
     {
-      "seq": 144,
+      "seq": 147,
       "step": 7,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7290,7 +7314,7 @@
       "gateRun": 3
     },
     {
-      "seq": 145,
+      "seq": 148,
       "step": 7,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7303,7 +7327,7 @@
       "gateRun": 3
     },
     {
-      "seq": 146,
+      "seq": 149,
       "step": 8,
       "agent": "sams-agent",
       "part": "core",
@@ -7311,7 +7335,7 @@
       "caption": "The core proposes to take the next step in Request a balance statement with Sam’s fictional bank."
     },
     {
-      "seq": 147,
+      "seq": 150,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7345,7 +7369,7 @@
       "gateRun": 5
     },
     {
-      "seq": 148,
+      "seq": 151,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7390,7 +7414,7 @@
       "gateRun": 5
     },
     {
-      "seq": 149,
+      "seq": 152,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7419,7 +7443,7 @@
       "gateRun": 5
     },
     {
-      "seq": 150,
+      "seq": 153,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7448,7 +7472,7 @@
       "gateRun": 5
     },
     {
-      "seq": 151,
+      "seq": 154,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7481,7 +7505,7 @@
       "gateRun": 5
     },
     {
-      "seq": 152,
+      "seq": 155,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7503,7 +7527,7 @@
       "gateRun": 5
     },
     {
-      "seq": 153,
+      "seq": 156,
       "step": 8,
       "agent": "sams-agent",
       "part": "principal",
@@ -7515,7 +7539,7 @@
       "caption": "Sam, the fictional applicant is asked to approve this exact action; the approval will be bound to its digest."
     },
     {
-      "seq": 154,
+      "seq": 157,
       "step": 8,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7539,7 +7563,7 @@
       "gateRun": 4
     },
     {
-      "seq": 155,
+      "seq": 158,
       "step": 8,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7588,7 +7612,7 @@
       "gateRun": 4
     },
     {
-      "seq": 156,
+      "seq": 159,
       "step": 8,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7607,7 +7631,7 @@
       "gateRun": 4
     },
     {
-      "seq": 157,
+      "seq": 160,
       "step": 8,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7635,7 +7659,7 @@
       "gateRun": 4
     },
     {
-      "seq": 158,
+      "seq": 161,
       "step": 8,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7663,7 +7687,7 @@
       "gateRun": 4
     },
     {
-      "seq": 159,
+      "seq": 162,
       "step": 8,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -7674,7 +7698,7 @@
       "gateRun": 4
     },
     {
-      "seq": 160,
+      "seq": 163,
       "step": 8,
       "agent": "sams-agent",
       "part": "memory",
@@ -7696,7 +7720,7 @@
       "caption": "The fictional identity provider's identity approval statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 161,
+      "seq": 164,
       "step": 8,
       "agent": "sams-agent",
       "part": "principal",
@@ -7710,7 +7734,7 @@
       "caption": "Approves by signing an answer bound to the exact action; an attestation of the stronger approval goes with the request."
     },
     {
-      "seq": 162,
+      "seq": 165,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7744,7 +7768,7 @@
       "gateRun": 6
     },
     {
-      "seq": 163,
+      "seq": 166,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7789,7 +7813,7 @@
       "gateRun": 6
     },
     {
-      "seq": 164,
+      "seq": 167,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7818,7 +7842,7 @@
       "gateRun": 6
     },
     {
-      "seq": 165,
+      "seq": 168,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7847,7 +7871,7 @@
       "gateRun": 6
     },
     {
-      "seq": 166,
+      "seq": 169,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7880,7 +7904,7 @@
       "gateRun": 6
     },
     {
-      "seq": 167,
+      "seq": 170,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7909,7 +7933,7 @@
       "gateRun": 6
     },
     {
-      "seq": 168,
+      "seq": 171,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7942,7 +7966,7 @@
       "gateRun": 6
     },
     {
-      "seq": 169,
+      "seq": 172,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -7971,7 +7995,7 @@
       "gateRun": 6
     },
     {
-      "seq": 170,
+      "seq": 173,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -8009,7 +8033,7 @@
       "gateRun": 6
     },
     {
-      "seq": 171,
+      "seq": 174,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -8032,7 +8056,7 @@
       "gateRun": 6
     },
     {
-      "seq": 172,
+      "seq": 175,
       "step": 8,
       "agent": "sams-agent",
       "actionDigest": "sha-256:dcbeda2649c56d8b805f9770dbc52c6d2a2ad49f8b3ab5edec8bbd794842acd0",
@@ -8259,7 +8283,7 @@
       "gateRun": 6
     },
     {
-      "seq": 173,
+      "seq": 176,
       "step": 8,
       "agent": "bank",
       "part": "transport",
@@ -8494,7 +8518,7 @@
       "gateRun": 2
     },
     {
-      "seq": 174,
+      "seq": 177,
       "step": 8,
       "agent": "bank",
       "part": "inbound-gate",
@@ -8522,7 +8546,7 @@
       "gateRun": 2
     },
     {
-      "seq": 175,
+      "seq": 178,
       "step": 8,
       "agent": "bank",
       "part": "inbound-gate",
@@ -8571,7 +8595,7 @@
       "gateRun": 2
     },
     {
-      "seq": 176,
+      "seq": 179,
       "step": 8,
       "agent": "bank",
       "part": "inbound-gate",
@@ -8594,7 +8618,7 @@
       "gateRun": 2
     },
     {
-      "seq": 177,
+      "seq": 180,
       "step": 8,
       "agent": "bank",
       "part": "inbound-gate",
@@ -8622,7 +8646,7 @@
       "gateRun": 2
     },
     {
-      "seq": 178,
+      "seq": 181,
       "step": 8,
       "agent": "bank",
       "part": "inbound-gate",
@@ -8645,7 +8669,7 @@
       "gateRun": 2
     },
     {
-      "seq": 179,
+      "seq": 182,
       "step": 8,
       "agent": "bank",
       "part": "inbound-gate",
@@ -8658,7 +8682,7 @@
       "gateRun": 2
     },
     {
-      "seq": 180,
+      "seq": 183,
       "step": 8,
       "agent": "bank",
       "part": "memory",
@@ -8680,7 +8704,7 @@
       "caption": "The fictional identity provider's identity approval statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 181,
+      "seq": 184,
       "step": 9,
       "agent": "bank",
       "part": "core",
@@ -8688,7 +8712,7 @@
       "caption": "The core proposes to share Request a balance statement with Sam, the fictional applicant."
     },
     {
-      "seq": 182,
+      "seq": 185,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8722,7 +8746,7 @@
       "gateRun": 2
     },
     {
-      "seq": 183,
+      "seq": 186,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8776,7 +8800,7 @@
       "gateRun": 2
     },
     {
-      "seq": 184,
+      "seq": 187,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8805,7 +8829,7 @@
       "gateRun": 2
     },
     {
-      "seq": 185,
+      "seq": 188,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8838,7 +8862,7 @@
       "gateRun": 2
     },
     {
-      "seq": 186,
+      "seq": 189,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8867,7 +8891,7 @@
       "gateRun": 2
     },
     {
-      "seq": 187,
+      "seq": 190,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8896,7 +8920,7 @@
       "gateRun": 2
     },
     {
-      "seq": 188,
+      "seq": 191,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8934,7 +8958,7 @@
       "gateRun": 2
     },
     {
-      "seq": 189,
+      "seq": 192,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -8957,7 +8981,7 @@
       "gateRun": 2
     },
     {
-      "seq": 190,
+      "seq": 193,
       "step": 9,
       "agent": "bank",
       "actionDigest": "sha-256:f00781d6f58e3693ef4f472449a7e382cd22748f2a7c86e0f4c6f857d293d0a3",
@@ -9193,7 +9217,7 @@
       "gateRun": 2
     },
     {
-      "seq": 191,
+      "seq": 194,
       "step": 10,
       "agent": "sams-agent",
       "part": "transport",
@@ -9441,7 +9465,7 @@
       "gateRun": 5
     },
     {
-      "seq": 192,
+      "seq": 195,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9469,7 +9493,7 @@
       "gateRun": 5
     },
     {
-      "seq": 193,
+      "seq": 196,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9508,7 +9532,7 @@
       "gateRun": 5
     },
     {
-      "seq": 194,
+      "seq": 197,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9527,7 +9551,7 @@
       "gateRun": 5
     },
     {
-      "seq": 195,
+      "seq": 198,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9555,7 +9579,7 @@
       "gateRun": 5
     },
     {
-      "seq": 196,
+      "seq": 199,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9578,7 +9602,7 @@
       "gateRun": 5
     },
     {
-      "seq": 197,
+      "seq": 200,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9591,7 +9615,7 @@
       "gateRun": 5
     },
     {
-      "seq": 198,
+      "seq": 201,
       "step": 10,
       "agent": "sams-agent",
       "part": "memory",
@@ -9618,7 +9642,7 @@
       "caption": "Sam’s fictional bank's deposit balance statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 199,
+      "seq": 202,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9642,7 +9666,7 @@
       "gateRun": 6
     },
     {
-      "seq": 200,
+      "seq": 203,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9681,7 +9705,7 @@
       "gateRun": 6
     },
     {
-      "seq": 201,
+      "seq": 204,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9700,7 +9724,7 @@
       "gateRun": 6
     },
     {
-      "seq": 202,
+      "seq": 205,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9728,7 +9752,7 @@
       "gateRun": 6
     },
     {
-      "seq": 203,
+      "seq": 206,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9756,7 +9780,7 @@
       "gateRun": 6
     },
     {
-      "seq": 204,
+      "seq": 207,
       "step": 10,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -9767,7 +9791,7 @@
       "gateRun": 6
     },
     {
-      "seq": 205,
+      "seq": 208,
       "step": 10,
       "agent": "sams-agent",
       "part": "memory",
@@ -9842,7 +9866,7 @@
       "caption": "The fictional payroll provider's income gross monthly series statement is stored with its source, how it was produced, its date and its terms."
     },
     {
-      "seq": 206,
+      "seq": 209,
       "step": 11,
       "agent": "sams-agent",
       "part": "transport",
@@ -10125,7 +10149,7 @@
       "gateRun": 7
     },
     {
-      "seq": 207,
+      "seq": 210,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",
@@ -10149,7 +10173,7 @@
       "gateRun": 7
     },
     {
-      "seq": 208,
+      "seq": 211,
       "step": 11,
       "agent": "sams-agent",
       "part": "inbound-gate",

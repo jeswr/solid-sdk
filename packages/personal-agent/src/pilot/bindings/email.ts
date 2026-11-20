@@ -8,7 +8,7 @@
  *     multipart/alternative
  *       text/plain  — the human fallback: an explicit "software agent / synthetic test"
  *                     label plus a summary rendered deterministically from the payload
- *       text/html   — the same text in <pre> + an inline JSON-LD carrier <script>
+ *       text/html   — the same text in <pre>, the footer and an inline JSON-LD carrier <script>
  *     application/ld+json attachment — the same carrier
  * The carrier is a JSON-LD object wrapping the signed packet or compact JWS. It uses JSON-LD
  * so the existing hardened parser (`@jeswr/agentic-legacy-bridge`
@@ -28,7 +28,7 @@
  *    client-rewritten mail, by design;
  *  - LENIENT parity (opt-in): other layouts are accepted with parity `unverified` — the
  *    signed structured copy still governs; nothing is claimed about the human text;
- *  - From/To headers are recorded as unauthenticated observations only; replies go to the
+ *  - From/To and Agent-Description are unauthenticated observations only; replies go to the
  *    endpoint pinned for the peer actor, never to an inbound Reply-To.
  *
  * Outbound, {@link validateOutboundEmail} re-derives and checks the exact bytes a provider
@@ -36,6 +36,12 @@
  * sender, single recipient, structured copy and parity.
  */
 import { createHash, randomBytes } from "node:crypto";
+import {
+  type FooterVariant,
+  footerHtml,
+  footerText,
+} from "@jeswr/agent-reference/bindings/email-footer";
+import { isAgentDescriptionAddress } from "@jeswr/agent-reference/bindings/email-mime";
 import { inspectMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { isValidEmailAddress, parseEmail } from "@jeswr/agentic-legacy-bridge";
 import { digestBytes } from "../core/canonical.js";
@@ -50,6 +56,7 @@ import { hasProof, packEmailDocument, unpackEmailDocument } from "./message-pack
 import { headerValues, leaves, type MimeNode, parseMime, shapeOf } from "./mime.js";
 
 export const EMAIL_BINDING = "email-mime/0.1";
+const ANONYMOUS_AGENT = "an anonymous client";
 const SUMMARY_START = "--- Summary generated from the signed statement ---";
 const SUMMARY_END = "--- End of summary ---";
 
@@ -137,7 +144,7 @@ export function summaryLines(m: AnyMessage): string[] {
  * receiver can re-derive it. Labels software representation and synthetic scope.
  */
 export function renderHuman(m: AnyMessage): string {
-  const actor = m.from.actor ?? "an anonymous client";
+  const actor = m.from.actor ?? ANONYMOUS_AGENT;
   const party = m.from.onBehalfOf
     ? `on behalf of ${m.from.onBehalfOf}`
     : "without a represented party";
@@ -203,21 +210,32 @@ function wrapCarrier(carriage: { format: string; jws?: string; packet?: string }
 }
 
 export function carrierFor(wire: WireMessage): string {
-  if (wire.format === "awp-jws-compact/0.1") return wrapCarrier(wire);
+  if (wire.format === "awp-jws-compact/0.1" && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(wire.jws))
+    return wrapCarrier(wire);
   if (wire.format === "awp-jsonld/0.1" && hasProof(wire))
     return wrapCarrier({ format: wire.format, packet: packEmailDocument(wire) });
   throw new Error("the email binding carries signed messages only");
 }
 
-function renderCarrier(m: AnyMessage, carrier: string) {
-  const human = renderHuman(m);
-  const html = `<!doctype html><html><body><pre>${htmlEscape(human)}</pre><script type="application/ld+json">${scriptSafe(carrier)}</script></body></html>`;
+function renderCarrier(m: AnyMessage, carrier: string, variant: FooterVariant) {
+  const body = renderHuman(m);
+  const names = m.from.onBehalfOf
+    ? { agent: m.from.actor ?? ANONYMOUS_AGENT, principal: m.from.onBehalfOf, variant }
+    : undefined;
+  const human = names ? `${body}\n\n${footerText(names)}` : body;
+  const html = `<!doctype html><html><body><pre>${htmlEscape(body)}</pre>${names ? footerHtml(names) : ""}<script type="application/ld+json">${scriptSafe(carrier)}</script></body></html>`;
   return { human, html, carrier };
 }
 
 /** The three renderings of one signed message (all derived deterministically). */
-export function renderBodies(m: AnyMessage, wire: WireMessage) {
-  return renderCarrier(m, carrierFor(wire));
+export function renderBodies(m: AnyMessage, wire: WireMessage, footer: FooterVariant = "neutral") {
+  return renderCarrier(m, carrierFor(wire), footer);
+}
+
+type EmailFooterOptions = { footer?: FooterVariant; agentDescription?: string };
+
+function validAgentDescription(value: string): boolean {
+  return value.length <= 200 && isAgentDescriptionAddress(value);
 }
 
 /**
@@ -234,18 +252,23 @@ export const SUPPORTED_SHAPE =
   "multipart/mixed(multipart/alternative(text/plain,text/html),application/ld+json)";
 
 /** Build the outbound MIME for one message. `to` must be a pinned endpoint. */
-export function buildEmail(input: {
-  out: OutboundMessage;
-  from: string;
-  to: string;
-  date: Date;
-  inReplyToEmailId?: string;
-  references?: readonly string[];
-}): BuiltEmail {
+export function buildEmail(
+  input: EmailFooterOptions & {
+    out: OutboundMessage;
+    from: string;
+    to: string;
+    date: Date;
+    inReplyToEmailId?: string;
+    references?: readonly string[];
+  },
+): BuiltEmail {
   if (!isValidEmailAddress(input.from) || !isValidEmailAddress(input.to))
     throw new Error("invalid email address");
+  const { agentDescription } = input;
+  if (agentDescription !== undefined && !validAgentDescription(agentDescription))
+    throw new Error("Agent-Description must be one HTTPS address of at most 200 characters");
   const m = input.out.message;
-  const { human, html, carrier } = renderBodies(m, input.out.wire);
+  const { human, html, carrier } = renderBodies(m, input.out.wire, input.footer);
   const mixed = `awp-mixed-${randomBytes(8).toString("hex")}`;
   const alt = `awp-alt-${randomBytes(8).toString("hex")}`;
   const emailMessageId = emailMessageIdFor(m.id);
@@ -272,6 +295,7 @@ export function buildEmail(input: {
     ...(threadIds.length > 0 ? [`References: ${threadIds.join(" ")}`] : []),
     "MIME-Version: 1.0",
     "Auto-Submitted: auto-generated",
+    ...(agentDescription === undefined ? [] : [`Agent-Description: ${agentDescription}`]),
     `X-AWP-Profile: ${asciiHeader(m.profile)}`,
     `X-AWP-Conversation: ${asciiHeader(m.conversation)}`,
     `X-AWP-Message: ${asciiHeader(m.id)}`,
@@ -344,6 +368,8 @@ export type InboundEmailResult =
        * `unchecked` — the payload could not be decoded (the runtime then rejects it).
        */
       readonly parity: Parity;
+      /** Readable-copy variant only. Signature verification is performed by admission. */
+      readonly footer: FooterVariant | "unverified";
       readonly parityDetail?: string;
       readonly structuredCopies: number;
     }
@@ -362,6 +388,7 @@ export interface EmailObservation {
   readonly subject?: string;
   readonly emailMessageId?: string;
   readonly inReplyTo?: string;
+  readonly agentDescription?: string;
   readonly warnings: readonly string[];
   readonly note: string;
 }
@@ -385,33 +412,47 @@ async function messageOf(wire: WireMessage): Promise<AnyMessage | undefined> {
 
 /**
  * Exact parity of every human-visible part and the attachment with the decoded carrier.
- * Returns undefined when the email matches, else what differs.
+ * Returns the matched footer variant, or identifies the parity problem.
  */
 function parityProblem(
   root: MimeNode,
   message: AnyMessage,
   carrierText: string,
-): string | undefined {
+  variants: readonly FooterVariant[],
+): { footer: FooterVariant | "unverified" } | { problem: string } {
   const shape = shapeOf(root);
-  if (shape !== SUPPORTED_SHAPE) return `unsupported MIME layout ${shape}`;
-  const expected = renderCarrier(message, carrierText);
-  const [plain, html, carrier] = leaves(root);
-  if (lines(plain?.text ?? "") !== lines(expected.human))
-    return "text/plain part differs from the signed statement's rendering";
-  if (lines(html?.text ?? "") !== lines(expected.html))
-    return "text/html part differs from the signed statement's rendering";
+  if (shape !== SUPPORTED_SHAPE) return { problem: `unsupported MIME layout ${shape}` };
+  const parts = leaves(root);
+  const [plain, html, carrier] = parts;
+  const plainText = lines(plain?.text ?? "");
+  const htmlText = lines(html?.text ?? "");
+  let matched: FooterVariant | undefined;
+  let plainMatches = false;
+  for (const variant of variants) {
+    const expected = renderCarrier(message, carrierText, variant);
+    if (plainText !== lines(expected.human)) continue;
+    plainMatches = true;
+    if (htmlText === lines(expected.html)) {
+      matched = variant;
+      break;
+    }
+  }
+  if (!matched) {
+    const part = plainMatches ? "text/html" : "text/plain";
+    return { problem: `${part} part differs from the signed statement's rendering` };
+  }
   const attachment = carrier?.text ?? "";
   if (Buffer.byteLength(attachment) > CARRIER_LIMITS.maxEnvelopeBytes)
-    return "attachment exceeds the structured copy size limit";
-  if (lines(attachment) !== lines(expected.carrier))
-    return "attachment differs from the structured copy";
-  for (const leaf of leaves(root)) {
+    return { problem: "attachment exceeds the structured copy size limit" };
+  if (lines(attachment) !== lines(carrierText))
+    return { problem: "attachment differs from the structured copy" };
+  for (const leaf of parts) {
     const extra = leaf.headers.filter(
       ([n]) => !["content-type", "content-transfer-encoding", "content-disposition"].includes(n),
     );
-    if (extra.length > 0) return `unexpected part header ${extra[0]?.[0]}`;
+    if (extra.length > 0) return { problem: `unexpected part header ${extra[0]?.[0]}` };
   }
-  return undefined;
+  return { footer: message.from.onBehalfOf ? matched : "unverified" };
 }
 
 const CARRIER_LIMITS = { ...DEFAULT_LIMITS, maxStringLength: DEFAULT_LIMITS.maxEnvelopeBytes };
@@ -455,6 +496,8 @@ function readEmailCarrier(raw: string | Uint8Array):
   } catch (error) {
     return { ok: false, reason: "bounds-exceeded", detail: (error as Error).message };
   }
+  const descriptions = parsed.headers.filter(([name]) => name === "agent-description");
+  const description = Buffer.from(descriptions[0]?.[1] ?? "", "latin1").toString("utf8");
   const email: EmailObservation = {
     rawSha256: `sha-256:${parsed.rawSha256}`,
     ...(parsed.from ? { from: parsed.from.address } : {}),
@@ -462,6 +505,9 @@ function readEmailCarrier(raw: string | Uint8Array):
     ...(parsed.subject ? { subject: parsed.subject } : {}),
     ...(parsed.messageId ? { emailMessageId: `<${parsed.messageId}>` } : {}),
     ...(parsed.inReplyTo ? { inReplyTo: `<${parsed.inReplyTo}>` } : {}),
+    ...(descriptions.length === 1 && validAgentDescription(description)
+      ? { agentDescription: description }
+      : {}),
     warnings: parsed.warnings,
     note: "email headers are unauthenticated observations; they carry no authority",
   };
@@ -536,17 +582,18 @@ export async function parseInboundEmail(
   if (!carried.ok) return carried;
   const { carrierText, wire, email, structuredCopies } = carried;
   const message = await messageOf(wire);
-  if (!message) return { ok: true, wire, email, parity: "unchecked", structuredCopies };
+  if (!message)
+    return { ok: true, wire, email, parity: "unchecked", footer: "unverified", structuredCopies };
   const mime = parseMime(raw);
-  const problem = mime.ok
-    ? parityProblem(mime.root, message, carrierText)
-    : `unparseable MIME: ${mime.detail}`;
-  if (problem) {
+  const parity = mime.ok
+    ? parityProblem(mime.root, message, carrierText, ["neutral", "named"])
+    : { problem: `unparseable MIME: ${mime.detail}` };
+  if ("problem" in parity) {
     if (strict) {
       return {
         ok: false,
         reason: "human-parity-mismatch",
-        detail: problem,
+        detail: parity.problem,
         email,
         structuredCopies,
       };
@@ -556,11 +603,12 @@ export async function parseInboundEmail(
       wire,
       email,
       parity: "unverified",
-      parityDetail: problem,
+      footer: "unverified",
+      parityDetail: parity.problem,
       structuredCopies,
     };
   }
-  return { ok: true, wire, email, parity: "match", structuredCopies };
+  return { ok: true, wire, email, parity: "match", footer: parity.footer, structuredCopies };
 }
 
 /** Top-level headers this binding emits. Anything else in an outbound message is refused. */
@@ -574,6 +622,7 @@ const OUTBOUND_HEADERS = new Set([
   "references",
   "mime-version",
   "auto-submitted",
+  "agent-description",
   "x-awp-profile",
   "x-awp-conversation",
   "x-awp-message",
@@ -591,10 +640,23 @@ const REQUIRED_OUTBOUND = [
   "content-type",
 ];
 
-type ExpectedEmail = { from: string; to: string } & ({ wire: WireMessage } | { jws: string });
+type ExpectedEmail = EmailFooterOptions & { from: string; to: string } & (
+    | { wire: WireMessage }
+    | { jws: string }
+  );
 
 function expectedWire(expected: ExpectedEmail): WireMessage {
   return "wire" in expected ? expected.wire : { format: "awp-jws-compact/0.1", jws: expected.jws };
+}
+
+function matchesAgentDescription(root: MimeNode, expected: string | undefined): boolean {
+  const values = headerValues(root, "agent-description");
+  if (expected === undefined) return values.length === 0;
+  return (
+    validAgentDescription(expected) &&
+    values.length === 1 &&
+    values[0] === Buffer.from(expected, "utf8").toString("latin1")
+  );
 }
 
 /**
@@ -624,6 +686,8 @@ export async function validateOutboundEmail(
   if (from !== expected.from) problems.push("From is not the configured source account");
   if (to !== expected.to || !isValidEmailAddress(to ?? ""))
     problems.push("To is not exactly the expected single pinned recipient");
+  if (!matchesAgentDescription(mime.root, expected.agentDescription))
+    problems.push("Agent-Description differs from the expected header");
   const carried = readEmailCarrier(raw);
   if (!carried.ok) problems.push(`${carried.reason}: ${carried.detail}`);
   else if (wireDigest(carried.wire) !== wireDigest(expectedWire(expected)))
@@ -636,8 +700,10 @@ export async function validateOutboundEmail(
         problems.push("Message-ID is not the one derived from the signed message id");
       if (headerValues(mime.root, "x-awp-message")[0] !== message.id)
         problems.push("X-AWP-Message is not the signed message id");
-      const problem = parityProblem(mime.root, message, carried.carrierText);
-      if (problem) problems.push(problem);
+      const parity = parityProblem(mime.root, message, carried.carrierText, [
+        expected.footer ?? "neutral",
+      ]);
+      if ("problem" in parity) problems.push(parity.problem);
     }
   }
   return problems.length === 0 ? { ok: true } : { ok: false, problems };
@@ -657,6 +723,8 @@ export async function verifyProviderCopy(
   const parsed = await parseInboundEmail(raw, { strictParity: true });
   if (!parsed.ok) return { ok: false, detail: `${parsed.reason}: ${parsed.detail}` };
   if (parsed.parity !== "match") return { ok: false, detail: "human parity not verified" };
+  if (parsed.footer !== "unverified" && parsed.footer !== (expected.footer ?? "neutral"))
+    return { ok: false, detail: "footer variant differs" };
   if (wireDigest(parsed.wire) !== wireDigest(expectedWire(expected)))
     return { ok: false, detail: "signed envelope differs" };
   if (parsed.email.emailMessageId !== expected.emailMessageId)
@@ -666,6 +734,8 @@ export async function verifyProviderCopy(
     return { ok: false, detail: "recipients differ" };
   const mime = parseMime(raw);
   if (!mime.ok) return { ok: false, detail: "unparseable MIME" };
+  if (!matchesAgentDescription(mime.root, expected.agentDescription))
+    return { ok: false, detail: "Agent-Description differs from the expected header" };
   for (const name of ["cc", "bcc", "resent-to", "resent-cc", "resent-bcc"])
     if (headerValues(mime.root, name).length > 0)
       return { ok: false, detail: `unexpected recipient header ${name}` };

@@ -34,7 +34,7 @@
     { view: 'usecases', title: 'Use cases', text: 'Seventy situations, from a mortgage to a hostile counterparty, and how the design copes with each.' },
     { view: 'specs', title: 'Specs', text: 'The draft specifications, with numbered clauses you can cite.' },
     { view: 'tests', title: 'Evaluation', text: 'How the design is being tested, and what the tests show so far.' },
-    { view: 'start', title: 'Get an agent', text: 'What the footer on an agent\'s email means, and the routes to an agent of your own.' },
+    { view: 'get-an-agent', title: 'Get an agent', text: 'Two routes to an agent of your own, and what is ready today.' },
   ];
 
   R.home = function (root) {
@@ -93,10 +93,7 @@
     // The public site hosts the Errand app at app/ when it was built with it; elsewhere the
     // link stays hidden.
     var appLink = root.querySelector('#home-app');
-    if (appLink && window.fetch && /^https?:$/.test(location.protocol)) {
-      fetch('app/index.html').then(function (r) { return r.ok ? r.text() : ''; })
-        .then(function (text) { if (/<title>Errand<\/title>/.test(text)) appLink.hidden = false; }).catch(function () {});
-    }
+    if (appLink) AX.probeErrandApp().then(function (available) { if (available) appLink.hidden = false; });
     var tb = root.querySelector('#home-tour');
     if (tb) tb.addEventListener('click', function () { AX.tour.start(); });
   };

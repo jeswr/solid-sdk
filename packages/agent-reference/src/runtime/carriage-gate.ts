@@ -5,6 +5,7 @@ import { readA2a } from "../bindings/a2a.js";
 import type { ByteMessage, HttpExchange } from "../bindings/bytes.js";
 import { CarriageError } from "../bindings/bytes.js";
 import { readEmail } from "../bindings/email.js";
+import { type FooterVariant, footerText, splitFooter } from "../bindings/email-footer.js";
 import {
   type ChannelToken,
   type FictionalAuthorizationServer,
@@ -63,11 +64,13 @@ export function readableCopy(
 ): string {
   return `Sent by ${name(message.from.actor)}, an automated agent, for ${name(message.from.onBehalfOf)}.\n${message.kind[0]?.toUpperCase()}${message.kind.slice(1)} message:\n${JSON.stringify(display(message.body, name), null, 2)}\n\nThe signed structured part is authoritative. An agent may request a structured reply using the advertised agent description.`;
 }
-export async function signedReadable(
-  wire: unknown,
-  key: SigningKey,
-  name: (id: string | undefined) => string,
-): Promise<string> {
+
+function footerNames(message: AnyMessage, name: (id: string | undefined) => string) {
+  if (message.from.onBehalfOf === undefined) return undefined;
+  return { agent: name(message.from.actor), principal: name(message.from.onBehalfOf) };
+}
+
+async function signedMessage(wire: unknown, key: SigningKey): Promise<AnyMessage> {
   if (isMessagePacket(wire)) {
     const cfg = configurationById(documentConfiguration(wire).configuration);
     const suite =
@@ -79,7 +82,7 @@ export async function signedReadable(
       resolve: (id) => (id.replace(/^urn:awp:key:/, "") === key.kid ? key : undefined),
     });
     if (!checked.ok) throw new CarriageError("bad-signature", checked.detail);
-    return readableCopy(new MessageNode(checked.root, checked.dataset).live, name);
+    return new MessageNode(checked.root, checked.dataset).live;
   }
   const value = wire as { jws?: string };
   if (typeof value?.jws !== "string")
@@ -98,7 +101,19 @@ export async function signedReadable(
     throw new CarriageError("bad-signature", "The outbound message does not verify.");
   const checked = validateMessage(verified.payload);
   if (!checked.ok) throw new CarriageError("malformed", "The outbound message is malformed.");
-  return readableCopy(checked.message, name);
+  return checked.message;
+}
+
+export async function signedReadable(
+  wire: unknown,
+  key: SigningKey,
+  name: (id: string | undefined) => string,
+  footer?: FooterVariant,
+): Promise<string> {
+  const message = await signedMessage(wire, key);
+  const readable = readableCopy(message, name);
+  const names = footer && footerNames(message, name);
+  return names && footer ? `${readable}\n\n${footerText({ ...names, variant: footer })}` : readable;
 }
 
 /** Only the receive hand-off calls this; existing gates still decide all message semantics. */
@@ -174,11 +189,25 @@ export async function receiveCarriage(
       const checked = await gate.verifyIntegrity(wire, meta, answersOurs);
       // A failed signature is handled by the ordinary gate, with its original reason.
       if (!checked.ok) return accept(wire);
-      if (readable !== readableCopy(checked.message, name))
+      if (!checked.signedBy)
+        throw new CarriageError(
+          "no-structured-content",
+          "Signed structured content is required for agent mail.",
+        );
+      const names = footerNames(checked.message, name);
+      const { body, variant } = names
+        ? splitFooter(readable, names)
+        : { body: readable, variant: "none" };
+      if (body !== readableCopy(checked.message, name))
         throw new CarriageError(
           "human-parity-mismatch",
           "The readable email says something different from the signed message.",
         );
+      if (variant !== "none")
+        notices.push({
+          caption:
+            "The readable copy ends with the standard footer. It is for people; no check used it.",
+        });
     }
     for (const { caption, fault } of notices)
       gate.emit({ part: "transport", kind: "record", caption, ...(fault ? { fault } : {}) });

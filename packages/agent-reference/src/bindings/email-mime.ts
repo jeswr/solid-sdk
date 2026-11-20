@@ -5,6 +5,11 @@ import { type ByteMessage, CarriageError, oneCopy } from "./bytes.js";
 
 const boundary = "answerable-mime-v1";
 const utf8 = new TextEncoder();
+
+export function isAgentDescriptionAddress(value: string): boolean {
+  return /^https:\/\/[^/]/i.test(value) && !/[\s\p{Cc}<>\\]/u.test(value) && URL.canParse(value);
+}
+
 export function writeEmail(
   message: ByteMessage,
   readable: string,
@@ -17,7 +22,7 @@ export function writeEmail(
   },
 ): ByteMessage {
   if (
-    /[\r\n]/.test(description) ||
+    !isAgentDescriptionAddress(description) ||
     /[\r\n]/.test(message.mediaType) ||
     Object.values(routing).some((value) => /[\r\n<>]/.test(value))
   )
@@ -56,13 +61,14 @@ export function readEmail(mail: ByteMessage): {
   if (mail.bytes.length > 2_000_000)
     throw new CarriageError("bounds-exceeded", "The email exceeds the carriage bound.");
   const source = new TextDecoder("utf-8", { fatal: true }).decode(mail.bytes);
+  const head = source.split(/\r?\n\r?\n/, 1)[0] ?? "";
+  const contentType = /^Content-Type:[ \t]*([^;\r\n]+)/im.exec(head)?.[1]?.trim().toLowerCase();
+  if (contentType === undefined || contentType === "text/plain" || contentType === "text/html")
+    throw new CarriageError("no-structured-content", "The email has no signed structured part.");
   const pieces = source.split(`--${boundary}`);
   const header = pieces.shift() ?? "";
   if (!header.includes(`Content-Type: multipart/mixed; boundary="${boundary}"`))
     throw new CarriageError("malformed", "Unsupported MIME envelope.");
-  const description = /^Agent-Description: ([^\r\n]+)$/m.exec(header)?.[1];
-  if (!description)
-    throw new CarriageError("malformed", "The email has no agent description header.");
   const copies: ByteMessage[] = [];
   const readable: string[] = [];
   for (const part of pieces) {
@@ -84,5 +90,12 @@ export function readEmail(mail: ByteMessage): {
   }
   if (readable.length !== 1)
     throw new CarriageError("human-parity-mismatch", "One readable copy is required.");
-  return { message: oneCopy(copies), readable: readable[0] as string, description };
+  const message = oneCopy(copies);
+  const [description, duplicate] = Array.from(
+    head.matchAll(/^Agent-Description:[ \t]*([^\r\n]*)/gim),
+    (match) => match[1],
+  );
+  if (!description || duplicate !== undefined || !isAgentDescriptionAddress(description))
+    throw new CarriageError("malformed", "The email requires one HTTPS agent description address.");
+  return { message, readable: readable[0] as string, description };
 }
