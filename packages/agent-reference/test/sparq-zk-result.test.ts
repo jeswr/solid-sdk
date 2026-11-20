@@ -21,6 +21,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 // @ts-expect-error Executable installer has no declaration file.
 import { install, RESULT_SHA256 } from "../scripts/install-sparq.mjs";
 import { digestOf } from "../src/core/canonical.js";
+import { openConversation } from "../src/core/conversation.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import type { JsonObject } from "../src/core/types.js";
 import { availableAdapters } from "../src/derive/adapters/index.js";
@@ -45,6 +46,7 @@ import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import { type GateContext, GateMemory } from "../src/gates/common.js";
 import { InboundGate } from "../src/gates/inbound.js";
+import { OrganizationChecks } from "../src/mechanisms/organizations.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { testKey } from "../src/reference/keys.js";
 import { signClaim } from "../src/scenarios/common.js";
@@ -301,6 +303,8 @@ async function gateFixture(
   bindKey = true,
   bindStatus = true,
   expectedQuery = query,
+  answerValue = true as JsonObject[string],
+  requestedSubject = subject,
 ) {
   const issuerKey = await testKey("brief28/issuer-identity"),
     holderKey = await testKey("brief28/holder");
@@ -316,7 +320,7 @@ async function gateFixture(
   const request: DerivedRequest = {
     rule: rule.id,
     ruleDigest: digestOf(rule),
-    subject,
+    subject: requestedSubject,
     purpose,
     assurances: ["attested"],
     nonce: data.nonce,
@@ -351,7 +355,7 @@ async function gateFixture(
         version: "1",
         source: issuer,
         claimTypes: ["identity.verified", "proof.issuer-key", "proof.status"],
-        subjects: [issuer, subject],
+        subjects: [issuer, requestedSubject],
       },
     ],
   });
@@ -432,9 +436,9 @@ async function gateFixture(
   const statement: JsonObject = {
     id: "urn:result:answer",
     issuer: holder,
-    subject,
+    subject: requestedSubject,
     claimType: rule.output,
-    value: data.proof.result,
+    value: answerValue,
     method: "derived",
     asOf: at,
     derivation: {
@@ -443,7 +447,7 @@ async function gateFixture(
       assurance: "attested",
       deriver: holder,
       at,
-      outputDigest: digestOf(data.proof.result),
+      outputDigest: digestOf(answerValue),
       proofBinds: [...system.binds],
       proof: { method: system.method, presentation: data.proof.presentation, nonce: data.nonce },
       inputs: [],
@@ -452,9 +456,19 @@ async function gateFixture(
   const admit = async () =>
     inbound.admitStatements(
       [{ jws: await signClaim(holderKey, statement), format: "derivation+jws" }],
-      { task: "urn:task:diagnostic", subject, purpose },
+      { task: "urn:task:diagnostic", subject: requestedSubject, purpose },
     );
-  return { admit, events, memory, request, gate, statement, saved: () => saved };
+  return {
+    admit,
+    events,
+    memory,
+    request,
+    gate,
+    statement,
+    issuerKey,
+    inbound,
+    saved: () => saved,
+  };
 }
 
 describe.skipIf(!installed)("real offline result proofs (diagnostics, not six-path runs)", () => {
@@ -519,6 +533,86 @@ describe.skipIf(!installed)("real offline result proofs (diagnostics, not six-pa
     expect(await f.admit()).toEqual({ admitted: 0, refused: 1 });
     expect(f.events.at(-1)?.reason).toBe("replay-conflict");
     expect(JSON.stringify(f.events)).not.toMatch(/graphNQuads|seedHex/);
+  }, 60_000);
+  it("preserves a signer–issuer refusal even when the opaque proof is valid", async () => {
+    const f = await gateFixture(system, required(samples[0]));
+    const verify = vi.spyOn(system, "verify");
+    try {
+      const conversation = "urn:result:conversation";
+      const jws = await signClaim(f.issuerKey, f.statement);
+      const admission = f.inbound.arrive(undefined, undefined, undefined);
+      await admission.complete(
+        openConversation({ id: conversation, peer: { party: holder }, role: "responder", at }),
+        {
+          id: "urn:result:message",
+          conversation,
+          kind: "invoke",
+          profile: "urn:result:profile",
+          configuration: "urn:result:configuration",
+          from: { onBehalfOf: holder },
+          createdAt: at,
+          expiresAt: new Date(Date.parse(at) + 60_000).toISOString(),
+          evidence: [{ role: "credential", value: jws, format: "derivation+jws" }],
+          body: {
+            operation: { id: "urn:result:operation", version: "1" },
+            purpose,
+            basis: { kind: "represented" },
+            input: {},
+          },
+        },
+      );
+      expect(f.events).toContainEqual(
+        expect.objectContaining({
+          check: "source",
+          verdict: "fail",
+          reason: "evidence-invalid",
+        }),
+      );
+      expect(verify).not.toHaveBeenCalled();
+      expect(f.request.consumed).toBe(false);
+    } finally {
+      verify.mockRestore();
+    }
+  }, 60_000);
+  it("refuses raw verified rows as a Boolean result, even for a valid proof", async () => {
+    const sample = required(samples[0]);
+    const f = await gateFixture(
+      system,
+      sample,
+      true,
+      true,
+      query,
+      sample.proof.result,
+      "urn:other-subject",
+    );
+    expect(await f.admit()).toEqual({ admitted: 0, refused: 1 });
+    expect(f.events.at(-1)?.reason).toBe("derivation-not-verified");
+  }, 60_000);
+  it("preserves an organization status refusal without calling the proof verifier", async () => {
+    const f = await gateFixture(system, required(samples[0]));
+    Object.assign(f.gate, {
+      organizations: {
+        policy: { registrar: "urn:status:registrar", maxStatusAgeSeconds: 60, requiredRoles: {} },
+        resolver: { resolve: async () => undefined },
+      },
+    });
+    f.statement.status = { ref: "urn:status:answer", id: "answer" };
+    const key = vi.spyOn(OrganizationChecks.prototype, "key").mockResolvedValue({ ok: true });
+    const status = vi
+      .spyOn(OrganizationChecks.prototype, "status")
+      .mockResolvedValue({ ok: false, reason: "status-withdrawn" });
+    const verify = vi.spyOn(system, "verify");
+    try {
+      expect(await f.admit()).toEqual({ admitted: 0, refused: 1 });
+      expect(status).toHaveBeenCalled();
+      expect(f.events.at(-1)?.reason).toBe("status-withdrawn");
+      expect(verify).not.toHaveBeenCalled();
+      expect(f.request.consumed).toBe(false);
+    } finally {
+      key.mockRestore();
+      status.mockRestore();
+      verify.mockRestore();
+    }
   }, 60_000);
   it.each([
     [false, true],

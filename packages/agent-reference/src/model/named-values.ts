@@ -196,7 +196,7 @@ export function writeValue(value: Json, id: string, dataset: Store): Term {
   return DataFactory.literal(decimalLexical(value), DataFactory.namedNode(XSD + datatype));
 }
 /** Exact shortest round-trippable JS decimal, expanded without exponent notation. */
-function decimalLexical(value: number): string {
+export function decimalLexical(value: number): string {
   if (Object.is(value, -0)) return "-0";
   const text = String(value);
   if (!/[eE]/.test(text)) return text;

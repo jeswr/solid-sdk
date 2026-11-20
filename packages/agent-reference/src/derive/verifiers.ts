@@ -29,12 +29,15 @@ export interface ProofSystem {
     credentials: readonly JsonObject[];
     policy: JsonObject;
     nonce: string;
+    booleanResult?: boolean;
+    presentationSaltHex?: string;
   }): Promise<{ presentation: JsonObject; result: JsonValue }>;
   verify(input: {
     expectedQuery: string;
     presentation: JsonObject;
     policy: JsonObject;
     nonce: string;
+    booleanResult?: boolean;
     /** Receiver-owned synchronous view of its persistent single-use nonce store. */
     seenNonces?: { has(key: string): boolean; add(key: string): unknown };
   }): Promise<

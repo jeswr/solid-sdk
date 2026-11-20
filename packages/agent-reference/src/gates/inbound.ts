@@ -60,7 +60,6 @@ import type {
   SourceAuthorityAssessment,
   VerificationResult,
 } from "../core/types.js";
-import { SPARQ_ZK_QUERY } from "../derive/adapters/sparq-zk-query.js";
 import { admittedResultPolicy } from "../derive/result-trust.js";
 import { verifyDerivation } from "../derive/rules.js";
 import {
@@ -1358,9 +1357,11 @@ export class InboundGate {
     }
     let c = r.claim;
     let label = c ? this.labelOf(c) : "A relayed statement";
+    const opaque = !!c?.derivation && opaqueDerivation(c as JsonObject);
     if (
       phase === "source" &&
       c &&
+      (!opaque || r.verdict === "pass") &&
       (c.claimType === "joint.message" ||
         (c.derivation as JsonObject | undefined)?.assurance === "joint")
     ) {
@@ -1435,7 +1436,7 @@ export class InboundGate {
         }
       }
     }
-    if (phase === "source" && c?.derivation && opaqueDerivation(c as JsonObject)) {
+    if (phase === "source" && r.verdict === "pass" && c?.derivation && opaque) {
       const proof = (c.derivation as JsonObject).proof as JsonObject | undefined;
       if (
         proof?.method === "sparq-zk-result/5" &&
@@ -1495,11 +1496,7 @@ export class InboundGate {
         return false;
       }
       c = result.statement as Claim;
-      if (
-        proof?.method === SPARQ_ZK_QUERY.method &&
-        this.deps.gate.proofSystems?.get(proof.method)?.kind === "real" &&
-        c.value === false
-      ) {
+      if (result.verifiedCondition === false) {
         const reason = "not-authorised";
         this.verdictEvent("source", "fail", QUERY_CONDITION_FALSE, { reason });
         cache.set(item.value, {
@@ -1522,7 +1519,7 @@ export class InboundGate {
       });
       return true;
     }
-    if (phase === "source" && c?.derivation) {
+    if (phase === "source" && c?.derivation && !opaque) {
       const derived = verifyDerivation(c as JsonObject, {
         rules: this.deps.gate.rules ?? [],
         attestedDerivers: this.deps.gate.attestedDerivers,

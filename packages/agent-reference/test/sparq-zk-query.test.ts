@@ -7,18 +7,23 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
 import { openConversation } from "../src/core/conversation.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
+import type { JsonObject } from "../src/core/types.js";
 import { availableAdapters } from "../src/derive/adapters/index.js";
 import {
   loadSparqZkQuery,
   SPARQ_ZK_QUERY,
-  type SparqZkQuery,
+  SparqZkQuery,
 } from "../src/derive/adapters/sparq-zk-query.js";
 import { ruleSchema } from "../src/derive/rules.js";
 import {
   DERIVATION_LIMITS,
   type DerivedRequest,
+  type ProofBinds,
   verifierRegistry,
 } from "../src/derive/verifiers.js";
+import { loadCase } from "../src/engine/load.js";
+import { patch, runScenario } from "../src/engine/run.js";
+import { domainProfileSchema, scenarioSchema } from "../src/engine/schema.js";
 import { GateMemory } from "../src/gates/common.js";
 import { InboundGate } from "../src/gates/inbound.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
@@ -28,6 +33,7 @@ import { signClaim } from "../src/scenarios/common.js";
 import type { TraceEventInput } from "../src/trace/types.js";
 
 const local = join(import.meta.dirname, "../.sparq/sparq-zk-query");
+const root = join(import.meta.dirname, "..");
 const installed = existsSync(join(process.env.ANSWERABLE_SPARQ_ZK_QUERY ?? local, "index.js"));
 
 it("omits the query verifier when its optional package is missing", async () => {
@@ -41,21 +47,197 @@ it("omits the query verifier when its optional package is missing", async () => 
   }
 });
 
+it.each([
+  { rows: [] },
+  {
+    rows: [
+      ['"true"^^<http://www.w3.org/2001/XMLSchema#boolean>'],
+      ['"false"^^<http://www.w3.org/2001/XMLSchema#boolean>'],
+    ],
+  },
+])("refuses a SELECT with zero or multiple rows for a Boolean rule (%j)", async ({ rows }) => {
+  const word = "00".repeat(32);
+  const released = { variables: ["result"], rows };
+  const policy = {
+    trustedIssuers: [word],
+    trustMembers: [{ issuer: "urn:issuer", verificationMethod: "urn:key", publicKey: word }],
+    bounds: { credentials: 1, quadsPerCredential: 4, rowsPerTable: 4 },
+    audience: "urn:receiver",
+    notBefore: 0,
+    notAfter: 1,
+  };
+  const presentation = {
+    requestDigest: word,
+    inputCommitment: word,
+    signatureMode: 1,
+    result: released,
+    proof: word,
+  };
+  const adapter = new SparqZkQuery({
+    testIssuerKeygen() {},
+    testIssue() {},
+    request: (args) => ({
+      ...args,
+      planHash: word,
+      verificationKey: word,
+      digest: word,
+      requestRdf: "",
+    }),
+    prove: async () => ({ presentation, result: released }),
+    verify: async () => ({
+      verified: true,
+      released,
+      report: {
+        rule: { query: "SELECT ?result {}", planHash: word },
+        issuers: [word],
+        subject: [],
+        fresh: word,
+        complete: true,
+        issuerRoot: word,
+        trustMembers: policy.trustMembers,
+      },
+    }),
+  });
+  expect(
+    await adapter.verify({
+      expectedQuery: "SELECT ?result {}",
+      presentation,
+      policy,
+      nonce: "test",
+      booleanResult: true,
+      seenNonces: new Set<string>(),
+    }),
+  ).toEqual({ ok: false, reason: "The query must release exactly one Boolean result" });
+  await expect(
+    adapter.prove({
+      query: "SELECT ?result {}",
+      credentials: [],
+      policy,
+      nonce: "test",
+      booleanResult: true,
+    }),
+  ).rejects.toThrow(/exactly one Boolean/);
+});
+
+const catalogueAsk = "ASK {?s <urn:p> ?x FILTER(?x > 8)}";
+const catalogueBounds = { credentials: 1, quadsPerCredential: 4, rowsPerTable: 4 };
+const threshold = { input: "urn:p", operator: "gt", value: 8 } as const;
+
+it.skipIf(!installed).each(["main", "supplier-below-threshold"])(
+  "issues all supplier decimals for recycled-content/%s",
+  async (path) => {
+    const system = await loadSparqZkQuery("wasm");
+    if (!system) throw new Error("Expected installed query adapter");
+    const { scenario } = loadCase(root, "recycled-content");
+    const world = patch(
+      scenario,
+      scenario.branches.find((branch) => branch.id === path)?.change ?? {},
+    );
+    const literals = [];
+    for (const spec of world.proofCredentials) {
+      const issuer = world.parties.find((p) => p.id === spec.issuer)?.identity;
+      if (!issuer) throw new Error("Missing supplier fixture issuer");
+      const keys = await system.issuerKeygen(new TextEncoder().encode(issuer));
+      const statements = spec.statements.map((id) => {
+        const statement = world.statements.find((s) => s.id === id);
+        if (!statement) throw new Error("Missing supplier fixture statement");
+        return { ...statement.value, issuer, subject: spec.subject, claimType: statement.kind };
+      });
+      const issued = await system.issue({
+        issuerKey: keys.secretKey,
+        subject: spec.subject,
+        claims: { statements },
+      });
+      literals.push(
+        String(issued.graphNQuads).match(
+          /"([\d.]+)"\^\^<http:\/\/www\.w3\.org\/2001\/XMLSchema#decimal>/,
+        )?.[1],
+      );
+    }
+    expect(literals).toEqual(["0.35", "0.4", path === "main" ? "0.38" : "0.29"]);
+  },
+);
+
+it.skipIf(!installed)(
+  "runs a real pinned Boolean query round trip through the scenario engine",
+  async () => {
+    const backend = process.env.SPARQ_NARGO && process.env.SPARQ_BB ? "native" : "wasm";
+    const system = await loadSparqZkQuery(backend);
+    if (!system) throw new Error("Expected installed query adapter");
+    const source = "urn:fictional:recycled-content:tier";
+    const world = loadCase(root, "recycled-content");
+    const profile = domainProfileSchema.parse(
+      JSON.parse(JSON.stringify(world.profile).replaceAll("material.recycled-fraction", "urn:p")),
+    );
+    const scenario = scenarioSchema.parse(
+      JSON.parse(JSON.stringify(world.scenario).replaceAll("material.recycled-fraction", "urn:p")),
+    );
+    const rule = profile.rules[0];
+    if (!rule || !("template" in rule) || rule.template !== "threshold")
+      throw new Error("Expected recycled-content threshold rule");
+    profile.sources = { ...profile.sources, supplier: source };
+    rule.inputsFrom = ["supplier"];
+    rule.proofQuery = catalogueAsk;
+    rule.params = threshold;
+    const supplier = scenario.statements.find((statement) => statement.id === "audited-tier");
+    if (!supplier) throw new Error("Expected supplier fixture");
+    supplier.value = { value: 9 };
+    scenario.requiredMethods = [system.method];
+    scenario.proofCredentials = scenario.proofCredentials.filter((spec) => spec.issuer === "tier");
+    scenario.branches = [];
+    scenario.blocked = [];
+    scenario.queryProofOptions = {
+      [rule.id]: {
+        bounds: catalogueBounds,
+        audience: "urn:fictional:recycled-content:receiver",
+        notBefore: 0,
+        notAfter: 32_503_680_000,
+      },
+    };
+    for (const step of scenario.script) {
+      if (step.type === "admit" && step.id === "private-inputs") step.statements = ["audited-tier"];
+      if (step.type === "prove") step.inputs = ["audited-tier"];
+    }
+    const [path] = await runScenario(profile, scenario, {
+      registry: verifierRegistry([system]),
+      compare: false,
+    });
+    expect(path?.trace?.events).toContainEqual(
+      expect.objectContaining({
+        verdict: "pass",
+        rule: expect.objectContaining({ id: "DER-13a" }),
+        caption: expect.stringContaining("rule, issuers, fresh, complete"),
+      }),
+    );
+    expect(path?.trace?.events).toContainEqual(
+      expect.objectContaining({
+        verdict: "pass",
+        rule: expect.objectContaining({ id: "DER-18" }),
+      }),
+    );
+    expect(JSON.stringify(path?.trace)).not.toMatch(/presentationSaltHex|graphNQuads|seedHex/);
+  },
+  300_000,
+);
+
 describe.skipIf(!installed)("real Noir query proofs (requires the optional archive)", () => {
   const issuer = "urn:issuer";
   const subject = "urn:subject";
-  const query = "ASK {?s <urn:p> ?x}";
+  const query = catalogueAsk;
   const now = Math.floor(Date.now() / 1000);
   let system: SparqZkQuery;
   let policy: Parameters<SparqZkQuery["prove"]>[0]["policy"];
   const nonce = "true-proof";
   let yes: Awaited<ReturnType<SparqZkQuery["prove"]>>;
+  let no: typeof yes;
+  let pinnedNo: typeof yes;
+  let pinnedPolicy: typeof policy;
   const keys = (seed: number) => system.issuerKeygen(new Uint8Array([seed]));
-  const issue = async (claimType: string, seed: number) =>
+  const issue = async (value: number, seed: number) =>
     system.issue({
       issuerKey: (await keys(seed)).secretKey,
       subject,
-      claims: { statements: [{ issuer, subject, claimType, value: 1 }] },
+      claims: { statements: [{ issuer, subject, claimType: "urn:p", value }] },
     });
   const prove = async (credential: Awaited<ReturnType<typeof issue>>, nonce: string) =>
     system.prove({ query, policy, nonce, credentials: [credential] });
@@ -77,11 +259,22 @@ describe.skipIf(!installed)("real Noir query proofs (requires the optional archi
       trustedIssuers: [publicKey],
       trustMembers: [{ issuer, verificationMethod: queryVerificationMethod(issuer), publicKey }],
       audience: "urn:receiver",
-      bounds: { credentials: 1, quadsPerCredential: 4, rowsPerTable: 4 },
+      bounds: catalogueBounds,
       notBefore: now - 1,
       notAfter: now + 3600,
     };
-    yes = await prove(await issue("urn:p", 1), nonce);
+    yes = await prove(await issue(9, 1), nonce);
+    const credential = await issue(1, 1);
+    no = await prove(credential, "false-proof");
+    const args = {
+      query,
+      policy,
+      nonce: "pinned-false",
+      credentials: [credential],
+      presentationSaltHex: "a2".repeat(32),
+    };
+    pinnedPolicy = { ...policy, inputCommitment: system.fixtureInputCommitment(args) };
+    pinnedNo = await system.prove({ ...args, policy: pinnedPolicy, booleanResult: true });
   }, 300_000);
 
   it("returns a verified true and keeps the method notice in discovery", async () => {
@@ -95,29 +288,37 @@ describe.skipIf(!installed)("real Noir query proofs (requires the optional archi
     });
   });
 
-  it("returns a verified false and the gate stops on the unmet condition", async () => {
-    const proof = await prove(await issue("urn:q", 1), "false-proof");
-    expect(proof.result).toBe(false);
+  async function receiveProof(input: {
+    proof: typeof yes;
+    nonce: string;
+    policy: JsonObject;
+    requiredBindings: ProofBinds[];
+    claimedBindings: ProofBinds[];
+    pin?: boolean;
+    requestedSubject?: string;
+    secondSupplier?: boolean;
+  }) {
+    const requestedSubject = input.requestedSubject ?? subject;
     const at = new Date(now * 1000).toISOString();
     const purpose = "urn:purpose:test-condition";
     const rule = ruleSchema.parse({
       id: "urn:rule:test-condition",
-      template: "membership",
-      params: { input: "urn:p", values: [1] },
+      template: "threshold",
+      params: threshold,
       output: "condition.result",
-      inputsFrom: [issuer],
+      inputsFrom: input.secondSupplier ? [issuer, "urn:second-issuer"] : [issuer],
       assurances: ["attested"],
       proofQuery: query,
     });
     const stored: DerivedRequest = {
       rule: rule.id,
       ruleDigest: digestOf(rule),
-      subject,
+      subject: requestedSubject,
       purpose,
       assurances: ["attested"],
-      nonce: "false-proof",
+      nonce: input.nonce,
       query,
-      policy,
+      policy: input.policy,
       consumed: false,
     };
     const holder = await testKey("query-test-holder");
@@ -133,12 +334,13 @@ describe.skipIf(!installed)("real Noir query proofs (requires the optional archi
           version: "1",
           source: issuer,
           claimTypes: ["urn:p"],
-          subjects: [subject],
+          subjects: [requestedSubject],
         },
       ],
     });
     const memory = new GateMemory();
     const events: TraceEventInput[] = [];
+    const coverage = [{ issuer, key: (await keys(1)).publicKey, claimTypes: ["urn:p"] }];
     const inbound = new InboundGate({
       identity: { actor: "urn:receiver:actor", party: "urn:receiver" },
       trust,
@@ -152,13 +354,16 @@ describe.skipIf(!installed)("real Noir query proofs (requires the optional archi
         rules: [rule],
         derivedRequests: { [stored.nonce]: stored },
         saveDerivationState: () => {},
-        proofIssuerKeys: [{ issuer, key: (await keys(1)).publicKey, claimTypes: ["urn:p"] }],
+        proofIssuerKeys: coverage,
+        ...(input.pin
+          ? { queryProofPolicies: [{ rule: rule.id, subject, policy: input.policy, coverage }] }
+          : {}),
         acceptedProofs: [
           {
             rule: rule.id,
             method: system.method,
             assurance: "attested",
-            binds: ["rule", "issuers", "fresh"],
+            binds: input.requiredBindings,
             purposes: [purpose],
           },
         ],
@@ -166,49 +371,68 @@ describe.skipIf(!installed)("real Noir query proofs (requires the optional archi
       },
     });
     const jws = await signClaim(holder, {
-      id: "urn:statement:false",
+      id: "urn:statement:condition-result",
       issuer: subject,
-      subject,
+      subject: requestedSubject,
       claimType: rule.output,
       method: "derived",
       asOf: at,
-      value: false,
+      value: input.proof.result,
       derivation: {
         rule: rule.id,
         ruleDigest: stored.ruleDigest,
         assurance: "attested",
         deriver: subject,
         at,
-        outputDigest: digestOf(false),
-        proofBinds: ["rule", "issuers", "fresh"],
+        outputDigest: digestOf(input.proof.result),
+        proofBinds: input.claimedBindings,
         inputs: [],
-        proof: { method: system.method, nonce: stored.nonce, presentation: proof.presentation },
+        proof: {
+          method: system.method,
+          nonce: stored.nonce,
+          presentation: input.proof.presentation,
+        },
       },
     });
     const conversation = "urn:test-conversation";
     const admission = inbound.arrive(undefined, undefined, undefined);
-    expect(
-      await admission.complete(
-        openConversation({ id: conversation, peer: { party: subject }, role: "responder", at }),
-        {
-          id: "urn:test-message",
-          conversation,
-          kind: "invoke",
-          profile: "urn:test-profile",
-          configuration: "urn:test-configuration",
-          from: { onBehalfOf: subject },
-          createdAt: at,
-          expiresAt: new Date((now + 60) * 1000).toISOString(),
-          evidence: [{ role: "credential", value: jws, format: "derivation+jws" }],
-          body: {
-            operation: { id: "urn:test-operation", version: "1" },
-            purpose,
-            basis: { kind: "represented" },
-            input: {},
-          },
+    const decision = await admission.complete(
+      openConversation({ id: conversation, peer: { party: subject }, role: "responder", at }),
+      {
+        id: "urn:test-message",
+        conversation,
+        kind: "invoke",
+        profile: "urn:test-profile",
+        configuration: "urn:test-configuration",
+        from: { onBehalfOf: subject },
+        createdAt: at,
+        expiresAt: new Date((now + 60) * 1000).toISOString(),
+        evidence: [{ role: "credential", value: jws, format: "derivation+jws" }],
+        body: {
+          operation: { id: "urn:test-operation", version: "1" },
+          purpose,
+          basis: { kind: "represented" },
+          input: {},
         },
-      ),
-    ).toMatchObject({ ok: false, reason: "not-authorised" });
+      },
+    );
+    return { decision, events, stored };
+  }
+
+  const basicBindings: ProofBinds[] = ["rule", "issuers", "fresh"];
+  const fullBindings: ProofBinds[] = [...basicBindings, "complete"];
+
+  it("returns a verified false and the gate stops on the unmet condition", async () => {
+    expect(pinnedNo.result).toBe(false);
+    const { decision, events, stored } = await receiveProof({
+      proof: pinnedNo,
+      nonce: "pinned-false",
+      policy: pinnedPolicy,
+      pin: true,
+      requiredBindings: fullBindings,
+      claimedBindings: fullBindings,
+    });
+    expect(decision).toMatchObject({ ok: false, reason: "not-authorised" });
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -221,10 +445,69 @@ describe.skipIf(!installed)("real Noir query proofs (requires the optional archi
     expect(stored.consumed).toBe(true);
   }, 300_000);
 
-  it("refuses a credential signed by a key outside the stored issuer roster", async () => {
-    await expect(prove(await issue("urn:p", 2), "wrong-issuer")).rejects.toThrow(
-      /issuer|authoriz/i,
+  it("refuses a valid Noir proof pinned to another subject", async () => {
+    const { decision, events } = await receiveProof({
+      proof: pinnedNo,
+      nonce: "pinned-false",
+      policy: pinnedPolicy,
+      pin: true,
+      requestedSubject: "urn:different-subject",
+      requiredBindings: fullBindings,
+      claimedBindings: fullBindings,
+    });
+    expect(decision).not.toMatchObject({ reason: "not-authorised" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        verdict: "fail",
+        reason: "derivation-not-verified",
+        rule: expect.objectContaining({ id: "DER-17" }),
+      }),
     );
+  });
+
+  it.each([
+    true,
+    false,
+  ])("refuses proof bindings missing complete before acting on %s", async (value) => {
+    const { decision, events } = await receiveProof({
+      proof: value ? yes : no,
+      nonce: value ? nonce : "false-proof",
+      policy,
+      requiredBindings: fullBindings,
+      claimedBindings: basicBindings,
+    });
+    expect(decision).not.toMatchObject({ reason: "not-authorised" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        verdict: "fail",
+        reason: "assurance-insufficient",
+        rule: expect.objectContaining({ id: "DER-13a" }),
+      }),
+    );
+  });
+
+  it("refuses a complete proof over a pinned dataset that omits a required supplier", async () => {
+    const { decision, events } = await receiveProof({
+      proof: pinnedNo,
+      nonce: "pinned-false",
+      policy: pinnedPolicy,
+      pin: true,
+      secondSupplier: true,
+      requiredBindings: fullBindings,
+      claimedBindings: fullBindings,
+    });
+    expect(decision).not.toMatchObject({ reason: "not-authorised" });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        verdict: "fail",
+        reason: "source-not-authoritative",
+        rule: expect.objectContaining({ id: "DER-18" }),
+      }),
+    );
+  });
+
+  it("refuses a credential signed by a key outside the stored issuer roster", async () => {
+    await expect(prove(await issue(9, 2), "wrong-issuer")).rejects.toThrow(/issuer|authoriz/i);
     const key = String((await keys(2)).publicKey.publicKey);
     const seenNonces = new Set<string>();
     const checked = await system.verify({

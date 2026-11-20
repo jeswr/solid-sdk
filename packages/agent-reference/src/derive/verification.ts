@@ -11,7 +11,7 @@ import {
   SPARQ_ZK_RESULT,
 } from "./adapters/sparq-zk-result.js";
 import { resultRequestPolicy } from "./result-trust.js";
-import { type DerivationRule, queryFor, ruleInputs } from "./rules.js";
+import { type DerivationRule, isBooleanRule, queryFor, ruleInputs } from "./rules.js";
 import type { JointOutcome, ProofBinds } from "./verifiers.js";
 
 // Claims are held across every asynchronous verifier and source check.
@@ -85,6 +85,7 @@ export function opaqueDerivation(statement: JsonObject): boolean {
 export function proofPolicy(
   gate: GateContext,
   rule: DerivationRule,
+  subject: string,
   accepted: (issuer: string, kind: string) => boolean,
 ): JsonObject {
   const kinds = ruleInputs(rule);
@@ -95,19 +96,23 @@ export function proofPolicy(
       (entry) => entry.rule === rule.id && entry.method === SPARQ_ZK_QUERY.method,
     )
   ) {
-    const members = (gate.proofIssuerKeys ?? []).flatMap(({ issuer, key, claimTypes }) => {
+    const dataset = gate.queryProofPolicies?.find(
+      (d) => d.rule === rule.id && d.subject === subject,
+    );
+    if (!dataset) throw new Error("No verifier-pinned query dataset for the requested subject");
+    const members = dataset.coverage.flatMap(({ issuer, key, claimTypes }) => {
       const parsed = resultPublicKey.safeParse(key);
       return parsed.success &&
         sources.includes(issuer) &&
-        kinds.every((kind) => claimTypes.includes(kind) && accepted(issuer, kind))
+        kinds.some((kind) => claimTypes.includes(kind) && accepted(issuer, kind))
         ? [{ issuer, verificationMethod: queryVerificationMethod(issuer), ...parsed.data }]
         : [];
     });
     if (!members.length) throw new Error("No trusted query issuer for the rule");
     return {
-      ...queryPolicyOptions.parse(gate.proofStatusPolicy?.queryPolicy),
+      ...queryPolicyOptions.parse(dataset.policy),
       trustedIssuers: [...new Set(members.map(({ publicKey }) => publicKey))],
-      trustMembers: members,
+      trustMembers: [...new Map(members.map((member) => [digestOf(member), member])).values()],
     };
   }
   if (
@@ -144,7 +149,8 @@ export async function verifyOpaqueDerivation(input: {
   acceptsSource: (issuer: string, kind: string) => boolean;
   event: (step: DerivationStep) => void;
 }): Promise<
-  { ok: true; statement: JsonObject; reportedBySubject?: boolean } | { ok: false; reason: string }
+  | { ok: true; statement: JsonObject; reportedBySubject?: boolean; verifiedCondition?: false }
+  | { ok: false; reason: string }
 > {
   const { statement: s, gate, purpose, event } = input;
   const d = s.derivation as JsonObject;
@@ -184,10 +190,14 @@ export async function verifyOpaqueDerivation(input: {
   );
   const verifier = gate.proofSystems?.get(method),
     protocol = gate.jointProtocols?.get(method);
+  const realQuery = method === SPARQ_ZK_QUERY.method && verifier?.kind === "real";
+  const booleanQuery = realQuery && isBooleanRule(rule);
+  const resultSubject =
+    method === SPARQ_ZK_RESULT.method && verifier?.kind === "real" && isBooleanRule(rule);
   const methodAccepted =
     d.assurance === "joint"
       ? !!protocol && !!jointEntry
-      : !!verifier && (!!proofEntry || (d.assurance === "attested" && !!holder));
+      : !!verifier && (!!proofEntry || (!booleanQuery && d.assurance === "attested" && !!holder));
   if (
     !step(
       "DER-16",
@@ -316,6 +326,7 @@ export async function verifyOpaqueDerivation(input: {
         presentation: proof.presentation as JsonObject,
         policy: request.policy,
         nonce: request.nonce,
+        ...(booleanQuery ? { booleanResult: true } : {}),
         seenNonces: gate.saveDerivationState
           ? {
               has: () => request.consumed,
@@ -333,13 +344,16 @@ export async function verifyOpaqueDerivation(input: {
       !step(
         "DER-17",
         checked.ok &&
-          (method === SPARQ_ZK_RESULT.method && verifier.kind === "real" && s.value === true
-            ? resultSupportsSubject(checked.released, request.subject)
-            : digestOf(checked.released) === digestOf(s.value)),
+          (resultSubject
+            ? s.value === true && resultSupportsSubject(checked.released, request.subject)
+            : (!booleanQuery || typeof checked.released === "boolean") &&
+              digestOf(checked.released) === digestOf(s.value)),
         "derivation-not-verified",
-        checked.ok
-          ? "The verifier checked the receiver's own query, issuer/status policy and nonce, and the released value equals the claim."
-          : `The verifier refused: ${checked.reason}.`,
+        !checked.ok
+          ? `The verifier refused: ${checked.reason}.`
+          : resultSubject
+            ? "The verifier checks the receiver's query, issuer/status policy and nonce. A verified row for the requested subject is required for the positive Boolean claim."
+            : "The verifier checked the receiver's own query, issuer/status policy and nonce, and the released value equals the claim.",
       )
     )
       return fail("derivation-not-verified");
@@ -363,8 +377,19 @@ export async function verifyOpaqueDerivation(input: {
     )
       return fail("derivation-not-verified");
     let reportedBySubject = false;
+    const profileBindingsMatch =
+      !!proofEntry && proofEntry.binds.every((binding) => checked.binds.includes(binding));
+    if ((booleanQuery || resultSubject) && proofEntry && !profileBindingsMatch) {
+      step(
+        "DER-13a",
+        false,
+        "assurance-insufficient",
+        "The verifier did not confirm every binding required by the profile.",
+      );
+      return fail("assurance-insufficient");
+    }
     if (d.assurance === "attested") {
-      const accepted = !!proofEntry && proofEntry.binds.every((b) => checked.binds.includes(b));
+      const accepted = profileBindingsMatch;
       if (!accepted && !holder) reportedBySubject = true;
       step(
         "DER-13a",
@@ -374,32 +399,84 @@ export async function verifyOpaqueDerivation(input: {
       );
     }
     const keys = checked.issuerKeys;
-    const sourcesOk =
-      keys.length > 0 &&
-      keys.every((key) => {
-        const pinned = gate.proofIssuerKeys?.find((k) => digestOf(k.key) === digestOf(key));
-        return (
-          pinned &&
-          ruleInputs(rule).every(
-            (kind) =>
-              pinned.claimTypes.includes(kind) &&
-              input.acceptsSource(pinned.issuer, kind) &&
-              rule.inputsFrom.map((s) => gate.sourceAliases?.[s] ?? s).includes(pinned.issuer),
+    const dataset =
+      realQuery && request.policy.inputCommitment
+        ? gate.queryProofPolicies?.find(
+            (d) =>
+              d.rule === rule.id &&
+              d.subject === request.subject &&
+              d.policy.inputCommitment === request.policy.inputCommitment,
           )
-        );
-      });
+        : undefined;
+    if (
+      booleanQuery &&
+      !step(
+        "DER-17",
+        !!dataset && checked.binds.includes("complete"),
+        "derivation-not-verified",
+        "The proof opens the verifier-pinned credential dataset for the requested subject.",
+      )
+    )
+      return fail("derivation-not-verified");
+    const sources = rule.inputsFrom.map((s) => gate.sourceAliases?.[s] ?? s);
+    const kinds = ruleInputs(rule);
+    const sourcesOk = dataset
+      ? sources.every((issuer) => dataset.coverage.some((source) => source.issuer === issuer)) &&
+        kinds.every((kind) =>
+          dataset.coverage.some((source) => source.claimTypes.includes(kind)),
+        ) &&
+        dataset.coverage.every((source) => {
+          const keyDigest = digestOf(source.key);
+          return (
+            sources.includes(source.issuer) &&
+            keys.some((key) => digestOf(key) === keyDigest) &&
+            gate.proofIssuerKeys?.some(
+              (pinned) =>
+                pinned.issuer === source.issuer &&
+                digestOf(pinned.key) === keyDigest &&
+                source.claimTypes.every((kind) => pinned.claimTypes.includes(kind)),
+            ) &&
+            source.claimTypes.length > 0 &&
+            source.claimTypes.every(
+              (kind) => kinds.includes(kind) && input.acceptsSource(source.issuer, kind),
+            )
+          );
+        }) &&
+        keys.every((key) =>
+          dataset.coverage.some((source) => digestOf(key) === digestOf(source.key)),
+        )
+      : keys.length > 0 &&
+        keys.every((key) => {
+          const pinned = gate.proofIssuerKeys?.find((k) => digestOf(k.key) === digestOf(key));
+          return (
+            pinned &&
+            kinds.every(
+              (kind) =>
+                pinned.claimTypes.includes(kind) &&
+                input.acceptsSource(pinned.issuer, kind) &&
+                sources.includes(pinned.issuer),
+            )
+          );
+        });
     if (
       !step(
         "DER-18",
         sourcesOk,
         "source-not-authoritative",
-        "This method does not bind an issuer to each fact. Every reported issuer key must therefore be independently accepted for every kind of claim the rule reads.",
+        dataset
+          ? "The pinned dataset covers every required source and claim kind with independently accepted issuer keys."
+          : "This method does not bind an issuer to each fact. Every reported issuer key must therefore be independently accepted for every kind of claim the rule reads.",
       )
     )
       return fail("source-not-authoritative");
     request.consumed = true;
     gate.saveDerivationState?.();
-    return { ok: true, statement: s, reportedBySubject };
+    return {
+      ok: true,
+      statement: s,
+      reportedBySubject,
+      ...(booleanQuery && s.value === false ? { verifiedCondition: false as const } : {}),
+    };
   } finally {
     inFlight.delete(request);
   }

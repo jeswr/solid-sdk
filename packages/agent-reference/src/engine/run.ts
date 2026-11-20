@@ -12,6 +12,7 @@ import { DEFAULT_LIMITS } from "../core/limits.js";
 import type { ActionIntent, EvidenceItem, Iri, Json, JsonObject } from "../core/types.js";
 import { availableAdapters } from "../derive/adapters/index.js";
 import { SPARQ_AGGREGATE } from "../derive/adapters/sparq-aggregate.js";
+import { SPARQ_ZK_QUERY, SparqZkQuery } from "../derive/adapters/sparq-zk-query.js";
 import {
   legacyStatusRef,
   resultPublicKey,
@@ -19,7 +20,7 @@ import {
   SPARQ_ZK_RESULT,
 } from "../derive/adapters/sparq-zk-result.js";
 import type { ProofCache } from "../derive/cache.js";
-import { ruleInputs } from "../derive/rules.js";
+import { queryFor, ruleInputs } from "../derive/rules.js";
 import type { DerivedRequest, FixedJointSession, VerifierRegistry } from "../derive/verifiers.js";
 import { DERIVATION_LIMITS, registryForRun, verifierRegistry } from "../derive/verifiers.js";
 import { SyntheticPaymentRail, underwritingTermsFor } from "../domains/mortgage.js";
@@ -62,6 +63,7 @@ import { EmbeddedCredentialNode } from "../model/evidence-item.js";
 import { LabelIndex } from "../model/labels.js";
 import { MessageNode } from "../model/message-nodes.js";
 import { PaymentFacts } from "../model/payment.js";
+import { queryVerificationMethod } from "../model/sparq-query.js";
 import {
   alternativeWireId,
   CONFIG_AGREEMENT,
@@ -912,6 +914,11 @@ async function runPath(
   const proofCredentials: (NonNullable<GateContext["proofCredentials"]>[number] & {
     holder?: string;
   })[] = [];
+  const queryFixtures: {
+    credential: JsonObject;
+    subject: string;
+    source: NonNullable<GateContext["proofIssuerKeys"]>[number];
+  }[] = [];
   const resultFixtures = new Map<
     string,
     {
@@ -935,6 +942,19 @@ async function runPath(
       claims: { statements },
       ...(spec.status ? { status: spec.status } : {}),
     });
+    if (system.method === SPARQ_ZK_QUERY.method && system.kind === "real") {
+      if (statements.some((statement) => statement.issuer !== issuer.identity))
+        throw new Error("Query fixture statements must come from the credential issuer");
+      queryFixtures.push({
+        credential,
+        subject: spec.subject,
+        source: {
+          issuer: issuer.identity,
+          key: keys.publicKey,
+          claimTypes: [...new Set(statements.map((statement) => String(statement.claimType)))],
+        },
+      });
+    }
     if (system.method === SPARQ_ZK_RESULT.method && system.kind === "real") {
       const ref = legacyStatusRef.parse(spec.status);
       if (ref.index >= 2 ** 20)
@@ -976,6 +996,68 @@ async function runPath(
           ? { holder: spec.subject }
           : {}),
       });
+  }
+  const queryPresentationSalts = new Map<string, string>();
+  const queryProofPolicies: NonNullable<GateContext["queryProofPolicies"]>[number][] = [];
+  const querySystem = verifiers.proofSystems.get(SPARQ_ZK_QUERY.method);
+  if (querySystem instanceof SparqZkQuery && scenario.queryProofOptions) {
+    for (const step of scenario.script) {
+      if (step.type !== "proof-request") continue;
+      const options = scenario.queryProofOptions[step.rule];
+      const rule = profile.rules.find((rule) => rule.id === step.rule);
+      if (!options || !rule || !("template" in rule)) continue;
+      const scope = digestOf([rule.id, step.subject]);
+      if (queryPresentationSalts.has(scope)) continue;
+      const kinds = ruleInputs(rule);
+      const sources = rule.inputsFrom.map((source) => profile.sources[source] ?? source);
+      const fixtures = queryFixtures.filter(
+        ({ subject, source }) =>
+          subject === step.subject &&
+          sources.includes(source.issuer) &&
+          source.claimTypes.some((kind) => kinds.includes(kind)),
+      );
+      const coverage = fixtures.map(({ source }) => ({
+        ...source,
+        claimTypes: source.claimTypes.filter((kind) => kinds.includes(kind)),
+      }));
+      const trustMembers = [
+        ...new Map(
+          coverage.map(({ issuer, key }) => [
+            digestOf([issuer, key]),
+            {
+              issuer,
+              verificationMethod: queryVerificationMethod(issuer),
+              ...resultPublicKey.parse(key),
+            },
+          ]),
+        ).values(),
+      ];
+      const trustedIssuers = [...new Set(trustMembers.map(({ publicKey }) => publicKey))];
+      // Fixture-only salt, held outside the signed request and proof record.
+      const salt = digestOf(["query fixture salt", scenario.id, path, scope]).slice(
+        "sha-256:".length,
+      );
+      const credentialByDigest = new Map(
+        fixtures.map(({ credential }) => [digestOf(credential), credential]),
+      );
+      const credentials = [...credentialByDigest.keys()]
+        .sort()
+        .map((digest) => required(credentialByDigest.get(digest)));
+      const inputCommitment = querySystem.fixtureInputCommitment({
+        query: queryFor(rule),
+        policy: { ...options, trustMembers, trustedIssuers },
+        nonce: scope,
+        credentials,
+        presentationSaltHex: salt,
+      });
+      queryProofPolicies.push({
+        rule: rule.id,
+        subject: step.subject,
+        policy: { ...options, inputCommitment },
+        coverage,
+      });
+      queryPresentationSalts.set(scope, salt);
+    }
   }
   const resultBindings = new Map<string, { jws: string }[]>();
   for (const issuer of new Set([...resultFixtures.values()].map((fixture) => fixture.issuer))) {
@@ -1994,6 +2076,7 @@ async function runPath(
       ),
       proofDatasets,
       proofStatusPolicy,
+      queryProofPolicies,
       proofCache: options.proofCache,
       generateProofs: options.generateProofs,
       ...(profile.codeMappings?.receivers.includes(agent.actor ?? "")
@@ -2983,13 +3066,19 @@ async function runPath(
           };
         }
         break;
-      case "prove":
+      case "prove": {
+        const request = template<DerivedRequest>(step.request);
         result = await runtime.proveDerived({
           ...step,
-          request: template<DerivedRequest>(step.request),
+          request,
           inputs: step.inputs.map((id) => String(required(signed[id]).statement.id)),
+          presentationSaltHex:
+            step.method === SPARQ_ZK_QUERY.method
+              ? queryPresentationSalts.get(digestOf([request.rule, request.subject]))
+              : undefined,
         });
         break;
+      }
       case "joint-action": {
         const party = required(jointParties.get(step.agent));
         if (step.action === "contribute") {

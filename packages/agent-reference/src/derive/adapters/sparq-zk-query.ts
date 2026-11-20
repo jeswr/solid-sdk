@@ -25,6 +25,7 @@ export const SPARQ_ZK_QUERY = {
 } as const;
 
 const hex = z.string().regex(/^(?:[0-9a-f]{2})+$/);
+const word = z.string().regex(/^[0-9a-f]{64}$/);
 const uint = z.number().int().nonnegative();
 const pos = uint.min(1);
 const testIssuer = z.strictObject({ seedHex: hex, publicKey: hex });
@@ -43,7 +44,7 @@ export const queryPolicyOptions = z.strictObject({
   notBefore: uint,
   notAfter: uint,
   credentialQuadBounds: z.array(pos).optional(),
-  inputCommitment: hex.optional(),
+  inputCommitment: word.optional(),
   maxPresentationBytes: pos.optional(),
   maxResultSize: pos.optional(),
   holderBinding: z.strictObject({ issuers: z.array(z.string()).min(1).optional() }).optional(),
@@ -116,7 +117,7 @@ interface QueryPackage {
   prove(input: {
     request: NativeRequest;
     credentials: z.infer<typeof credential>[];
-    backend: "native" | "wasm";
+    backend: "native" | "wasm" | { type: "native" | "wasm"; presentationSaltHex: string };
   }): Promise<unknown>;
   verify(input: {
     request: NativeRequest;
@@ -125,14 +126,21 @@ interface QueryPackage {
   }): Promise<unknown>;
 }
 
-function released(value: z.infer<typeof result>) {
+function released(value: z.infer<typeof result>, booleanResult = false) {
   if ("boolean" in value) return value.boolean;
-  if (value.variables.length === 1 && value.variables[0] === "result" && value.rows.length === 1) {
-    const term = value.rows[0]?.[0];
+  const [row] = value.rows;
+  if (
+    value.variables.length === 1 &&
+    (booleanResult || value.variables[0] === "result") &&
+    value.rows.length === 1 &&
+    row?.length === 1
+  ) {
+    const [term] = row;
     const datatype = '"^^<http://www.w3.org/2001/XMLSchema#boolean>';
-    if (term === `"true${datatype}`) return true;
-    if (term === `"false${datatype}`) return false;
+    if (term === `"true${datatype}` || term === `"1${datatype}`) return true;
+    if (term === `"false${datatype}` || term === `"0${datatype}`) return false;
   }
+  if (booleanResult) throw new Error("The query must release exactly one Boolean result");
   return value;
 }
 
@@ -148,6 +156,7 @@ export class SparqZkQuery implements ProofSystem {
   constructor(
     private readonly native: QueryPackage,
     private readonly backend: "native" | "wasm" = "native",
+    private readonly prepareFixture?: (input: string) => string,
   ) {}
 
   issuerKeygen: ProofSystem["issuerKeygen"] = async (seed) => {
@@ -184,15 +193,45 @@ export class SparqZkQuery implements ProofSystem {
     );
   }
 
-  prove: ProofSystem["prove"] = async ({ query, policy, nonce, credentials }) => {
+  /** Compute a pin for the verifier's independently selected scenario fixture dataset. */
+  fixtureInputCommitment(input: Parameters<ProofSystem["prove"]>[0]): string {
+    if (!this.prepareFixture) throw new Error("Query fixture commitment host unavailable");
+    const prepared: unknown = JSON.parse(
+      this.prepareFixture(
+        JSON.stringify({
+          request: this.request(input.query, input.policy, input.nonce),
+          credentials: input.credentials.map((value) => credential.parse(value)),
+          clock: Math.floor(Date.now() / 1000),
+          presentationSaltHex: word.parse(input.presentationSaltHex),
+        }),
+      ),
+    );
+    return z.object({ presentationSkeleton: z.object({ inputCommitment: word }) }).parse(prepared)
+      .presentationSkeleton.inputCommitment;
+  }
+
+  prove: ProofSystem["prove"] = async ({
+    query,
+    policy,
+    nonce,
+    credentials,
+    booleanResult,
+    presentationSaltHex,
+  }) => {
+    const stored = this.request(query, policy, nonce);
+    if (stored.policy.inputCommitment && !presentationSaltHex)
+      throw new Error("The pinned query dataset requires its presentation salt");
     const proof = proved.parse(
       await this.native.prove({
-        request: this.request(query, policy, nonce),
+        request: stored,
         credentials: credentials.map((value) => credential.parse(value)),
-        backend: this.backend,
+        backend:
+          presentationSaltHex === undefined
+            ? this.backend
+            : { type: this.backend, presentationSaltHex: word.parse(presentationSaltHex) },
       }),
     );
-    return { presentation: proof.presentation, result: released(proof.result) };
+    return { presentation: proof.presentation, result: released(proof.result, booleanResult) };
   };
 
   verify: ProofSystem["verify"] = async (input) => {
@@ -220,7 +259,7 @@ export class SparqZkQuery implements ProofSystem {
       if (stored.policy.inputCommitment && report.complete) bindings.push("complete");
       return {
         ok: true,
-        released: released(checked.released),
+        released: released(checked.released, input.booleanResult),
         binds: bindings,
         // This is the complete authorization set. The gate must approve every
         // member for the claims in the rule because individual signers are hidden.
@@ -242,11 +281,15 @@ export async function loadSparqZkQuery(
   if (!existsSync(entry)) return undefined;
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
-      if (
-        specifier === "../../../.sparq/sparq-zk-query/index.js" &&
-        context.parentURL === import.meta.url
-      )
-        return { url: pathToFileURL(entry).href, shortCircuit: true };
+      if (context.parentURL === import.meta.url) {
+        if (specifier === "../../../.sparq/sparq-zk-query/index.js")
+          return { url: pathToFileURL(entry).href, shortCircuit: true };
+        if (specifier === "../../../.sparq/sparq-zk-query/wasm/sparq_zk_query_wasm.cjs")
+          return {
+            url: pathToFileURL(resolve(directory, "wasm/sparq_zk_query_wasm.cjs")).href,
+            shortCircuit: true,
+          };
+      }
       return nextResolve(specifier, context);
     },
   });
@@ -263,7 +306,22 @@ export async function loadSparqZkQuery(
         verify: z.function(),
       })
       .parse(loaded);
-    return new SparqZkQuery(api as QueryPackage, backend);
+    const host: unknown = await import(
+      // biome-ignore lint/suspicious/noTsIgnore: the optional archive may be absent at typecheck time
+      // @ts-ignore Optional fixture commitment host from the pinned archive.
+      "../../../.sparq/sparq-zk-query/wasm/sparq_zk_query_wasm.cjs"
+    );
+    const wasm = z
+      .object({
+        hostCall: z.function({
+          input: [z.literal("prepareProof"), z.string()],
+          output: z.string(),
+        }),
+      })
+      .parse(host);
+    return new SparqZkQuery(api as QueryPackage, backend, (input) =>
+      wasm.hostCall("prepareProof", input),
+    );
   } finally {
     hooks.deregister();
   }
