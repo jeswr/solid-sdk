@@ -149,6 +149,7 @@ import {
   continuedReleaseProblem,
   decisionsOf,
   describeStep,
+  stoppedReleaseProblem,
   witnessedDecision,
 } from "./compare.js";
 import { patchDifferences } from "./confinement.js";
@@ -629,19 +630,7 @@ export async function runScenario(
         expectationProblem = "a release after the stop lacks a narrower authorised proposal";
       } else if (
         ((witness.outcome === "stop" && !witness.continues) || witness.outcome === "refuse") &&
-        later.some(
-          (event) =>
-            event.agent === witnessed.agent &&
-            (event.effectRelease ||
-              event.kind === "store" ||
-              (event.kind === "message-out" &&
-                !(
-                  witness.outcome === "refuse" &&
-                  ["refuse", "challenge", "unsupported", "indeterminate"].includes(
-                    event.packet?.kind ?? "",
-                  )
-                ))),
-        )
+        stoppedReleaseProblem(run, witnessed, witness.outcome)
       ) {
         expectationProblem = "an effect followed a stop";
       }
@@ -2972,6 +2961,7 @@ async function runPath(
   const steps = new Map<number, ComparisonStep>();
   const effectReleases = new Set<number>();
   const effectSupport = new Map<number, readonly string[]>();
+  const standaloneRefusals = new Map<number, string>();
   const approvedAsks = new Set<number>();
   const pendingAsks = new Map<string, number>();
   for (const [index, step] of scenario.script.entries()) {
@@ -3054,14 +3044,18 @@ async function runPath(
     const traceAgent = parties.get(step.agent)?.traceId ?? step.agent;
     const trackApprovals = options.judgedAgent && traceAgent !== options.judgedAgent;
     const previousPending = trackApprovals ? runtime.pendingApprovals() : [];
-    const previouslyCompleted = options.collectEffects
-      ? new Set(
-          runtime
-            .effectStates()
-            .filter((effect) => effect.conclusion === "completed")
-            .map((effect) => effect.key),
-        )
-      : undefined;
+    const trackRefusedEffect =
+      standaloneRefusals.size > 0 &&
+      (step.type === "effect" || step.type === "approve" || step.type === "organisation-approve");
+    const previouslyCompleted =
+      options.collectEffects || trackRefusedEffect
+        ? new Set(
+            runtime
+              .effectStates()
+              .filter((effect) => effect.conclusion === "completed")
+              .map((effect) => effect.key),
+          )
+        : undefined;
     let approvedDigest: string | undefined;
     let effectIntent: ActionIntent | undefined;
     const template = <T>(v: unknown) => resolveTemplate(v, variables()) as T;
@@ -3932,6 +3926,7 @@ async function runPath(
       case "approve": {
         const pending = runtime.pendingApprovals()[0];
         if (!pending) throw new Error(`${step.id}: no pending approval`);
+        if (trackRefusedEffect) effectIntent = pending.intent;
         if (trackApprovals && step.decision === "approve") approvedDigest = pending.actionDigest;
         result = await runtime.submitApproval(
           await cast.approval(
@@ -4024,6 +4019,7 @@ async function runPath(
         break;
       case "organisation-approve": {
         const pending = required(runtime.pendingApprovals()[0]);
+        if (trackRefusedEffect) effectIntent = pending.intent;
         const signer = required(parties.get(step.signer));
         const payload = {
           type: "OrganisationApproval",
@@ -4373,6 +4369,25 @@ async function runPath(
         id: step.id,
         descriptor: event.part === "inbound-gate" ? inboundDescriptor : descriptor,
       });
+    if (step.type === "admit") {
+      const decisions = events.filter(
+        (event) =>
+          event.agent === traceAgent && event.part === "inbound-gate" && event.kind === "decision",
+      );
+      // The gate decides each item in order before checking precedence across admitted items.
+      const count = step.statements.length;
+      if (
+        decisions.length !== count &&
+        !(decisions.length === count + 1 && decisions[count]?.outcome === "ask-more")
+      )
+        throw new Error(
+          `step ${step.id}: standalone gate decisions do not match the offered statements`,
+        );
+      for (const [index, id] of step.statements.entries()) {
+        const decision = required(decisions[index]);
+        if (decision.outcome === "refuse") standaloneRefusals.set(decision.seq, statementId(id));
+      }
+    }
     const outboundDecisions = events.filter(
       (event) =>
         event.agent === traceAgent && event.part === "outbound-gate" && event.kind === "decision",
@@ -4388,15 +4403,11 @@ async function runPath(
       );
       const support = effectIntent?.parameters.support;
       for (const event of outboundDecisions) {
+        if (event.outcome !== "go" || !event.effectRelease || !event.actionDigest) continue;
+        const effectCompleted = completed.has(event.actionDigest);
+        if (options.collectEffects && effectCompleted) effectReleases.add(event.seq);
         if (
-          event.outcome !== "go" ||
-          !event.effectRelease ||
-          !event.actionDigest ||
-          !completed.has(event.actionDigest)
-        )
-          continue;
-        effectReleases.add(event.seq);
-        if (
+          (trackRefusedEffect || effectCompleted) &&
           effectIntent &&
           event.actionDigest === actionDigest(effectIntent) &&
           Array.isArray(support)
@@ -4544,7 +4555,15 @@ async function runPath(
       : {}),
     events: recorder.events(),
   };
-  return { trace, events: trace.events, steps, effectReleases, effectSupport, approvedAsks };
+  return {
+    trace,
+    events: trace.events,
+    steps,
+    effectReleases,
+    effectSupport,
+    standaloneRefusals,
+    approvedAsks,
+  };
 }
 
 /**

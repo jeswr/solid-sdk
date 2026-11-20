@@ -756,7 +756,7 @@
       "path": "branch-2",
       "settlement": "rdf-order",
       "what": "The same flag is used by someone not on the register",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "stop",
         "reason": "source-unknown",
@@ -767,7 +767,6 @@
         "reason": "source-unknown"
       },
       "consequences": [],
-      "note": "expected source/source-unknown -> stop",
       "trace": "emergency-access--branch-2--baseline.json"
     },
     {
@@ -1739,7 +1738,7 @@
       "path": "branch-2",
       "settlement": "rdf-order",
       "what": "The new details come from an email",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -1772,7 +1771,6 @@
           "reason": "source-not-authoritative"
         }
       ],
-      "note": "an effect followed a stop",
       "trace": "master-data-change--branch-2--baseline.json"
     },
     {
@@ -15092,7 +15090,7 @@
       "path": "branch-1",
       "settlement": "rdf-order",
       "what": "A message gives new bank details for a known supplier",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -15155,7 +15153,6 @@
           "reason": "source-not-authoritative"
         }
       ],
-      "note": "an effect followed a stop",
       "trace": "pay-an-invoice--branch-1--baseline.json"
     },
     {
@@ -16432,7 +16429,7 @@
       "path": "branch-2",
       "settlement": "rdf-order",
       "what": "The account belongs to a different legal entity",
-      "status": "disagrees",
+      "status": "runs",
       "actual": {
         "outcome": "refuse",
         "reason": "source-not-authoritative",
@@ -16455,7 +16452,6 @@
           "reason": "source-not-authoritative"
         }
       ],
-      "note": "an effect followed a stop",
       "trace": "supplier-onboarding--branch-2--baseline.json"
     },
     {

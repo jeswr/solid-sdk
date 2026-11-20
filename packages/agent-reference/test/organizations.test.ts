@@ -39,7 +39,7 @@ it("uses the aliased represented entity in the signed organization mandate", asy
 
 it("runs supplier onboarding and both catalogue refusals through current documents, credential status and source gates", async () => {
   const { profile, scenario } = loadCase(root, "supplier-onboarding");
-  const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
+  const paths = await runScenario(profile, scenario);
   expect(paths.every((p) => p.matches && !p.blocked)).toBe(true);
   expect(
     paths[0]?.trace?.events.some(
@@ -51,8 +51,7 @@ it("runs supplier onboarding and both catalogue refusals through current documen
     reason: "status-withdrawn",
   });
   expect(paths[2]).toMatchObject({
-    disagrees: true,
-    note: "an effect followed a stop",
+    disagrees: false,
     actual: { outcome: "refuse", reason: "source-not-authoritative", check: "source" },
   });
   expect(paths[2]?.trace?.events.at(-1)).toMatchObject({

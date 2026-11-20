@@ -135,6 +135,8 @@ export interface ComparisonRun {
   readonly steps?: ReadonlyMap<number, ComparisonStep>;
   readonly effectReleases?: ReadonlySet<number>;
   readonly effectSupport?: ReadonlyMap<number, readonly string[]>;
+  /** Statement ID by the sequence of its standalone inbound refusal. */
+  readonly standaloneRefusals?: ReadonlyMap<number, string>;
   readonly approvedAsks?: ReadonlySet<number>;
 }
 
@@ -332,6 +334,96 @@ function firstStatementDifference(main: ComparisonRun, branch: ComparisonRun, ag
   return undefined;
 }
 
+function matchesMessageRelease(release: TraceEvent | undefined, send: TraceEvent): boolean {
+  return (
+    !!release &&
+    release.seq < send.seq &&
+    release.messageId === send.messageId &&
+    !!release.messageDigest &&
+    release.messageDigest === send.packet?.layers.header.digest &&
+    release.actionDigest === send.actionDigest
+  );
+}
+
+function containsItem(value: unknown, id: string): boolean {
+  if (Array.isArray(value)) return value.some((entry) => containsItem(entry, id));
+  const record = object(value);
+  return !!record && (record.id === id || Object.values(record).some((v) => containsItem(v, id)));
+}
+
+export function stoppedReleaseProblem(
+  run: ComparisonRun,
+  stop: TraceEvent,
+  expectedOutcome: string,
+): boolean {
+  const later = run.events.slice(stop.seq);
+  const refused = run.standaloneRefusals?.get(stop.seq);
+  if (
+    stop.part !== "inbound-gate" ||
+    stop.outcome !== "refuse" ||
+    stop.gateRun === undefined ||
+    refused === undefined ||
+    run.events.some(
+      (event) =>
+        event.kind === "message-in" && event.agent === stop.agent && event.gateRun === stop.gateRun,
+    )
+  ) {
+    return later.some(
+      (event) =>
+        event.agent === stop.agent &&
+        (event.effectRelease ||
+          event.kind === "store" ||
+          (event.kind === "message-out" &&
+            !(
+              expectedOutcome === "refuse" &&
+              ["refuse", "challenge", "unsupported", "indeterminate"].includes(
+                event.packet?.kind ?? "",
+              )
+            ))),
+    );
+  }
+
+  const allowed = new Map<number, TraceEvent>();
+  let preceding: TraceEvent | undefined;
+  for (const event of later) {
+    if (event.agent !== stop.agent) continue;
+    if (event.kind === "decision") {
+      preceding = event;
+      if (event.part === "outbound-gate" && event.outcome === "go") {
+        if (
+          event.actionScope?.evidence.includes(refused) ||
+          run.effectSupport?.get(event.seq)?.includes(refused)
+        )
+          return true;
+        if (event.gateRun !== undefined) allowed.set(event.gateRun, event);
+      }
+    }
+    if (event.kind === "store") {
+      // A decision after the refusal must admit the store in this trace step.
+      if (
+        event.fact?.id === refused ||
+        preceding?.part !== "inbound-gate" ||
+        preceding.outcome !== "admit" ||
+        preceding.step !== event.step
+      )
+        return true;
+    }
+    if (event.kind === "message-out") {
+      const release = event.gateRun === undefined ? undefined : allowed.get(event.gateRun);
+      const layers = event.packet?.layers;
+      if (
+        event.messageId === undefined ||
+        !matchesMessageRelease(release, event) ||
+        containsItem(layers?.evidence.raw, refused) ||
+        containsItem(layers?.authority.raw, refused) ||
+        containsItem(layers?.content.raw, refused)
+      )
+        return true;
+    }
+  }
+  return false;
+}
+
 /** A scoped stop permits subsequent releases only after their own gate decision. */
 export function continuedReleaseProblem(stop: TraceEvent, later: readonly TraceEvent[]): boolean {
   if (!stop.actionDigest || !stop.actionScope) return true;
@@ -377,14 +469,7 @@ export function continuedReleaseProblem(stop: TraceEvent, later: readonly TraceE
     }
     if (event.kind !== "message-out") return false;
     const release = event.gateRun === undefined ? undefined : allowed.get(event.gateRun);
-    return (
-      !release ||
-      release.seq >= event.seq ||
-      release.messageId !== event.messageId ||
-      !release.messageDigest ||
-      release.messageDigest !== event.packet?.layers.header.digest ||
-      release.actionDigest !== event.actionDigest
-    );
+    return !matchesMessageRelease(release, event);
   });
 }
 

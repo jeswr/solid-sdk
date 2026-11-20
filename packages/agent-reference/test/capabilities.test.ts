@@ -18,18 +18,12 @@ const run = async (id: string) => {
 it("executes every new catalogue path with canonical reasons and declared stand-ins", async () => {
   for (const id of ["master-data-change", "pay-an-invoice", "false-but-signed", "flat-share"]) {
     const { profile, scenario } = loadCase(root, id);
-    const results = await runScenario(profile, scenario, {
-      reportExpectationFailures: true,
-    });
+    const results = await runScenario(profile, scenario);
     expect(results).toHaveLength(scenario.branches.length + 1);
     for (const result of results) {
       expect(result.blocked).toBeUndefined();
       expect(result.matches).toBe(true);
-      const stoppedAfterSourceRefusal =
-        (id === "pay-an-invoice" && result.path === "branch-1") ||
-        (id === "master-data-change" && result.path === "branch-2");
-      expect(result.disagrees).toBe(stoppedAfterSourceRefusal);
-      if (stoppedAfterSourceRefusal) expect(result.note).toBe("an effect followed a stop");
+      expect(result.disagrees).toBe(false);
       expect(result.trace?.standIns).toEqual(profile.standIns);
       for (const e of result.trace?.events ?? [])
         if (e.reason) expect(CORE_REASON_CODES).toContain(e.reason);
@@ -48,8 +42,7 @@ it("requires two controllers and records a rejected self-approval without perfor
     reason: "not-authorised",
   });
   expect(results[2]).toMatchObject({
-    disagrees: true,
-    note: "an effect followed a stop",
+    disagrees: false,
     actual: { outcome: "refuse", check: "source", reason: "source-not-authoritative" },
   });
 });

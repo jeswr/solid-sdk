@@ -5,11 +5,12 @@ import {
   compareBranch,
   continuedReleaseProblem,
   describeStep,
+  stoppedReleaseProblem,
   witnessedDecision,
 } from "../src/engine/compare.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
-import type { TraceEvent } from "../src/trace/types.js";
+import type { PacketView, TraceEvent } from "../src/trace/types.js";
 
 const root = new URL("../", import.meta.url).pathname;
 
@@ -113,6 +114,143 @@ const checked = (seq: number, extra: Partial<TraceEvent> = {}): TraceEvent => ({
   reason: "source-accepted",
   caption: "",
   ...extra,
+});
+
+const refusedId = "urn:statement:refused";
+const acceptedId = "urn:statement:accepted";
+const refusal: TraceEvent = { ...accepted(2, "admit"), outcome: "refuse" };
+const laterAdmit: TraceEvent = { ...accepted(3, "admit"), gateRun: 2 };
+const stored = {
+  ...checked(4),
+  part: "memory",
+  kind: "store",
+  fact: {
+    id: acceptedId,
+    claimType: "test.claim",
+    label: "Test statement",
+    subject: "urn:subject",
+    value: true,
+    source: "urn:source",
+  },
+} satisfies TraceEvent;
+const gated = {
+  ...accepted(5),
+  gateRun: 3,
+  messageId: "urn:message",
+  messageDigest: "message-digest",
+  actionScope: {
+    action: "distribute",
+    operation: "urn:operation",
+    target: "urn:operation",
+    conversation: "urn:conversation",
+    evidence: [acceptedId],
+  },
+} satisfies TraceEvent;
+
+function packetWithStatement(id: string): PacketView {
+  const layer = { present: false, summary: "" };
+  return {
+    id: "urn:message",
+    from: "agent",
+    to: "peer",
+    kind: "deliver",
+    carriage: { suite: "direct-http", summary: "" },
+    layers: {
+      header: { present: true, summary: "", digest: "message-digest" },
+      authority: layer,
+      content: layer,
+      evidence: { present: true, summary: "", raw: [{ id }] },
+      terms: layer,
+      provenance: layer,
+    },
+  };
+}
+
+const sent: TraceEvent = {
+  ...checked(6),
+  part: "transport",
+  kind: "message-out",
+  gateRun: 3,
+  messageId: "urn:message",
+  packet: packetWithStatement(acceptedId),
+};
+
+function afterRefusal(later: TraceEvent[], first = checked(1), stop = refusal) {
+  return stoppedReleaseProblem(
+    {
+      events: [first, stop, ...later],
+      standaloneRefusals: new Map([[stop.seq, refusedId]]),
+    },
+    stop,
+    "stop",
+  );
+}
+
+it("allows separately admitted stores and a gated send after a standalone refusal", () => {
+  expect(afterRefusal([laterAdmit, stored, gated, sent])).toBe(false);
+});
+
+it("rejects a store before the next inbound decision or without an admit in its trace step", () => {
+  expect(
+    afterRefusal([
+      { ...stored, seq: 3 },
+      { ...laterAdmit, seq: 4 },
+    ]),
+  ).toBe(true);
+  expect(afterRefusal([laterAdmit, { ...stored, step: 2 }])).toBe(true);
+  expect(afterRefusal([{ ...gated, seq: 3 }, stored])).toBe(true);
+  expect(afterRefusal([laterAdmit, { ...gated, seq: 4, step: 2 }, { ...stored, seq: 5 }])).toBe(
+    true,
+  );
+});
+
+it("rejects a store or send carrying the refused statement despite its own gate decision", () => {
+  expect(afterRefusal([laterAdmit, { ...stored, fact: { ...stored.fact, id: refusedId } }])).toBe(
+    true,
+  );
+  expect(afterRefusal([gated, { ...sent, packet: packetWithStatement(refusedId) }])).toBe(true);
+});
+
+it("requires a preceding go for the send's gate run, message ID and digest", () => {
+  expect(afterRefusal([sent])).toBe(true);
+  expect(afterRefusal([{ ...gated, gateRun: 2 }, sent])).toBe(true);
+  expect(afterRefusal([{ ...gated, messageId: "urn:other" }, sent])).toBe(true);
+  expect(afterRefusal([{ ...gated, messageDigest: "other-digest" }, sent])).toBe(true);
+  expect(afterRefusal([sent, { ...gated, seq: 7 }])).toBe(true);
+});
+
+it("rejects citations in outbound go scope and in completed effect support", () => {
+  expect(
+    afterRefusal([{ ...gated, actionScope: { ...gated.actionScope, evidence: [refusedId] } }]),
+  ).toBe(true);
+  const effect = { ...gated, effectRelease: true, messageId: undefined, messageDigest: undefined };
+  expect(afterRefusal([effect])).toBe(false);
+  expect(
+    stoppedReleaseProblem(
+      {
+        events: [checked(1), refusal, effect],
+        standaloneRefusals: new Map([[refusal.seq, refusedId]]),
+        effectSupport: new Map([[effect.seq, [refusedId]]]),
+      },
+      refusal,
+      "stop",
+    ),
+  ).toBe(true);
+});
+
+it("keeps the blanket check for a refused message and an outbound stop", () => {
+  const received = checked(1, { part: "transport", kind: "message-in", gateRun: refusal.gateRun });
+  const stopped = { ...refusal, part: "outbound-gate", outcome: "stop" } as const;
+  for (const followUp of [
+    [laterAdmit, stored],
+    [gated, sent],
+  ]) {
+    expect(afterRefusal(followUp, received)).toBe(true);
+    expect(afterRefusal(followUp, checked(1), stopped)).toBe(true);
+  }
+  expect(afterRefusal([laterAdmit, stored, gated, sent], { ...received, agent: "peer" })).toBe(
+    false,
+  );
 });
 
 it("reports a permissive branch only when a missing main bar is followed by a witnessed release", () => {

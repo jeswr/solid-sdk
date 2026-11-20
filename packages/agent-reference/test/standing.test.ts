@@ -10,7 +10,7 @@ const root = join(import.meta.dirname, "..");
 
 it("runs registered and unregistered emergencies, with two separately gated notification messages", async () => {
   const { profile, scenario } = loadCase(root, "emergency-access");
-  const paths = await runScenario(profile, scenario, { reportExpectationFailures: true });
+  const paths = await runScenario(profile, scenario);
   expect(paths.map((path) => path.path)).toEqual(["main", "branch-2"]);
   expect(paths[0]).toMatchObject({
     disagrees: false,
@@ -22,11 +22,24 @@ it("runs registered and unregistered emergencies, with two separately gated noti
   expect(events.some((e) => e.agent === "patient-agent" && e.kind === "message-in")).toBe(true);
   expect(events.some((e) => e.agent === "contact-agent" && e.kind === "message-in")).toBe(true);
   expect(paths[1]).toMatchObject({
-    disagrees: true,
-    note: "expected source/source-unknown -> stop",
+    disagrees: false,
     actual: { outcome: "stop", check: "mandate", reason: "source-unknown" },
   });
-  expect(paths[1]?.trace?.events.at(-1)).toMatchObject({
+  const branch = paths[1]?.trace?.events ?? [];
+  expect(branch[32]).toMatchObject({ seq: 33, agent: "record-agent", outcome: "admit" });
+  expect(
+    branch.filter(
+      (event) =>
+        event.seq > 33 &&
+        event.agent === "record-agent" &&
+        (event.kind === "message-out" || event.effectRelease),
+    ),
+  ).toEqual([]);
+  for (const { packet } of branch) {
+    if (packet)
+      expect(JSON.stringify(packet)).not.toContain("urn:scenario:emergency-access:summary");
+  }
+  expect(branch.at(-1)).toMatchObject({
     outcome: "stop",
     reason: "source-unknown",
   });

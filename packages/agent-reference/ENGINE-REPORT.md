@@ -5448,3 +5448,20 @@ The manifest has **283 paths, 274 runs, 4 disagreements and 5 blocked**. All 278
 ### Oracle
 
 A parsed comparison against the saved 164-path snapshot found seven changed projections and the deletion of `emergency-access/branch-1`. The 156 other projections are equal. The other changed keys are `contract-wording/branch-1`, `employment-reference/branch-1`, `flat-share/branch-1`, `hardship-request/branch-1`, `insurance-claim-photos/branch-1`, `probing-counterparty/tenth-request` and `salary-benchmark/branch-1`. The five proof paths remain outside the pre-RDF oracle. See [Brief 37](BRIEF-37-REPORT.md) for the live build, commands and verification.
+
+## Brief 34c
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+| Path | Measured outcome / reason / check | Status | Observed |
+| --- | --- | --- | --- |
+| `emergency-access/branch-2` | `stop` / `source-unknown` / `mandate` | runs | The record agent admits the request at #33. The outbound mandate check fails at #37 and stops at #38. No record-agent send or effect follows #33, and no packet carries the summary. |
+| `master-data-change/branch-2` | `refuse` / `source-not-authoritative` / `source` | runs | The finance agent refuses at #4, admits three other statements at #10, #17 and #24, then stops at outbound evidence at #28–29. |
+| `pay-an-invoice/branch-1` | `refuse` / `source-not-authoritative` / `source` | runs | The business agent refuses at #4. It sends the separately gated fee acceptance at #37 and stores the admitted invoice statement at #78. The payment stops at outbound P4 at #83–84. |
+| `supplier-onboarding/branch-2` | `refuse` / `source-not-authoritative` / `source` | runs | The supplier agent refuses at #11, admits the separate certificate at #17 and stores it at #18. Outbound fitness stops the later action at #21–22. |
+
+The replay guard records the signed statement ID against its own inbound refusal. Subsequent stores require the refusing agent's preceding inbound admit in the same trace step. Sends require a preceding outbound `go` for the same gate run, message ID and digest. A store, packet, `go` scope or effect support that uses the refused statement fails with `an effect followed a stop`. The guard for refused messages still rejects later stores and ordinary sends. The outbound stop checks retain their existing rules.
+
+`branch-comparison.test.ts` covers a refused ID in a store, packet, action scope and completed effect support. It rejects stores that lack a directly preceding admit and sends that lack a matching earlier `go`. The positive case admits independent statements and sends a separately gated packet. Paired cases keep the blanket store and send checks for a refused message and an outbound stop. `standing.test.ts` verifies the emergency mandate witness and checks the absence of a send, effect or summary disclosure. The capability and organization scenario tests require agreement on the three source refusals.
+
+The manifest has **283 paths, 278 runs, 0 disagreements and 5 blocked**. The four rows above are the only manifest changes. Their regenerated outlines are byte-equal and their traces differ only in the candidate generation commit, so the existing trace and outline files were retained. The oracle has **163 paths** and is **byte-equal to `ed1df480d`**. The parsed snapshot comparison found zero changed keys. See [Brief 37b](BRIEF-37B-REPORT.md) for the blocked rows and verification commands.
