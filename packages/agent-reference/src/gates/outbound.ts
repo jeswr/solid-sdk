@@ -1,0 +1,3641 @@
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
+import {
+  accessRequests,
+  deadline,
+  referenceAgreement,
+  referenceGrant,
+  referenceTerms,
+} from "../mechanisms/access-pointer.js";
+import {
+  type TranslationTerms,
+  translateTerms,
+  withinTerms,
+} from "../mechanisms/access-translation.js";
+import { isClaimEvidence, unverifiedEvidenceClaim } from "../mechanisms/selective.js";
+import { tightenUsage } from "../mechanisms/usage-model.js";
+import { MessageEnvelopeNode } from "../model/envelope.js";
+import { IntentScopeNode } from "../model/intent.js";
+import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
+import { PaymentAccountNode, PaymentFacts } from "../model/payment.js";
+import { StatementQualityNode } from "../model/quality.js";
+import { SettlementError } from "../settlement/adapter.js";
+import { carry } from "../settlement/carried.js";
+import { selectedSettlement } from "../settlement/configurations.js";
+import type { ProtocolObjects, SettlementSuite } from "../settlement/types.js";
+import type { PodGrant } from "../standins/pod-access.js";
+import { negotiatedRequestMatches } from "../suites/meaning-negotiated.js";
+import { decodeJws } from "../wire/inspect.js";
+import { documentConfiguration, isMessagePacket, packetProofInfo } from "../wire/message-packet.js";
+import { paymentDocumentIn, paymentTrace } from "../wire/payment.js";
+// AUTHORED-BY Claude Opus 5.5
+/**
+ * The outbound gate. Every action and disclosure the core proposes is checked before anything
+ * leaves: mandate, recipient, disclosure, data terms, limits and approval, evidence, in that
+ * order. The gate answers go, ask the principal, or stop. The first check that fails stops the
+ * release; no later check can make up for it.
+ *
+ * The mandate decision itself is the pilot's (`evaluateIntent`); the gate reads it, adds the
+ * checks around it, and builds the request the principal sees from the rule and the facts.
+ */
+
+import type { OdrlRule } from "@jeswr/solid-odrl";
+import { canonicalJson, digestOf } from "../core/canonical.js";
+import type {
+  ActionIntent,
+  AnyMessage,
+  AuthorisationDecision,
+  EvidenceItem,
+  Iri,
+  JsonObject,
+} from "../core/types.js";
+import { ruleInputs } from "../derive/rules.js";
+import { contributorUpperBound } from "../derive/verification.js";
+import type { FixedJointSession } from "../derive/verifiers.js";
+import {
+  actionDigest,
+  evaluateIntent,
+  NO_MANDATE_GRANT,
+  type OwnerMandate,
+} from "../mechanisms/mandate.js";
+import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
+import type { TrustStore } from "../mechanisms/trust.js";
+import { configurationById } from "../profile/configurations.js";
+import {
+  CORE_CONTENT_VOCABULARY,
+  type ContentProfile,
+  type ContentVocabulary,
+  dataClaims,
+  freeMessageStrings,
+  freeStrings,
+  hasOpenPublicData,
+  identifiersIn,
+  type KnownContent,
+} from "../profile/content.js";
+import type { WireMessage } from "../store/state.js";
+import { packetView } from "../trace/packet.js";
+import type { TraceObservation } from "../trace/recorder.js";
+import type { OutboundCheck, OutboundOutcome, TraceEventInput, Verdict } from "../trace/types.js";
+import {
+  type AdmittedFact,
+  alternativeInstalled,
+  type CheckVerdict,
+  checkRefs,
+  claimRequest,
+  defaultName,
+  type GateContext,
+  type GateMemory,
+  type ItemTerms,
+  idWords,
+  NOT_APPLICABLE,
+  PASS_CODE,
+  refsFor,
+  resolutionView,
+  ruleText,
+} from "./common.js";
+import {
+  checkPayment,
+  type PaymentLimit,
+  type PaymentRecord,
+  paymentBinding,
+  paymentDigest,
+} from "./payment.js";
+import { evaluateItemTerms, fitnessOf, type TermsVerdict, termsSummary } from "./quality.js";
+
+/** Where the core took a proposed action from, when it came from a received message. */
+export interface ProposalOrigin {
+  /** The message id. */
+  readonly message: string;
+  /** Message kind ("receipt"). */
+  readonly kind: string;
+  /** Sender, by display name. */
+  readonly from: string;
+  /** The free text the core read. */
+  readonly text: string;
+}
+/** A data-terms verdict that may also hold an undecided use for the principal (brief 31). */
+type PrincipalUseVerdict = Omit<TermsVerdict, "verdict"> & {
+  readonly verdict: TermsVerdict["verdict"] | "ask-principal";
+};
+
+export interface OutboundDeps {
+  readonly settlement?: SettlementSuite;
+  readonly referencePeer?: (conversation: string) => { actor: string; party: string } | undefined;
+  readonly referenceAgreementId?: (intent: ActionIntent) => string | undefined;
+  readonly recordRelease?: (intent: ActionIntent) => boolean;
+  readonly recordReleaseItem?: (intent: ActionIntent, id: string) => AdmittedFact | undefined;
+  readonly authoredProofSupports?: (
+    intent: ActionIntent,
+    item: EvidenceItem,
+    claimType: string,
+  ) => boolean;
+  /** Brief 32: whether the agent's own record supports a record-backed outgoing statement. */
+  readonly recordBacks?: (claim: Readonly<Record<string, unknown>>, recipient: string) => boolean;
+  readonly identity: { readonly actor: Iri; readonly party?: Iri };
+  readonly now: () => string;
+  readonly mandate: () => OwnerMandate | undefined;
+  readonly gate: GateContext;
+  readonly memory: GateMemory;
+  readonly policyEngine?: PolicyEngine;
+  /** Whether `party` opened this conversation (a reply to its verified agent). */
+  readonly isReplyTo: (conversation: Iri, party: Iri) => boolean;
+  /** The offered terms with this digest, as received in this agent's conversations. */
+  readonly offerTerms: (termsDigest: string) => JsonObject | undefined;
+  readonly conversationPurpose?: (conversation: Iri) => Iri | undefined;
+  readonly conversationRetentionDays?: (conversation: Iri) => number | undefined;
+  /** A stronger approval the recipient asked for in a challenge to this kind of action. */
+  readonly anonymousConversation?: (id: string) => boolean;
+  readonly recipientBound?: (actor: string, party?: string) => boolean;
+  readonly recipientPinned?: (
+    party: string,
+    purpose: string | undefined,
+    actor?: string,
+  ) => boolean;
+  readonly paymentApprovalMatches?: (facts: PaymentFacts, intent: ActionIntent) => boolean;
+  readonly paymentRecord?: (
+    facts: PaymentFacts,
+    intent: ActionIntent,
+  ) => Pick<PaymentRecord, "agreement" | "proofsVerified" | "inEffect" | "ordered">;
+  readonly paymentSpent?: (rule: string, currency: string, intent: ActionIntent) => number;
+  readonly consumeApproval?: (intent: ActionIntent) => void;
+  readonly reservePayment?: (intent: ActionIntent, releaseId: string) => void;
+  readonly organisationApprovals?: (
+    intent: ActionIntent,
+    rule: import("./approvals.js").ApprovalsRule,
+  ) => "pass" | "missing" | "invalid";
+  readonly personApproved?: (intent: ActionIntent, role?: string) => boolean;
+  readonly demandedApproval?: (intent: ActionIntent) =>
+    | {
+        readonly approval: Iri;
+        readonly label: string;
+        /** The principal's signed approval of this exact action, once given. */
+        readonly approvedBy?: Iri;
+      }
+    | undefined;
+}
+
+export interface Release {
+  readonly outcome: OutboundOutcome;
+  readonly verdicts: readonly CheckVerdict[];
+  /** The decision the runtime acts on (limits can turn an autonomous permit into an ask). */
+  readonly decision: AuthorisationDecision;
+}
+
+const OUTCOME_VERDICT: Record<OutboundOutcome, Verdict> = {
+  "ask-more": "ask-more",
+  go: "pass",
+  "ask-principal": "ask-principal",
+  stop: "fail",
+};
+
+function article(word: string): string {
+  return /^[aeiou]/.test(word) ? "an" : "a";
+}
+
+function mandateReason(decision: AuthorisationDecision): string {
+  if (
+    [
+      "source-unknown",
+      "excessive-scope",
+      "expired",
+      "mandate-withdrawn",
+      "lookup-failed",
+      "unsupported-configuration",
+    ].includes(decision.reason)
+  )
+    return decision.reason;
+  if (decision.reason.startsWith("mandate-invalid")) return "mandate-invalid";
+  if (decision.outcome === "indeterminate") return "indeterminate-policy";
+  return "not-authorised";
+}
+
+export class OutboundGate {
+  /** Releases that ended in go, waiting for the message or effect that carries them out. */
+  private activeAction: Pick<TraceEventInput, "actionDigest" | "actionScope"> = {};
+
+  private releaseObservation(intent: ActionIntent, value: unknown): TraceObservation {
+    const support = intent.parameters.support;
+    return {
+      kind: "payload",
+      value,
+      ...(Array.isArray(support)
+        ? { support: support.filter((id): id is string => typeof id === "string") }
+        : {}),
+    };
+  }
+
+  private setAction(intent: ActionIntent): void {
+    const { action, target, operation, conversation, recipient, purpose, parameters } = intent;
+    const { evidence, ...otherParameters } = parameters;
+    this.activeAction = {
+      actionDigest: actionDigest(intent),
+      actionScope: {
+        action,
+        target,
+        operation,
+        conversation,
+        recipient,
+        purpose,
+        evidence: Array.isArray(evidence) ? evidence.map(String) : [],
+        ...(Array.isArray(evidence)
+          ? { otherParametersDigest: digestOf({ ...intent, parameters: otherParameters }) }
+          : {}),
+      },
+    };
+  }
+
+  private readonly pendingGo = new Set<string>();
+  private activePayment: PaymentFacts | undefined;
+  private activePaymentDocument: unknown;
+
+  private readonly checkedPayments = new Map<string, PaymentFacts>();
+  private readonly paymentDocuments = new Map<string, unknown>();
+
+  async paymentOrder(intent: ActionIntent): Promise<unknown> {
+    const key = actionDigest(intent);
+    const facts = this.checkedPayments.get(key);
+    if (!facts || !this.pendingGo.has(key)) throw new TypeError("Payment was not checked");
+    const suite = selectedSettlement(
+      this.deps.gate.configuration?.layers.settlement,
+      this.deps.settlement,
+    );
+    let objects: ProtocolObjects;
+    try {
+      objects = await suite.order(
+        { facts, digest: paymentDigest(facts) },
+        { party: this.deps.identity.party ?? this.deps.identity.actor },
+      );
+    } catch (error) {
+      if (error instanceof SettlementError) {
+        this.emit({
+          part: "outbound-gate",
+          kind: "check",
+          check: "evidence",
+          verdict: "fail",
+          reason: error.reason,
+          caption: "The selected protocol verifier refuses the carried payment object.",
+        });
+        this.decide("stop", "The protocol payment object failed verification.", error.reason);
+      }
+      throw error;
+    }
+    const trace = suite.trace ? await suite.trace(objects) : await paymentTrace(facts);
+    const carried = suite.id === "rdf-order" ? objects.objects[0]?.shown : carry(objects);
+    this.paymentDocuments.set(key, carried);
+    this.emit({
+      part: "outbound-gate",
+      kind: "propose",
+      caption:
+        suite.id === "rdf-order"
+          ? "The gate builds the checked payment order in RDF."
+          : "The gate builds the checked protocol payment order.",
+      settlement: trace,
+    });
+    return carried;
+  }
+
+  constructor(private readonly deps: OutboundDeps) {}
+
+  private get name() {
+    return this.deps.gate.name ?? defaultName;
+  }
+
+  private get owner(): string {
+    return this.name(this.deps.identity.party);
+  }
+
+  private emit(event: TraceEventInput, observation?: TraceObservation): void {
+    this.deps.gate.sink?.emit(
+      {
+        ...(event.part === "outbound-gate" || event.kind === "message-out"
+          ? this.activeAction
+          : {}),
+        ...event,
+        ...(this.activePayment
+          ? { settlementFacts: this.activePayment }
+          : this.activePaymentDocument
+            ? { settlementDocument: this.activePaymentDocument }
+            : {}),
+      },
+      observation,
+    );
+  }
+
+  private verdict(
+    out: CheckVerdict[],
+    subject: string,
+    check: OutboundCheck | "fitness",
+    verdict: Verdict,
+    caption: string,
+    extra: Partial<TraceEventInput> = {},
+  ): void {
+    // Every verdict carries a code; a pass without one of its own takes the check's pass code.
+    if (verdict === "pass" && !extra.reason) extra = { ...extra, reason: PASS_CODE[check] };
+    out.push({
+      type: "check-verdict",
+      gate: "outbound",
+      check,
+      verdict,
+      ...(extra.reason ? { reason: extra.reason } : {}),
+      ...(extra.rule ? { rule: extra.rule } : {}),
+      subject,
+      at: this.deps.now(),
+    });
+    this.emit({
+      part: "outbound-gate",
+      kind: "check",
+      check,
+      verdict,
+      ...checkRefs(this.deps.gate, check),
+      ...extra,
+      caption,
+    });
+  }
+
+  private decide(
+    outcome: OutboundOutcome,
+    caption: string,
+    reason?: string,
+    release?: Pick<TraceEventInput, "messageId" | "messageDigest" | "effectRelease">,
+    observation?: TraceObservation,
+  ): void {
+    this.emit(
+      {
+        part: "outbound-gate",
+        kind: "decision",
+        verdict: OUTCOME_VERDICT[outcome],
+        outcome,
+        ...release,
+        ...(reason ? { reason } : {}),
+        caption,
+      },
+      observation,
+    );
+  }
+
+  rejectEffect(intent: ActionIntent, reason: string): readonly CheckVerdict[] {
+    this.setAction(intent);
+    const verdicts: CheckVerdict[] = [];
+    this.verdict(
+      verdicts,
+      digestOf(intent),
+      "evidence",
+      "fail",
+      `The effect is stopped before execution: ${reason}.`,
+      { reason },
+    );
+    this.decide("stop", "Required effect evidence is unavailable or withdrawn.", reason);
+    return verdicts;
+  }
+
+  /** Profile key control and trust/representation remain separate checks. */
+  async webIdRecipient(
+    actor: string | undefined,
+    configuration: string,
+    subject: string,
+  ): Promise<string | undefined> {
+    const reason = await this.deps.gate.webId?.recipient(actor, configuration);
+    if (reason) {
+      this.verdict(
+        [],
+        subject,
+        "recipient",
+        "fail",
+        "The recipient's profile key cannot be bound to its registered identity.",
+        { reason },
+      );
+      this.decide("stop", "The recipient identity cannot be established.", reason);
+    }
+    return reason;
+  }
+
+  /** Independent record availability is an evidence precondition, never a core assertion. */
+  async ensureRecord(subject: string): Promise<boolean> {
+    const mirror = this.deps.gate.recordMirror;
+    if (!mirror) return true;
+    if (await mirror.flush()) return true;
+    this.verdict(
+      [],
+      subject,
+      "evidence",
+      "indeterminate",
+      "The independent record store is unavailable; the action waits.",
+      { reason: "record-unavailable" },
+    );
+    this.decide(
+      "ask-more",
+      "The action waits for the independent record store.",
+      "record-unavailable",
+    );
+    if (!mirror.recover) return false;
+    await mirror.recover();
+    return mirror.flush();
+  }
+
+  private narrowerAnswer(
+    claim: JsonObject,
+    purpose: string | undefined,
+    recipient: string | undefined,
+  ): string | undefined {
+    if (!purpose || !recipient || claim.method === "derived") return undefined;
+    const held = this.deps.memory.context(this.deps.gate.taskId ?? "*");
+    for (const fact of held) {
+      if (
+        !fact.accepted ||
+        fact.source !== recipient ||
+        this.deps.memory.facts.get(fact.id)?.digest !== fact.digest
+      )
+        continue;
+      if (fact.claimType === "derivation.request") {
+        const request = fact.statement?.value as JsonObject | undefined;
+        if (request?.purpose !== purpose || !Array.isArray(request.assurances)) continue;
+        const rule = this.deps.gate.rules?.find(
+          (r) => r.id === request.rule && digestOf(r) === request.ruleDigest,
+        );
+        if (!rule || !ruleInputs(rule).includes(String(claim.claimType))) continue;
+        if (
+          this.deps.gate.acceptedProofs?.some(
+            (a) =>
+              a.rule === rule.id &&
+              a.purposes.includes(purpose) &&
+              Array.isArray(request.assurances) &&
+              request.assurances.includes(a.assurance) &&
+              this.deps.gate.proofSystems?.has(a.method),
+          )
+        )
+          return "a proof of the requested result";
+      }
+      if (
+        fact.claimType === "joint.message" &&
+        ["joint.count", "joint.sum"].includes(String(claim.claimType))
+      ) {
+        const message = fact.statement?.value as JsonObject | undefined;
+        const fixed = this.deps.gate.fixedJointSessions?.[String(message?.sessionId)];
+        if (
+          fixed &&
+          fixed.purpose === purpose &&
+          message?.session &&
+          digestOf(message.session) === digestOf(fixed.session) &&
+          this.deps.gate.acceptedJoint?.some(
+            (a) =>
+              a.rule === fixed.rule && a.method === fixed.method && a.purposes.includes(purpose),
+          ) &&
+          this.deps.gate.jointProtocols?.has(fixed.method)
+        )
+          return "a joint contribution to the fixed session";
+      }
+    }
+    return undefined;
+  }
+
+  /** DER-21/22/23 before an opaque proof, contribution, partial or numeric release. */
+  checkDerivationRelease(
+    input: {
+      subject: string;
+      purpose: string;
+      recipient: string;
+      inputs: readonly string[];
+      way: "proof" | "joint contribution" | "joint partial" | "joint outcome";
+      minimumGroup?: number;
+      evidenceOk?: boolean;
+      partyAtFault?: string;
+      suppressed?: boolean;
+      record?: JsonObject;
+    },
+    contributionSession?: FixedJointSession,
+  ): boolean {
+    const verdicts: CheckVerdict[] = [];
+    this.verdict(
+      verdicts,
+      input.subject,
+      "disclosure",
+      "pass",
+      `The gate chooses ${input.way}, revealing only the answer or committed contribution instead of attaching private inputs.`,
+      {
+        reason: "minimal-disclosure",
+        rule: {
+          id: "DER-21",
+          text: "Prefer the least revealing way accepted by the request and profile.",
+        },
+      },
+    );
+    if (input.way === "joint contribution" && contributionSession) {
+      const { session, rule, method } = contributionSession;
+      const roster = session.roster as JsonObject[];
+      const slot = roster.find(({ party }) => party === this.deps.identity.party);
+      const minimum = this.deps.gate.acceptedJoint?.find(
+        (entry) =>
+          entry.rule === rule && entry.method === method && entry.purposes.includes(input.purpose),
+      )?.minimumContributors;
+      const belowMinimum =
+        minimum === undefined
+          ? !!session.wire // The native protocol requires a local profile entry.
+          : Number(session.minimumContributors) < minimum ||
+            contributorUpperBound(contributionSession) < minimum;
+      if (slot?.computeOnly !== true && belowMinimum) {
+        this.verdict(
+          verdicts,
+          input.subject,
+          "data-terms",
+          "fail",
+          "The session's stated minimum or upper bound on contributors with inputs is below this contributor's required minimum.",
+          {
+            reason: "prohibited",
+            rule: {
+              id: "DER-14b",
+              text: "Compute-only slots are excluded from the contributor minimum.",
+            },
+          },
+        );
+        this.decide("stop", "The contribution stays with its holder.", "prohibited");
+        return false;
+      }
+    }
+    for (const id of input.inputs) {
+      const item = this.deps.memory.facts.get(id);
+      for (const action of ["use", "distribute"] as const) {
+        const t = evaluateItemTerms(item?.terms, {
+          name: this.deps.gate.name,
+          agent: this.deps.identity.actor,
+          action,
+          target: id,
+          purpose: input.purpose,
+          recipient: input.recipient,
+          minimumGroup: input.minimumGroup,
+          at: this.deps.now(),
+        });
+        const ok = !!item && t.verdict === "pass";
+        this.verdict(
+          verdicts,
+          input.subject,
+          "data-terms",
+          ok ? "pass" : "fail",
+          `Each input must permit derivation for this purpose and recipient: ${id}. ${t.text}`,
+          { reason: ok ? "terms-allow" : "prohibited", rule: { id: "DER-22", text: t.text } },
+        );
+        if (!ok) {
+          this.decide("stop", "An input's data terms prohibit this derivation.", "prohibited");
+          return false;
+        }
+      }
+    }
+    if (input.suppressed) {
+      this.verdict(
+        verdicts,
+        input.subject,
+        "data-terms",
+        "fail",
+        "The verified outcome is below the minimum group or has too few contributors; no number is released.",
+        {
+          reason: "prohibited",
+          rule: { id: "DER-22", text: "Minimum group size is a term of the data." },
+        },
+      );
+      this.decide(
+        "stop",
+        "Only the verifiable refusal outcome may go to the requester.",
+        "prohibited",
+      );
+      return false;
+    }
+    const ok = input.evidenceOk !== false;
+    this.verdict(
+      verdicts,
+      input.subject,
+      "evidence",
+      ok ? "pass" : "fail",
+      ok
+        ? "The evidence record retains the derivation and every contribution."
+        : `A contribution does not verify; backend reason: ${input.record?.reason ?? "unknown"}; check: ${input.record?.check ?? "unknown"}; roster index: ${input.record?.index ?? "unknown"}; party at fault: ${input.partyAtFault ?? "unknown"}.`,
+      {
+        reason: ok ? "evidence-complete" : "derivation-not-verified",
+        rule: {
+          id: "DER-23",
+          text: "Retain the derivation record, input references and contributions.",
+        },
+      },
+    );
+    if (!ok)
+      this.decide(
+        "stop",
+        "Joint evidence failed before a partial or total left.",
+        "derivation-not-verified",
+      );
+    return ok;
+  }
+
+  private findRule(id: string | undefined): { rule: OdrlRule; withApproval: boolean } | undefined {
+    const m = this.deps.mandate();
+    if (!m || !id) return undefined;
+    const auto = m.autonomous.permissions?.find((r) => r.id === id);
+    if (auto) return { rule: auto, withApproval: false };
+    const ask = m.withApproval.permissions?.find((r) => r.id === id);
+    return ask ? { rule: ask, withApproval: true } : undefined;
+  }
+
+  private disclosedFact(intent: ActionIntent, id: string): AdmittedFact | undefined {
+    return this.deps.recordReleaseItem?.(intent, id) ?? this.deps.memory.facts.get(id);
+  }
+
+  private labels(intent: ActionIntent): string[] {
+    const ids = intent.parameters.evidence;
+    return Array.isArray(ids)
+      ? ids.map((id) => this.disclosedFact(intent, String(id))?.label ?? "a statement")
+      : [];
+  }
+
+  private describeAction(intent: ActionIntent): string {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const p = intent.parameters;
+    const task = this.deps.gate.taskLabel?.(scope.target);
+    if (scope.action === "compensate")
+      return `pay ${String(p.amount ?? "?")} ${String(p.currency ?? "")} to ${this.name(scope.recipient)}`;
+    if (scope.action === "distribute") {
+      const labels = this.labels(intent);
+      return `share ${labels.length > 0 ? listWords(labels) : idWords(scope.target, this.name)} with ${this.name(scope.recipient)}`;
+    }
+    if (task && task !== scope.target)
+      return `take the next step in ${task} with ${this.name(scope.recipient)}`;
+    return `${scope.action} ${idWords(scope.target, this.name)} with ${this.name(scope.recipient)}`;
+  }
+
+  private exceededLimit(intent: ActionIntent): string | undefined {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const limits = this.deps.gate.principalLimits;
+    const commitment = limits?.commitments?.[scope.operation];
+    if (commitment && Number(intent.parameters.amount) > commitment.maxAmount)
+      return `This commitment exceeds the principal's ${commitment.currency} ${commitment.maxAmount} limit.`;
+    const days = intent.parameters.retentionDays;
+    if (
+      limits?.maxRetentionDays !== undefined &&
+      typeof days === "number" &&
+      days > limits.maxRetentionDays
+    )
+      return `You asked me not to let anyone keep your data for more than ${limits.maxRetentionDays} days; this asks for ${days}.`;
+    return undefined;
+  }
+
+  /** The request the principal sees, built from the rule and the facts of the action. */
+  approvalRequest(
+    intent: ActionIntent,
+    limitText: string | undefined,
+    evidence: readonly EvidenceItem[] = [],
+  ): string {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const p = intent.parameters;
+    const who = this.name(scope.recipient);
+    if (typeof p.termsDigest === "string") {
+      const terms = this.deps.offerTerms(p.termsDigest);
+      const due = terms?.compensation;
+      if (due && typeof due === "object" && !Array.isArray(due)) {
+        const rule = this.deps
+          .mandate()
+          ?.withApproval.permissions?.find((r) => r.target === scope.target) as
+          | (OdrlRule & { limit?: PaymentLimit })
+          | undefined;
+        return `May I accept ${String(terms?.service ?? "the service")} from ${this.paymentPayeeLabel(String(due.payee))} for ${String(due.amount)} ${String(due.currency)}?${rule?.limit ? ` Your payment limit is ${rule.limit.perAction} ${rule.limit.currency}.` : ""}`;
+      }
+    }
+    if (scope.action === "distribute") {
+      const items = new Map<string, string | undefined>();
+      for (const item of evidence) {
+        if (!isClaimEvidence(item)) continue;
+        try {
+          const claim = unverifiedEvidenceClaim(item);
+          if (typeof claim.id === "string" && typeof claim.claimType === "string")
+            items.set(claim.id, claim.claimType);
+        } catch {
+          // Unreadable credentials are handled by the evidence check.
+        }
+      }
+      if (Array.isArray(p.evidence))
+        for (const id of p.evidence.map(String)) if (!items.has(id)) items.set(id, undefined);
+      const labels = [...items].map(([id, kind]) => {
+        const fact = this.disclosedFact(intent, id);
+        const label = fact?.label ?? idWords(id, this.name);
+        const claimType = fact?.claimType ?? kind;
+        return claimType ? `${label} (${claimType})` : label;
+      });
+      const uses = [
+        scope.purpose ? `use them for ${idWords(scope.purpose, this.name)}` : "",
+        typeof p.retentionDays === "number" ? `keep them for ${p.retentionDays} days` : "",
+        Array.isArray(p.onward) && p.onward.length > 0
+          ? `pass them on only to ${listWords(p.onward.map((o) => this.name(String(o))))}`
+          : "",
+      ].filter(Boolean);
+      return `${who} asks for ${labels.length === 1 ? "one" : labels.length === 2 ? "two" : labels.length} of your statements: ${listWords(labels)}. They would ${listWords(uses)}.${
+        limitText ? ` ${limitText}` : ""
+      }${this.referenceApproval(intent)} May I share them?`;
+    }
+    return `${who} asks me to ${this.describeAction(intent)}${
+      scope.purpose ? ` for ${idWords(scope.purpose, this.name)}` : ""
+    }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
+  }
+
+  private referenceApproval(intent: ActionIntent): string {
+    if (!this.deps.gate.accessPod) return "";
+    const access = accessRequests.safeParse(intent.parameters.access);
+    if (!access.success) return "";
+    const grants = this.accessGrants(intent) ?? [];
+    return grants
+      .map(
+        ({ pointer }) =>
+          ` ${this.name(intent.recipient)}'s agent will be able to read ${this.deps.memory.facts.get(pointer.item.id)?.label ?? "the statement"} in your storage until ${pointer.validUntil.slice(0, 10)}.`,
+      )
+      .join("");
+  }
+
+  private readonly checkedAccess = new Map<string, readonly PodGrant[]>();
+
+  accessGrants(intent: ActionIntent): readonly PodGrant[] | undefined {
+    return this.checkedAccess.get(actionDigest(intent));
+  }
+
+  stopAccessRelease(): void {
+    this.decide(
+      "stop",
+      "The pod grant and reference delivery could not be completed.",
+      "execution-failed",
+    );
+  }
+
+  referenceRetentionDays(agreedDays: number): number {
+    const end = this.deps.mandate()?.validUntil;
+    if (!end) return 0;
+    const daysRemaining = (Date.parse(end) - Date.parse(this.deps.now())) / 86_400_000;
+    // Keep the issued lease strictly within the period covered by the releasing mandate.
+    return Math.max(0, Math.min(agreedDays, Math.ceil(daysRemaining) - 1));
+  }
+
+  private checkAccessScope(intent: ActionIntent, retentionDays: number | undefined): boolean {
+    const pod = this.deps.gate.accessPod;
+    if (!pod || pod.actor !== this.deps.identity.actor) return true;
+    const items = Array.isArray(intent.parameters.evidence) ? intent.parameters.evidence : [];
+    const held = items.filter((id) => typeof id === "string" && pod.stored(id));
+    const access = accessRequests.safeParse(intent.parameters.access);
+    if (!held.length) return intent.parameters.access === undefined;
+    if (
+      !access.success ||
+      access.data.length !== held.length ||
+      new Set(access.data.map((a) => a.item)).size !== held.length
+    )
+      return false;
+    const peer = this.deps.referencePeer?.(intent.conversation);
+    return (
+      !!peer &&
+      peer.party === intent.recipient &&
+      retentionDays !== undefined &&
+      access.data.every(
+        (a) =>
+          held.includes(a.item) &&
+          pod.stored(a.item)?.resource === a.resource &&
+          a.reader === peer.actor &&
+          a.retentionDays <= this.referenceRetentionDays(retentionDays),
+      )
+    );
+  }
+
+  private planAccess(
+    intent: ActionIntent,
+    mandate: OdrlRule | undefined,
+  ):
+    | {
+        grants: PodGrant[];
+        translated: boolean;
+      }
+    | undefined {
+    const pod = this.deps.gate.accessPod;
+    const access = accessRequests.safeParse(intent.parameters.access);
+    const agreement = this.deps.referenceAgreementId?.(intent);
+    const offer = referenceAgreement.safeParse(
+      this.deps.offerTerms(String(intent.parameters.termsDigest)),
+    );
+    const peer = this.deps.referencePeer?.(intent.conversation);
+    if (
+      !pod ||
+      pod.actor !== this.deps.identity.actor ||
+      !access.success ||
+      !agreement ||
+      !offer.success ||
+      !peer ||
+      !intent.purpose ||
+      intent.purpose !== offer.data.purpose ||
+      offer.data.application.applicant !== pod.owner
+    )
+      return undefined;
+
+    const now = this.deps.now();
+    const grants: PodGrant[] = [];
+    const translated =
+      this.deps.gate.configuration?.layers["usage-control"] === "solid-access-control";
+    const grant = referenceGrant(agreement, offer.data, pod.owner, peer.party).policy;
+    const deleteBy = deadline(now, offer.data.retentionDays);
+    for (const request of access.data) {
+      const stored = pod.stored(request.item);
+      const supplier = this.deps.memory.facts.get(request.item)?.terms;
+      if (!stored || !supplier) return undefined;
+      let until = deadline(now, request.retentionDays);
+      let policies: string[] | undefined;
+      let remainder: string[] | undefined;
+      if (translated) {
+        if (!mandate) return undefined;
+        const inputs: TranslationTerms = {
+          supplier: supplier.policy,
+          grant,
+          mandate,
+          item: stored.id,
+          resource: stored.resource,
+          agent: peer.actor,
+          recipient: peer.party,
+          purpose: intent.purpose,
+          mandateTarget: intent.target,
+          at: now,
+          until,
+        };
+        const proposed = translateTerms(inputs);
+        const rule =
+          proposed.rule && (this.deps.gate.translateAccess?.(proposed.rule) ?? proposed.rule);
+        if (!rule || !withinTerms(rule, inputs)) return undefined;
+        policies = [...rule.policies];
+        remainder = [...proposed.remainder];
+        until = rule.until;
+      }
+      if (
+        Date.parse(until) > Date.parse(deleteBy) ||
+        // Check the lease's authorization window and the copy's agreed retention against
+        // the signed supplier terms, independent of the core's summary retentionDays.
+        evaluateItemTerms(supplier, {
+          agent: this.deps.identity.actor,
+          action: "distribute",
+          target: request.item,
+          purpose: intent.purpose,
+          recipient: peer.party,
+          at: now,
+          until,
+          reader: peer,
+          retentionDays: offer.data.retentionDays,
+          recipientAllowed: (role) => this.recipientAllows(peer.party, role),
+        }).verdict !== "pass"
+      )
+        return undefined;
+      const fragment = `reference-${digestOf({ agreement, item: stored.id }).replace(/[^a-z0-9-]/gi, "")}`;
+      grants.push({
+        fragment,
+        pointer: {
+          id: `${stored.resource}.acl#${fragment}`,
+          issuer: pod.actor,
+          owner: pod.owner,
+          resource: stored.resource,
+          digest: stored.digest,
+          agreement,
+          purpose: intent.purpose,
+          item: { id: stored.id, claimType: stored.claimType, issuer: stored.issuer },
+          reader: peer,
+          modes: ["Read"],
+          validFrom: now,
+          validUntil: until,
+          terms: referenceTerms(supplier, grant),
+          copy: { permitted: true, deleteBy },
+          ...(policies && remainder ? { policies, remainder } : {}),
+        },
+      });
+    }
+    return { grants, translated };
+  }
+
+  private paymentPayeeLabel(party: string | undefined): string {
+    const item = this.deps.memory
+      .context(this.deps.gate.taskId ?? "*")
+      .find(
+        (item) =>
+          item.accepted &&
+          item.claimType === "valuer.registration" &&
+          item.subject === party &&
+          this.deps.memory.facts.get(item.id)?.digest === item.digest &&
+          typeof item.statement?.name === "string",
+      );
+    return typeof item?.statement?.name === "string" &&
+      !/https?:\/\/|urn:/.test(item.statement.name)
+      ? item.statement.name
+      : this.name(party);
+  }
+  private paymentApprovalRequest(
+    facts: PaymentFacts,
+    service: string | undefined,
+    limit?: PaymentLimit,
+  ): string {
+    return `May I pay ${facts.amount ?? "the stated amount"} ${facts.currency ?? ""} to ${this.paymentPayeeLabel(facts.payee)} for ${service ?? "the agreed service"}?${limit ? ` Your limit is ${limit.perAction} ${limit.currency} per payment and ${limit.perPeriod} ${limit.currency} per calendar month.` : ""}`;
+  }
+
+  /** Statements about the principal, or facts it holds, that a message carries. */
+  private principalDataIn(message: AnyMessage): string[] {
+    const party = this.deps.identity.party;
+    const out: string[] = [];
+    for (const e of message.evidence ?? []) {
+      if (!isClaimEvidence(e)) continue;
+      let payload: JsonObject = {};
+      try {
+        payload = unverifiedEvidenceClaim(e);
+      } catch {
+        out.push("an unreadable statement");
+        continue;
+      }
+      const fact =
+        typeof payload.id === "string" ? this.deps.memory.facts.get(payload.id) : undefined;
+      if (fact) out.push(fact.label);
+      else if (party && payload.subject === party) out.push(idWords(String(payload.claimType)));
+    }
+    return out;
+  }
+
+  private unsignedAllowed(message: AnyMessage): boolean {
+    const envelope =
+      message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
+    return (configurationById(envelope.configurationId)?.unsignedRequestKinds ?? []).includes(
+      envelope.messageKind,
+    );
+  }
+
+  /** The principal's signed mandate, as loaded and verified: the rules every check reads. */
+  mandateLoaded(): void {
+    const m = this.deps.mandate();
+    if (!m) return;
+    const rules = [
+      ...(m.autonomous.permissions ?? []).map((rule) => ({ rule, withApproval: false })),
+      ...(m.withApproval.permissions ?? []).map((rule) => ({ rule, withApproval: true })),
+    ].map(({ rule, withApproval }) =>
+      ruleText(rule, { owner: this.owner, name: this.name, withApproval }),
+    );
+    this.emit({
+      part: "record",
+      kind: "record",
+      rule: { id: m.id, text: rules.join(" ") },
+      ...refsFor(this.deps.gate, ["authority", "usage-control"]),
+      caption: `${this.owner} signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: ${rules.length} rules, valid until ${m.validUntil.slice(0, 10)}.`,
+    });
+  }
+
+  /** The request the principal sees when a recipient asked for a stronger approval. */
+  strongerApprovalRequest(intent: ActionIntent, label: string): string {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const task = this.deps.gate.taskLabel?.(scope.operation) ?? idWords(scope.operation, this.name);
+    return `Before ${this.name(scope.recipient)} will go ahead with ${task}, it asks you to approve with ${label}. May I ask you to do that now?`;
+  }
+
+  /**
+   * The core proposes an action; the gate receives it. When the core took the idea from a
+   * message, the caption says which one: the gate decides on the action all the same.
+   */
+  propose(intent: ActionIntent, origin?: ProposalOrigin): void {
+    this.emit({
+      part: "core",
+      kind: "propose",
+      caption: origin
+        ? `The core proposes to ${this.describeAction(intent)}. It took this from the untrusted free text in ${origin.from}'s ${origin.kind} message (${origin.message}): "${origin.text}"`
+        : `The core proposes to ${this.describeAction(intent)}.`,
+    });
+  }
+
+  /** Checks 1 to 5 for a proposed action, around the pilot's mandate decision. */
+  release(
+    intent: ActionIntent,
+    decision: AuthorisationDecision,
+    evidence: readonly EvidenceItem[] = [],
+  ): Release {
+    this.setAction(intent);
+    const selected =
+      this.deps.gate.carriage?.() ?? this.deps.gate.configuration?.pilotConfiguration;
+    if (selected && !alternativeInstalled(this.deps.gate, selected))
+      decision = { ...decision, outcome: "deny", reason: "unsupported-configuration" };
+    const statusFailure =
+      decision.policy.evaluator === "grant-withdrawal"
+        ? undefined
+        : (this.deps.gate.mandateCredential?.outbound() ??
+          this.deps.gate.authorizationGrant?.outbound?.());
+    if (statusFailure) decision = { ...decision, outcome: "deny", reason: statusFailure };
+    const scope = IntentScopeNode.fromIntent(intent);
+    this.activePayment = undefined;
+    this.activePaymentDocument = undefined;
+    const subject = actionDigest(intent);
+    const verdicts: CheckVerdict[] = [];
+    const ctx = this.deps.gate;
+    const matched = this.findRule(decision.matchedRule);
+    const ruleRef = matched
+      ? {
+          rule: {
+            id: matched.rule.id ?? decision.policy.id,
+            text: ruleText(matched.rule, {
+              owner: this.owner,
+              name: this.name,
+              withApproval: matched.withApproval,
+            }),
+          },
+        }
+      : {};
+
+    if (scope.action === "pay") {
+      const facts = PaymentFacts.fromIntent(
+        intent,
+        this.deps.identity.party ?? this.deps.identity.actor,
+        this.deps.now(),
+      );
+      this.activePayment = facts;
+      const held = this.deps.paymentRecord?.(facts, intent);
+      if (held?.agreement) facts.attachAgreement(held.agreement);
+      const limit = (matched?.rule as (OdrlRule & { limit?: PaymentLimit }) | undefined)?.limit;
+      const amount = Number(facts.amount);
+      const exceeded =
+        !!limit &&
+        (facts.currency !== limit.currency ||
+          Math.round(amount * 100) > Math.round(limit.perAction * 100) ||
+          (this.deps.paymentSpent?.(matched?.rule.id ?? "", limit.currency, intent) ?? Infinity) +
+            Math.round(amount * 100) >
+            Math.round(limit.perPeriod * 100));
+      const mandate = this.deps.mandate();
+      const canAsk =
+        !matched?.withApproval &&
+        !!mandate &&
+        (this.deps.policyEngine ?? solidOdrlEngine).evaluate(mandate.withApproval, {
+          agent: this.deps.identity.actor,
+          action: scope.action,
+          target: scope.target,
+          purpose: scope.purpose,
+          recipient: scope.recipient,
+          at: this.deps.now(),
+        }).effect === "permit";
+      const approved =
+        (this.deps.personApproved?.(intent) === true || decision.basis === "owner-approval") &&
+        this.deps.paymentApprovalMatches?.(facts, intent) === true;
+      const result = checkPayment(facts, {
+        now: this.deps.now(),
+        payer: this.deps.identity.party ?? this.deps.identity.actor,
+        purpose: scope.purpose,
+        agreement: held?.agreement,
+        proofsVerified: held?.proofsVerified ?? false,
+        inEffect: held?.inEffect ?? false,
+        protocolScoped:
+          (ctx.configuration?.layers.settlement ?? "rdf-order") ===
+          (this.deps.settlement?.id ?? "rdf-order"),
+        ordered: held?.ordered ?? (() => false),
+        accountBindings: this.deps.memory
+          .context(ctx.taskId ?? scope.conversation)
+          .filter(
+            (item) =>
+              item.accepted === true &&
+              item.claimType === "payee-account" &&
+              this.deps.memory.facts.get(item.id)?.digest === item.digest &&
+              item.statement?.account === facts.account &&
+              (!item.statement?.validUntil ||
+                Date.parse(String(item.statement.validUntil)) > Date.parse(this.deps.now())) &&
+              typeof item.statement?.payee === "string",
+          )
+          .map((item) =>
+            PaymentAccountNode.create(
+              String(item.statement?.payee),
+              String(item.statement?.account),
+            ),
+          ),
+        binding: () =>
+          paymentBinding(
+            intent,
+            this.deps.memory,
+            ctx.taskId ?? scope.conversation,
+            this.deps.now(),
+            this.deps.identity.actor,
+            (label) => this.recipientAllows(scope.recipient, label),
+          ),
+        mandate: () =>
+          decision.outcome === "deny" || decision.outcome === "indeterminate"
+            ? { reason: mandateReason(decision) }
+            : exceeded && !approved
+              ? { reason: "limit-exceeded", ask: canAsk }
+              : {},
+        approval: () =>
+          decision.reason === "approval-denied"
+            ? "denied"
+            : approved
+              ? "approved"
+              : decision.outcome === "approval-required" ||
+                  ctx.personDecisions?.some((p) => p.action === "pay")
+                ? "required"
+                : "unneeded",
+      });
+      for (const v of result.verdicts)
+        this.verdict(
+          verdicts,
+          subject,
+          v.check === "receipt" ? "receipt" : v.check,
+          v.ok ? "pass" : v.ask ? "ask-principal" : "fail",
+          v.fact,
+          { reason: v.reason ?? PASS_CODE[v.check] },
+        );
+      if (!result.ok) {
+        const missing = result.reason === "structured-form-required";
+        const outcome = result.ask ? "ask-principal" : missing ? "ask-more" : "stop";
+        this.decide(
+          outcome,
+          result.verdicts.at(-1)?.fact ?? "The payment is stopped.",
+          result.reason,
+        );
+        if (result.reason === "amount-differs")
+          this.emit({
+            part: "principal",
+            kind: "propose",
+            caption: "The gate explains the difference in the requested fee.",
+            chat: {
+              who: "agent",
+              text: `The agreed fee is ${held?.agreement?.duty?.constraint?.amount} ${held?.agreement?.duty?.constraint?.currency}. The invoice asks for ${facts.amount} ${facts.currency}. I have stopped the payment.`,
+            },
+          });
+        if (result.ask)
+          this.emit({
+            part: "principal",
+            kind: "ask-principal",
+            caption: "The gate asks for approval of the agreement and exact order.",
+            chat: {
+              who: "agent",
+              text: this.paymentApprovalRequest(facts, held?.agreement?.service, limit),
+            },
+          });
+        return {
+          outcome,
+          verdicts,
+          decision: {
+            ...decision,
+            outcome: result.ask ? "approval-required" : missing ? "ask-more" : "deny",
+            reason: result.reason ?? "protocol-violation",
+          },
+        };
+      }
+      this.checkedPayments.set(subject, facts);
+    }
+
+    // 1. Mandate.
+    if (decision.outcome === "deny" || decision.outcome === "indeterminate") {
+      const reason = mandateReason(decision);
+      this.verdict(
+        verdicts,
+        subject,
+        "mandate",
+        decision.outcome === "deny" ? "fail" : "indeterminate",
+        decision.outcome === "deny"
+          ? `${this.owner}'s mandate does not allow this: ${this.describeAction(intent)}.`
+          : "The mandate cannot be decided for this action, so it is not allowed.",
+        {
+          reason,
+          rule: {
+            id: decision.policy.id,
+            text: `No rule in ${this.owner}'s mandate lets the agent ${this.describeAction(intent)}${
+              scope.purpose ? ` for ${idWords(scope.purpose, this.name)}` : ""
+            } (${decision.reason}).`,
+          },
+        },
+      );
+      this.decide("stop", "The action is stopped; nothing leaves.", reason);
+      return { outcome: "stop", verdicts, decision };
+    }
+    this.verdict(
+      verdicts,
+      subject,
+      "mandate",
+      "pass",
+      decision.policy.evaluator === "grant-withdrawal"
+        ? "The original grant authorizes removal of its own access rule at expiry."
+        : `${this.owner}'s mandate covers this action${matched?.withApproval ? ", with approval" : ""}.`,
+      ruleRef,
+    );
+
+    if (!this.commitmentShape(intent))
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "malformed" },
+      };
+
+    if (
+      ctx.negotiatedMeaning &&
+      scope.operation === ctx.negotiatedMeaning.operation &&
+      scope.action === "distribute"
+    ) {
+      const approved =
+        negotiatedRequestMatches(
+          this.deps.offerTerms(String(intent.parameters.termsDigest ?? "")),
+          ctx.negotiatedMeaning.term,
+        ) &&
+        ctx.negotiatedMeaning.approved(
+          scope.conversation,
+          this.deps.identity.party,
+          scope.recipient,
+          this.deps.now(),
+        );
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        approved ? "pass" : "ask-principal",
+        approved
+          ? "The principals approved this exact definition of irregular income for this exchange."
+          : "The agents agreed on irregular income, but no person’s approval of this definition is on record for this exchange.",
+        { reason: approved ? "minimal-disclosure" : "approval-required" },
+      );
+      if (!approved) {
+        this.decide(
+          "ask-principal",
+          "Approval of the proposed definition is required before relying on it.",
+          "approval-required",
+        );
+        return {
+          outcome: "ask-principal",
+          verdicts,
+          decision: { ...decision, outcome: "approval-required", reason: "approval-required" },
+        };
+      }
+    }
+
+    const taskItems = this.deps.memory.context(ctx.taskId ?? scope.conversation);
+    const supportIds = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
+      Array.isArray(v) ? v.map(String) : [],
+    );
+    const requiredClaims =
+      ctx.actionClaims
+        ?.filter((rule) => rule.action === scope.action || rule.action === scope.operation)
+        .flatMap((rule) => rule.claims) ?? [];
+    const reliance = Object.values(this.deps.memory.relianceHolds).filter(
+      (held) =>
+        held.task === (ctx.taskId ?? scope.conversation) &&
+        ctx.personMayRelyOn?.includes(String(held.statement.claimType)) &&
+        (supportIds.includes(String(held.statement.id)) ||
+          (!supportIds.length && requiredClaims.includes(String(held.statement.claimType)))),
+    );
+    const relianceIds = new Set(reliance.map((h) => String(h.statement.id)));
+
+    // Check the evidence actually offered when a receiver requested a less revealing answer.
+    // A raw input does not become suitable support merely because a required result is absent.
+    const narrower =
+      requiredClaims.length > 0 &&
+      evidence.some((item) => {
+        if (!isClaimEvidence(item)) return false;
+        try {
+          return this.narrowerAnswer(unverifiedEvidenceClaim(item), scope.purpose, scope.recipient);
+        } catch {
+          return false; // The message gate refuses uninspectable evidence.
+        }
+      });
+    if (narrower) {
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        "fail",
+        "The receiver's request and profile allow a less revealing answer than the proposed evidence.",
+        {
+          reason: "excessive-scope",
+          rule: {
+            id: "DER-21",
+            text: "Prefer an available proof to disclosing its private inputs.",
+          },
+        },
+      );
+      this.decide(
+        "stop",
+        "The private input is held for the less revealing answer.",
+        "excessive-scope",
+      );
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "excessive-scope" },
+      };
+    }
+
+    for (const claimType of requiredClaims) {
+      const admitted = [...this.deps.memory.facts.values()].some(
+        (f) =>
+          f.claimType === claimType &&
+          taskItems.some((i) => i.id === f.id && i.accepted && i.digest === f.digest) &&
+          !!f.statement &&
+          fitnessOf(
+            StatementQualityNode.from({
+              ...f.statement,
+              method: f.method ?? f.statement.method,
+            } as unknown as import("./quality.js").QualityClaim),
+            ctx.reliance,
+            this.deps.now(),
+          ).verdict === "pass" &&
+          evaluateItemTerms(f.terms, {
+            name: this.deps.gate.name,
+            agent: this.deps.identity.actor,
+            action: "use",
+            target: f.id,
+            purpose: scope.purpose,
+            at: this.deps.now(),
+          }).verdict === "pass",
+      );
+      const proposedSupport = [intent.parameters.support, intent.parameters.evidence].flatMap(
+        (v) => (Array.isArray(v) ? v : []),
+      );
+      const reading = taskItems.find(
+        (i) =>
+          i.kind === "reading" && (i.claimType === claimType || proposedSupport.includes(i.id)),
+      );
+      if (
+        !admitted &&
+        !evidence.some((item) => this.deps.authoredProofSupports?.(intent, item, claimType))
+      ) {
+        if (reliance.some((h) => h.statement.claimType === claimType)) continue;
+        const refusal = Object.entries(this.deps.memory.refusals).find(([key]) =>
+          key.startsWith(`${ctx.taskId ?? scope.conversation}|${claimType}|`),
+        )?.[1];
+        if (refusal) {
+          this.verdict(
+            verdicts,
+            subject,
+            "fitness",
+            "fail",
+            `Required ${claimType} was refused: ${refusal}.`,
+            { reason: refusal },
+          );
+          this.decide("stop", "A refused source cannot authorize the action.", refusal);
+          return {
+            outcome: "stop",
+            verdicts,
+            decision: { ...decision, outcome: "deny", reason: refusal },
+          };
+        }
+        const letter = taskItems.find(
+          (item) =>
+            item.kind === "statement" &&
+            item.accepted &&
+            item.claimType === "unstructured-content" &&
+            this.deps.memory.facts.get(item.id)?.digest === item.digest &&
+            ctx.claimSources?.[claimType]?.includes(item.source) &&
+            (ctx.resolver?.resolveSource({
+              evaluator: this.deps.identity.actor,
+              source: item.source,
+              claimType,
+              subject: item.subject,
+              at: this.deps.now(),
+            }).outcome ?? "accepted") === "accepted",
+        );
+        if (!reading && !letter && !taskItems.some((i) => i.kind === "content")) {
+          this.verdict(verdicts, subject, "fitness", "fail", claimRequest(ctx, claimType), {
+            reason: "evidence-missing",
+          });
+          this.decide("stop", "Required evidence is missing.", "evidence-missing");
+          return {
+            outcome: "stop",
+            verdicts,
+            decision: { ...decision, outcome: "deny", reason: "evidence-missing" },
+          };
+        }
+        const original = taskItems.find((i) => i.digest === reading?.statement?.originalDigest);
+        const acceptedSources = (ctx.claimSources?.[claimType] ?? []).filter(
+          (source) =>
+            (ctx.resolver?.resolveSource({
+              evaluator: this.deps.identity.actor,
+              source,
+              claimType,
+              subject: reading?.subject,
+              at: this.deps.now(),
+            }).outcome ?? "accepted") === "accepted",
+        );
+        const requestSource = letter?.source ?? acceptedSources[0] ?? original?.source ?? "unknown";
+        const request = letter
+          ? `Ask ${requestSource} for structured evidence. ${claimRequest(ctx, claimType, [requestSource])}`
+          : `Structured form required: ${claimType}; request source ${requestSource}; original ${reading?.statement?.originalDigest}. ${claimRequest(ctx, claimType, acceptedSources)}`;
+        this.verdict(verdicts, subject, "fitness", "ask-more", request, {
+          reason: "structured-form-required",
+        });
+        this.decide(
+          "ask-more",
+          `Ask source ${requestSource} for ${claimType}.`,
+          "structured-form-required",
+        );
+        return {
+          outcome: "ask-more",
+          verdicts,
+          decision: { ...decision, outcome: "ask-more", reason: "structured-form-required" },
+        };
+      }
+    }
+
+    // Labels, not the core's confidence, determine whether support is admitted (CORE-IN-16).
+    const support = [intent.parameters.support, intent.parameters.evidence].flatMap((v) =>
+      Array.isArray(v) ? v : [],
+    );
+    if (
+      support.some((id) => !this.disclosedFact(intent, String(id)) && !relianceIds.has(String(id)))
+    ) {
+      const unacceptedReading = taskItems.find(
+        (i) => i.kind === "reading" && support.includes(i.id),
+      );
+      const failed = support
+        .map((id) => this.deps.memory.refusals[`statement:${String(id)}`])
+        .find(Boolean);
+      const reason = failed ?? (unacceptedReading ? "method-not-accepted" : "evidence-invalid");
+      this.verdict(
+        verdicts,
+        subject,
+        unacceptedReading ? "fitness" : "evidence",
+        "fail",
+        "The proposed action relies on a statement that was not admitted.",
+        { reason },
+      );
+      this.decide("stop", "Unaccepted support cannot authorize an action.", reason);
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason },
+      };
+    }
+
+    if (
+      ctx.originHosted &&
+      scope.action === "distribute" &&
+      Array.isArray(intent.parameters.evidence) &&
+      intent.parameters.evidence.some(
+        (id) => typeof id === "string" && ctx.originHosted?.nonTransferable(id),
+      )
+    ) {
+      this.verdict(
+        verdicts,
+        subject,
+        "evidence",
+        "fail",
+        "A source-hosted unsigned record cannot be forwarded as transferable evidence.",
+        { reason: "evidence-invalid" },
+      );
+      this.decide(
+        "stop",
+        "The unsigned origin observation stays in the verifier’s own record.",
+        "evidence-invalid",
+      );
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "evidence-invalid" },
+      };
+    }
+    // 2. Recipient.
+    if (
+      !this.recipient(
+        verdicts,
+        subject,
+        scope.recipient,
+        scope.operation,
+        scope.conversation,
+        scope.purpose,
+      )
+    ) {
+      this.decide(
+        "stop",
+        "The action is stopped: the recipient is not accepted.",
+        "not-authorised",
+      );
+      return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny" } };
+    }
+
+    // 3. Disclosure, then 4. data terms: either can stop the release.
+    // An email's context checks come first in that position (brief 31 §2.4).
+    const email = this.emailContext;
+    this.emailContext = undefined;
+    if (email) {
+      const context = this.checkEmailContext(intent, email.text, email.approved);
+      verdicts.push(...context);
+      this.emailContextVerdicts = context;
+      const failed = context.find((verdict) => verdict.verdict === "fail");
+      if (failed)
+        return {
+          outcome: "stop",
+          verdicts,
+          decision: { ...decision, outcome: "deny", reason: failed.reason ?? "prohibited" },
+        };
+    }
+    const blocked =
+      ctx.configuration || this.deps.recordRelease?.(intent)
+        ? (this.disclosure(verdicts, subject, intent) ??
+          this.dataTerms(verdicts, subject, intent, undefined, matched?.rule))
+        : undefined;
+    if (blocked) {
+      this.decide("stop", "The action is stopped; nothing leaves.", blocked);
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: blocked },
+      };
+    }
+
+    if (
+      ctx.recordBackedClaims?.length &&
+      evidence.some((item) => {
+        if (!isClaimEvidence(item)) return false;
+        let claim: JsonObject;
+        try {
+          claim = unverifiedEvidenceClaim(item);
+        } catch {
+          // Verification of malformed credentials still happens at release.
+          return false;
+        }
+        return this.missingRecordSupport(claim, scope.recipient);
+      })
+    ) {
+      this.stopEvidence(subject, "evidence-invalid", verdicts);
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "evidence-invalid" },
+      };
+    }
+
+    if (reliance.length) {
+      const unsafe =
+        scope.action === "pay" ||
+        ((scope.action === "distribute" ||
+          (Array.isArray(intent.parameters.evidence) && intent.parameters.evidence.length > 0)) &&
+          reliance.some((h) => scope.recipient !== h.statement.issuer));
+      const termsFailure = reliance
+        .map((h) =>
+          evaluateItemTerms(h.statement.terms as ItemTerms | undefined, {
+            name: this.deps.gate.name,
+            agent: this.deps.identity.actor,
+            action: "use",
+            target: String(h.statement.id),
+            purpose: scope.purpose,
+            at: this.deps.now(),
+          }),
+        )
+        .find((v) => v.verdict !== "pass");
+      const binding = digestOf(reliance.map((h) => h.digest).sort());
+      const approved = this.deps.personApproved?.(intent) === true;
+      const changed = approved && this.deps.memory.relianceBindings[subject] !== binding;
+      if (unsafe || termsFailure || changed) {
+        const reason = unsafe
+          ? "not-authorised"
+          : changed
+            ? "approval-denied"
+            : (termsFailure?.reason ?? "terms-not-acceptable");
+        this.verdict(
+          verdicts,
+          subject,
+          "limits-approval",
+          "fail",
+          "Personal reliance cannot override this action's safety, evidence binding or terms.",
+          { reason },
+        );
+        this.decide("stop", "The action cannot rely on this statement.", reason);
+        return { outcome: "stop", verdicts, decision: { ...decision, outcome: "deny", reason } };
+      }
+      if (!approved) {
+        this.deps.memory.relianceBindings[subject] = binding;
+        const request =
+          `Action: ${JSON.stringify(intent)}. Action digest: ${subject}. ` +
+          reliance
+            .map(
+              (h) =>
+                `Statement: ${JSON.stringify(h.statement)}. Made by: ${String(h.statement.issuer)}. Nobody vouches for this statement. It was not admitted. Statement digest: ${h.digest}.`,
+            )
+            .join(" ") +
+          " Do you choose to rely on it for this exact action only?";
+        this.verdict(
+          verdicts,
+          subject,
+          "limits-approval",
+          "ask-principal",
+          "The principal may choose whether to rely on this self-made statement.",
+          {
+            reason: "method-not-accepted",
+            rule: {
+              id: "RL-8",
+              text: "The profile permits personal reliance for this kind of claim only.",
+            },
+          },
+        );
+        this.decide(
+          "ask-principal",
+          "The gate holds this exact action for the person's decision.",
+          "method-not-accepted",
+        );
+        this.emit({
+          part: "principal",
+          kind: "ask-principal",
+          reason: "method-not-accepted",
+          chat: { who: "agent", text: request },
+          caption:
+            "The gate shows the self-made statement, its author and its lack of anyone vouching for it.",
+        });
+        return {
+          outcome: "ask-principal",
+          verdicts,
+          decision: { ...decision, outcome: "approval-required", reason: "method-not-accepted" },
+        };
+      }
+    }
+
+    // 5. Limits and approval. Profile judgement and role approvals cannot be overridden by
+    // an autonomous mandate or by the principal substituting their own signature.
+    const person =
+      ctx.personDecisions?.find((p) => p.action === scope.action) ??
+      (ctx.email && scope.operation === "urn:op:email"
+        ? { action: scope.action, decider: "principal" as const }
+        : undefined);
+    const approvals = (
+      matched?.rule as
+        | (OdrlRule & { approvals?: import("./approvals.js").ApprovalsRule })
+        | undefined
+    )?.approvals;
+    const approvalState = approvals
+      ? (this.deps.organisationApprovals?.(intent, approvals) ?? "missing")
+      : "pass";
+    if (approvalState === "invalid") {
+      this.verdict(
+        verdicts,
+        subject,
+        "limits-approval",
+        "fail",
+        "An approver lacks a current admitted role or is the requester.",
+        { reason: "not-authorised" },
+      );
+      this.decide("stop", "The separation of duties requirement is not met.", "not-authorised");
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "not-authorised" },
+      };
+    }
+    if (
+      approvalState === "missing" ||
+      (person &&
+        !this.deps.personApproved?.(
+          intent,
+          typeof person.decider === "object" ? person.decider.role : undefined,
+        ))
+    ) {
+      const roles =
+        approvals?.roles ??
+        (person && typeof person.decider === "object" ? [person.decider.role] : []);
+      this.verdict(
+        verdicts,
+        subject,
+        "limits-approval",
+        "ask-principal",
+        "The required people must decide this exact action.",
+        {
+          reason: "approval-required",
+          rule: {
+            id: matched?.rule.id ?? subject,
+            text: `Requires ${approvals?.count ?? 1} approval(s) from ${roles.join(", ") || "the principal"}.`,
+          },
+        },
+      );
+      this.decide(
+        "ask-principal",
+        "The action is held for the named decision makers.",
+        "approval-required",
+      );
+      this.emit({
+        part: "principal",
+        kind: "ask-principal",
+        reason: "approval-required",
+        chat: {
+          who: "agent",
+          text: `${roles.length ? `To ${roles.join(", ")}: ` : ""}${this.approvalRequest(intent, undefined, evidence)} Action digest: ${subject}. Parameters: ${JSON.stringify(intent.parameters)}`,
+        },
+        caption: "The gate built this request from the action and the approval rule.",
+      });
+      return {
+        outcome: "ask-principal",
+        verdicts,
+        decision: { ...decision, outcome: "approval-required", reason: "approval-required" },
+      };
+    }
+
+    const paymentLimit = (matched?.rule as (OdrlRule & { limit?: PaymentLimit }) | undefined)
+      ?.limit;
+    const amount = Number(intent.parameters.amount);
+    const paymentExceeded =
+      scope.action === "pay" &&
+      paymentLimit &&
+      (intent.parameters.currency !== paymentLimit.currency ||
+        amount * 100 > Math.round(paymentLimit.perAction * 100) ||
+        (this.deps.paymentSpent?.(matched?.rule.id ?? "", paymentLimit.currency, intent) ??
+          Infinity) +
+          Math.round(amount * 100) >
+          Math.round(paymentLimit.perPeriod * 100));
+    const limitText = paymentExceeded
+      ? "This payment exceeds the mandate's per-action or calendar-month limit."
+      : this.exceededLimit(intent);
+    if (paymentExceeded) {
+      const m = this.deps.mandate();
+      const mayAsk =
+        m &&
+        (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.withApproval, {
+          agent: this.deps.identity.actor,
+          action: scope.action,
+          target: scope.target,
+          purpose: scope.purpose,
+          recipient: scope.recipient,
+          at: this.deps.now(),
+        }).effect === "permit";
+      if (!mayAsk) {
+        this.verdict(
+          verdicts,
+          subject,
+          "limits-approval",
+          "fail",
+          limitText ?? "Payment limit exceeded.",
+          { reason: "limit-exceeded" },
+        );
+        this.decide(
+          "stop",
+          "The mandate does not allow approval beyond this limit.",
+          "limit-exceeded",
+        );
+        return {
+          outcome: "stop",
+          verdicts,
+          decision: { ...decision, outcome: "deny", reason: "limit-exceeded" },
+        };
+      }
+    }
+    const limitRule = ctx.principalLimits && limitText ? { id: ctx.principalLimits.id } : undefined;
+    // CORE-OUT-8: the recipient asked for a stronger approval; ask the principal in that form.
+    const demanded = this.deps.demandedApproval?.(intent);
+    const demandText =
+      demanded && !demanded.approvedBy
+        ? `${this.name(scope.recipient)} asked for ${demanded.label} before it will do this.`
+        : undefined;
+    let effective =
+      paymentExceeded && this.deps.personApproved?.(intent)
+        ? { ...decision, basis: "owner-approval" as const }
+        : decision;
+    if (
+      decision.outcome === "permit" &&
+      decision.basis === "autonomous" &&
+      limitText &&
+      !this.deps.personApproved?.(intent)
+    ) {
+      effective = {
+        ...decision,
+        outcome: "approval-required",
+        reason: `principal limit: ${limitText}`,
+      };
+    } else if (decision.outcome === "permit" && decision.basis === "autonomous" && demandText) {
+      effective = {
+        ...decision,
+        outcome: "approval-required",
+        reason: `stronger approval asked for: ${demanded?.approval}`,
+      };
+    }
+    if (effective.outcome === "approval-required") {
+      const reason = limitText ? "limit-exceeded" : "approval-required";
+      const request =
+        demandText && demanded
+          ? this.strongerApprovalRequest(intent, demanded.label)
+          : this.approvalRequest(intent, limitText, evidence);
+      this.verdict(
+        verdicts,
+        subject,
+        "limits-approval",
+        "ask-principal",
+        limitText
+          ? `This is outside ${this.owner}'s limits, so the gate asks ${this.owner}.`
+          : demandText
+            ? `${demandText} The gate asks ${this.owner} to approve in that form.`
+            : `The mandate says to ask ${this.owner} first.`,
+        {
+          reason,
+          rule: {
+            id: limitRule?.id ?? demanded?.approval ?? matched?.rule.id ?? decision.policy.id,
+            text: [ruleRef.rule?.text, limitText ?? demandText].filter(Boolean).join(" "),
+          },
+        },
+      );
+      this.decide("ask-principal", `The gate holds the action and asks ${this.owner}.`, reason);
+      this.emit({
+        part: "principal",
+        kind: "ask-principal",
+        chat: { who: "agent", text: request },
+        caption: `${this.owner} is asked to approve this exact action; the approval will be bound to its digest.`,
+      });
+      return { outcome: "ask-principal", verdicts, decision: effective };
+    }
+    if (demanded?.approvedBy) {
+      this.verdict(
+        verdicts,
+        subject,
+        "limits-approval",
+        "pass",
+        `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(scope.recipient)} asked; the attestation goes with the request.`,
+        {
+          reason: "approval-given",
+          rule: {
+            id: demanded.approvedBy,
+            text: `${this.owner}'s signed approval, bound to digest ${subject.slice(0, 16)}….`,
+          },
+        },
+      );
+      this.pendingGo.add(subject);
+      return { outcome: "go", verdicts, decision };
+    }
+    this.verdict(
+      verdicts,
+      subject,
+      "limits-approval",
+      "pass",
+      effective.basis === "owner-approval"
+        ? demanded
+          ? `${this.owner} approved this exact action with ${demanded.label}, as ${this.name(scope.recipient)} asked.`
+          : `${this.owner} approved this exact action.`
+        : `Inside what the agent may do on its own, and within ${this.owner}'s limits.`,
+      effective.basis === "owner-approval" && !decision.approval
+        ? { reason: "approval-given" }
+        : decision.approval
+          ? {
+              reason: "approval-given",
+              rule: {
+                id: decision.approval,
+                text: `${this.owner}'s signed approval, bound to digest ${subject.slice(0, 16)}….`,
+              },
+            }
+          : {},
+    );
+    this.pendingGo.add(subject);
+    return { outcome: "go", verdicts, decision };
+  }
+
+  /** Recipient: looked up through the trust resolver. Returns false when it fails. */
+  private recipient(
+    verdicts: CheckVerdict[],
+    subject: string,
+    party: Iri | undefined,
+    task: Iri | undefined,
+    conversation?: Iri,
+    purpose?: Iri,
+  ): boolean {
+    if (party && this.deps.recipientPinned && !this.deps.recipientPinned(party, purpose)) {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "fail",
+        "The recipient has no own-list pin for this party, purpose and current time.",
+        { reason: "source-unknown" },
+      );
+      return false;
+    }
+    const resolver = this.deps.gate.resolver;
+    if (!party) {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "not-applicable",
+        "The message goes to no one in particular.",
+        {
+          reason: NOT_APPLICABLE.noPrincipal,
+        },
+      );
+      return true;
+    }
+    if (!resolver || !task) {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "pass",
+        `${this.name(party)}'s agent is reached through the key pinned when the two were introduced.`,
+      );
+      return true;
+    }
+    const label = this.deps.gate.taskLabel?.(task) ?? idWords(task, this.name);
+    const r = resolver.resolveRecipient({ party, task, taskLabel: label, at: this.deps.now() });
+    const resolution = { resolution: resolutionView(r) };
+    if (r.outcome === "accepted") {
+      this.verdict(verdicts, subject, "recipient", "pass", `${this.name(party)}: ${r.answer}`, {
+        ...resolution,
+        ...(r.rule ? { rule: { id: r.rule.id, text: r.path.at(-1)?.says ?? r.answer } } : {}),
+      });
+      return true;
+    }
+    if (r.outcome === "no-route" && conversation && this.deps.isReplyTo(conversation, party)) {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "pass",
+        `A reply to ${this.name(party)}'s verified agent, which opened this conversation; no register lists private persons.`,
+        {
+          ...resolution,
+          rule: { id: conversation, text: "Replies go to the verified sender of the request." },
+        },
+      );
+      return true;
+    }
+    if (r.outcome === "no-route") {
+      this.verdict(
+        verdicts,
+        subject,
+        "recipient",
+        "indeterminate",
+        `${this.name(party)}: ${r.answer}`,
+        {
+          reason: "lookup-failed",
+          ...resolution,
+        },
+      );
+      return false;
+    }
+    this.verdict(verdicts, subject, "recipient", "fail", `${this.name(party)}: ${r.answer}`, {
+      reason: "not-authorised",
+      ...resolution,
+    });
+    return false;
+  }
+
+  /** Disclosure: is what goes out what the request and the purpose need, and no more? */
+  private disclosure(
+    verdicts: CheckVerdict[],
+    subject: string,
+    intent: ActionIntent,
+  ): string | undefined {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const p = intent.parameters;
+    if (scope.action === "distribute" && Array.isArray(p.evidence)) {
+      const offer =
+        typeof p.termsDigest === "string" ? this.deps.offerTerms(p.termsDigest) : undefined;
+      const requested = this.deps.recordRelease?.(intent)
+        ? this.deps.gate.purposes?.[scope.purpose ?? ""]
+        : Array.isArray(offer?.evidenceRequest)
+          ? offer.evidenceRequest.map((r) => String((r as JsonObject).claimType))
+          : undefined;
+      const items = p.evidence.map((id) => this.disclosedFact(intent, String(id)));
+      if (
+        this.deps.gate.selectiveAnnual &&
+        items.some(
+          (item) =>
+            item && !this.deps.gate.purposes?.[scope.purpose ?? ""]?.includes(item.claimType),
+        )
+      ) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "fail",
+          "The requested private claim is outside the principal’s permitted disclosure scope; it is withheld.",
+          { reason: "excessive-scope" },
+        );
+        return "excessive-scope";
+      }
+      if (!requested) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "indeterminate",
+          "What the request needs cannot be found.",
+          {
+            reason: "missing-context",
+          },
+        );
+        return "missing-context";
+      }
+      if (
+        !this.checkAccessScope(
+          intent,
+          typeof offer?.retentionDays === "number" ? offer.retentionDays : undefined,
+        )
+      ) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "fail",
+          "The requested pod grant exceeds the agreed resource, reader or retention.",
+          { reason: "excessive-scope" },
+        );
+        return "excessive-scope";
+      }
+      const extra = items.filter((f) => !f || !requested.includes(f.claimType));
+      const missing = requested.filter((t) => !items.some((f) => f?.claimType === t));
+      const rule = {
+        id: String(p.termsDigest),
+        text: `The request asks for ${listWords(requested.map((t) => idWords(t)))}; ${p.access ? "a pod grant covers only an agreed statement, the verified reader and the agreed retention" : "by value is the only form in this configuration"}.`,
+      };
+      if (extra.length > 0) {
+        this.verdict(
+          verdicts,
+          subject,
+          "disclosure",
+          "fail",
+          `${extra.length} item(s) would go that the request does not need.`,
+          { reason: "excessive-scope", rule },
+        );
+        return "excessive-scope";
+      }
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        "pass",
+        `Only what the request needs goes: ${listWords(this.labels(intent))}${
+          missing.length > 0 ? ` (nothing held for ${listWords(missing)})` : ""
+        }.`,
+        { reason: "minimal-disclosure", rule },
+      );
+      return;
+    }
+    this.verdict(
+      verdicts,
+      subject,
+      "disclosure",
+      "not-applicable",
+      "This action passes on no personal data.",
+      {
+        reason: NOT_APPLICABLE.noPersonalData,
+      },
+    );
+  }
+
+  private recipientAllows(party: string | undefined, role: string): boolean {
+    return (
+      !!party &&
+      this.deps.gate.resolver?.resolveRecipient({
+        party,
+        task: role,
+        taskLabel: idWords(role, this.name),
+        registeredRole: true,
+        at: this.deps.now(),
+      }).outcome === "accepted"
+    );
+  }
+
+  private missingRecipientRole(terms: ItemTerms | undefined, recipient: Iri | undefined): boolean {
+    return (
+      (!!terms?.recipientMustBe && !this.recipientAllows(recipient, terms.recipientMustBe.task)) ||
+      !!terms?.inherited?.some(({ terms }) =>
+        this.missingRecipientRole(terms ?? undefined, recipient),
+      )
+    );
+  }
+
+  /** Data terms: do the terms on each item allow this use and this recipient? */
+  private modelTerms(rules: TermsVerdict, intent: ActionIntent, item: string): TermsVerdict {
+    if (this.deps.gate.configuration?.layers["usage-control"] !== "odrl-model-tighten")
+      return rules;
+    if (rules.verdict !== "pass") return rules;
+    const model = this.deps.gate.usageModel;
+    if (!model)
+      return {
+        verdict: "indeterminate",
+        reason: "unsupported-configuration",
+        text: "The configured usage model is unavailable.",
+      };
+    const action = intent instanceof ActionIntentNode ? intent : ActionIntentNode.toNode(intent);
+    const termsDigest = action.live.parameters.termsDigest;
+    const request = typeof termsDigest === "string" ? this.deps.offerTerms(termsDigest) : undefined;
+    const input = Object.freeze({
+      action: canonicalJson(action.toObject()),
+      actionDigest: actionDigest(intent),
+      operation: action.operation,
+      ...(action.purpose ? { purpose: action.purpose } : {}),
+      ...(action.recipient ? { recipient: action.recipient } : {}),
+      item,
+      ...(request ? { request: canonicalJson(request) } : {}),
+      at: this.deps.now(),
+    });
+    const reviewed = tightenUsage(rules, input, model);
+    if (reviewed.opinion)
+      this.emit({
+        part: "record",
+        kind: "record",
+        caption: "The model's opinion is recorded after the rules permit this use.",
+        fact: {
+          id: actionDigest(intent),
+          label: "The model's opinion about this use",
+          claimType: "usage-model.opinion",
+          subject: item,
+          source: model.id,
+          value: {
+            input,
+            rules: { ...rules },
+            opinion: reviewed.opinion,
+            at: this.deps.now(),
+          },
+        },
+      });
+    return reviewed.terms;
+  }
+
+  /**
+   * Brief 31 §2.1, usage-control human-approval only: the principal's own statement, with no
+   * terms of its own, is governed by the principal's mandate. A permit or a prohibition there
+   * decides; when no rule decides the purpose, the use is "not decided" and goes to the
+   * principal, whose approval binds the held message's digest, recipient, purpose and expiry.
+   * Items anyone else supplied keep the default terms (refused unless their terms allow it).
+   */
+  private principalUse(
+    fact: AdmittedFact | undefined,
+    scope: ReturnType<typeof IntentScopeNode.fromIntent>,
+    approved: boolean,
+  ): PrincipalUseVerdict | undefined {
+    const principal = this.deps.identity.party;
+    if (
+      this.deps.gate.configuration?.layers["usage-control"] !== "human-approval" ||
+      !principal ||
+      !fact ||
+      fact.terms ||
+      fact.source !== principal
+    )
+      return undefined;
+    const m = this.deps.mandate();
+    const now = Date.parse(this.deps.now());
+    if (!m || Date.parse(m.validFrom) > now || Date.parse(m.validUntil) <= now)
+      return {
+        verdict: "fail",
+        reason: "not-authorised",
+        text: `There is no current mandate from ${this.owner} to decide this use.`,
+      };
+    const results = [...new Set([scope.target, fact.id])].map((target) =>
+      evaluateIntent({
+        loaded: { mandate: m, digest: digestOf(m) },
+        intent: {
+          action: "distribute",
+          target,
+          operation: scope.operation,
+          conversation: scope.conversation,
+          ...(scope.purpose ? { purpose: scope.purpose } : {}),
+          ...(scope.recipient ? { recipient: scope.recipient } : {}),
+          parameters: {},
+        },
+        decider: this.deps.identity.actor,
+        at: this.deps.now(),
+        engine: this.deps.policyEngine,
+      }),
+    );
+    if (results.some((v) => v.outcome === "indeterminate"))
+      return {
+        verdict: "indeterminate",
+        reason: "indeterminate-policy",
+        text: `${this.owner}'s mandate cannot be decided for this use.`,
+      };
+    const denied = results.find((v) => v.outcome === "deny" && v.reason !== NO_MANDATE_GRANT);
+    if (denied)
+      return {
+        verdict: "fail",
+        reason: denied.reason.startsWith("prohibited") ? "prohibited" : "not-authorised",
+        text: `${this.owner}'s mandate forbids this use of ${this.owner}'s own statement.`,
+      };
+    if (
+      results.some((v) => v.outcome === "permit") &&
+      !results.some((v) => v.outcome === "approval-required")
+    )
+      return {
+        verdict: "pass",
+        text: `${this.owner}'s mandate allows this use of ${this.owner}'s own statement.`,
+      };
+    return approved
+      ? {
+          verdict: "pass",
+          reason: "approval-given",
+          text: `${this.owner} approved this exact release of ${this.owner}'s own statement.`,
+        }
+      : {
+          verdict: "ask-principal",
+          reason: "approval-required",
+          text: `No rule in ${this.owner}'s mandate decides this use of ${this.owner}'s own statement, so ${this.owner} decides.`,
+        };
+  }
+
+  private dataTerms(
+    verdicts: CheckVerdict[],
+    subject: string,
+    intent: ActionIntent,
+    release?: { readonly approved: boolean; asked?: boolean },
+    mandate?: OdrlRule,
+  ): string | undefined {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const p = intent.parameters;
+    // Issuer-authored text cannot hide unsupported machine terms on the actual items.
+    for (const id of scope.action === "distribute" && Array.isArray(p.evidence) ? p.evidence : []) {
+      const fact = this.disclosedFact(intent, String(id));
+      if (!fact?.terms) continue;
+      const checked = evaluateItemTerms(fact.terms, {
+        name: this.deps.gate.name,
+        agent: this.deps.identity.actor,
+        action: "distribute",
+        target: fact.id,
+        purpose: scope.purpose,
+        recipient: scope.recipient,
+        at: this.deps.now(),
+      });
+      if (checked.verdict === "indeterminate") {
+        this.verdict(verdicts, subject, "data-terms", checked.verdict, checked.text, {
+          reason: checked.reason,
+        });
+        return checked.reason ?? "unsupported-term";
+      }
+    }
+    if (
+      scope.action === "distribute" &&
+      typeof p.attachedTerms === "string" &&
+      !this.deps.recordRelease?.(intent)
+    ) {
+      // An issuer releasing its own statement: the terms it attaches travel with it.
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        "pass",
+        `${this.owner}'s own terms go with it: ${p.attachedTerms}`,
+        typeof p.termsId === "string"
+          ? { rule: { id: p.termsId, text: String(p.attachedTerms) } }
+          : {},
+      );
+      return undefined;
+    }
+    if (scope.action !== "distribute" || !Array.isArray(p.evidence)) {
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        "not-applicable",
+        "This action passes on no personal data.",
+        {
+          reason: NOT_APPLICABLE.noPersonalData,
+        },
+      );
+      return undefined;
+    }
+    if (p.evidence.length === 0 && typeof p.recordFrom === "number") {
+      // Brief 31 item 4: a range record release that discloses no fact still records the
+      // check. Whole-record releases keep their recorded rows (fee-dispute is unchanged).
+      this.verdict(verdicts, subject, "data-terms", "not-applicable", "Nothing is disclosed.", {
+        reason: NOT_APPLICABLE.noData,
+      });
+      return undefined;
+    }
+    let blocked: string | undefined;
+    const access = this.deps.gate.accessPod && p.access !== undefined;
+    const requests = access ? accessRequests.safeParse(p.access).data : undefined;
+    const ruledItems = p.evidence.map((id) => {
+      const fact = this.disclosedFact(intent, String(id));
+      const terms: ItemTerms | undefined = fact?.terms;
+      const t = evaluateItemTerms(terms, {
+        name: this.deps.gate.name,
+        agent: this.deps.identity.actor,
+        action: "distribute",
+        target: String(id),
+        ...(scope.purpose ? { purpose: scope.purpose } : {}),
+        ...(scope.recipient ? { recipient: scope.recipient } : {}),
+        ...(typeof p.retentionDays === "number" && !requests?.some((request) => request.item === id)
+          ? { retentionDays: p.retentionDays }
+          : {}),
+        at: this.deps.now(),
+        recipientAllowed: (label) => this.recipientAllows(scope.recipient, label),
+      });
+      return { id: String(id), fact, terms, t };
+    });
+    const allRulesPermit = ruledItems.every(({ t }) => t.verdict === "pass");
+    const accessPlan = access && allRulesPermit ? this.planAccess(intent, mandate) : undefined;
+    if (access) this.checkedAccess.delete(subject);
+
+    for (const { id, fact, terms, t: rules } of ruledItems) {
+      const own = release ? this.principalUse(fact, scope, release.approved) : undefined;
+      const t: PrincipalUseVerdict =
+        own ?? (allRulesPermit ? this.modelTerms(rules, intent, id) : rules);
+      let verdict = t.verdict;
+      let text = t.text;
+      let reason = t.reason;
+      if (verdict === "pass" && terms?.recipientMustBe && scope.recipient) {
+        if (!this.recipientAllows(scope.recipient, terms.recipientMustBe.task)) {
+          verdict = "fail";
+          reason = "not-authorised";
+          text = `Its terms allow sharing only with ${terms.recipientMustBe.label}; ${this.name(scope.recipient)} is not shown to be one.`;
+        } else {
+          text = `${text} ${this.name(scope.recipient)} is ${terms.recipientMustBe.label} (sector register).`;
+        }
+      }
+      if (access && verdict === "pass" && requests?.some((a) => a.item === id)) {
+        if (!accessPlan) {
+          verdict = "fail";
+          reason = "prohibited";
+          text = "The proposed access rule grants more than the terms and mandate allow.";
+        } else if (accessPlan.translated) {
+          text +=
+            " The access rule was translated from the bank's terms and the agreement and grants no more than they allow.";
+        }
+      }
+      // An undecided own-statement use is held only when no other item already stops it.
+      if (verdict === "ask-principal") {
+        if (!blocked && release) {
+          blocked = "approval-required";
+          release.asked = true;
+        }
+      } else if (verdict !== "pass") {
+        if (release?.asked) {
+          blocked = undefined;
+          release.asked = false;
+        }
+        blocked ??= reason ?? "indeterminate-policy";
+      }
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        verdict,
+        `${fact?.label ?? "An item"}: ${lower(text)}`,
+        {
+          ...(reason ? { reason } : {}),
+          rule: {
+            id: terms?.policy?.id ?? "default-terms",
+            text: terms
+              ? `The issuer's terms: ${termsSummary(terms, this.name)}. They go out with the data.`
+              : text,
+          },
+        },
+      );
+    }
+    if (!blocked && accessPlan) this.checkedAccess.set(subject, accessPlan.grants);
+    return blocked;
+  }
+
+  private missingRecordSupport(
+    claim: Readonly<Record<string, unknown>>,
+    recipient?: string,
+  ): boolean {
+    return (
+      this.deps.gate.recordBackedClaims?.includes(String(claim.claimType)) === true &&
+      !this.deps.recordBacks?.(claim, recipient ?? "")
+    );
+  }
+
+  needsStructuredClaim(intent: ActionIntent, content?: ContentProfile): boolean {
+    const kind = intent.parameters.claimType;
+    if (typeof kind === "string") return kind !== "unstructured-content";
+    const required = this.deps.gate.actionClaims
+      ?.filter((rule) => rule.action === intent.action || rule.action === intent.operation)
+      .flatMap((rule) => rule.claims);
+    if (required?.length) return required.some((claim) => claim !== "unstructured-content");
+    const claims =
+      intent.purpose &&
+      (this.deps.gate.purposes?.[intent.purpose] ?? content?.purposes?.[intent.purpose]);
+    return !!claims?.length && !claims.includes("unstructured-content");
+  }
+
+  stopEvidence(
+    subject: string,
+    reason: "evidence-invalid" | "structured-form-required" = "evidence-invalid",
+    verdicts: CheckVerdict[] = [],
+  ): void {
+    const structured = reason === "structured-form-required";
+    this.verdict(
+      verdicts,
+      subject,
+      "evidence",
+      "fail",
+      structured
+        ? "The action needs a structured claim; prose or a reading cannot supply it."
+        : "The outgoing credential was not verified.",
+      { reason },
+    );
+    this.decide(
+      "stop",
+      structured ? "Ask the source for the structured claim." : "Unverified evidence cannot leave.",
+      reason,
+    );
+  }
+  stopAgreementCredential(subject: string, reason: string): void {
+    this.verdict(
+      [],
+      subject,
+      "evidence",
+      "fail",
+      "The valuation credential or its current signed status does not authorize acceptance.",
+      { reason },
+    );
+    this.decide("stop", "The acceptance stays inside the gate.", reason);
+  }
+
+  async checkAgreementCredential(
+    message: MessageNode,
+    offer: MessageNode | undefined,
+    trust: TrustStore,
+  ): Promise<boolean> {
+    const protocol = this.deps.gate.agreementCredential;
+    if (!protocol) return true;
+    const checked = await protocol.check(message, offer, trust, this.deps.now());
+    if (checked.state === "not-applicable") return true;
+    if (checked.state === "invalid") {
+      this.stopAgreementCredential(message.id, checked.reason ?? "evidence-invalid");
+      return false;
+    }
+    this.verdict(
+      [],
+      message.id,
+      "evidence",
+      "pass",
+      checked.state === "agreement"
+        ? "The final credential carrier contains both verified proofs over exactly the approved valuation terms."
+        : "The final credential carrier is an authentic offer; it creates no agreement without the acceptor's proof.",
+      {
+        rule: {
+          id: "CM-6",
+          text: "The credential's exact terms, parties, proofs and current status are checked before release.",
+        },
+      },
+    );
+    return true;
+  }
+
+  stopLimit(subject: string, reason: "round-limit"): void {
+    this.verdict(
+      [],
+      subject,
+      "limits-approval",
+      "fail",
+      "The proposal would exceed the conversation's round limit.",
+      { reason },
+    );
+    this.decide("stop", "The round limit stops the message before release.", reason);
+  }
+
+  /** The principal declined a held action: it stops. */
+  declined(intent: ActionIntent): void {
+    this.setAction(intent);
+    if (intent.action === "pay") {
+      this.activePayment = PaymentFacts.fromIntent(
+        intent,
+        this.deps.identity.party ?? this.deps.identity.actor,
+        this.deps.now(),
+      );
+      this.verdict(
+        [],
+        actionDigest(intent),
+        "P6",
+        "fail",
+        `${this.owner} declined this exact payment and its agreement terms.`,
+        { reason: "approval-denied" },
+      );
+    }
+    this.pendingGo.delete(actionDigest(intent));
+    this.decide("stop", `${this.owner} declined; the action is stopped.`, "approval-denied");
+  }
+
+  /** UNS-9 / CORE-OUT-12: a real release boundary, independent of trace collection. */
+  checkMessage(
+    message: AnyMessage,
+    opts: {
+      intent?: ActionIntent;
+      operation?: Iri;
+      approved?: boolean;
+      content?: ContentProfile;
+      knownTerms?: ReadonlySet<string>;
+      documentDigest?: string;
+    } = {},
+  ): {
+    outcome: OutboundOutcome;
+    reason?: string;
+    digest: string;
+    intent: ActionIntent;
+    /** Brief 31 §2.1: held because no mandate rule decides a use of the principal's own data. */
+    undecidedUse?: true;
+  } {
+    this.activePayment =
+      opts.intent?.action === "pay"
+        ? this.checkedPayments.get(actionDigest(opts.intent))
+        : undefined;
+    this.activePaymentDocument = paymentDocumentIn(message);
+    const envelope =
+      message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
+    const vocabulary = { ...this.deps.gate.vocabulary, ...opts.content?.vocabulary };
+    const purposes = { ...opts.content?.purposes, ...this.deps.gate.purposes };
+    const known = {
+      identifiers: this.deps.memory.knownIdentifiers(
+        this.deps.gate.taskId ?? envelope.conversationId,
+        envelope.conversationId,
+        { ...this.deps.gate, content: opts.content },
+      ),
+      terms: opts.knownTerms,
+    };
+    const digest = opts.documentDigest ?? digestOf(message);
+    const body = message.body as unknown as JsonObject;
+    const purpose =
+      opts.intent?.purpose ??
+      this.deps.conversationPurpose?.(envelope.conversationId) ??
+      (typeof body.purpose === "string" ? body.purpose : undefined);
+    const retentionDays =
+      typeof opts.intent?.parameters.retentionDays === "number"
+        ? opts.intent.parameters.retentionDays
+        : this.deps.conversationRetentionDays?.(envelope.conversationId);
+    const intent: ActionIntent = {
+      action: "distribute",
+      operation: opts.operation ?? "urn:awp:send-message",
+      target: opts.intent?.target ?? opts.operation ?? "urn:awp:send-message",
+      recipient: envelope.to?.party ?? envelope.to?.actor,
+      ...(purpose ? { purpose } : {}),
+      conversation: envelope.conversationId,
+      parameters: {
+        messageDigest: digest,
+        textDigest: digestOf(freeMessageStrings(message, vocabulary, known)),
+      },
+    };
+    const verdicts: CheckVerdict[] = [];
+    this.setAction(opts.approved ? intent : (opts.intent ?? intent));
+    const finish = (outcome: OutboundOutcome, reason?: string) => ({
+      outcome,
+      reason,
+      digest,
+      intent,
+    });
+    // Brief 31 §2.1: an undecided use of the principal's own statement is held for them.
+    const holdForPrincipal = (what: string) => {
+      this.setAction(intent);
+      this.decide(
+        "ask-principal",
+        `No rule decides this use, so the reply is held for ${this.owner}.`,
+        "approval-required",
+      );
+      this.emit({
+        part: "principal",
+        kind: "ask-principal",
+        reason: "approval-required",
+        chat: {
+          who: "agent",
+          text: `${this.name(intent.recipient)} asks for ${what} for ${purpose ? idWords(purpose, this.name) : "an undeclared purpose"}. No rule in your mandate decides this. May I send it? Message digest: ${digest}.`,
+        },
+        caption: `The reply is held before release; ${this.owner}'s approval will bind its digest, recipient, purpose and expiry.`,
+      });
+      return { ...finish("ask-principal", "approval-required"), undecidedUse: true as const };
+    };
+    // Brief 26e seam: an agent agreement cannot substitute for approval of a novel term.
+    if (
+      this.deps.gate.negotiatedMeaning &&
+      envelope.messageKind === "accept" &&
+      opts.operation === this.deps.gate.negotiatedMeaning.operation
+    ) {
+      const approved =
+        negotiatedRequestMatches(
+          this.deps.offerTerms(String(body.termsDigest ?? "")),
+          this.deps.gate.negotiatedMeaning.term,
+        ) &&
+        this.deps.gate.negotiatedMeaning.approved(
+          envelope.conversationId,
+          this.deps.identity.party,
+          intent.recipient,
+          this.deps.now(),
+        );
+      this.verdict(
+        verdicts,
+        digest,
+        "disclosure",
+        approved ? "pass" : "ask-principal",
+        approved
+          ? "The principals approved this exact definition of irregular income for this exchange."
+          : "The agents agreed on irregular income, but no person’s approval of this definition is on record for this exchange.",
+        { reason: approved ? "minimal-disclosure" : "approval-required" },
+      );
+      if (!approved) {
+        this.setAction(intent);
+        this.decide(
+          "ask-principal",
+          "Approval of the proposed definition is required before relying on it.",
+          "approval-required",
+        );
+        return finish("ask-principal", "approval-required");
+      }
+    }
+    if (!alternativeInstalled(this.deps.gate, envelope.configurationId)) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "fail",
+        "The selected identity or authority adapter is not installed.",
+        { reason: "unsupported-configuration" },
+      );
+      this.decide(
+        "stop",
+        "This configuration cannot release an action without its required adapter.",
+        "unsupported-configuration",
+      );
+      return finish("stop", "unsupported-configuration");
+    }
+    const statusFailure =
+      this.deps.gate.mandateCredential?.outbound() ??
+      this.deps.gate.authorizationGrant?.outbound?.();
+    if (
+      statusFailure &&
+      ["propose", "accept", "invoke", "deliver"].includes(envelope.messageKind)
+    ) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "fail",
+        "The mandate status does not permit releasing this action.",
+        { reason: statusFailure },
+      );
+      this.decide(
+        "stop",
+        "The mandate has been suspended or withdrawn; the action stays inside the gate.",
+        statusFailure,
+      );
+      return finish("stop", statusFailure);
+    }
+    if (
+      opts.intent?.action === "pay" &&
+      (envelope.messageKind !== "invoke" ||
+        (this.paymentDocuments.has(actionDigest(opts.intent))
+          ? digestOf(body.input) !== digestOf(this.paymentDocuments.get(actionDigest(opts.intent)))
+          : digestOf(body.input) !== digestOf(opts.intent.parameters)) ||
+        (body.operation as JsonObject | undefined)?.id !== opts.intent.operation)
+    ) {
+      this.verdict(
+        [],
+        digest,
+        "mandate",
+        "fail",
+        "The actual payment instruction must match the exact authorised action.",
+        { reason: "not-authorised" },
+      );
+      this.decide("stop", "The payment bytes differ from the authorised action.", "not-authorised");
+      return finish("stop", "not-authorised");
+    }
+    // A public read configuration removes requester authentication, never commitment authority.
+    if (!envelope.participant.onBehalfOf && ["propose", "accept"].includes(envelope.messageKind)) {
+      this.verdict(verdicts, digest, "mandate", "fail", "A commitment must name its principal.", {
+        reason: "representation-missing",
+      });
+      this.decide("stop", "An anonymous sender cannot commit anyone.", "representation-missing");
+      return finish("stop", "representation-missing");
+    }
+    const anonymous =
+      !envelope.participant.actor &&
+      configurationById(envelope.configurationId)?.requesterAuthentication === "not-applicable";
+    if (
+      (envelope.to?.actor &&
+        this.deps.recipientBound &&
+        !this.deps.recipientBound(envelope.to.actor, envelope.to.party)) ||
+      (["pay", "distribute"].includes(opts.intent?.action ?? "") &&
+        opts.intent?.recipient &&
+        opts.intent.recipient !== (envelope.to?.party ?? envelope.to?.actor))
+    ) {
+      this.verdict(
+        [],
+        digest,
+        "recipient",
+        "fail",
+        "The actual recipient actor, party and authorised recipient must agree with the introduced key binding.",
+        { reason: "not-authorised" },
+      );
+      this.decide(
+        "stop",
+        "The core cannot substitute a recipient or encode data in an address.",
+        "not-authorised",
+      );
+      return finish("stop", "not-authorised");
+    }
+    if (
+      anonymous &&
+      (!known.identifiers.has(envelope.conversationId) ||
+        (this.deps.anonymousConversation &&
+          !this.deps.anonymousConversation(envelope.conversationId)))
+    ) {
+      this.verdict(
+        [],
+        digest,
+        "disclosure",
+        "fail",
+        "An anonymous request cannot carry a core-invented conversation identifier.",
+        { reason: "context-not-clear" },
+      );
+      this.decide("stop", "The public read header contains unapproved text.", "context-not-clear");
+      return finish("stop", "context-not-clear");
+    }
+    if (
+      this.deps.recipientPinned &&
+      envelope.to &&
+      !this.deps.recipientPinned(
+        envelope.to.party ?? envelope.to.actor ?? "",
+        purpose,
+        envelope.to.actor,
+      )
+    ) {
+      this.verdict(
+        verdicts,
+        digest,
+        "recipient",
+        "fail",
+        "This exact recipient key has no current pin for the party and purpose.",
+        { reason: "source-unknown" },
+      );
+      this.decide("stop", "A pin never widens to another key or scope.", "source-unknown");
+      return finish("stop", "source-unknown");
+    }
+    if (anonymous) {
+      // Only installed public parameters are available here. Context knowledge is not a
+      // permission to put a person's identifier, facts, or prose in a public query.
+      const publicBody = dataClaims(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, "", {
+        identifiers: new Set(
+          identifiersIn({
+            operation: opts.operation,
+            vocabulary: this.deps.gate.vocabulary,
+            identifiers: this.deps.gate.identifiers,
+            purposes: this.deps.gate.purposes,
+            sources: this.deps.gate.claimSources,
+            content: opts.content,
+          }),
+        ),
+      });
+      const mandate = this.deps.mandate();
+      const request = {
+        agent: this.deps.identity.actor,
+        action: "read",
+        target: opts.operation ?? intent.target,
+        recipient: intent.recipient,
+        purpose,
+        at: this.deps.now(),
+      };
+      const excluded =
+        mandate &&
+        [mandate.autonomous, mandate.withApproval].some(
+          (policy) =>
+            (this.deps.policyEngine ?? solidOdrlEngine).evaluate(policy, request).effect ===
+            "prohibited",
+        );
+      if (excluded) {
+        this.verdict(
+          verdicts,
+          digest,
+          "mandate",
+          "fail",
+          "The mandate excludes this public read.",
+          { reason: "prohibited" },
+        );
+        this.decide("stop", "The public read is prohibited.", "prohibited");
+        return finish("stop", "prohibited");
+      }
+      if (
+        publicBody.unknown ||
+        hasOpenPublicData(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }) ||
+        publicBody.claims.length ||
+        message.evidence?.length ||
+        message.authorship
+      ) {
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          "fail",
+          "Anonymous reads carry only installed, structured public query parameters.",
+          { reason: "excessive-scope" },
+        );
+        this.decide(
+          "stop",
+          "Personal data, evidence and free text need an authorised represented action.",
+          "excessive-scope",
+        );
+        return finish("stop", "excessive-scope");
+      }
+    }
+    if (
+      !opts.intent &&
+      envelope.participant.onBehalfOf &&
+      ["invoke", "propose", "accept"].includes(envelope.messageKind)
+    ) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "fail",
+        "A consequential message requires an authorised structured action.",
+        { reason: "not-authorised" },
+      );
+      this.decide("stop", "No action authority was supplied; nothing leaves.", "not-authorised");
+      return finish("stop", "not-authorised");
+    }
+    if (!opts.intent) {
+      this.verdict(
+        verdicts,
+        digest,
+        "mandate",
+        "not-applicable",
+        "This protocol message proposes no additional action.",
+        { reason: NOT_APPLICABLE.noAction },
+      );
+      if (
+        !this.recipient(
+          verdicts,
+          digest,
+          intent.recipient,
+          opts.operation,
+          envelope.conversationId,
+          purpose,
+        )
+      ) {
+        this.decide("stop", "The recipient is not established; nothing leaves.", "not-authorised");
+        return finish("stop", "not-authorised");
+      }
+    }
+    if (
+      opts.intent &&
+      opts.intent.recipient !== intent.recipient &&
+      !this.recipient(
+        verdicts,
+        digest,
+        intent.recipient,
+        opts.operation,
+        envelope.conversationId,
+        purpose,
+      )
+    ) {
+      this.decide("stop", "The actual message recipient is not established.", "not-authorised");
+      return finish("stop", "not-authorised");
+    }
+    for (const evidence of message.evidence ?? []) {
+      if (!isClaimEvidence(evidence) && evidence.format !== "origin-hosted") continue;
+      try {
+        const originClaim =
+          evidence.format === "origin-hosted"
+            ? this.deps.gate.originHosted?.claim(evidence.value)
+            : undefined;
+        const claim = originClaim
+          ? (originClaim.live as JsonObject)
+          : unverifiedEvidenceClaim(evidence);
+        const narrower = this.narrowerAnswer(claim, purpose, intent.recipient);
+        if (narrower) {
+          this.verdict(
+            verdicts,
+            digest,
+            "disclosure",
+            "fail",
+            `The request and profile allow ${narrower}; the gate chooses it because attaching this private input reveals more.`,
+            {
+              reason: "excessive-scope",
+              rule: {
+                id: "DER-21",
+                text: "Prefer an available proof or joint contribution to disclosing its private inputs.",
+              },
+            },
+          );
+          this.decide(
+            "stop",
+            "The private input is held for the less revealing answer.",
+            "excessive-scope",
+          );
+          return finish("stop", "excessive-scope");
+        }
+        const fact = this.deps.memory.facts.get(String(claim.id));
+        if (claim.terms) {
+          const checked = evaluateItemTerms(claim.terms as unknown as ItemTerms, {
+            name: this.deps.gate.name,
+            agent: this.deps.identity.actor,
+            action: "distribute",
+            target: String(claim.id),
+            purpose,
+            recipient: intent.recipient,
+            at: this.deps.now(),
+          });
+          if (checked.verdict === "indeterminate") {
+            this.verdict(verdicts, digest, "data-terms", checked.verdict, checked.text, {
+              reason: checked.reason,
+            });
+            this.decide(
+              "stop",
+              "An unknown attached term cannot be passed as permission.",
+              checked.reason,
+            );
+            return finish("stop", checked.reason);
+          }
+        }
+        if (!fact && claim.issuer !== this.deps.identity.party) {
+          const reading =
+            typeof claim.originalDigest === "string" &&
+            typeof claim.implementation === "string" &&
+            ["model-output", "self-reported"].includes(String(claim.method));
+          const reason =
+            opts.intent &&
+            this.needsStructuredClaim(opts.intent, opts.content) &&
+            (claim.claimType === "unstructured-content" || reading)
+              ? "structured-form-required"
+              : "evidence-invalid";
+          this.stopEvidence(digest, reason);
+          return finish("stop", reason);
+        }
+        // Brief 32: a record-backed claim leaves only with the record's support and only to
+        // the gate operator the admitted component statement names; this only tightens.
+        if (this.missingRecordSupport(claim, intent.recipient)) {
+          this.stopEvidence(digest);
+          return finish("stop", "evidence-invalid");
+        }
+        if (fact) {
+          const needed = purpose ? purposes?.[purpose] : undefined;
+          const reason = !needed
+            ? "missing-context"
+            : !needed.includes(fact.claimType)
+              ? "excessive-scope"
+              : undefined;
+          this.verdict(
+            verdicts,
+            digest,
+            "disclosure",
+            reason ? "indeterminate" : "pass",
+            "The gate checks the actual credential against the declared purpose.",
+            { reason },
+          );
+          if (reason) {
+            this.decide("stop", "The credential is not necessary for this purpose.", reason);
+            return finish("stop", reason);
+          }
+          const release: { approved: boolean; asked?: boolean } = {
+            approved: opts.approved === true,
+          };
+          const blocked = this.dataTerms(
+            verdicts,
+            digest,
+            {
+              ...intent,
+              action: "distribute",
+              parameters: {
+                evidence: [fact.id],
+                ...(retentionDays === undefined ? {} : { retentionDays }),
+              },
+            },
+            release,
+          );
+          if (release.asked) return holdForPrincipal(fact.label);
+          if (blocked) {
+            this.decide("stop", "The actual credential's terms prohibit release.", blocked);
+            return finish("stop", blocked);
+          }
+        }
+        if (fact?.digest && fact.digest !== digestOf(claim)) {
+          this.verdict(
+            verdicts,
+            digest,
+            "evidence",
+            "fail",
+            "The outgoing statement differs from the one admitted under this identifier.",
+            { reason: "evidence-invalid" },
+          );
+          this.decide(
+            "stop",
+            "A fact's identifier cannot substitute for its admitted bytes.",
+            "evidence-invalid",
+          );
+          return finish("stop", "evidence-invalid");
+        }
+      } catch {
+        this.verdict(
+          verdicts,
+          digest,
+          "evidence",
+          "fail",
+          "The outgoing statement cannot be read.",
+          { reason: "evidence-invalid" },
+        );
+        this.decide("stop", "Uninspectable evidence cannot leave.", "evidence-invalid");
+        return finish("stop", "evidence-invalid");
+      }
+    }
+    let bodyHasPersonalData = false;
+    const payloadKey =
+      envelope.messageKind === "propose"
+        ? "terms"
+        : envelope.messageKind === "invoke"
+          ? "input"
+          : envelope.messageKind === "deliver"
+            ? "output"
+            : envelope.messageKind === "receipt"
+              ? "observed"
+              : undefined;
+    if (payloadKey && body[payloadKey]) {
+      const payload = dataClaims(body[payloadKey], vocabulary ?? {}, payloadKey, known);
+      bodyHasPersonalData = payload.claims.length > 0;
+      const needs = purpose ? purposes?.[purpose] : undefined;
+      const reason =
+        payload.claims.length > 0 && !needs
+          ? "missing-context"
+          : payload.claims.some((c) => !needs?.includes(c))
+            ? "excessive-scope"
+            : undefined;
+      if (reason) {
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          "indeterminate",
+          "The gate cannot establish this payload as necessary for the declared purpose.",
+          { reason },
+        );
+        this.decide("stop", "The payload is held before release.", reason);
+        return finish("stop", reason);
+      }
+      // Unknown strings go through UNS-9 below. Unknown non-string data cannot be assumed public.
+      if (
+        payload.unknown &&
+        freeStrings(body, { ...CORE_CONTENT_VOCABULARY, ...vocabulary }, known).length === 0
+      ) {
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          "indeterminate",
+          "An untyped payload cannot be declared free of personal data.",
+          { reason: "missing-context" },
+        );
+        this.decide("stop", "The untyped payload is held.", "missing-context");
+        return finish("stop", "missing-context");
+      }
+      for (const item of this.deps.memory.context(
+        this.deps.gate.taskId ?? envelope.conversationId,
+      )) {
+        if (!payload.claims.includes(item.claimType)) continue;
+        const terms = evaluateItemTerms(item.terms, {
+          name: this.deps.gate.name,
+          agent: this.deps.identity.actor,
+          action: "distribute",
+          target: item.id,
+          purpose,
+          recipient: intent.recipient,
+          ...(retentionDays === undefined ? {} : { retentionDays }),
+          at: this.deps.now(),
+          recipientAllowed: (label) => this.recipientAllows(intent.recipient, label),
+        });
+        this.verdict(
+          verdicts,
+          digest,
+          "data-terms",
+          terms.verdict,
+          `${item.label}: ${terms.text}`,
+          { reason: terms.reason },
+        );
+        if (terms.verdict !== "pass") {
+          this.decide(
+            "stop",
+            "The structured payload's item terms prohibit release.",
+            terms.reason,
+          );
+          return finish("stop", terms.reason);
+        }
+      }
+      if (payload.claims.length)
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          "pass",
+          `The vocabulary identifies only the necessary claims: ${payload.claims.join(", ")}.`,
+        );
+      else if (!payload.unknown && opts.intent)
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          "not-applicable",
+          "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+          { reason: "no-personal-data" },
+        );
+    }
+    const free = freeMessageStrings(message, vocabulary, known);
+    if (
+      (envelope.messageKind === "accept" || envelope.messageKind === "propose") &&
+      free.length > 0
+    ) {
+      this.verdict(
+        verdicts,
+        digest,
+        "disclosure",
+        "fail",
+        "Free text cannot form the terms or selection of a structured commitment.",
+        { reason: "structured-form-required" },
+      );
+      this.decide("stop", "Free text never commits the principal.", "structured-form-required");
+      return finish("stop", "structured-form-required");
+    }
+    const context = this.deps.memory.context(this.deps.gate.taskId ?? envelope.conversationId);
+    const needed = purpose ? purposes?.[purpose] : undefined;
+    let contextClear = true;
+    if (free.length > 0) {
+      // Every item is assessed separately, including items about someone other than our principal.
+      for (const item of context) {
+        if (this.missingRecipientRole(item.terms, intent.recipient)) {
+          this.verdict(
+            verdicts,
+            digest,
+            "data-terms",
+            "fail",
+            `${item.label}: the recipient lacks the registration its terms require.`,
+            { reason: "not-authorised" },
+          );
+          this.decide("stop", "The required recipient registration is missing.", "not-authorised");
+          return finish("stop", "not-authorised");
+        }
+        const minimal = !!needed?.includes(item.claimType);
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          minimal ? "pass" : "ask-principal",
+          `Context item ${item.label} (${item.subject ?? "unknown subject"}) ${minimal ? "is needed" : "is not established as needed"} for this purpose.`,
+          { reason: minimal ? "minimal-disclosure" : "context-not-clear" },
+        );
+        const terms = evaluateItemTerms(item.terms, {
+          name: this.deps.gate.name,
+          agent: this.deps.identity.actor,
+          action: "distribute",
+          target: item.id,
+          purpose,
+          recipient: intent.recipient,
+          ...(retentionDays === undefined ? {} : { retentionDays }),
+          at: this.deps.now(),
+          recipientAllowed: (label) => this.recipientAllows(intent.recipient, label),
+        });
+        const termsOK = terms.verdict === "pass";
+        this.verdict(
+          verdicts,
+          digest,
+          "data-terms",
+          termsOK ? "pass" : "ask-principal",
+          `${item.label}: ${terms.text}`,
+          { reason: termsOK ? "terms-allow" : "context-not-clear" },
+        );
+        contextClear &&= minimal && termsOK;
+      }
+      if (!contextClear && !opts.approved) {
+        const m = this.deps.mandate();
+        const request = {
+          agent: this.deps.identity.actor,
+          action: intent.action,
+          target: intent.target,
+          purpose,
+          recipient: intent.recipient,
+          ...(retentionDays === undefined ? {} : { retentionDays }),
+          at: this.deps.now(),
+        };
+        const canAsk =
+          this.deps.gate.freeTextApproval !== false &&
+          m &&
+          Date.parse(m.validFrom) <= Date.parse(this.deps.now()) &&
+          Date.parse(m.validUntil) > Date.parse(this.deps.now()) &&
+          (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.withApproval, request).effect ===
+            "permit" &&
+          (this.deps.policyEngine ?? solidOdrlEngine).evaluate(m.autonomous, request).effect !==
+            "prohibited";
+        const outcome = canAsk ? "ask-principal" : "stop";
+        if (canAsk) this.setAction(intent);
+        this.decide(
+          outcome,
+          "The task context is not clear for this text, recipient and purpose.",
+          "context-not-clear",
+        );
+        if (canAsk)
+          this.emit({
+            part: "principal",
+            kind: "ask-principal",
+            reason: "context-not-clear",
+            chat: {
+              who: "agent",
+              text: `May I send this exact text to ${this.name(intent.recipient)} for ${purpose ? this.name(purpose) : "an undeclared purpose"}?\n${free.map((f) => f.text).join("\n")}`,
+            },
+            caption: `The text is held before release; approval binds message digest ${digest}.`,
+          });
+        return finish(outcome, "context-not-clear");
+      }
+      if (context.length === 0 || opts.approved) {
+        this.verdict(
+          verdicts,
+          digest,
+          "disclosure",
+          "pass",
+          opts.approved
+            ? "The principal approved these exact bytes for this recipient and purpose."
+            : "No restricted item entered this task's context.",
+          { reason: opts.approved ? "approval-given" : "minimal-disclosure" },
+        );
+        this.verdict(verdicts, digest, "data-terms", "pass", "The context rule permits this text.");
+      }
+    }
+    // Actual relayed statements are checked even when the core supplied no action intent.
+    const carried = this.principalDataIn(message);
+    if (!opts.intent && carried.length > 0) {
+      const ids = (message.evidence ?? [])
+        .filter((e) => e.role === "credential")
+        .map((e) => {
+          try {
+            return e.format === "origin-hosted"
+              ? (this.deps.gate.originHosted?.claim(e.value)?.string("id") ?? "unknown")
+              : String(unverifiedEvidenceClaim(e).id);
+          } catch {
+            return "unknown";
+          }
+        });
+      const items = ids.map((id) => this.deps.memory.facts.get(id));
+      const reason = !needed
+        ? "missing-context"
+        : items.some((f) => !f || !needed.includes(f.claimType))
+          ? "excessive-scope"
+          : undefined;
+      this.verdict(
+        verdicts,
+        digest,
+        "disclosure",
+        reason ? "indeterminate" : "pass",
+        "The gate checks the carried statements against the conversation's purpose.",
+        { reason: reason ?? "minimal-disclosure" },
+      );
+      const release: { approved: boolean; asked?: boolean } = { approved: opts.approved === true };
+      const termsReason =
+        reason ??
+        this.dataTerms(verdicts, digest, { ...intent, parameters: { evidence: ids } }, release);
+      if (release.asked) return holdForPrincipal(listWords(carried));
+      if (termsReason) {
+        this.decide(
+          "stop",
+          "The message's disclosure is not permitted; nothing leaves.",
+          termsReason,
+        );
+        return finish("stop", termsReason);
+      }
+    } else if (!opts.intent && bodyHasPersonalData) {
+      this.verdict(
+        verdicts,
+        digest,
+        "data-terms",
+        "pass",
+        "The vocabulary identifies original structured data for this interaction; matching context terms were checked.",
+      );
+    } else if (!opts.intent && free.length === 0) {
+      this.verdict(
+        verdicts,
+        digest,
+        "disclosure",
+        envelope.messageKind === "description" ? "pass" : "not-applicable",
+        "The gate finds no personal data in this protocol message.",
+        {
+          reason:
+            envelope.messageKind === "description"
+              ? "minimal-disclosure"
+              : NOT_APPLICABLE.noPersonalData,
+        },
+      );
+      this.verdict(
+        verdicts,
+        digest,
+        "data-terms",
+        envelope.messageKind === "description" ? "pass" : "not-applicable",
+        "The gate finds no data terms to apply.",
+        {
+          reason:
+            envelope.messageKind === "description" ? "terms-allow" : NOT_APPLICABLE.noPersonalData,
+        },
+      );
+    }
+    if (!opts.intent)
+      this.verdict(
+        verdicts,
+        digest,
+        "limits-approval",
+        opts.approved ? "pass" : "not-applicable",
+        "The message release check is complete.",
+        { reason: opts.approved ? "approval-given" : NOT_APPLICABLE.noAction },
+      );
+    return finish("go");
+  }
+
+  /** UNS-9/9a at an unsigned email boundary; the profile always requires exact-send approval. */
+  private emailContext?: { text: string; approved: boolean };
+  private emailContextVerdicts: readonly CheckVerdict[] = [];
+  /** The context verdicts the last email release recorded, for the agent's record. */
+  takeEmailContextVerdicts(): readonly CheckVerdict[] {
+    const verdicts = this.emailContextVerdicts;
+    this.emailContextVerdicts = [];
+    return verdicts;
+  }
+  /** The exact email text whose context the next release checks, with its approval state. */
+  holdEmailContext(context: { text: string; approved: boolean } | undefined): void {
+    this.emailContext = context;
+  }
+  checkEmailContext(intent: ActionIntent, text: string, approved = false): readonly CheckVerdict[] {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const verdicts: CheckVerdict[] = [],
+      subject = actionDigest(intent),
+      needed = scope.purpose ? this.deps.gate.purposes?.[scope.purpose] : undefined;
+    for (const item of this.deps.memory.context(this.deps.gate.taskId ?? scope.conversation)) {
+      const minimal = item.accepted === true && !!needed?.includes(item.claimType);
+      this.verdict(
+        verdicts,
+        subject,
+        "disclosure",
+        minimal || approved ? "pass" : "ask-principal",
+        `Email context: ${item.label}; ${item.accepted === true ? "admitted source" : "unstructured or unaccepted source"}.`,
+        {
+          reason: approved
+            ? "approval-given"
+            : minimal
+              ? "minimal-disclosure"
+              : "context-not-clear",
+        },
+      );
+      const terms = evaluateItemTerms(item.terms, {
+        name: this.deps.gate.name,
+        agent: this.deps.identity.actor,
+        action: "distribute",
+        target: item.id,
+        purpose: scope.purpose,
+        recipient: scope.recipient,
+        at: this.deps.now(),
+        recipientAllowed: (role) => this.recipientAllows(scope.recipient, role),
+      });
+      const explicitlyProhibits = (source: ItemTerms | undefined, target: string): boolean => {
+        if (!source) return false;
+        if (source.inherited?.some((i) => explicitlyProhibits(i.terms ?? undefined, i.target)))
+          return true;
+        if (!Array.isArray(source.policy?.prohibitions) || !source.policy.prohibitions.length)
+          return false;
+        return (
+          evaluateItemTerms(
+            { policy: { ...source.policy, permissions: [], obligations: [] } },
+            {
+              agent: this.deps.identity.actor,
+              action: "distribute",
+              target,
+              purpose: scope.purpose,
+              recipient: scope.recipient,
+              at: this.deps.now(),
+            },
+            this.deps.policyEngine ?? solidOdrlEngine,
+          ).reason === "prohibited"
+        );
+      };
+      const value = item.statement?.value;
+      const literal =
+        value === undefined ? undefined : typeof value === "string" ? value : canonicalJson(value);
+      const bytes = item.kind === "content" ? item.statement?.bytes : undefined;
+      const rawText =
+        typeof bytes === "string"
+          ? bytes
+          : Array.isArray(bytes)
+            ? new TextDecoder().decode(Uint8Array.from(bytes))
+            : undefined;
+      const emailText = text.toLowerCase();
+      const repetitions = [literal, rawText].filter(
+        (itemText): itemText is string => !!itemText && emailText.includes(itemText.toLowerCase()),
+      );
+      const prohibited =
+        approved &&
+        repetitions.some((itemText) => itemText.length >= 4) &&
+        explicitlyProhibits(item.terms, item.id);
+      if (repetitions.length && this.missingRecipientRole(item.terms, scope.recipient)) {
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "fail",
+          `The email repeats ${item.label}'s value and the recipient lacks the registration its terms require.`,
+          { reason: "not-authorised" },
+        );
+        this.decide("stop", "The required recipient registration is missing.", "not-authorised");
+        return verdicts;
+      }
+      if (prohibited) {
+        this.verdict(
+          verdicts,
+          subject,
+          "data-terms",
+          "fail",
+          `The approved text repeats ${item.label}'s value verbatim, and its source explicitly prohibits this recipient or purpose. The principal cannot approve past that prohibition.`,
+          {
+            reason: "prohibited",
+            rule: {
+              id: "UNS-9",
+              text: "Exact-text review cannot waive a source's explicit prohibition on the item itself.",
+            },
+          },
+        );
+        this.decide(
+          "stop",
+          "The source's explicit prohibition stops this email before release.",
+          "prohibited",
+        );
+        return verdicts;
+      }
+      this.verdict(
+        verdicts,
+        subject,
+        "data-terms",
+        terms.verdict === "pass" || approved ? "pass" : "ask-principal",
+        approved
+          ? `The principal reviewed this exact text against ${item.label}'s restriction: ${terms.text} The approval confirms these bytes after that review.`
+          : `The exact email needs a person to review this item's restrictions: ${item.label}.`,
+        {
+          reason: approved
+            ? "approval-given"
+            : terms.verdict === "pass"
+              ? "terms-allow"
+              : "context-not-clear",
+        },
+      );
+    }
+    this.emit({
+      part: "core",
+      kind: "propose",
+      caption: "Agent-written plain text for exact principal review.",
+      chat: { who: "agent", text },
+    });
+    return verdicts;
+  }
+  checkEffect(intent: ActionIntent, parameters: JsonObject): boolean {
+    const scope = IntentScopeNode.fromIntent(intent);
+    if (!this.commitmentShape(intent)) return false;
+    const bounded = !!this.deps.gate.principalLimits?.commitments?.[scope.operation];
+    if (
+      (!bounded && scope.action !== "pay") ||
+      digestOf(parameters) === digestOf(intent.parameters)
+    )
+      return true;
+    const verdicts: CheckVerdict[] = [];
+    this.verdict(
+      verdicts,
+      actionDigest(intent),
+      "mandate",
+      "fail",
+      "The actual adapter parameters differ from the authorised action.",
+      { reason: "not-authorised" },
+    );
+    this.decide("stop", "The actual effect was not authorised.", "not-authorised");
+    return false;
+  }
+
+  private commitmentShape(intent: ActionIntent): boolean {
+    const scope = IntentScopeNode.fromIntent(intent);
+    const cap = this.deps.gate.principalLimits?.commitments?.[scope.operation];
+    if (!cap) return true;
+    const amount = intent.parameters.amount;
+    if (
+      typeof amount === "number" &&
+      Number.isFinite(amount) &&
+      amount >= 0 &&
+      Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7 &&
+      intent.parameters.currency === cap.currency
+    )
+      return true;
+    this.verdict(
+      [],
+      actionDigest(intent),
+      "limits-approval",
+      "fail",
+      "A bounded commitment requires a nonnegative amount in the configured currency.",
+      { reason: "malformed" },
+    );
+    this.decide("stop", "The bounded commitment is malformed.", "malformed");
+    return false;
+  }
+
+  /** Seal the evidence now and return the announcement to emit when releasing the message. */
+  seal(
+    message: AnyMessage,
+    wire: WireMessage,
+    opts: {
+      intent?: ActionIntent;
+      operation?: Iri;
+      vocabulary?: ContentVocabulary;
+      known?: KnownContent;
+    },
+  ): (recordConsumption?: OutboundDeps["consumeApproval"]) => void {
+    const envelope =
+      message instanceof MessageNode ? message : MessageEnvelopeNode.fromMessage(message);
+    const verdicts: CheckVerdict[] = [];
+    if (opts.intent) {
+      this.deps.reservePayment?.(opts.intent, envelope.id);
+      this.pendingGo.delete(actionDigest(opts.intent));
+    }
+    const signed =
+      wire.format === "awp-jws-compact/0.1" ||
+      (isMessagePacket(wire) && documentConfiguration(wire).signed);
+    const header =
+      wire.format === "awp-jws-compact/0.1" ? (decodeJws(wire.jws).header ?? {}) : { alg: "EdDSA" };
+    this.verdict(
+      verdicts,
+      envelope.id,
+      "evidence",
+      signed || this.unsignedAllowed(message) ? "pass" : "fail",
+      signed
+        ? `${isMessagePacket(wire) && packetProofInfo(wire)?.summary.includes("eddsa-rdfc") ? "Signed with eddsa-rdfc-2022" : `Signed (JWS ${String(header.alg)})`} with ${this.name(this.deps.identity.actor)}'s pinned key, and written to the record.`
+        : this.unsignedAllowed(message)
+          ? "Sent unsigned and with no identifier, as the public read configuration requires; written to the record."
+          : "Sent unsigned; written to the record.",
+      {
+        ...(signed || this.unsignedAllowed(message) ? {} : { reason: "evidence-missing" }),
+        rule: {
+          id: envelope.configurationId,
+          text: "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record.",
+        },
+      },
+    );
+    return (recordConsumption = this.deps.consumeApproval) => {
+      this.decide(
+        "go",
+        `The ${envelope.messageKind} message goes to ${this.name(envelope.to?.actor)}.`,
+        undefined,
+        { messageId: envelope.id, messageDigest: digestOf(message) },
+        opts.intent && this.releaseObservation(opts.intent, opts.intent.parameters),
+      );
+      if (opts.intent) recordConsumption?.(opts.intent);
+      this.emit(
+        {
+          part: "transport",
+          kind: "message-out",
+          messageId: envelope.id,
+          packet: packetView(message, wire, {
+            carriageSuite: this.deps.gate.configuration?.layers.transport ?? "unknown",
+            carriageSummary: "Handed to the carriage.",
+            name: this.name,
+            vocabulary: opts.vocabulary ?? this.deps.gate.vocabulary,
+            known: opts.known,
+          }),
+          ...refsFor(this.deps.gate, ["transport", "data-access", "meaning"]),
+          caption: `${this.name(envelope.participant.actor)} sends ${article(envelope.messageKind)} ${envelope.messageKind} message to ${this.name(envelope.to?.actor)}.`,
+        },
+        { kind: "payload", value: { message, wire } },
+      );
+    };
+  }
+
+  stopDisclosure(subject: string, reason = "excessive-scope"): void {
+    this.verdict(
+      [],
+      subject,
+      "disclosure",
+      "fail",
+      "The actual payload is outside the authorized item scope.",
+      { reason },
+    );
+    this.decide("stop", "The disclosure is stopped before release.", reason);
+  }
+
+  /** Evidence, then go, for an effect (no message): the activity is recorded first. */
+  sealEffect(intent: ActionIntent, releaseId: string, params: unknown): void {
+    this.setAction(intent);
+    this.deps.reservePayment?.(intent, releaseId);
+    this.pendingGo.delete(actionDigest(intent));
+    const verdicts: CheckVerdict[] = [];
+    this.verdict(
+      verdicts,
+      actionDigest(intent),
+      "evidence",
+      "pass",
+      "The activity is written to the record before it runs.",
+      {
+        rule: {
+          id: actionDigest(intent),
+          text: "Write-ahead: the intended activity is recorded first.",
+        },
+      },
+    );
+    this.decide(
+      "go",
+      `The action goes: ${this.describeAction(intent)}.`,
+      undefined,
+      { effectRelease: true },
+      this.releaseObservation(intent, [intent.parameters, params]),
+    );
+    this.deps.consumeApproval?.(intent);
+  }
+
+  /** The principal starts something in chat. */
+  instruction(text: string): void {
+    this.emit({
+      part: "principal",
+      kind: "principal-instruction",
+      chat: { who: "principal", text },
+      caption: `${this.owner} asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does.`,
+    });
+  }
+
+  /** The principal's own words, as a chat line. */
+  principal(
+    text: string,
+    caption: string,
+    approval?: { actionDigest: string; decision: "approve" | "deny" },
+  ): void {
+    this.emit({
+      part: "principal",
+      kind: "principal-reply",
+      ...(approval
+        ? { actionDigest: approval.actionDigest, approvalDecision: approval.decision }
+        : {}),
+      chat: { who: "principal", text },
+      caption,
+    });
+  }
+}
+
+function listWords(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "nothing";
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
+function lower(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}

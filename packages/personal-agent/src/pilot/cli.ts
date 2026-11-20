@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 /**
  * `awp-pilot` — file/stdio interface to the pilot personal agent.
  *
@@ -98,7 +99,7 @@ Setup (synthetic keys; nothing leaves this machine):
                                               without one; solid-odrl only when chosen explicitly
             [--role ROLE]                     personal (default) or a SYNTHETIC role; list them
                                               with \`roles\`. Roles with a fixed identity omit
-                                              --party/--actor; mortgage-consumer needs --wallet FILE,
+                                              --party/--actor; mortgage-consumer needs --wallet FILE --issuers FILE,
                                               mortgage-lender needs --issuers FILE (local anchors)
             [--role-input KEY=VALUE]...       role inputs declared by the role (\`roles\` lists them);
                                               unknown keys are refused
@@ -1224,7 +1225,7 @@ export async function main(
       try {
         const terms = buildMeetingTerms({
           calendar: a.calendar,
-          title: opt(o, "title") ?? "Synthetic test meeting",
+          title: opt(o, "title") ?? "meeting",
           durationMinutes: Number.parseInt(opt(o, "duration") ?? "30", 10),
           window: { start: need(o, "window-start"), end: need(o, "window-end") },
           now: now().toISOString(),

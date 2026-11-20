@@ -1,0 +1,1954 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "return-and-refund",
+  "useCase": "return-and-refund",
+  "title": "Returning a faulty item",
+  "profile": "return-and-refund",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:return-and-refund:owner",
+      "name": "The customer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:return-and-refund:receiver",
+      "name": "The merchant",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:return-and-refund:owner-agent",
+      "name": "The customer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:return-and-refund:receiver-agent",
+      "name": "The merchant’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:return-and-refund:receiver",
+          "tasks": [
+            "urn:op:return-and-refund",
+            "urn:op:return-and-refund:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:return-and-refund:owner",
+          "tasks": [
+            "urn:op:return-and-refund",
+            "urn:op:return-and-refund:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:return-and-refund:receiver",
+          "tasks": [
+            "urn:op:return-and-refund"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:return-and-refund:merchant.receipt",
+          "version": "1",
+          "source": "urn:fictional:return-and-refund:receiver",
+          "claimTypes": [
+            "merchant.receipt"
+          ],
+          "subjects": [
+            "urn:fictional:return-and-refund:owner"
+          ]
+        },
+        {
+          "id": "urn:source:customer-photo",
+          "version": "1",
+          "source": "urn:fictional:return-and-refund:owner",
+          "claimTypes": [
+            "unstructured-content"
+          ],
+          "subjects": [
+            "urn:fictional:return-and-refund:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:return-and-refund:merchant.receipt",
+          "version": "1",
+          "source": "urn:fictional:return-and-refund:receiver",
+          "claimTypes": [
+            "merchant.receipt"
+          ],
+          "subjects": [
+            "urn:fictional:return-and-refund:owner"
+          ]
+        },
+        {
+          "id": "urn:source:customer-photo",
+          "version": "1",
+          "source": "urn:fictional:return-and-refund:owner",
+          "claimTypes": [
+            "unstructured-content"
+          ],
+          "subjects": [
+            "urn:fictional:return-and-refund:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "receipt",
+      "issuer": "receiver",
+      "subject": "urn:fictional:return-and-refund:owner",
+      "kind": "merchant.receipt",
+      "value": {
+        "product": "urn:fictional:kettle",
+        "amount": 40,
+        "currency": "GBP",
+        "purchased": "2026-11-01"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:return-and-refund:receipt",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:return-and-refund:receipt",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:return-and-refund"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:return-and-refund:receipt",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:return-and-refund"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "photo",
+      "issuer": "owner",
+      "subject": "urn:fictional:return-and-refund:owner",
+      "kind": "unstructured-content",
+      "value": {
+        "contentDigest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+      },
+      "method": "self-reported",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:return-and-refund:photo",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:return-and-refund:photo",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:return-and-refund"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:return-and-refund:photo",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:return-and-refund"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:return-and-refund"
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:return-and-refund"
+        }
+      ]
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:return-and-refund:request"
+        },
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:return-and-refund",
+          "constraints": [
+            {
+              "leftOperand": "dateTime",
+              "operator": "lteq",
+              "rightOperand": "2026-11-30T23:59:59.000Z"
+            }
+          ]
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "admit-source",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "receipt",
+        "photo"
+      ],
+      "purpose": "urn:purpose:return-and-refund"
+    },
+    {
+      "id": "request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:return-and-refund:request",
+      "contents": {
+        "request": "merchant.receipt"
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:return-and-refund:request",
+        "operation": "urn:op:return-and-refund:request",
+        "recipient": "urn:fictional:return-and-refund:owner",
+        "purpose": "urn:purpose:return-and-refund",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:return-and-refund"
+    },
+    {
+      "id": "request-arrives",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "share",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:return-and-refund",
+      "contents": {
+        "items": [
+          "urn:scenario:return-and-refund:receipt"
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:return-and-refund",
+        "operation": "urn:op:return-and-refund",
+        "recipient": "urn:fictional:return-and-refund:receiver",
+        "purpose": "urn:purpose:return-and-refund",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": "urn:scenario:return-and-refund:receipt",
+            "claimType": "merchant.receipt"
+          }
+        ]
+      },
+      "evidence": [
+        "receipt",
+        "photo"
+      ],
+      "purpose": "urn:purpose:return-and-refund",
+      "content": [
+        {
+          "id": "urn:content:return-photo",
+          "mediaType": "image/png",
+          "bytes": [
+            137,
+            80,
+            78,
+            71,
+            13,
+            10,
+            26,
+            10,
+            0,
+            0,
+            0,
+            13,
+            73,
+            72,
+            68,
+            82,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            8,
+            4,
+            0,
+            0,
+            0,
+            181,
+            28,
+            12,
+            2,
+            0,
+            0,
+            0,
+            11,
+            73,
+            68,
+            65,
+            84,
+            120,
+            218,
+            99,
+            252,
+            255,
+            31,
+            0,
+            3,
+            3,
+            2,
+            0,
+            239,
+            163,
+            241,
+            119,
+            0,
+            0,
+            0,
+            0,
+            73,
+            69,
+            78,
+            68,
+            174,
+            66,
+            96,
+            130
+          ]
+        }
+      ]
+    },
+    {
+      "id": "approve-exact-photo",
+      "agent": "owner-agent",
+      "type": "approve",
+      "decision": "approve",
+      "note": "Send this exact synthetic photograph and merchant receipt for this return.",
+      "evidence": []
+    },
+    {
+      "id": "receive",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "refund",
+      "agent": "receiver-agent",
+      "type": "effect",
+      "intent": {
+        "action": "transfer",
+        "operation": "urn:op:return-and-refund",
+        "target": "urn:op:return-and-refund",
+        "recipient": "urn:fictional:return-and-refund:receiver",
+        "purpose": "urn:purpose:return-and-refund",
+        "conversation": "urn:scenario:return-and-refund:task",
+        "parameters": {
+          "support": [
+            "urn:scenario:return-and-refund:receipt"
+          ],
+          "amount": 40,
+          "currency": "GBP"
+        }
+      },
+      "params": {
+        "amount": 40,
+        "currency": "GBP"
+      },
+      "activityType": "urn:activity:local-refund-credit"
+    },
+    {
+      "id": "refund-completed",
+      "agent": "receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.refund.effect.conclusion"
+      },
+      "expected": "completed"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The customer's agent asks for a refund outside the return window",
+      "change": {
+        "script": [
+          {
+            "id": "outside-return-window",
+            "agent": "owner-agent",
+            "type": "advance",
+            "milliseconds": 2592000000
+          },
+          {
+            "id": "admit-source",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "receipt",
+              "photo"
+            ],
+            "purpose": "urn:purpose:return-and-refund"
+          },
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "invoke",
+            "operation": "urn:op:return-and-refund:request",
+            "contents": {
+              "request": "merchant.receipt"
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:return-and-refund:request",
+              "operation": "urn:op:return-and-refund:request",
+              "recipient": "urn:fictional:return-and-refund:owner",
+              "purpose": "urn:purpose:return-and-refund",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:return-and-refund"
+          },
+          {
+            "id": "request-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "share",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:return-and-refund",
+            "contents": {
+              "items": [
+                "urn:scenario:return-and-refund:receipt"
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:return-and-refund",
+              "operation": "urn:op:return-and-refund",
+              "recipient": "urn:fictional:return-and-refund:receiver",
+              "purpose": "urn:purpose:return-and-refund",
+              "parameters": {},
+              "evidence": [
+                {
+                  "itemId": "urn:scenario:return-and-refund:receipt",
+                  "claimType": "merchant.receipt"
+                }
+              ]
+            },
+            "evidence": [
+              "receipt",
+              "photo"
+            ],
+            "purpose": "urn:purpose:return-and-refund",
+            "content": [
+              {
+                "id": "urn:content:return-photo",
+                "mediaType": "image/png",
+                "bytes": [
+                  137,
+                  80,
+                  78,
+                  71,
+                  13,
+                  10,
+                  26,
+                  10,
+                  0,
+                  0,
+                  0,
+                  13,
+                  73,
+                  72,
+                  68,
+                  82,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  1,
+                  8,
+                  4,
+                  0,
+                  0,
+                  0,
+                  181,
+                  28,
+                  12,
+                  2,
+                  0,
+                  0,
+                  0,
+                  11,
+                  73,
+                  68,
+                  65,
+                  84,
+                  120,
+                  218,
+                  99,
+                  252,
+                  255,
+                  31,
+                  0,
+                  3,
+                  3,
+                  2,
+                  0,
+                  239,
+                  163,
+                  241,
+                  119,
+                  0,
+                  0,
+                  0,
+                  0,
+                  73,
+                  69,
+                  78,
+                  68,
+                  174,
+                  66,
+                  96,
+                  130
+                ]
+              }
+            ]
+          },
+          {
+            "id": "approve-exact-photo",
+            "agent": "owner-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Send this exact synthetic photograph and merchant receipt for this return.",
+            "evidence": []
+          },
+          {
+            "id": "receive",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "from": "owner-agent"
+          },
+          {
+            "id": "refund",
+            "agent": "receiver-agent",
+            "type": "effect",
+            "intent": {
+              "action": "transfer",
+              "operation": "urn:op:return-and-refund",
+              "target": "urn:op:return-and-refund",
+              "recipient": "urn:fictional:return-and-refund:receiver",
+              "purpose": "urn:purpose:return-and-refund",
+              "conversation": "urn:scenario:return-and-refund:task",
+              "parameters": {
+                "support": [
+                  "urn:scenario:return-and-refund:receipt"
+                ],
+                "amount": 40,
+                "currency": "GBP"
+              }
+            },
+            "params": {
+              "amount": 40,
+              "currency": "GBP"
+            },
+            "activityType": "urn:activity:local-refund-credit"
+          }
+        ],
+        "traceSteps": {
+          "1": "The customer’s agent completes the advance step.",
+          "2": "The customer’s agent checks the signed statements.",
+          "3": "The merchant’s agent sends the signed request.",
+          "4": "The customer’s agent checks the message and prepares a response.",
+          "5": "The customer’s agent sends the signed request.",
+          "6": "The customer’s agent completes the approve step.",
+          "7": "The merchant’s agent checks the message and prepares a response.",
+          "8": "The merchant’s agent proposes the local action."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "approval-given"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "fail",
+          "reason": "not-authorised"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "not-authorised"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "reason": "context-not-clear"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "approval-given"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "source",
+    "mandate",
+    "fitness"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Return and refund service",
+      "replacedBy": "The merchant’s source-signed receipt and a local credit-record adapter; this fixture policy permits returns within November only, and no cash settlement is claimed"
+    },
+    {
+      "what": "Fault photograph",
+      "replacedBy": "A synthetic PNG carried whole with its customer-signed digest; refund relies on the merchant receipt and date policy, not a model diagnosis of the image"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "limits-approval",
+    "reason": "within-limits"
+  },
+  "traceSteps": {
+    "1": "The customer’s agent checks the signed statements.",
+    "2": "The merchant’s agent sends the signed request.",
+    "3": "The customer’s agent checks the message and prepares a response.",
+    "4": "The customer’s agent sends the signed request.",
+    "5": "The customer’s agent completes the approve step.",
+    "6": "The merchant’s agent checks the message and prepares a response.",
+    "7": "The merchant’s agent proposes the local action.",
+    "8": "The merchant’s agent checks the observed result."
+  }
+}

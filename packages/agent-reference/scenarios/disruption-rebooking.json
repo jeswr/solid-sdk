@@ -1,0 +1,892 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "disruption-rebooking",
+  "useCase": "disruption-rebooking",
+  "title": "Rebooking after a cancelled flight",
+  "profile": "disruption-rebooking",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:disruption-rebooking:owner",
+      "name": "The traveller",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:disruption-rebooking:receiver",
+      "name": "The airline",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:disruption-rebooking:owner-agent",
+      "name": "The traveller’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:disruption-rebooking:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:disruption-rebooking:receiver-agent",
+      "name": "The airline’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:disruption-rebooking:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:disruption-rebooking:receiver",
+          "tasks": [
+            "urn:op:disruption-rebooking",
+            "urn:op:disruption-rebooking:request",
+            "urn:op:disruption-rebooking:disclose"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:disruption-rebooking:owner",
+          "tasks": [
+            "urn:op:disruption-rebooking",
+            "urn:op:disruption-rebooking:request",
+            "urn:op:disruption-rebooking:disclose"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:disruption-rebooking:traveller.margin",
+          "version": "1",
+          "source": "urn:fictional:disruption-rebooking:owner",
+          "claimTypes": [
+            "traveller.margin"
+          ],
+          "subjects": [
+            "urn:fictional:disruption-rebooking:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:disruption-rebooking:traveller.margin",
+          "version": "1",
+          "source": "urn:fictional:disruption-rebooking:owner",
+          "claimTypes": [
+            "traveller.margin"
+          ],
+          "subjects": [
+            "urn:fictional:disruption-rebooking:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "ceiling",
+      "issuer": "owner",
+      "subject": "urn:fictional:disruption-rebooking:owner",
+      "kind": "traveller.margin",
+      "value": {
+        "value": 50,
+        "currency": "GBP"
+      },
+      "method": "self-reported",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:disruption-rebooking:ceiling",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:disruption-rebooking:ceiling",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:traveller-planning"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:disruption-rebooking"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:disruption-rebooking:disclose"
+        }
+      ],
+      "withApproval": [],
+      "limits": {
+        "commitments": {
+          "urn:op:disruption-rebooking": {
+            "maxAmount": 50,
+            "currency": "GBP"
+          }
+        }
+      }
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:disruption-rebooking:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:disruption-rebooking"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "traveller-loads-margin",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "ceiling"
+      ],
+      "purpose": "urn:purpose:traveller-planning"
+    },
+    {
+      "id": "airline-offer",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "propose",
+      "operation": "urn:op:disruption-rebooking",
+      "contents": {
+        "price": 20,
+        "currency": "GBP",
+        "item": "replacement-flight",
+        "travelDate": "2026-11-13"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:disruption-rebooking",
+        "target": "urn:op:disruption-rebooking",
+        "purpose": "urn:purpose:disruption-rebooking",
+        "recipient": "urn:fictional:disruption-rebooking:owner",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:disruption-rebooking"
+    },
+    {
+      "id": "buyer-accepts",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent",
+      "reply": {
+        "type": "accept",
+        "intent": {
+          "action": "transfer",
+          "operation": "urn:op:disruption-rebooking",
+          "target": "urn:op:disruption-rebooking",
+          "purpose": "urn:purpose:disruption-rebooking",
+          "recipient": {
+            "$ref": "current.peer.party"
+          },
+          "conversation": {
+            "$ref": "current.conversation.id"
+          },
+          "parameters": {
+            "amount": {
+              "$ref": "current.message.body.terms.price"
+            },
+            "currency": {
+              "$ref": "current.message.body.terms.currency"
+            },
+            "termsDigest": {
+              "$ref": "current.message.body.termsDigest"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "seller-verifies-acceptance",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "buyer-record",
+      "agent": "owner-agent",
+      "type": "record"
+    },
+    {
+      "id": "seller-record",
+      "agent": "receiver-agent",
+      "type": "record"
+    },
+    {
+      "id": "buyer-agreement",
+      "agent": "owner-agent",
+      "type": "conversation",
+      "conversation": {
+        "$ref": "steps.airline-offer.conversation"
+      }
+    },
+    {
+      "id": "seller-agreement",
+      "agent": "receiver-agent",
+      "type": "conversation",
+      "conversation": {
+        "$ref": "steps.airline-offer.conversation"
+      }
+    },
+    {
+      "id": "same-agreement",
+      "agent": "owner-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.buyer-agreement.agreement"
+      },
+      "expected": {
+        "$ref": "steps.seller-agreement.agreement"
+      }
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The only alternative costs more than the pre-agreed margin",
+      "change": {
+        "script": [
+          {
+            "id": "traveller-loads-margin",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "ceiling"
+            ],
+            "purpose": "urn:purpose:traveller-planning"
+          },
+          {
+            "id": "airline-offer",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "propose",
+            "operation": "urn:op:disruption-rebooking",
+            "contents": {
+              "price": 70,
+              "currency": "GBP",
+              "item": "replacement-flight",
+              "travelDate": "2026-11-13"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:disruption-rebooking",
+              "target": "urn:op:disruption-rebooking",
+              "purpose": "urn:purpose:disruption-rebooking",
+              "recipient": "urn:fictional:disruption-rebooking:owner",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:disruption-rebooking"
+          },
+          {
+            "id": "buyer-accepts",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent",
+            "reply": {
+              "type": "accept",
+              "intent": {
+                "action": "transfer",
+                "operation": "urn:op:disruption-rebooking",
+                "target": "urn:op:disruption-rebooking",
+                "purpose": "urn:purpose:disruption-rebooking",
+                "recipient": {
+                  "$ref": "current.peer.party"
+                },
+                "conversation": {
+                  "$ref": "current.conversation.id"
+                },
+                "parameters": {
+                  "amount": {
+                    "$ref": "current.message.body.terms.price"
+                  },
+                  "currency": {
+                    "$ref": "current.message.body.terms.currency"
+                  },
+                  "termsDigest": {
+                    "$ref": "current.message.body.termsDigest"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "traceSteps": {
+          "1": "The traveller’s agent checks the signed statements.",
+          "2": "The airline’s agent sends the signed request.",
+          "3": "The traveller’s agent checks the message and prepares a response."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded",
+        "check": "limits-approval"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "limit-exceeded"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "limit-exceeded"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "principal",
+          "kind": "ask-principal"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "limits-approval",
+    "mandate"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Airline inventory and fare offer",
+      "replacedBy": "Fictional airline agent signs a same-day replacement-flight offer; direct local signed messages have real expiry windows, and acceptance is recorded on both sides, without claiming a live seat reservation"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "limits-approval",
+    "reason": "within-limits"
+  },
+  "traceSteps": {
+    "1": "The traveller’s agent checks the signed statements.",
+    "2": "The airline’s agent sends the signed request.",
+    "3": "The traveller’s agent checks the message and prepares a response.",
+    "4": "The airline’s agent checks the message and prepares a response.",
+    "5": "The traveller’s agent checks the durable record.",
+    "6": "The airline’s agent checks the durable record.",
+    "7": "The traveller’s agent completes the conversation step.",
+    "8": "The airline’s agent completes the conversation step.",
+    "9": "The traveller’s agent checks the observed result."
+  }
+}

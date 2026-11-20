@@ -1,0 +1,924 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "degree-recognition",
+  "useCase": "degree-recognition",
+  "title": "Showing a degree to an employer abroad",
+  "profile": "degree-recognition",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:degree-recognition:owner",
+      "name": "The graduate",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:degree-recognition:receiver",
+      "name": "The foreign employer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "university",
+      "identity": "urn:fictional:degree-recognition:university",
+      "name": "The fictional university",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "national-root",
+      "identity": "urn:fictional:degree-recognition:national-root",
+      "name": "The employer’s national register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:degree-recognition:owner-agent",
+      "name": "The graduate’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:degree-recognition:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:degree-recognition:receiver-agent",
+      "name": "The foreign employer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:degree-recognition:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:degree-recognition:receiver",
+          "tasks": [
+            "urn:op:degree-recognition",
+            "urn:op:degree-recognition:request",
+            "urn:op:degree-recognition:proof-request",
+            "urn:op:degree-recognition:proof-answer"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:degree-recognition:owner",
+          "tasks": [
+            "urn:op:degree-recognition",
+            "urn:op:degree-recognition:request",
+            "urn:op:degree-recognition:proof-request",
+            "urn:op:degree-recognition:proof-answer"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:degree-recognition:education.degree",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:university",
+          "claimTypes": [
+            "education.degree"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:owner"
+          ]
+        },
+        {
+          "id": "urn:source:degree-recognition:university:education.degree-code",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:university",
+          "claimTypes": [
+            "education.degree-code"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:owner"
+          ]
+        },
+        {
+          "id": "urn:source:degree-recognition:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:receiver"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:degree-recognition:education.degree",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:university",
+          "claimTypes": [
+            "education.degree"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:owner"
+          ]
+        },
+        {
+          "id": "urn:source:degree-recognition:university:education.degree-code",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:university",
+          "claimTypes": [
+            "education.degree-code"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:owner"
+          ]
+        },
+        {
+          "id": "urn:source:degree-recognition:receiver:derivation.request",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:receiver",
+          "claimTypes": [
+            "derivation.request"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:receiver"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "degree",
+      "issuer": "university",
+      "subject": "urn:fictional:degree-recognition:owner",
+      "kind": "education.degree",
+      "value": {
+        "degree": "fictional-degree",
+        "awarded": "2025-06-30"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:degree-recognition:degree",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:degree-recognition:degree",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:degree-recognition"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:degree-recognition:degree",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:degree-recognition"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "proof-degree",
+      "issuer": "university",
+      "subject": "urn:fictional:degree-recognition:owner",
+      "kind": "education.degree-code",
+      "value": {
+        "value": "BSc"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:degree-recognition:proof-degree",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:degree-recognition"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:degree-recognition"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:degree-recognition"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:degree-recognition:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:degree-recognition:proof-answer"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:degree-recognition:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:degree-recognition:proof-request"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:degree-recognition:proof-answer"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "private-inputs",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "proof-degree"
+      ],
+      "subject": "urn:fictional:degree-recognition:owner",
+      "purpose": "urn:purpose:degree-recognition"
+    },
+    {
+      "id": "fresh-request",
+      "agent": "receiver-agent",
+      "type": "proof-request",
+      "rule": "urn:rule:degree-recognition:proof",
+      "subject": "urn:fictional:degree-recognition:owner",
+      "purpose": "urn:purpose:degree-recognition",
+      "assurances": [
+        "attested"
+      ]
+    },
+    {
+      "id": "send-request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:degree-recognition:proof-request",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.fresh-request.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:degree-recognition:proof-request",
+        "operation": "urn:op:degree-recognition:proof-request",
+        "recipient": "urn:fictional:degree-recognition:owner",
+        "purpose": "urn:purpose:degree-recognition",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:degree-recognition",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.fresh-request.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-request",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "prove-answer",
+      "agent": "owner-agent",
+      "type": "prove",
+      "method": "sparq-zk-result/5",
+      "request": {
+        "$ref": "steps.fresh-request.request"
+      },
+      "recipient": "urn:fictional:degree-recognition:receiver",
+      "assurance": "attested",
+      "proofBinds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "inputs": [
+        "proof-degree"
+      ]
+    },
+    {
+      "id": "send-answer",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:degree-recognition:proof-answer",
+      "contents": {
+        "items": [
+          {
+            "$ref": "steps.prove-answer.statement.id"
+          }
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:degree-recognition:proof-answer",
+        "operation": "urn:op:degree-recognition:proof-answer",
+        "recipient": "urn:fictional:degree-recognition:receiver",
+        "purpose": "urn:purpose:degree-recognition",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:degree-recognition",
+      "derivedEvidence": [
+        {
+          "$ref": "steps.prove-answer.jws"
+        }
+      ]
+    },
+    {
+      "id": "receive-answer",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "receiver-facts",
+      "agent": "receiver-agent",
+      "type": "facts"
+    },
+    {
+      "id": "check-answer",
+      "agent": "receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.receiver-facts.0.value"
+      },
+      "expected": true
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "No chain links the two national registers",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws",
+          "trust": "register-chain"
+        },
+        "trust": {
+          "sources": {
+            "receiver-agent": []
+          },
+          "root": {
+            "id": "urn:fictional:degree-recognition:national-root",
+            "name": "The employer’s national trust root",
+            "delegates": []
+          }
+        },
+        "script": [
+          {
+            "id": "foreign-university-preflight",
+            "agent": "receiver-agent",
+            "type": "admit",
+            "statements": [
+              "degree"
+            ],
+            "purpose": "urn:purpose:degree-recognition",
+            "operation": "urn:op:degree-recognition"
+          }
+        ],
+        "traceSteps": {
+          "1": "The foreign employer’s agent checks the signed statements."
+        },
+        "requiredMethods": [],
+        "proofCredentials": [],
+        "stress": [
+          "source"
+        ]
+      },
+      "expect": {
+        "outcome": "ask-more",
+        "check": "source",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "ask-more",
+          "reason": "source-unknown"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-more",
+        "reason": "source-unknown"
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "source",
+    "fitness",
+    "disclosure"
+  ],
+  "suites": {},
+  "assurance": "attested",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Blocked: @sparq-org/zk-result rejects the issuer-scoped FILTER IN membership with \"operator outside positive BGP/JOIN/FILTER\"; @sparq-org/zk-query has no catalogue plan for the scoped BSc-or-MSc query."
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Foreign university trust preflight",
+      "replacedBy": "The locally introduced university key verifies its degree statement, but no register chain reaches it; no selective hidden-value proof is made"
+    }
+  ],
+  "traceSteps": {},
+  "requiredMethods": [],
+  "catalogueAssurance": "proved",
+  "recordedAssurance": "attested",
+  "proofCredentials": [
+    {
+      "method": "sparq-zk-result/5",
+      "issuer": "university",
+      "subject": "urn:fictional:degree-recognition:owner",
+      "statements": [
+        "proof-degree"
+      ],
+      "status": {
+        "list": "urn:fictional:status:degree-recognition:university",
+        "index": 0,
+        "version": 1,
+        "active": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "configuration": {
+    "id": "authenticity-data-integrity",
+    "change": {
+      "authenticity": "data-integrity"
+    },
+    "world": {
+      "mandates": {
+        "sam-agent": {
+          "autonomous": {
+            "urn:rule:use:payment-request": {
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:valuation"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "note": "The patch narrows one of Sam's baseline mandate rules without listing it in replaces."
+}

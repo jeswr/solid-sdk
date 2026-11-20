@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The optional local A2A binding in-process: agents run the loopback listener of the official
  * `@a2a-js/sdk` against their AgentHost and dispatch through the runtime transmission boundary.
@@ -8,6 +9,7 @@
  * Denial tests count requests at the PEER's listener (every request, before any check): a
  * sender-side refusal must leave that count at zero — not merely be rejected by the peer.
  */
+
 import {
   chmodSync,
   existsSync,
@@ -22,6 +24,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readJson } from "@jeswr/agent-reference/wire/document";
 import { afterEach, describe, expect, it } from "vitest";
 import { freePort } from "../test-support/free-port.js";
 import {
@@ -373,16 +376,12 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
     const carol = await host(env, "carol", { auto: false });
     await propose(alice, "bob");
     const [out] = alice.h.undelivered(IDS.bob[1]);
-    if (out?.wire.format !== "awp-jws-compact/0.1") throw new Error("no signed outbound");
+    if (out?.wire.format !== "awp-jsonld/0.1") throw new Error("no signed outbound");
     const bobPeer = readA2aPeers(alice.a.dir).find((p) => p.actor === IDS.bob[1]);
     if (!bobPeer) throw new Error("bob not pinned");
-    const [h, p, s] = out.wire.jws.split(".");
-    const payload = JSON.parse(Buffer.from(p as string, "base64url").toString());
-    payload.kind = "propose";
-    const tampered = {
-      ...out.wire,
-      jws: `${h}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.${s}`,
-    };
+    const doc = readJson(out.wire.jsonld);
+    doc.expiresAt = new Date(env.clock.t + HOUR).toISOString();
+    const tampered = { ...out.wire, jsonld: JSON.stringify(doc) };
     expect(await sendEnvelope(bobPeer, { id: `${out.id}-t`, wire: tampered })).toMatchObject({
       kind: "processed",
       ack: { disposition: "rejected", reason: "bad-signature" },
@@ -773,6 +772,8 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
       "mortgage-consumer",
       "--wallet",
       issuance.wallet,
+      "--issuers",
+      issuance.issuers,
       "--owner-dir",
       owners,
       ...common,

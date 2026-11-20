@@ -1,0 +1,1594 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "home-purchase",
+  "useCase": "home-purchase",
+  "title": "Buying a home",
+  "profile": "home-purchase",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:home-purchase:owner",
+      "name": "The buyer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:home-purchase:receiver",
+      "name": "The seller",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "bank",
+      "identity": "urn:fictional:home-purchase:bank",
+      "name": "The conveyancer’s deposit bank",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "email",
+      "identity": "urn:fictional:home-purchase:email",
+      "name": "The unverified account sender",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "land-register",
+      "identity": "urn:fictional:home-purchase:land-register",
+      "name": "The fictional land registry",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "other-person",
+      "identity": "urn:fictional:home-purchase:other-person",
+      "name": "The other fictional owner",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:home-purchase:owner-agent",
+      "name": "The buyer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:home-purchase:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:home-purchase:receiver-agent",
+      "name": "The seller’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:home-purchase:receiver-agent:actor",
+      "actsFor": "receiver"
+    },
+    {
+      "id": "coordinator",
+      "identity": "urn:fictional:home-purchase:coordinator",
+      "name": "The conveyancer and conditional escrow register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "coordinator-agent",
+      "identity": "urn:fictional:home-purchase:coordinator-agent",
+      "actor": "urn:fictional:home-purchase:coordinator-agent:actor",
+      "name": "The conveyancer and conditional escrow register’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "coordinator"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ],
+      [
+        "owner-agent",
+        "coordinator-agent"
+      ],
+      [
+        "receiver-agent",
+        "coordinator-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:home-purchase:receiver",
+          "tasks": [
+            "urn:op:home-purchase",
+            "urn:op:home-purchase:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:home-purchase:owner",
+          "tasks": [
+            "urn:op:home-purchase"
+          ]
+        },
+        {
+          "party": "urn:fictional:home-purchase:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:home-purchase:owner",
+          "tasks": [
+            "urn:op:home-purchase",
+            "urn:op:home-purchase:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:home-purchase:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        }
+      ],
+      "coordinator-agent": [
+        {
+          "party": "urn:fictional:home-purchase:coordinator",
+          "tasks": [
+            "urn:op:agreement"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:home-purchase:deposit.account",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:bank",
+          "claimTypes": [
+            "deposit.account"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:owner"
+          ]
+        },
+        {
+          "id": "urn:source:home-purchase:land.ownership",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:land-register",
+          "claimTypes": [
+            "land.ownership"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:receiver"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:home-purchase:deposit.account",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:bank",
+          "claimTypes": [
+            "deposit.account"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:owner"
+          ]
+        },
+        {
+          "id": "urn:source:home-purchase:land.ownership",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:land-register",
+          "claimTypes": [
+            "land.ownership"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:receiver"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "new-account",
+      "issuer": "email",
+      "subject": "urn:fictional:home-purchase:owner",
+      "kind": "deposit.account",
+      "value": {
+        "account": "urn:fictional:new-deposit-account"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:home-purchase:new-account",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:home-purchase:new-account",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:home-purchase:new-account",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ownership",
+      "issuer": "land-register",
+      "subject": "urn:fictional:home-purchase:other-person",
+      "kind": "land.ownership",
+      "value": {
+        "property": "urn:fictional:home"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:home-purchase:ownership",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:home-purchase:ownership",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:home-purchase:ownership",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "completion-condition",
+      "issuer": "land-register",
+      "subject": "urn:fictional:home-purchase:asset",
+      "kind": "searches.complete",
+      "value": {
+        "value": true
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:fictional:home-purchase:condition-terms",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:home-purchase:completion-condition",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:home-purchase"
+        },
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:home-purchase"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:home-purchase:request"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "coordinator-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:agreement"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "reserve-plan",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "hold"
+    },
+    {
+      "id": "accept-owner",
+      "agent": "owner-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-receiver",
+      "agent": "receiver-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "accept-coordinator",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "accept"
+    },
+    {
+      "id": "complete-plan",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "complete",
+      "evidence": [
+        "completion-condition"
+      ]
+    },
+    {
+      "id": "completed",
+      "agent": "coordinator-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.complete-plan.service.status"
+      },
+      "expected": "complete"
+    },
+    {
+      "id": "issue-to-owner",
+      "agent": "owner-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-receiver",
+      "agent": "receiver-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    },
+    {
+      "id": "issue-to-coordinator",
+      "agent": "coordinator-agent",
+      "type": "agreement-request",
+      "service": "coordinator",
+      "operation": "collect"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A message gives a new account for the deposit",
+      "change": {
+        "suites": {
+          "commitments": "signed-offer-acceptance"
+        },
+        "script": [
+          {
+            "id": "source-preflight",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "new-account"
+            ],
+            "purpose": "urn:purpose:home-purchase"
+          },
+          {
+            "id": "proposed-completion",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "transfer",
+              "operation": "urn:op:home-purchase",
+              "target": "urn:op:home-purchase",
+              "recipient": "urn:fictional:home-purchase:owner",
+              "purpose": "urn:purpose:home-purchase",
+              "conversation": "urn:scenario:home-purchase:task",
+              "parameters": {}
+            },
+            "params": {},
+            "activityType": "urn:activity:conveyancing-step"
+          }
+        ],
+        "traceSteps": {
+          "1": "The buyer’s agent checks the signed statements.",
+          "2": "The buyer’s agent proposes the local action."
+        },
+        "agreements": []
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The seller is not the registered owner",
+      "change": {
+        "suites": {
+          "commitments": "signed-offer-acceptance"
+        },
+        "script": [
+          {
+            "id": "source-preflight",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "ownership"
+            ],
+            "purpose": "urn:purpose:home-purchase"
+          },
+          {
+            "id": "proposed-completion",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:home-purchase",
+              "target": "urn:op:home-purchase",
+              "recipient": "urn:fictional:home-purchase:owner",
+              "purpose": "urn:purpose:home-purchase",
+              "conversation": "urn:scenario:home-purchase:task",
+              "parameters": {}
+            },
+            "params": {},
+            "activityType": "urn:activity:conveyancing-step"
+          }
+        ],
+        "traceSteps": {
+          "1": "The buyer’s agent checks the signed statements.",
+          "2": "The buyer’s agent proposes the local action."
+        },
+        "agreements": []
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "coordinator-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "coordinator",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    }
+  ],
+  "stress": [
+    "source",
+    "fitness"
+  ],
+  "suites": {
+    "commitments": "agreement-credential"
+  },
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Conveyancing source preflights",
+      "replacedBy": "An email author signs an unauthoritative deposit account; the registry signs ownership by someone other than the seller. No funds, escrow or completion are simulated"
+    },
+    {
+      "what": "Multi-party completion, local conditional escrow and reservation providers",
+      "replacedBy": "A separately keyed fictional coordinator owns the durable reservation register; holds and all confirmations change in one local atomic snapshot. Every party accepts with its own represented actor key."
+    }
+  ],
+  "traceSteps": {
+    "1": "The parties complete and collect their signed agreement.",
+    "2": "The parties complete and collect their signed agreement.",
+    "3": "The parties complete and collect their signed agreement.",
+    "4": "The parties complete and collect their signed agreement.",
+    "5": "The parties complete and collect their signed agreement.",
+    "6": "The parties complete and collect their signed agreement.",
+    "7": "The parties complete and collect their signed agreement.",
+    "8": "The parties complete and collect their signed agreement.",
+    "9": "The parties complete and collect their signed agreement."
+  },
+  "agreements": [
+    {
+      "service": "coordinator",
+      "definition": {
+        "id": "urn:fictional:home-purchase:agreement",
+        "coordinator": "urn:fictional:home-purchase:coordinator",
+        "parties": [
+          "urn:fictional:home-purchase:owner",
+          "urn:fictional:home-purchase:receiver",
+          "urn:fictional:home-purchase:coordinator"
+        ],
+        "required": [
+          "urn:fictional:home-purchase:owner",
+          "urn:fictional:home-purchase:receiver",
+          "urn:fictional:home-purchase:coordinator"
+        ],
+        "terms": {
+          "asset": "urn:fictional:home-purchase:asset",
+          "purpose": "urn:purpose:home-purchase",
+          "validFrom": "2026-11-13T00:00:00.000Z",
+          "validUntil": "2027-11-13T00:00:00.000Z",
+          "clauses": {
+            "price": 250000,
+            "deposit": 25000,
+            "currency": "GBP"
+          }
+        },
+        "conditions": [
+          {
+            "kind": "funds.held",
+            "source": "urn:fictional:home-purchase:coordinator",
+            "subject": "urn:fictional:home-purchase:asset",
+            "equals": {
+              "value": true,
+              "amount": 25000,
+              "currency": "GBP",
+              "plan": "urn:fictional:home-purchase:agreement"
+            }
+          },
+          {
+            "kind": "searches.complete",
+            "source": "urn:fictional:home-purchase:land-register",
+            "subject": "urn:fictional:home-purchase:asset",
+            "equals": {
+              "value": true
+            }
+          }
+        ],
+        "reservations": [
+          {
+            "id": "urn:fictional:home-purchase:hold:owner",
+            "provider": "urn:fictional:home-purchase:owner",
+            "amount": 25000,
+            "currency": "GBP"
+          },
+          {
+            "id": "urn:fictional:home-purchase:hold:receiver",
+            "provider": "urn:fictional:home-purchase:receiver",
+            "amount": 0,
+            "currency": "GBP"
+          }
+        ],
+        "budget": {
+          "amount": 25000,
+          "currency": "GBP"
+        }
+      }
+    }
+  ]
+}

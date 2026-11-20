@@ -795,6 +795,28 @@ describe("global restrictions across module load forms", () => {
     ).toContain("invalid file URL import target");
   });
 
+  it("allows a CommonJS loader only in the sparq aggregate adapter", () => {
+    const loader =
+      'import { createRequire } from "module";\nexport const load = (d) => createRequire(d)("./aggregate.js");\n';
+    expect(
+      scan("packages/agent-reference/src/derive/adapters/sparq-aggregate.ts", loader).filter((f) =>
+        f.includes("CommonJS loaders"),
+      ),
+    ).toEqual([]);
+    const elsewhere = scan("packages/agent-reference/src/derive/adapters/other.ts", loader);
+    expect(elsewhere.some((f) => f.includes("CommonJS loaders are forbidden"))).toBe(true);
+  });
+
+  it("does not scan the gitignored sparq install", () => {
+    const failures = checkAgentLayers(
+      workspace({
+        "packages/agent-reference/.sparq/sparq-verifiable-aggregate/aggregate.js":
+          "module.exports = require('./x.js'); globalThis.y = 1;",
+      }),
+    );
+    expect(failures.filter((f) => f.includes(".sparq"))).toEqual([]);
+  });
+
   it("preserves global exceptions without permitting agent CommonJS", () => {
     expect(scan("packages/agent-model-gateway/src/index.ts", 'import "openai";')).toEqual([]);
     expect(

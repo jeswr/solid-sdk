@@ -393,6 +393,7 @@ describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () =>
       return signStatement(owner.key, TYP.statement, {
         type: "PatientAuthorisation",
         id: newUrn(),
+        issuer: agent.identity.party,
         patient: agent.identity.party,
         patientId: PATIENT_ID,
         client: agent.identity.actor,
@@ -422,6 +423,15 @@ describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () =>
       const last = records(auth, "consent-decision").at(-1);
       return { ...lastPhase(h), detail: last?.detail as string | undefined };
     };
+
+    // Maya's key cannot authenticate a consent that claims Noah issued it.
+    expect(
+      await request("carebrief", await consent("carebrief", { issuer: CAREBRIEF_NOAH.party })),
+    ).toMatchObject({
+      phase: "refused",
+      reason: expect.stringMatching(/not-authorised/),
+      detail: "patient authorisation not verified",
+    });
 
     // Maya asks, with her own authentic consent, for NOAH's compartment → refused.
     const cross = await request(
@@ -502,7 +512,7 @@ describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () =>
       new Date(clock.t + 60_000).toISOString(),
     );
     // Every refusal was recorded; issued grants name the enrolled patient only.
-    expect(records(auth, "consent-decision").length).toBe(8);
+    expect(records(auth, "consent-decision").length).toBe(9);
     expect(records(auth, "scope-decision").map((d) => [d.patient, d.patientId])).toEqual([
       [CAREBRIEF_NOAH.party, NOAH_PATIENT_ID],
       [CAREBRIEF.party, PATIENT_ID],

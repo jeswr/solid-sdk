@@ -1,0 +1,58 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "source": "/mnt/project-files/agent-architecture/specs",
+  "clauses": {
+    "CORE-IN-1": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-10": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-11": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-12": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-13": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-2": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-20": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-4": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-5": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-IN-7": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "CORE-OUT-6": {
+      "source": "01-core.md",
+      "sha256": "d3c886e89b033220ff1ce36da7bfd455d322839696135e31586f64f4e93292ff"
+    },
+    "DER-17": {
+      "source": "03-derived-data.md",
+      "sha256": "3d3830f3f5dd7f6c377f7b0fe917c11cd2aa50a1d1a1a58c355c5fc1f893751b"
+    },
+    "DER-18": {
+      "source": "03-derived-data.md",
+      "sha256": "3d3830f3f5dd7f6c377f7b0fe917c11cd2aa50a1d1a1a58c355c5fc1f893751b"
+    }
+  }
+}

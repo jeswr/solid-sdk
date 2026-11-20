@@ -1,0 +1,205 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "right-to-work",
+  "claims": [
+    {
+      "kind": "work.entitled",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "degree",
+      "sources": [
+        "urn:fictional:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 3650
+    },
+    {
+      "kind": "passport.scan",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "work.valid-until",
+      "sources": [
+        "urn:fictional:immigration-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "right-to-work.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:employer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:right-to-work",
+      "claims": [
+        "work.entitled",
+        "degree",
+        "right-to-work.answer",
+        "derivation.request",
+        "work.valid-until"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:right-to-work:proof",
+      "template": "threshold",
+      "params": {
+        "input": "work.valid-until",
+        "operator": "gte",
+        "date": "2026-11-13"
+      },
+      "output": "right-to-work.answer",
+      "inputsFrom": [
+        "urn:fictional:immigration-office"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:immigration-office> . GRAPH ?g { ?subject <urn:claim:work.valid-until> ?until . FILTER(?until >= \"2026-11-13\"^^<http://www.w3.org/2001/XMLSchema#date>) } }"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.claims.*": {
+      "type": "code",
+      "values": [
+        "work.entitled",
+        "degree",
+        "passport.scan"
+      ]
+    },
+    "input.items.*": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:right-to-work",
+      "version": "0.1",
+      "label": "urn:op:right-to-work",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:employment-evidence-request",
+      "version": "0.1",
+      "label": "Request employment evidence",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:right-to-work:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:right-to-work:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Immigration authority and university credential issuance",
+      "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
+    },
+    {
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
+    }
+  ],
+  "parties": {
+    "candidate": "The candidate",
+    "employer": "The employer",
+    "immigration-office": "The fictional immigration office",
+    "university": "The fictional university",
+    "candidate-agent": "The candidate’s agent",
+    "employer-agent": "The employer’s agent"
+  },
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:right-to-work:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:right-to-work"
+      ]
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:right-to-work:proof-answer",
+      "claims": [
+        "right-to-work.answer"
+      ]
+    }
+  ],
+  "labels": {
+    "urn:purpose:right-to-work": "Right to work"
+  }
+}

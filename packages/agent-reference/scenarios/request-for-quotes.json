@@ -1,0 +1,6661 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "request-for-quotes",
+  "useCase": "request-for-quotes",
+  "title": "Asking suppliers for quotes",
+  "profile": "request-for-quotes",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:request-for-quotes:owner",
+      "name": "The buyer company",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:request-for-quotes:owner-agent",
+      "name": "The buyer company’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:request-for-quotes:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "supplier-1",
+      "identity": "urn:fictional:request-for-quotes:supplier-1",
+      "name": "Fictional supplier 1",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-1-agent",
+      "identity": "urn:fictional:request-for-quotes:supplier-1-agent",
+      "actor": "urn:fictional:request-for-quotes:supplier-1-agent:actor",
+      "name": "Fictional supplier 1’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "supplier-1"
+    },
+    {
+      "id": "supplier-2",
+      "identity": "urn:fictional:request-for-quotes:supplier-2",
+      "name": "Fictional supplier 2",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-2-agent",
+      "identity": "urn:fictional:request-for-quotes:supplier-2-agent",
+      "actor": "urn:fictional:request-for-quotes:supplier-2-agent:actor",
+      "name": "Fictional supplier 2’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "supplier-2"
+    },
+    {
+      "id": "supplier-3",
+      "identity": "urn:fictional:request-for-quotes:supplier-3",
+      "name": "Fictional supplier 3",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-3-agent",
+      "identity": "urn:fictional:request-for-quotes:supplier-3-agent",
+      "actor": "urn:fictional:request-for-quotes:supplier-3-agent:actor",
+      "name": "Fictional supplier 3’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "supplier-3"
+    },
+    {
+      "id": "supplier-4",
+      "identity": "urn:fictional:request-for-quotes:supplier-4",
+      "name": "Fictional supplier 4",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-4-agent",
+      "identity": "urn:fictional:request-for-quotes:supplier-4-agent",
+      "actor": "urn:fictional:request-for-quotes:supplier-4-agent:actor",
+      "name": "Fictional supplier 4’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "supplier-4"
+    },
+    {
+      "id": "supplier-5",
+      "identity": "urn:fictional:request-for-quotes:supplier-5",
+      "name": "Fictional supplier 5",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "supplier-5-agent",
+      "identity": "urn:fictional:request-for-quotes:supplier-5-agent",
+      "actor": "urn:fictional:request-for-quotes:supplier-5-agent:actor",
+      "name": "Fictional supplier 5’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "supplier-5"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "supplier-1-agent"
+      ],
+      [
+        "owner-agent",
+        "supplier-2-agent"
+      ],
+      [
+        "owner-agent",
+        "supplier-3-agent"
+      ],
+      [
+        "owner-agent",
+        "supplier-4-agent"
+      ],
+      [
+        "owner-agent",
+        "supplier-5-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:request-for-quotes:supplier-1",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        },
+        {
+          "party": "urn:fictional:request-for-quotes:supplier-2",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        },
+        {
+          "party": "urn:fictional:request-for-quotes:supplier-3",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        },
+        {
+          "party": "urn:fictional:request-for-quotes:supplier-4",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        },
+        {
+          "party": "urn:fictional:request-for-quotes:supplier-5",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        }
+      ],
+      "supplier-1-agent": [
+        {
+          "party": "urn:fictional:request-for-quotes:owner",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        }
+      ],
+      "supplier-2-agent": [
+        {
+          "party": "urn:fictional:request-for-quotes:owner",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        }
+      ],
+      "supplier-3-agent": [
+        {
+          "party": "urn:fictional:request-for-quotes:owner",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        }
+      ],
+      "supplier-4-agent": [
+        {
+          "party": "urn:fictional:request-for-quotes:owner",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        }
+      ],
+      "supplier-5-agent": [
+        {
+          "party": "urn:fictional:request-for-quotes:owner",
+          "tasks": [
+            "urn:op:request-for-quotes",
+            "urn:op:request-for-quotes:request",
+            "urn:op:request-for-quotes:share"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:quote:supplier-1",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-1",
+          "claimTypes": [
+            "quote.supplier-1"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        },
+        {
+          "id": "urn:source:quote:supplier-2",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-2",
+          "claimTypes": [
+            "quote.supplier-2"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        },
+        {
+          "id": "urn:source:quote:supplier-3",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-3",
+          "claimTypes": [
+            "quote.supplier-3"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        },
+        {
+          "id": "urn:source:quote:supplier-4",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-4",
+          "claimTypes": [
+            "quote.supplier-4"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        },
+        {
+          "id": "urn:source:quote:supplier-5",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-5",
+          "claimTypes": [
+            "quote.supplier-5"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        }
+      ],
+      "supplier-1-agent": [
+        {
+          "id": "urn:source:quote:supplier-1",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-1",
+          "claimTypes": [
+            "quote.supplier-1"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        }
+      ],
+      "supplier-2-agent": [
+        {
+          "id": "urn:source:quote:supplier-2",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-2",
+          "claimTypes": [
+            "quote.supplier-2"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        }
+      ],
+      "supplier-3-agent": [
+        {
+          "id": "urn:source:quote:supplier-3",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-3",
+          "claimTypes": [
+            "quote.supplier-3"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        }
+      ],
+      "supplier-4-agent": [
+        {
+          "id": "urn:source:quote:supplier-4",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-4",
+          "claimTypes": [
+            "quote.supplier-4"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        }
+      ],
+      "supplier-5-agent": [
+        {
+          "id": "urn:source:quote:supplier-5",
+          "version": "1",
+          "source": "urn:fictional:request-for-quotes:supplier-5",
+          "claimTypes": [
+            "quote.supplier-5"
+          ],
+          "subjects": [
+            "urn:fictional:request-for-quotes:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "quote-1",
+      "issuer": "supplier-1",
+      "subject": "urn:fictional:request-for-quotes:owner",
+      "kind": "quote.supplier-1",
+      "value": {
+        "amount": 120,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:request-for-quotes:quote-1",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:request-for-quotes:quote-1",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-1",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                },
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:owner"
+                }
+              ]
+            }
+          ],
+          "prohibitions": [
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-1",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-2"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-1",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-3"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-1",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-4"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-1",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "quote-2",
+      "issuer": "supplier-2",
+      "subject": "urn:fictional:request-for-quotes:owner",
+      "kind": "quote.supplier-2",
+      "value": {
+        "amount": 110,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:request-for-quotes:quote-2",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:request-for-quotes:quote-2",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-2",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                },
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:owner"
+                }
+              ]
+            }
+          ],
+          "prohibitions": [
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-2",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-1"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-2",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-3"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-2",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-4"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-2",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "quote-3",
+      "issuer": "supplier-3",
+      "subject": "urn:fictional:request-for-quotes:owner",
+      "kind": "quote.supplier-3",
+      "value": {
+        "amount": 90,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:request-for-quotes:quote-3",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:request-for-quotes:quote-3",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-3",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                },
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:owner"
+                }
+              ]
+            }
+          ],
+          "prohibitions": [
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-3",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-1"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-3",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-2"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-3",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-4"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-3",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "quote-4",
+      "issuer": "supplier-4",
+      "subject": "urn:fictional:request-for-quotes:owner",
+      "kind": "quote.supplier-4",
+      "value": {
+        "amount": 130,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:request-for-quotes:quote-4",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:request-for-quotes:quote-4",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-4",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                },
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:owner"
+                }
+              ]
+            }
+          ],
+          "prohibitions": [
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-4",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-1"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-4",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-2"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-4",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-3"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-4",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "quote-5",
+      "issuer": "supplier-5",
+      "subject": "urn:fictional:request-for-quotes:owner",
+      "kind": "quote.supplier-5",
+      "value": {
+        "amount": 125,
+        "currency": "GBP"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:request-for-quotes:quote-5",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:request-for-quotes:quote-5",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-5",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:request-for-quotes"
+                },
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:owner"
+                }
+              ]
+            }
+          ],
+          "prohibitions": [
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-5",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-1"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-5",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-2"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-5",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-3"
+                }
+              ]
+            },
+            {
+              "type": "prohibition",
+              "action": "distribute",
+              "target": "urn:scenario:request-for-quotes:quote-5",
+              "constraints": [
+                {
+                  "leftOperand": "recipient",
+                  "operator": "eq",
+                  "rightOperand": "urn:fictional:request-for-quotes:supplier-4"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:request-for-quotes:request"
+        },
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:request-for-quotes"
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:request-for-quotes:share"
+        }
+      ],
+      "withApproval": [],
+      "limits": {
+        "commitments": {
+          "urn:op:request-for-quotes": {
+            "maxAmount": 100,
+            "currency": "GBP"
+          }
+        }
+      }
+    },
+    {
+      "agent": "supplier-1-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:request-for-quotes"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "supplier-2-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:request-for-quotes"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "supplier-3-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:request-for-quotes"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "supplier-4-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:request-for-quotes"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "supplier-5-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:request-for-quotes"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "supplier-holds-1",
+      "agent": "supplier-1-agent",
+      "type": "admit",
+      "statements": [
+        "quote-1"
+      ],
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "request-1",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "supplier-1-agent",
+      "kind": "invoke",
+      "operation": "urn:op:request-for-quotes:request",
+      "contents": {
+        "request": "quote"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:request-for-quotes:request",
+        "target": "urn:op:request-for-quotes:request",
+        "recipient": "urn:fictional:request-for-quotes:supplier-1",
+        "purpose": "urn:purpose:request-for-quotes",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "quote-1-sent",
+      "agent": "supplier-1-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "items": [
+            "urn:scenario:request-for-quotes:quote-1"
+          ]
+        },
+        "evidence": [
+          {
+            "$ref": "statements.quote-1.evidence"
+          }
+        ]
+      }
+    },
+    {
+      "id": "quote-1-received",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "supplier-1-agent"
+    },
+    {
+      "id": "supplier-holds-2",
+      "agent": "supplier-2-agent",
+      "type": "admit",
+      "statements": [
+        "quote-2"
+      ],
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "request-2",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "supplier-2-agent",
+      "kind": "invoke",
+      "operation": "urn:op:request-for-quotes:request",
+      "contents": {
+        "request": "quote"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:request-for-quotes:request",
+        "target": "urn:op:request-for-quotes:request",
+        "recipient": "urn:fictional:request-for-quotes:supplier-2",
+        "purpose": "urn:purpose:request-for-quotes",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "quote-2-sent",
+      "agent": "supplier-2-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "items": [
+            "urn:scenario:request-for-quotes:quote-2"
+          ]
+        },
+        "evidence": [
+          {
+            "$ref": "statements.quote-2.evidence"
+          }
+        ]
+      }
+    },
+    {
+      "id": "quote-2-received",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "supplier-2-agent"
+    },
+    {
+      "id": "supplier-holds-3",
+      "agent": "supplier-3-agent",
+      "type": "admit",
+      "statements": [
+        "quote-3"
+      ],
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "request-3",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "supplier-3-agent",
+      "kind": "invoke",
+      "operation": "urn:op:request-for-quotes:request",
+      "contents": {
+        "request": "quote"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:request-for-quotes:request",
+        "target": "urn:op:request-for-quotes:request",
+        "recipient": "urn:fictional:request-for-quotes:supplier-3",
+        "purpose": "urn:purpose:request-for-quotes",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "quote-3-sent",
+      "agent": "supplier-3-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "items": [
+            "urn:scenario:request-for-quotes:quote-3"
+          ]
+        },
+        "evidence": [
+          {
+            "$ref": "statements.quote-3.evidence"
+          }
+        ]
+      }
+    },
+    {
+      "id": "quote-3-received",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "supplier-3-agent"
+    },
+    {
+      "id": "supplier-holds-4",
+      "agent": "supplier-4-agent",
+      "type": "admit",
+      "statements": [
+        "quote-4"
+      ],
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "request-4",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "supplier-4-agent",
+      "kind": "invoke",
+      "operation": "urn:op:request-for-quotes:request",
+      "contents": {
+        "request": "quote"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:request-for-quotes:request",
+        "target": "urn:op:request-for-quotes:request",
+        "recipient": "urn:fictional:request-for-quotes:supplier-4",
+        "purpose": "urn:purpose:request-for-quotes",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "quote-4-sent",
+      "agent": "supplier-4-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "items": [
+            "urn:scenario:request-for-quotes:quote-4"
+          ]
+        },
+        "evidence": [
+          {
+            "$ref": "statements.quote-4.evidence"
+          }
+        ]
+      }
+    },
+    {
+      "id": "quote-4-received",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "supplier-4-agent"
+    },
+    {
+      "id": "supplier-holds-5",
+      "agent": "supplier-5-agent",
+      "type": "admit",
+      "statements": [
+        "quote-5"
+      ],
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "request-5",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "supplier-5-agent",
+      "kind": "invoke",
+      "operation": "urn:op:request-for-quotes:request",
+      "contents": {
+        "request": "quote"
+      },
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:request-for-quotes:request",
+        "target": "urn:op:request-for-quotes:request",
+        "recipient": "urn:fictional:request-for-quotes:supplier-5",
+        "purpose": "urn:purpose:request-for-quotes",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "quote-5-sent",
+      "agent": "supplier-5-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "items": [
+            "urn:scenario:request-for-quotes:quote-5"
+          ]
+        },
+        "evidence": [
+          {
+            "$ref": "statements.quote-5.evidence"
+          }
+        ]
+      }
+    },
+    {
+      "id": "quote-5-received",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "supplier-5-agent"
+    },
+    {
+      "id": "purchase-order",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "supplier-3-agent",
+      "kind": "propose",
+      "operation": "urn:op:request-for-quotes",
+      "contents": {
+        "amount": 90,
+        "currency": "GBP",
+        "quantity": 1
+      },
+      "intent": {
+        "action": "transfer",
+        "operation": "urn:op:request-for-quotes",
+        "target": "urn:op:request-for-quotes",
+        "recipient": "urn:fictional:request-for-quotes:supplier-3",
+        "purpose": "urn:purpose:request-for-quotes",
+        "parameters": {
+          "amount": 90,
+          "currency": "GBP",
+          "quantity": 1
+        }
+      },
+      "purpose": "urn:purpose:request-for-quotes"
+    },
+    {
+      "id": "supplier-accepts-order",
+      "agent": "supplier-3-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "accept",
+        "intent": {
+          "action": "use",
+          "operation": "urn:op:request-for-quotes",
+          "target": "urn:op:request-for-quotes",
+          "recipient": {
+            "$ref": "current.peer.party"
+          },
+          "purpose": "urn:purpose:request-for-quotes",
+          "conversation": {
+            "$ref": "current.conversation.id"
+          },
+          "parameters": {}
+        }
+      }
+    },
+    {
+      "id": "buyer-verifies-order",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "supplier-3-agent"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The agent would quote a rival's price to get a discount",
+      "change": {
+        "script": [
+          {
+            "id": "supplier-holds-1",
+            "agent": "supplier-1-agent",
+            "type": "admit",
+            "statements": [
+              "quote-1"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-1",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-1-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-1",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-1-sent",
+            "agent": "supplier-1-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-1"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-1.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-1-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-1-agent"
+          },
+          {
+            "id": "supplier-holds-2",
+            "agent": "supplier-2-agent",
+            "type": "admit",
+            "statements": [
+              "quote-2"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-2",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-2-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-2",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-2-sent",
+            "agent": "supplier-2-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-2"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-2.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-2-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-2-agent"
+          },
+          {
+            "id": "supplier-holds-3",
+            "agent": "supplier-3-agent",
+            "type": "admit",
+            "statements": [
+              "quote-3"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-3",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-3-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-3",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-3-sent",
+            "agent": "supplier-3-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-3"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-3.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-3-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-3-agent"
+          },
+          {
+            "id": "supplier-holds-4",
+            "agent": "supplier-4-agent",
+            "type": "admit",
+            "statements": [
+              "quote-4"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-4",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-4-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-4",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-4-sent",
+            "agent": "supplier-4-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-4"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-4.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-4-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-4-agent"
+          },
+          {
+            "id": "supplier-holds-5",
+            "agent": "supplier-5-agent",
+            "type": "admit",
+            "statements": [
+              "quote-5"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-5",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-5-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-5",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-5-sent",
+            "agent": "supplier-5-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-5"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-5.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-5-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-5-agent"
+          },
+          {
+            "id": "try-rival-price",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-1-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:share",
+            "contents": {
+              "items": [
+                "urn:scenario:request-for-quotes:quote-3"
+              ]
+            },
+            "evidence": [
+              "quote-3"
+            ],
+            "intent": {
+              "action": "distribute",
+              "operation": "urn:op:request-for-quotes:share",
+              "target": "urn:op:request-for-quotes:share",
+              "recipient": "urn:fictional:request-for-quotes:supplier-1",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          }
+        ],
+        "traceSteps": {
+          "1": "Fictional supplier 1’s agent checks the signed statements.",
+          "2": "The buyer company’s agent sends the signed request.",
+          "3": "Fictional supplier 1’s agent checks the message and prepares a response.",
+          "4": "The buyer company’s agent checks the message and prepares a response.",
+          "5": "Fictional supplier 2’s agent checks the signed statements.",
+          "6": "The buyer company’s agent sends the signed request.",
+          "7": "Fictional supplier 2’s agent checks the message and prepares a response.",
+          "8": "The buyer company’s agent checks the message and prepares a response.",
+          "9": "Fictional supplier 3’s agent checks the signed statements.",
+          "10": "The buyer company’s agent sends the signed request.",
+          "11": "Fictional supplier 3’s agent checks the message and prepares a response.",
+          "12": "The buyer company’s agent checks the message and prepares a response.",
+          "13": "Fictional supplier 4’s agent checks the signed statements.",
+          "14": "The buyer company’s agent sends the signed request.",
+          "15": "Fictional supplier 4’s agent checks the message and prepares a response.",
+          "16": "The buyer company’s agent checks the message and prepares a response.",
+          "17": "Fictional supplier 5’s agent checks the signed statements.",
+          "18": "The buyer company’s agent sends the signed request.",
+          "19": "Fictional supplier 5’s agent checks the message and prepares a response.",
+          "20": "The buyer company’s agent checks the message and prepares a response.",
+          "21": "The buyer company’s agent sends the signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "outline": [
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "fail",
+          "reason": "prohibited"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "prohibited"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The order is above the employee's signing limit",
+      "change": {
+        "script": [
+          {
+            "id": "supplier-holds-1",
+            "agent": "supplier-1-agent",
+            "type": "admit",
+            "statements": [
+              "quote-1"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-1",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-1-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-1",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-1-sent",
+            "agent": "supplier-1-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-1"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-1.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-1-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-1-agent"
+          },
+          {
+            "id": "supplier-holds-2",
+            "agent": "supplier-2-agent",
+            "type": "admit",
+            "statements": [
+              "quote-2"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-2",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-2-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-2",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-2-sent",
+            "agent": "supplier-2-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-2"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-2.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-2-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-2-agent"
+          },
+          {
+            "id": "supplier-holds-3",
+            "agent": "supplier-3-agent",
+            "type": "admit",
+            "statements": [
+              "quote-3"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-3",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-3-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-3",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-3-sent",
+            "agent": "supplier-3-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-3"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-3.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-3-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-3-agent"
+          },
+          {
+            "id": "supplier-holds-4",
+            "agent": "supplier-4-agent",
+            "type": "admit",
+            "statements": [
+              "quote-4"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-4",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-4-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-4",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-4-sent",
+            "agent": "supplier-4-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-4"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-4.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-4-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-4-agent"
+          },
+          {
+            "id": "supplier-holds-5",
+            "agent": "supplier-5-agent",
+            "type": "admit",
+            "statements": [
+              "quote-5"
+            ],
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "request-5",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-5-agent",
+            "kind": "invoke",
+            "operation": "urn:op:request-for-quotes:request",
+            "contents": {
+              "request": "quote"
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:request-for-quotes:request",
+              "target": "urn:op:request-for-quotes:request",
+              "recipient": "urn:fictional:request-for-quotes:supplier-5",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          },
+          {
+            "id": "quote-5-sent",
+            "agent": "supplier-5-agent",
+            "type": "receive",
+            "from": "owner-agent",
+            "reply": {
+              "type": "deliver",
+              "output": {
+                "items": [
+                  "urn:scenario:request-for-quotes:quote-5"
+                ]
+              },
+              "evidence": [
+                {
+                  "$ref": "statements.quote-5.evidence"
+                }
+              ]
+            }
+          },
+          {
+            "id": "quote-5-received",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "supplier-5-agent"
+          },
+          {
+            "id": "purchase-order",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "supplier-3-agent",
+            "kind": "propose",
+            "operation": "urn:op:request-for-quotes",
+            "contents": {
+              "amount": 180,
+              "currency": "GBP",
+              "quantity": 2
+            },
+            "intent": {
+              "action": "transfer",
+              "operation": "urn:op:request-for-quotes",
+              "target": "urn:op:request-for-quotes",
+              "recipient": "urn:fictional:request-for-quotes:supplier-3",
+              "purpose": "urn:purpose:request-for-quotes",
+              "parameters": {
+                "amount": 180,
+                "currency": "GBP",
+                "quantity": 2
+              }
+            },
+            "purpose": "urn:purpose:request-for-quotes"
+          }
+        ],
+        "traceSteps": {
+          "1": "Fictional supplier 1’s agent checks the signed statements.",
+          "2": "The buyer company’s agent sends the signed request.",
+          "3": "Fictional supplier 1’s agent checks the message and prepares a response.",
+          "4": "The buyer company’s agent checks the message and prepares a response.",
+          "5": "Fictional supplier 2’s agent checks the signed statements.",
+          "6": "The buyer company’s agent sends the signed request.",
+          "7": "Fictional supplier 2’s agent checks the message and prepares a response.",
+          "8": "The buyer company’s agent checks the message and prepares a response.",
+          "9": "Fictional supplier 3’s agent checks the signed statements.",
+          "10": "The buyer company’s agent sends the signed request.",
+          "11": "Fictional supplier 3’s agent checks the message and prepares a response.",
+          "12": "The buyer company’s agent checks the message and prepares a response.",
+          "13": "Fictional supplier 4’s agent checks the signed statements.",
+          "14": "The buyer company’s agent sends the signed request.",
+          "15": "Fictional supplier 4’s agent checks the message and prepares a response.",
+          "16": "The buyer company’s agent checks the message and prepares a response.",
+          "17": "Fictional supplier 5’s agent checks the signed statements.",
+          "18": "The buyer company’s agent sends the signed request.",
+          "19": "Fictional supplier 5’s agent checks the message and prepares a response.",
+          "20": "The buyer company’s agent checks the message and prepares a response.",
+          "21": "The buyer company’s agent sends the signed request."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "reason": "limit-exceeded",
+        "check": "limits-approval"
+      },
+      "outline": [
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-1-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-2-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-3-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-4-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "supplier-5-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "limit-exceeded"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "limit-exceeded"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "principal",
+          "kind": "ask-principal"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-5-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "supplier-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "data-terms",
+    "limits-approval",
+    "authority"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Supplier quotation and purchase-order systems",
+      "replacedBy": "Five separately keyed fictional supplier agents issue their own confidential signed quotes; exact signed offer/acceptance records the chosen order, with no settlement or physical fulfilment"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "evidence",
+    "reason": "evidence-complete"
+  },
+  "traceSteps": {
+    "1": "Fictional supplier 1’s agent checks the signed statements.",
+    "2": "The buyer company’s agent sends the signed request.",
+    "3": "Fictional supplier 1’s agent checks the message and prepares a response.",
+    "4": "The buyer company’s agent checks the message and prepares a response.",
+    "5": "Fictional supplier 2’s agent checks the signed statements.",
+    "6": "The buyer company’s agent sends the signed request.",
+    "7": "Fictional supplier 2’s agent checks the message and prepares a response.",
+    "8": "The buyer company’s agent checks the message and prepares a response.",
+    "9": "Fictional supplier 3’s agent checks the signed statements.",
+    "10": "The buyer company’s agent sends the signed request.",
+    "11": "Fictional supplier 3’s agent checks the message and prepares a response.",
+    "12": "The buyer company’s agent checks the message and prepares a response.",
+    "13": "Fictional supplier 4’s agent checks the signed statements.",
+    "14": "The buyer company’s agent sends the signed request.",
+    "15": "Fictional supplier 4’s agent checks the message and prepares a response.",
+    "16": "The buyer company’s agent checks the message and prepares a response.",
+    "17": "Fictional supplier 5’s agent checks the signed statements.",
+    "18": "The buyer company’s agent sends the signed request.",
+    "19": "Fictional supplier 5’s agent checks the message and prepares a response.",
+    "20": "The buyer company’s agent checks the message and prepares a response.",
+    "21": "The buyer company’s agent sends the signed request.",
+    "22": "Fictional supplier 3’s agent checks the message and prepares a response.",
+    "23": "The buyer company’s agent checks the message and prepares a response."
+  }
+}

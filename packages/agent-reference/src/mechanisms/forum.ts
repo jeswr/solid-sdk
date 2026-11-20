@@ -1,0 +1,952 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
+import { z } from "zod";
+import { digestOf } from "../core/canonical.js";
+import { DEFAULT_LIMITS } from "../core/limits.js";
+import { id, iso, validateMessage } from "../core/schema.js";
+import type { AnyMessage, JsonObject, ReasonCode } from "../core/types.js";
+import { claimSchema as domainClaimSchema } from "../gates/inbound.js";
+import {
+  type EvidenceLedger,
+  LEDGER_GENESIS,
+  type LedgerEntry,
+  type LedgerRangeEntry,
+  verifyLedgerRange,
+} from "../store/ledger.js";
+import type { StateStore } from "../store/state.js";
+import type { TraceEventInput } from "../trace/types.js";
+import { verifyRecordedMessage } from "../wire/recorded-message.js";
+import type { SigningKey } from "./jws.js";
+import { representationSchema, signStatement, TYP, verifyStatement } from "./statements.js";
+import type { TrustStore } from "./trust.js";
+export const RECORD_LIMITS = {
+  ...DEFAULT_LIMITS,
+  maxEnvelopeBytes: 2 * 1024 * 1024,
+  maxStringLength: 1024 * 1024,
+  maxJsonNodes: 100000,
+  maxJsonDepth: 32,
+  maxArrayLength: 4096,
+};
+const chainDigest = z.string().regex(/^sha-256:[0-9a-f]{64}$/);
+const recordPoint = z.strictObject({ seq: z.number().int().positive(), hash: chainDigest });
+const witnessedPoint = recordPoint.extend({ receipt: z.string() });
+export const recordEntrySchema = z
+  .object({
+    seq: z.number().int().positive(),
+    at: iso,
+    prev: z.string(),
+    record: z.object({ type: z.string() }).passthrough(),
+    hash: z.string(),
+    recordDigest: chainDigest.optional(),
+  })
+  .strict();
+export const rangeEntrySchema = z.union([
+  recordEntrySchema,
+  recordEntrySchema.extend({ record: z.null() }),
+]);
+export const recordSegmentSchema = z.strictObject({
+  type: z.literal("RecordSegment"),
+  actor: id,
+  party: id,
+  conversation: id,
+  // Brief 31 item 4: a range segment names the anchor entry and the peer's receipt for it.
+  anchor: witnessedPoint.optional(),
+  terminal: witnessedPoint.optional(),
+  entries: z.array(z.strictObject({ entry: rangeEntrySchema, proof: z.string() })).max(4096),
+  messages: z
+    .array(
+      z.strictObject({ direction: z.enum(["in", "out"]), digest: z.string(), jws: z.string() }),
+    )
+    .max(512),
+});
+export const anchorReceiptSchema = z.strictObject({
+  type: z.literal("RecordAnchorReceipt"),
+  actor: id,
+  party: id,
+  subject: id,
+  subjectParty: id,
+  seq: z.number().int().positive(),
+  hash: z.string(),
+  at: iso,
+  interval: z
+    .strictObject({
+      conversation: id,
+      from: z.union([
+        recordPoint,
+        z.strictObject({ seq: z.literal(0), hash: z.literal(LEDGER_GENESIS.hash) }),
+      ]),
+    })
+    .optional(),
+  approvalRedactions: z.array(chainDigest).max(4096).optional(),
+});
+export const RECORD_PROOF_GRANT_TYP = "awp-record-proof-grant+jws";
+export const recordProofGrantSchema = z.strictObject({
+  issuer: id,
+  holder: id,
+  recipient: id,
+  purpose: id,
+  digest: chainDigest,
+  validUntil: iso,
+});
+export const forumClaimSchema = z.strictObject({
+  type: z.literal("ForumClaim"),
+  id,
+  actor: id,
+  party: id,
+  respondent: id,
+  conversation: id,
+  segment: z.string(),
+  allegation: z.enum(["fee-not-agreed", "onward-leak", "records-differ", "fee-not-in-terms"]),
+  observation: z.string().optional(),
+  answerThrough: witnessedPoint.optional(),
+  agreement: z
+    .strictObject({ digest: z.string(), offer: z.string(), acceptance: z.string() })
+    .optional(),
+  // Brief 31 §2.9: natural persons the claim names besides the claimant (an employee).
+  persons: z.array(id).min(1).max(16).optional(),
+  at: iso,
+});
+export const forumAnswerSchema = z.strictObject({
+  type: z.literal("ForumAnswer"),
+  case: id,
+  actor: id,
+  party: id,
+  request: z.string(),
+  segment: z.string(),
+  at: iso,
+});
+export const recordRequestSchema = z.strictObject({
+  type: z.literal("RecordRequest"),
+  issuer: id,
+  case: id,
+  conversation: id,
+  respondent: id,
+  through: witnessedPoint.optional(),
+  deadline: iso,
+});
+const messageSchema = z
+  .object({
+    id,
+    conversation: id,
+    from: z.object({ actor: id, onBehalfOf: id }).passthrough(),
+    body: z.record(z.string(), z.unknown()),
+    kind: z.string(),
+  })
+  .passthrough();
+interface Case {
+  id: string;
+  claim: z.infer<typeof forumClaimSchema>;
+  deadline: string;
+  request: string;
+  decision?: string;
+}
+interface Verified {
+  party: string;
+  entries: LedgerEntry[];
+  messages: AnyMessage[];
+  directions: Map<string, "in" | "out">;
+  redacted: boolean;
+}
+export class LocalForum {
+  readonly identity: string;
+  private gateRun = 0;
+  constructor(
+    private readonly options: {
+      identity: string;
+      key: SigningKey;
+      trust: TrustStore;
+      store: StateStore;
+      ledger: EvidenceLedger;
+      now: () => string;
+      responseSeconds: number;
+      observers: string[];
+      /**
+       * Brief 31 §2.9: the publication service the forum's decision terms let a party pass
+       * the decision to. Absent, the decision terms permit use only.
+       */
+      publication?: string;
+      sink: (e: TraceEventInput) => void;
+    },
+  ) {
+    this.identity = options.identity;
+  }
+  private record(r: { type: string; [key: string]: unknown }) {
+    this.options.ledger.append(r, this.options.now());
+  }
+  private check(
+    gateRun: number,
+    check: "integrity" | "source" | "authority" | "terms" | "fitness",
+    reason?: ReasonCode,
+  ) {
+    this.options.sink({
+      part: "inbound-gate",
+      kind: "check",
+      gateRun,
+      check,
+      verdict: reason ? "fail" : "pass",
+      reason:
+        reason ??
+        (
+          {
+            integrity: "intact",
+            source: "source-accepted",
+            authority: "authority-valid",
+            terms: "terms-acceptable",
+            fitness: "fit-for-use",
+          } as const
+        )[check],
+      caption: `The forum checks ${check}${reason ? `: ${reason}` : ""}.`,
+    });
+  }
+  private cases() {
+    return (this.options.store.load().domain.forumCases ?? {}) as unknown as Record<string, Case>;
+  }
+  private save(cases: Record<string, Case>) {
+    const state = this.options.store.load();
+    state.domain.forumCases = cases as unknown as JsonObject;
+    this.options.store.save(state);
+  }
+  requestFor(id: string) {
+    return this.cases()[id]?.request;
+  }
+  decisionFor(id: string) {
+    return this.cases()[id]?.decision;
+  }
+  /**
+   * Brief 31 §2.9 (decision, 15 Nov): with a publication service, the decision may be passed
+   * to that service's own IRI and to nobody else; when the claim names a natural person
+   * besides the claimant, the terms prohibit passing it there instead.
+   */
+  private decisionTerms(c: Case) {
+    const target = `${c.id}:decision`;
+    const use = { type: "permission", action: "use", target };
+    const service = this.options.publication;
+    if (!service) return { id: `${c.id}:decision-terms`, permissions: [use] };
+    const toService = {
+      action: "distribute",
+      target,
+      constraints: [{ leftOperand: "recipient", operator: "isAnyOf", rightOperand: [service] }],
+    };
+    return c.claim.persons?.length
+      ? {
+          id: `${c.id}:decision-terms`,
+          permissions: [use],
+          prohibitions: [{ type: "prohibition", ...toService }],
+        }
+      : {
+          id: `${c.id}:decision-terms`,
+          permissions: [use, { type: "permission", ...toService }],
+        };
+  }
+  private async decision(
+    gateRun: number,
+    c: Case,
+    reason: ReasonCode,
+    fault: string,
+    point: JsonObject,
+    settled = true,
+  ) {
+    const statement = {
+      id: `${c.id}:decision`,
+      issuer: this.identity,
+      subject: c.claim.party,
+      claimType: "forum.decision",
+      method: "recorded-by-authority",
+      asOf: this.options.now(),
+      case: c.id,
+      reason,
+      fault,
+      point,
+      settled,
+      terms: { policy: this.decisionTerms(c) },
+    };
+    c.decision = await signStatement(this.options.key, TYP.statement, statement);
+    const cases = this.cases();
+    const existing = cases[c.id]?.decision;
+    if (existing) return existing;
+    this.record({ type: "forum-decision", case: c.id, reason, fault, point, settled });
+    cases[c.id] = c;
+    this.save(cases);
+    this.options.sink({
+      part: "inbound-gate",
+      kind: "decision",
+      gateRun,
+      outcome:
+        reason === "record-unavailable" || reason === "evidence-invalid" ? "refuse" : "admit",
+      reason,
+      caption: `Forum decision: ${fault}; ${JSON.stringify(point)}. No core was re-run.`,
+    });
+    return c.decision;
+  }
+  /**
+   * Brief 31 item 4: a range segment's anchor counts only when the case's other party
+   * signed a receipt for exactly this actor's record at that sequence and hash.
+   */
+  private async anchorAttested(
+    anchor: { seq: number; hash: string; receipt: string },
+    segment: { actor: string; party: string },
+    peer: string,
+    interval?: { conversation: string; from: { seq: number; hash: string } },
+  ) {
+    const receipt = await this.readWitnessedPoint(anchor, peer);
+    return receipt &&
+      receipt.subject === segment.actor &&
+      receipt.subjectParty === segment.party &&
+      digestOf(receipt.interval ?? null) === digestOf(interval ?? null)
+      ? receipt
+      : undefined;
+  }
+
+  private async readWitnessedPoint(point: z.infer<typeof witnessedPoint>, peer: string) {
+    const checked = await verifyStatement(point.receipt, {
+      trust: this.options.trust,
+      typ: "awp-record-anchor+jws",
+      role: "actor",
+      schema: anchorReceiptSchema,
+      limits: RECORD_LIMITS,
+      at: this.options.now(),
+      verifier: this.identity,
+    });
+    this.record({ ...checked.verification });
+    const receipt = checked.payload;
+    return receipt &&
+      checked.signer?.subject === receipt.actor &&
+      checked.signer.party === receipt.party &&
+      receipt.party === peer &&
+      receipt.seq === point.seq &&
+      receipt.hash === point.hash
+      ? receipt
+      : undefined;
+  }
+
+  private async segment(
+    jws: string,
+    party: string,
+    conversation: string,
+    peer: string,
+    expectedTerminal?: z.infer<typeof witnessedPoint>,
+  ): Promise<{ ok: true; value: Verified } | { ok: false; reason: ReasonCode; point: JsonObject }> {
+    const checked = await verifyStatement(jws, {
+      trust: this.options.trust,
+      typ: "awp-record-segment+jws",
+      role: "actor",
+      schema: recordSegmentSchema,
+      limits: RECORD_LIMITS,
+      at: this.options.now(),
+      verifier: this.identity,
+    });
+    this.record(checked.verification as unknown as { type: string; [key: string]: unknown });
+    const segment = checked.payload;
+    if (
+      !segment ||
+      checked.signer?.subject !== segment.actor ||
+      checked.signer.party !== party ||
+      segment.party !== party ||
+      segment.conversation !== conversation
+    )
+      return {
+        ok: false,
+        reason: "evidence-invalid",
+        point: { problem: "invalid-segment-signature" },
+      };
+    const range = segment.entries.map((s) => s.entry) as LedgerRangeEntry[];
+    const entries = range.filter((entry): entry is LedgerEntry => entry.record !== null);
+    if (segment.anchor && !(await this.anchorAttested(segment.anchor, segment, peer)))
+      return {
+        ok: false,
+        reason: "evidence-invalid",
+        point: { problem: "anchor-not-attested", sequence: segment.anchor.seq },
+      };
+    const terminal =
+      segment.terminal &&
+      (await this.anchorAttested(segment.terminal, segment, peer, {
+        conversation,
+        from: segment.anchor
+          ? { seq: segment.anchor.seq, hash: segment.anchor.hash }
+          : LEDGER_GENESIS,
+      }));
+    if (
+      (expectedTerminal &&
+        (!segment.terminal || digestOf(segment.terminal) !== digestOf(expectedTerminal))) ||
+      !terminal
+    )
+      return {
+        ok: false,
+        reason: "record-unavailable",
+        point: { problem: "terminal-not-attested" },
+      };
+    const approvals = new Set(terminal.approvalRedactions);
+    const chain = verifyLedgerRange(range, segment.anchor ?? LEDGER_GENESIS, terminal, approvals);
+    if (!chain.ok)
+      return {
+        ok: false,
+        reason: "record-unavailable",
+        point: { problem: chain.problem ?? "record-gap", sequence: chain.firstBadSeq ?? 0 },
+      };
+    const checks = new Set<string>();
+    for (const item of segment.entries) {
+      if (
+        item.entry.record?.producer === "core" &&
+        ["gate-check", "gate-decision", "message-in", "message-out"].includes(
+          item.entry.record.type,
+        )
+      )
+        return {
+          ok: false,
+          reason: "record-unavailable",
+          point: { problem: "core-record-is-not-a-gate-decision", sequence: item.entry.seq },
+        };
+      const check = await verifyStatement(item.proof, {
+        trust: this.options.trust,
+        typ: "awp-record-entry+jws",
+        role: "actor",
+        schema: rangeEntrySchema,
+        limits: RECORD_LIMITS,
+        at: this.options.now(),
+        verifier: this.identity,
+      });
+      if (
+        !check.payload ||
+        check.signer?.subject !== segment.actor ||
+        digestOf(check.payload) !== digestOf(item.entry)
+      )
+        return {
+          ok: false,
+          reason: "evidence-invalid",
+          point: { problem: "entry-signature", sequence: item.entry.seq },
+        };
+      if (item.entry.record?.type === "gate-check") checks.add(digestOf(item.entry.record));
+      if (
+        item.entry.record?.type === "gate-decision" &&
+        (!Array.isArray(item.entry.record.checks) ||
+          item.entry.record.checks.length === 0 ||
+          !(item.entry.record.checks as unknown[]).every(
+            (c) => typeof c === "string" && checks.has(c),
+          ))
+      )
+        return {
+          ok: false,
+          reason: "record-unavailable",
+          point: { problem: "decision-check-missing", sequence: item.entry.seq },
+        };
+    }
+    const messages: AnyMessage[] = [];
+    const directions = new Map<string, "in" | "out">();
+    for (const archived of segment.messages) {
+      const read = await verifyRecordedMessage(archived.jws, this.options.trust);
+      const message = { payload: read?.message, signer: read?.pinned };
+      if (
+        !message.payload ||
+        message.signer?.subject !== message.payload.from.actor ||
+        message.signer?.party !== message.payload.from.onBehalfOf ||
+        digestOf(message.payload) !== archived.digest ||
+        message.payload.conversation !== conversation
+      )
+        return { ok: false, reason: "evidence-invalid", point: { problem: "message-signature" } };
+      if (
+        !entries.some(
+          (e) =>
+            e.record.type === `message-${archived.direction}` &&
+            e.record.digest === archived.digest,
+        )
+      )
+        return {
+          ok: false,
+          reason: "record-unavailable",
+          point: { problem: "message-entry-missing", message: message.payload.id },
+        };
+      const decoded = message.payload as unknown as AnyMessage;
+      if (segment.anchor) {
+        const sender = archived.direction === "out" ? party : peer;
+        const recipient = archived.direction === "out" ? peer : party;
+        const recipientKey = this.options.trust.keysFor(decoded.to?.actor ?? "", "actor");
+        if (
+          decoded.from.onBehalfOf !== sender ||
+          decoded.to?.party !== recipient ||
+          !recipientKey.some((key) => key.party === recipient)
+        )
+          return { ok: false, reason: "evidence-invalid", point: { problem: "message-parties" } };
+      }
+      for (const evidence of decoded.evidence ?? []) {
+        const representation =
+          evidence.role === "representation" && evidence.format === "jws-compact";
+        const credential = evidence.role === "credential" && evidence.format === "jws-compact";
+        if (!representation && !credential)
+          return {
+            ok: false,
+            reason: "record-unavailable",
+            point: { problem: "unsupported-record-evidence", message: decoded.id },
+          };
+        const args = {
+          trust: this.options.trust,
+          typ: representation ? TYP.representation : TYP.statement,
+          schema: representation
+            ? (representationSchema as z.ZodType<unknown>)
+            : (domainClaimSchema as z.ZodType<unknown>),
+          limits: RECORD_LIMITS,
+          at: this.options.now(),
+          verifier: this.identity,
+        };
+        let original = await verifyStatement(evidence.value, {
+          ...args,
+          role: representation ? "party" : "issuer",
+        });
+        if (original.verification.outcome === "unknown-key")
+          original = await verifyStatement(evidence.value, {
+            ...args,
+            role: representation ? "issuer" : "party",
+          });
+        const payload = original.payload as JsonObject | undefined;
+        if (
+          !payload ||
+          original.signer?.subject !== (representation ? payload.party : payload.issuer)
+        )
+          return {
+            ok: false,
+            reason: "evidence-invalid",
+            point: {
+              problem: "embedded-signature",
+              message: decoded.id,
+              party: decoded.from.onBehalfOf ?? "unsettled",
+            },
+          };
+      }
+      messages.push(message.payload as unknown as AnyMessage);
+      directions.set(message.payload.id, archived.direction);
+    }
+    for (const entry of entries)
+      if (
+        entry.record.conversation === conversation &&
+        ["message-in", "message-out"].includes(entry.record.type) &&
+        !segment.messages.some((m) => m.digest === entry.record.digest)
+      )
+        return {
+          ok: false,
+          reason: "record-unavailable",
+          point: { problem: "message-payload-unavailable", sequence: entry.seq },
+        };
+    return {
+      ok: true,
+      value: {
+        party,
+        entries,
+        messages,
+        directions,
+        redacted: range.some((entry) => entry.record === null && !approvals.has(digestOf(entry))),
+      },
+    };
+  }
+  async submit(jws: string) {
+    const gateRun = ++this.gateRun;
+    const check = await verifyStatement(jws, {
+      trust: this.options.trust,
+      typ: "awp-forum-claim+jws",
+      role: "actor",
+      schema: forumClaimSchema,
+      limits: RECORD_LIMITS,
+      at: this.options.now(),
+      verifier: this.identity,
+    });
+    this.record(check.verification as unknown as { type: string; [key: string]: unknown });
+    const claim = check.payload;
+    if (!claim || check.signer?.subject !== claim.actor || check.signer.party !== claim.party) {
+      this.check(gateRun, "integrity", "bad-signature");
+      return { ok: false, reason: "bad-signature" };
+    }
+    this.check(gateRun, "integrity");
+    this.check(gateRun, "source");
+    this.check(gateRun, "authority");
+    this.check(gateRun, "terms");
+    const c: Case = {
+      id: claim.id,
+      claim,
+      deadline: new Date(
+        Date.parse(this.options.now()) + this.options.responseSeconds * 1000,
+      ).toISOString(),
+      request: "",
+    };
+    const current = this.cases()[c.id];
+    if (current) return { ok: false, reason: "evidence-invalid" };
+    const segment = await this.segment(
+      claim.segment,
+      claim.party,
+      claim.conversation,
+      claim.respondent,
+    );
+    if (!segment.ok) {
+      this.check(gateRun, "fitness", segment.reason);
+      await this.decision(gateRun, c, segment.reason, claim.party, segment.point);
+      return { ok: false, reason: segment.reason };
+    }
+    const responseTerminal =
+      claim.answerThrough && (await this.readWitnessedPoint(claim.answerThrough, claim.party));
+    if (
+      responseTerminal?.subjectParty !== claim.respondent ||
+      responseTerminal.interval?.conversation !== claim.conversation ||
+      responseTerminal.seq <= responseTerminal.interval.from.seq
+    ) {
+      this.check(gateRun, "fitness", "record-unavailable");
+      await this.decision(gateRun, c, "record-unavailable", claim.party, {
+        problem: "response-terminal-missing",
+      });
+      return { ok: false, reason: "record-unavailable" };
+    }
+    this.check(gateRun, "fitness");
+    c.request = await signStatement(this.options.key, "awp-record-request+jws", {
+      type: "RecordRequest",
+      issuer: this.identity,
+      case: c.id,
+      conversation: claim.conversation,
+      respondent: claim.respondent,
+      ...(claim.answerThrough ? { through: claim.answerThrough } : {}),
+      deadline: c.deadline,
+    });
+    const cases = this.cases();
+    if (cases[c.id]) return { ok: false, reason: "evidence-invalid" };
+    this.record({
+      type: "forum-record-requested",
+      case: c.id,
+      respondent: claim.respondent,
+      deadline: c.deadline,
+      request: c.request,
+    });
+    cases[c.id] = c;
+    this.save(cases);
+    this.options.sink({
+      part: "outbound-gate",
+      kind: "check",
+      check: "recipient",
+      verdict: "pass",
+      reason: "recipient-established",
+      caption: `The forum requests ${claim.respondent}'s record by ${c.deadline}.`,
+    });
+    return { ok: true, case: c.id, request: c.request };
+  }
+  async answer(jws: string) {
+    const gateRun = ++this.gateRun;
+    const check = await verifyStatement(jws, {
+      trust: this.options.trust,
+      typ: "awp-forum-answer+jws",
+      role: "actor",
+      schema: forumAnswerSchema,
+      limits: RECORD_LIMITS,
+      at: this.options.now(),
+      verifier: this.identity,
+    });
+    const answer = check.payload;
+    const c = answer ? this.cases()[answer.case] : undefined;
+    if (
+      !answer ||
+      !c ||
+      check.signer?.subject !== answer.actor ||
+      check.signer.party !== answer.party ||
+      answer.party !== c.claim.respondent ||
+      answer.request !== c.request
+    ) {
+      this.check(gateRun, "integrity", "evidence-invalid");
+      return { ok: false, reason: "evidence-invalid" };
+    }
+    if (c.decision) return { ok: false, reason: "expired" };
+    if (Date.parse(this.options.now()) > Date.parse(c.deadline)) {
+      await this.decision(gateRun, c, "record-unavailable", c.claim.respondent, {
+        problem: "response-deadline-missed",
+      });
+      return { ok: false, reason: "record-unavailable" };
+    }
+    this.check(gateRun, "integrity");
+    this.check(gateRun, "source");
+    this.check(gateRun, "authority");
+    this.check(gateRun, "terms");
+    const a = await this.segment(
+      c.claim.segment,
+      c.claim.party,
+      c.claim.conversation,
+      c.claim.respondent,
+    );
+    const b = await this.segment(
+      answer.segment,
+      answer.party,
+      c.claim.conversation,
+      c.claim.party,
+      c.claim.answerThrough,
+    );
+    if (!a.ok || !b.ok) {
+      const failed = !a.ok ? a : !b.ok ? b : undefined;
+      if (!failed) throw Error("unreachable");
+      this.check(gateRun, "fitness", failed.reason);
+      await this.decision(
+        gateRun,
+        c,
+        failed.reason,
+        !a.ok ? c.claim.party : answer.party,
+        failed.point,
+      );
+      return { ok: false, reason: failed.reason };
+    }
+    if (c.claim.allegation !== "fee-not-in-terms" && (a.value.redacted || b.value.redacted)) {
+      this.check(gateRun, "fitness", "record-unavailable");
+      await this.decision(
+        gateRun,
+        c,
+        "record-unavailable",
+        "unsettled",
+        { problem: "required-records-redacted" },
+        false,
+      );
+      return { ok: false, reason: "record-unavailable" };
+    }
+    this.check(gateRun, "fitness");
+    for (const [own, other] of [
+      [a.value, b.value],
+      [b.value, a.value],
+    ] as const)
+      for (const message of own.messages) {
+        if (own.directions.get(message.id) !== "out") continue;
+        const received = other.messages.find(
+          (m) => m.id === message.id && other.directions.get(m.id) === "in",
+        );
+        if (!received || digestOf(received) !== digestOf(message)) {
+          await this.decision(
+            gateRun,
+            c,
+            "record-unavailable",
+            "unsettled",
+            {
+              problem: "message-differs",
+              message: message.id,
+              sender: own.party,
+              receiver: other.party,
+            },
+            false,
+          );
+          return { ok: false, reason: "record-unavailable" };
+        }
+      }
+    const messages = [...a.value.messages, ...b.value.messages];
+    for (const message of messages)
+      if (message.kind === "accept") {
+        const offer = messages.find((m) => m.kind === "propose" && m.id === message.body.proposal);
+        if (
+          !offer ||
+          offer.kind !== "propose" ||
+          digestOf(offer.body.terms) !== message.body.termsDigest
+        ) {
+          await this.decision(
+            gateRun,
+            c,
+            "terms-digest-mismatch",
+            message.from.onBehalfOf ?? "unsettled",
+            {
+              problem: "acceptance-terms-differ",
+              message: message.id,
+            },
+          );
+          return { ok: true };
+        }
+      }
+    if (c.claim.allegation === "fee-not-agreed")
+      for (const charged of messages) {
+        if (
+          charged.kind !== "invoke" ||
+          typeof charged.body.input.fee !== "number" ||
+          charged.body.basis.kind !== "agreement"
+        )
+          continue;
+        const agreement = charged.body.basis.agreement;
+        const acceptance = messages.find(
+          (m) => m.kind === "accept" && m.body.agreement === agreement,
+        );
+        const offer =
+          acceptance?.kind === "accept"
+            ? messages.find((m) => m.kind === "propose" && m.id === acceptance.body.proposal)
+            : undefined;
+        if (
+          offer?.kind === "propose" &&
+          typeof offer.body.terms.fee === "number" &&
+          offer.body.terms.fee !== charged.body.input.fee
+        ) {
+          await this.decision(
+            gateRun,
+            c,
+            "not-authorised",
+            charged.from.onBehalfOf ?? "unsettled",
+            {
+              problem: "fee-not-agreed",
+              message: charged.id,
+              agreedFee: offer.body.terms.fee,
+              billedFee: charged.body.input.fee,
+            },
+          );
+          return { ok: true };
+        }
+      }
+    if (c.claim.allegation === "onward-leak" && c.claim.observation) {
+      const observation = await verifyStatement(c.claim.observation, {
+        trust: this.options.trust,
+        typ: TYP.statement,
+        role: "issuer",
+        schema: z
+          .object({
+            issuer: id,
+            claimType: z.literal("onward.observation"),
+            dataDigest: z.string(),
+            receiver: id,
+            subject: id,
+          })
+          .passthrough(),
+        limits: RECORD_LIMITS,
+        at: this.options.now(),
+        verifier: this.identity,
+      });
+      const o = observation.payload;
+      const offer = messages.find(
+        (m) =>
+          m.kind === "propose" &&
+          m.body.terms.protectedDigest === o?.dataDigest &&
+          m.body.terms.forbiddenRecipient === o?.subject,
+      );
+      const acceptance = offer
+        ? messages.find(
+            (m) =>
+              m.kind === "accept" &&
+              m.body.proposal === offer.id &&
+              m.from.onBehalfOf === o?.receiver,
+          )
+        : undefined;
+      if (
+        o &&
+        observation.signer?.subject === o.issuer &&
+        this.options.observers.includes(o.issuer) &&
+        acceptance
+      ) {
+        await this.decision(gateRun, c, "prohibited", o.receiver, {
+          problem: "observed-outside-gate",
+          observation: digestOf(o),
+          acceptance: acceptance.id,
+          recipient: o.subject,
+        });
+        return { ok: true };
+      }
+    }
+    if (c.claim.allegation === "fee-not-in-terms" && c.claim.observation && c.claim.agreement) {
+      // Brief 31 §2.3: a respondent-signed fee statement, delivered in the claimed
+      // conversation, checked against the terms the respondent accepted. The claim names
+      // that agreement by digest and carries its two signed messages.
+      const charge = await verifyStatement(c.claim.observation, {
+        trust: this.options.trust,
+        typ: TYP.statement,
+        role: "issuer",
+        schema: z
+          .object({
+            issuer: id,
+            claimType: z.literal("fee.charged"),
+            subject: id,
+            fee: z.number(),
+            agreement: z.strictObject({
+              id,
+              offer: id,
+              conversation: id,
+              termsDigest: chainDigest,
+              discloseTo: id.optional(),
+              discloseFor: id.optional(),
+            }),
+          })
+          .passthrough(),
+        limits: RECORD_LIMITS,
+        at: this.options.now(),
+        verifier: this.identity,
+      });
+      const f = charge.payload;
+      const offered = await verifyRecordedMessage(c.claim.agreement.offer, this.options.trust);
+      const offer = offered?.message as AnyMessage | undefined;
+      const read = await verifyRecordedMessage(c.claim.agreement.acceptance, this.options.trust);
+      const acceptance = read?.message as AnyMessage | undefined;
+      // The two parties to the case signed the agreement, one offering and one accepting.
+      const parties = new Set([c.claim.party, c.claim.respondent]);
+      const bound =
+        offer &&
+        acceptance &&
+        offered?.pinned?.subject === offer.from.actor &&
+        offered?.pinned?.party === offer.from.onBehalfOf &&
+        read?.pinned?.subject === acceptance.from.actor &&
+        read?.pinned?.party === acceptance.from.onBehalfOf &&
+        parties.has(offer.from.onBehalfOf ?? "") &&
+        parties.has(acceptance.from.onBehalfOf ?? "") &&
+        offer.from.onBehalfOf !== acceptance.from.onBehalfOf &&
+        offer.to?.party === acceptance.from.onBehalfOf &&
+        offer.to?.actor === acceptance.from.actor &&
+        acceptance.to?.party === offer.from.onBehalfOf &&
+        acceptance.to?.actor === offer.from.actor &&
+        offer.conversation === acceptance.conversation;
+      const agreed =
+        offer?.kind === "propose"
+          ? typeof offer.body.terms.fee === "number"
+            ? offer.body.terms.fee
+            : (offer.body.terms.fee as { amount?: unknown } | undefined)?.amount
+          : undefined;
+      const delivered =
+        acceptance?.kind === "accept" &&
+        b.value.messages.some(
+          (m) =>
+            m.kind === "invoke" &&
+            m.body.operation.id === "urn:op:fee-notice" &&
+            f?.agreement.id === acceptance.body.agreement &&
+            Date.parse(m.createdAt) >= Date.parse(acceptance.createdAt) &&
+            m.from.onBehalfOf === c.claim.respondent &&
+            m.to?.party === c.claim.party &&
+            this.options.trust
+              .keysFor(m.to.actor ?? "", "actor")
+              .some((key) => key.party === c.claim.party) &&
+            b.value.directions.get(m.id) === "out" &&
+            a.value.directions.get(m.id) === "in" &&
+            (m.evidence ?? []).some(
+              (e) => e.role === "credential" && e.value === c.claim.observation,
+            ),
+        );
+      if (
+        f &&
+        delivered &&
+        charge.signer?.subject === f.issuer &&
+        f.issuer === c.claim.respondent &&
+        f.subject === c.claim.party &&
+        offer?.kind === "propose" &&
+        acceptance?.kind === "accept" &&
+        bound &&
+        f.agreement.offer === offer.id &&
+        f.agreement.conversation === offer.conversation &&
+        f.agreement.termsDigest === acceptance.body.termsDigest &&
+        acceptance.body.proposal === offer.id &&
+        acceptance.body.termsDigest === digestOf(offer.body.terms) &&
+        acceptance.body.termsDigest === c.claim.agreement.digest &&
+        typeof agreed === "number" &&
+        agreed !== f.fee
+      ) {
+        await this.decision(gateRun, c, "not-authorised", c.claim.respondent, {
+          problem: "fee-not-in-terms",
+          agreement: c.claim.agreement.digest,
+          ...(typeof agreed === "number" ? { agreedFee: agreed } : {}),
+          statement: digestOf(f),
+          billedFee: f.fee,
+        });
+        return { ok: true };
+      }
+    }
+    await this.decision(
+      gateRun,
+      c,
+      "evidence-missing",
+      "unsettled",
+      { problem: "records-do-not-settle-allegation" },
+      false,
+    );
+    return { ok: true };
+  }
+  async audit() {
+    for (const c of Object.values(this.cases()))
+      if (!c.decision && Date.parse(this.options.now()) > Date.parse(c.deadline))
+        await this.decision(++this.gateRun, c, "record-unavailable", c.claim.respondent, {
+          problem: "party-did-not-answer",
+        });
+    return Object.values(this.cases()).map((c) => ({ case: c.id, answered: !!c.decision }));
+  }
+}

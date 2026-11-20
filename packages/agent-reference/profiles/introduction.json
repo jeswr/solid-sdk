@@ -1,0 +1,183 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "introduction",
+  "parties": {
+    "owner": "The first person",
+    "receiver": "The second person",
+    "identity-provider": "The identity provider",
+    "owner-agent": "The first person’s agent",
+    "receiver-agent": "The second person’s agent"
+  },
+  "claims": [
+    {
+      "kind": "identity.verified",
+      "sources": [
+        "urn:fictional:introduction:identity-provider"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "introduction.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:introduction:receiver",
+        "urn:fictional:introduction:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:introduction",
+      "claims": [
+        "identity.verified",
+        "introduction.answer",
+        "derivation.request"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:introduction:proof",
+      "template": "membership",
+      "params": {
+        "input": "identity.verified",
+        "values": [
+          true
+        ]
+      },
+      "output": "introduction.answer",
+      "inputsFrom": [
+        "urn:fictional:introduction:identity-provider"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:introduction:identity-provider> . GRAPH ?g { ?subject <urn:claim:identity.verified> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> . }  }"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "identity.verified"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:introduction",
+      "version": "0.1",
+      "label": "Being introduced to a stranger safely",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:introduction:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:introduction:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:introduction:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personMayRelyOn": [
+    "identity.verified"
+  ],
+  "actionClaims": [
+    {
+      "action": "read",
+      "claims": [
+        "identity.verified"
+      ]
+    },
+    {
+      "action": "urn:op:introduction:proof-answer",
+      "claims": [
+        "introduction.answer"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:introduction:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:introduction"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
+    }
+  ],
+  "labels": {
+    "urn:purpose:introduction": "Introduction"
+  }
+}

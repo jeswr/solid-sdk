@@ -3049,6 +3049,82 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
 
+  packages/agent-reference:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../solid-vc
+      '@noble/curves':
+        specifier: ^2.4.0
+        version: 2.4.0
+      '@noble/hashes':
+        specifier: ^2.4.0
+        version: 2.4.0
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      canonicalize:
+        specifier: ^1.0.8
+        version: 1.0.8
+      jose:
+        specifier: ^6.2.3
+        version: 6.2.14
+      jsonld:
+        specifier: ^9.0.0
+        version: 9.0.0
+      n3:
+        specifier: ^2.1.0
+        version: 2.1.1
+      rdf-validate-shacl:
+        specifier: ^0.6.5
+        version: 0.6.5
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@types/jsonld':
+        specifier: ^1.5.15
+        version: 1.5.15
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/agent-registry:
     dependencies:
       '@jeswr/agent-model':
@@ -3512,7 +3588,7 @@ importers:
         version: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54
       '@jeswr/solid-vc':
         specifier: github:jeswr/solid-vc#main
-        version: https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982
+        version: https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -3861,6 +3937,9 @@ importers:
       '@a2a-js/sdk':
         specifier: ^1.2.1
         version: 1.3.0(@grpc/grpc-js@1.14.6)(express@5.2.1)
+      '@jeswr/agent-reference':
+        specifier: workspace:*
+        version: link:../agent-reference
       '@jeswr/agentic-legacy-bridge':
         specifier: workspace:*
         version: link:../agentic-legacy-bridge
@@ -9529,13 +9608,18 @@ packages:
     version: 0.1.0
     engines: {node: '>=24'}
 
-  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
-    resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b}
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
+    resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6}
     version: 0.1.0
     engines: {node: '>=22'}
 
   '@jeswr/prefixcc@1.2.1':
     resolution: {integrity: sha512-kBBXbqsaeh3Irp416h/RbelqJgIOp6X/OJJlYmLyr/9qlBYKTKSCuEv5/xjZ0Yf8Yec+QFRYBaOQ2JkMBSH7KA==}
+
+  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
+    resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578}
+    version: 0.1.0
+    engines: {node: '>=24'}
 
   '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
     resolution: {integrity: sha512-cMh1ckDWspn8GqHJWhL1obqCNBa8x52fNUIrQfd3Z1LYNVLE5coN51NJymFyLXteEoc2stexlz8s5bQsCM6O+A==, tarball: file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz}
@@ -9549,8 +9633,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982':
-    resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982}
+  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
+    resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18}
     version: 0.1.0
     engines: {node: '>=24'}
 
@@ -11946,6 +12030,7 @@ packages:
 
   '@tiptap/y-tiptap@3.0.10':
     resolution: {integrity: sha512-vJtwYVoBBk+e8KyUVoH9WSsfUfKTXf1Uh+tk2UNTlD8wim9j7XVTuc7sakWUYuznB7DkXThT9w5uQTGH2SN0Kg==}
+    deprecated: Persistent position migrations can cause excessive collaborative document growth. Upgrade all collaborating clients to 3.1.0 or later.
     peerDependencies:
       prosemirror-model: ^1.7.1
       prosemirror-state: ^1.2.3
@@ -16630,6 +16715,7 @@ packages:
   nkeys.js@1.1.0:
     resolution: {integrity: sha512-tB/a0shZL5UZWSwsoeyqfTszONTt4k2YS0tuQioMOD180+MbombYVgzDUYHlx+gejYK6rgf08n/2Df99WY0Sxg==}
     engines: {node: '>=10.0.0'}
+    deprecated: 'Package moved. Use @nats-io/nkeys instead: https://www.npmjs.com/package/@nats-io/nkeys'
 
   node-downloader-helper@2.1.11:
     resolution: {integrity: sha512-882fH2C9AWdiPCwz/2beq5t8FGMZK9Dx8TJUOIxzMCbvG7XUKM5BuJwN5f0NKo4SCQK6jR4p2TPm54mYGdGchQ==}
@@ -25967,7 +26053,7 @@ snapshots:
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
 
-  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
     dependencies:
       undici: 8.9.0
 
@@ -25978,6 +26064,11 @@ snapshots:
       fsevents: 2.3.3
     transitivePeerDependencies:
       - encoding
+
+  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
+    dependencies:
+      '@rdfjs/types': 2.0.1
+      n3: 2.1.1
 
   '@jeswr/solid-server@file:packages/solid-pod-guard/vendor/jeswr-solid-server-0.1.0.tgz':
     dependencies:
@@ -25991,9 +26082,10 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982':
+  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
     dependencies:
-      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b
+      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6
+      '@jeswr/rdf-serialize': https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578
       '@rdfjs/wrapper': 0.34.0
       '@solid/object': 0.6.0
       content-type: 1.0.5

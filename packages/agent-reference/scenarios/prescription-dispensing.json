@@ -1,0 +1,1068 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "prescription-dispensing",
+  "useCase": "prescription-dispensing",
+  "title": "Dispensing a prescription",
+  "profile": "prescription-dispensing",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:prescription-dispensing:owner",
+      "name": "The first pharmacy",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "second",
+      "identity": "urn:fictional:prescription-dispensing:second",
+      "name": "The second pharmacy",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "issuer",
+      "identity": "urn:fictional:prescription-dispensing:issuer",
+      "name": "The prescriber",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "authority",
+      "identity": "urn:fictional:prescription-dispensing:authority",
+      "name": "The professional register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "register",
+      "identity": "urn:fictional:prescription-dispensing:register",
+      "name": "The dispensing register",
+      "role": "register",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "subject",
+      "identity": "urn:fictional:prescription-dispensing:subject",
+      "name": "The patient",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:prescription-dispensing:owner-agent",
+      "actor": "urn:fictional:prescription-dispensing:owner-agent:actor",
+      "actsFor": "owner",
+      "name": "The first pharmacy’s agent",
+      "role": "agent",
+      "runs": "agent"
+    },
+    {
+      "id": "second-agent",
+      "identity": "urn:fictional:prescription-dispensing:second-agent",
+      "actor": "urn:fictional:prescription-dispensing:second-agent:actor",
+      "actsFor": "second",
+      "name": "The second pharmacy’s agent",
+      "role": "agent",
+      "runs": "agent"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:prescription-dispensing:owner",
+          "tasks": [
+            "urn:op:prescription-dispensing"
+          ]
+        }
+      ],
+      "second-agent": [
+        {
+          "party": "urn:fictional:prescription-dispensing:second",
+          "tasks": [
+            "urn:op:prescription-dispensing"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:prescription-dispensing",
+          "version": "1",
+          "source": "urn:fictional:prescription-dispensing:issuer",
+          "claimTypes": [
+            "prescription"
+          ],
+          "subjects": [
+            "urn:fictional:prescription-dispensing:subject"
+          ]
+        }
+      ],
+      "second-agent": [
+        {
+          "id": "urn:source:prescription-dispensing",
+          "version": "1",
+          "source": "urn:fictional:prescription-dispensing:issuer",
+          "claimTypes": [
+            "prescription"
+          ],
+          "subjects": [
+            "urn:fictional:prescription-dispensing:subject"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "item",
+      "issuer": "issuer",
+      "subject": "urn:fictional:prescription-dispensing:subject",
+      "kind": "prescription",
+      "value": {
+        "item": "urn:fictional:prescription-dispensing:item",
+        "amount": 100
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:prescription-dispensing:item",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:prescription-dispensing:item",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:prescription-dispensing"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "role",
+      "issuer": "authority",
+      "subject": "urn:fictional:prescription-dispensing:issuer",
+      "kind": "prescriber.registration",
+      "value": {
+        "status": {
+          "ref": "urn:fictional:prescription-dispensing:standing-status",
+          "id": "registration"
+        }
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:prescription-dispensing:role",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:prescription-dispensing:role",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:prescription-dispensing"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:prescription-dispensing"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "second-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:prescription-dispensing"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "admit-item",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "item"
+      ],
+      "purpose": "urn:purpose:prescription-dispensing"
+    },
+    {
+      "id": "redeem-and-act",
+      "agent": "owner-agent",
+      "type": "effect",
+      "intent": {
+        "action": "use",
+        "operation": "urn:op:prescription-dispensing",
+        "target": "urn:op:prescription-dispensing",
+        "recipient": "urn:fictional:prescription-dispensing:owner",
+        "purpose": "urn:purpose:prescription-dispensing",
+        "conversation": "urn:scenario:prescription-dispensing:redeem-and-act",
+        "parameters": {
+          "item": "urn:fictional:prescription-dispensing:item"
+        }
+      },
+      "params": {
+        "item": "urn:fictional:prescription-dispensing:item"
+      },
+      "activityType": "urn:activity:prescription-dispensing"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The same prescription is presented at a second pharmacy",
+      "change": {
+        "script": [
+          {
+            "id": "admit-item",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "item"
+            ],
+            "purpose": "urn:purpose:prescription-dispensing"
+          },
+          {
+            "id": "redeem-and-act",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:prescription-dispensing",
+              "target": "urn:op:prescription-dispensing",
+              "recipient": "urn:fictional:prescription-dispensing:owner",
+              "purpose": "urn:purpose:prescription-dispensing",
+              "conversation": "urn:scenario:prescription-dispensing:redeem-and-act",
+              "parameters": {
+                "item": "urn:fictional:prescription-dispensing:item"
+              }
+            },
+            "params": {
+              "item": "urn:fictional:prescription-dispensing:item"
+            },
+            "activityType": "urn:activity:prescription-dispensing"
+          },
+          {
+            "id": "second-admits",
+            "agent": "second-agent",
+            "type": "admit",
+            "statements": [
+              "item"
+            ],
+            "purpose": "urn:purpose:prescription-dispensing"
+          },
+          {
+            "id": "second-redemption",
+            "agent": "second-agent",
+            "type": "effect",
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:prescription-dispensing",
+              "target": "urn:op:prescription-dispensing",
+              "recipient": "urn:fictional:prescription-dispensing:second",
+              "purpose": "urn:purpose:prescription-dispensing",
+              "conversation": "urn:scenario:prescription-dispensing:second-redemption",
+              "parameters": {
+                "item": "urn:fictional:prescription-dispensing:item"
+              }
+            },
+            "params": {
+              "item": "urn:fictional:prescription-dispensing:item"
+            },
+            "activityType": "urn:activity:prescription-dispensing"
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "status-withdrawn",
+        "check": "evidence"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "second-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "second-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The prescriber's registration lapsed last month",
+      "change": {
+        "documents": [
+          {
+            "id": "urn:fictional:prescription-dispensing:standing-status",
+            "issuer": "authority",
+            "typ": "awp-status-list+jws",
+            "value": {
+              "type": "StatusList",
+              "id": "urn:fictional:prescription-dispensing:standing-status",
+              "issuer": "urn:fictional:prescription-dispensing:authority",
+              "issuedAt": "2026-11-13T09:00:00.000Z",
+              "validUntil": "2026-12-01T00:00:00.000Z",
+              "entries": {
+                "registration": "withdrawn"
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "outcome": "refuse",
+        "reason": "status-withdrawn",
+        "check": "source"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "register",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "status-withdrawn"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "stop",
+        "reason": "status-withdrawn"
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "register",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "source",
+    "integrity",
+    "evidence"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "documents": [
+    {
+      "id": "urn:fictional:prescription-dispensing:standing-status",
+      "issuer": "authority",
+      "typ": "awp-status-list+jws",
+      "value": {
+        "type": "StatusList",
+        "id": "urn:fictional:prescription-dispensing:standing-status",
+        "issuer": "urn:fictional:prescription-dispensing:authority",
+        "issuedAt": "2026-11-13T09:00:00.000Z",
+        "validUntil": "2026-12-01T00:00:00.000Z",
+        "entries": {
+          "registration": "active"
+        }
+      }
+    }
+  ],
+  "singleUseRegisters": [
+    {
+      "party": "register",
+      "maxAgeSeconds": 60,
+      "items": [
+        {
+          "id": "urn:fictional:prescription-dispensing:item",
+          "issuer": "issuer",
+          "state": "active",
+          "roleStatement": "role",
+          "roleSource": "urn:fictional:prescription-dispensing:authority",
+          "roleClaim": "prescriber.registration",
+          "redeemers": [
+            "urn:fictional:prescription-dispensing:owner",
+            "urn:fictional:prescription-dispensing:second"
+          ],
+          "purposes": [
+            "urn:purpose:prescription-dispensing"
+          ]
+        }
+      ]
+    }
+  ],
+  "traceSteps": {
+    "1": "Check and perform step 1.",
+    "2": "Check and perform step 2.",
+    "3": "Check and perform step 3.",
+    "4": "Check and perform step 4."
+  }
+}

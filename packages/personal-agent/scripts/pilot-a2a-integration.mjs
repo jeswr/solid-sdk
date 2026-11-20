@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // A2A + durable enterprise workflow (SYNTHETIC ONLY). Requires `npm run build` and a local SPARQ
 // policy binary (explicit path; never the ambient `sparq` command).
 //
@@ -545,6 +546,8 @@ try {
     "mortgage-consumer",
     "--wallet",
     issuance.json.wallet,
+    "--issuers",
+    issuance.json.issuers,
   ]);
   mids.northbank = await provision("northbank", [
     "--role",
@@ -721,7 +724,7 @@ try {
   const permitted = await call("northbank", "internal_access", {
     agent: fixtures.NB_ASSESS,
     action: "read",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     application,
   });
   const marketing = await call("northbank", "internal_access", {
@@ -733,13 +736,13 @@ try {
   const relabelled = await call("northbank", "internal_access", {
     agent: fixtures.NB_MARKETING,
     action: "read",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     application,
   });
   const broker = await call("northbank", "internal_access", {
     agent: fixtures.NORTH.actor,
     action: "distribute",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     recipient: fixtures.DATA_BROKER,
     application,
   });

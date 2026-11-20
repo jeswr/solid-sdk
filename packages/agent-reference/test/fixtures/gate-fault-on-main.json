@@ -1,0 +1,27 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "configuration": {
+    "id": "accountability-vendor-fault",
+    "change": {
+      "accountability": "vendor-fault"
+    },
+    "world": {
+      "gateFault": {
+        "at": "fee-acknowledged",
+        "agent": "sam-agent",
+        "kind": "released-outside-mandate",
+        "intent": {
+          "action": "transfer",
+          "target": "urn:scenario:mortgage-main:second-valuation-order",
+          "operation": "urn:op:paid-service",
+          "recipient": "urn:fictional:other-valuer",
+          "purpose": "urn:purpose:valuation",
+          "conversation": "urn:scenario:mortgage-main:second-valuation",
+          "parameters": {}
+        },
+        "activityType": "urn:activity:second-valuation-order"
+      }
+    }
+  },
+  "note": "The faulty-gate stand-in placed in a configuration world, so it would be active on the main path."
+}

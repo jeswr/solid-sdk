@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The personal-to-personal slice as executable cases for the demo report. Each case runs
  * real agents (fresh synthetic keys, real JWS verification, persistent or memory stores)
@@ -7,6 +8,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
+import { writeAttachmentDocument } from "@jeswr/agent-reference/wire/attachments";
+import { readJson } from "@jeswr/agent-reference/wire/document";
 import { DirectBus } from "../bindings/direct.js";
 import { scopedUrn } from "../core/canonical.js";
 import { buildMeetingTerms, MEETING_MODEL, SCHEDULE_OP } from "../domains/scheduling.js";
@@ -42,7 +46,7 @@ function terms(
 ) {
   return buildMeetingTerms({
     calendar: a.calendar,
-    title: "Synthetic catch-up",
+    title: "catch-up",
     durationMinutes: 30,
     window,
     now: now.toISOString(),
@@ -211,30 +215,32 @@ export async function caseFeeRefused() {
   };
 }
 
-function tamper(jws: string, mutate: (p: Record<string, unknown>) => void): string {
-  const [h, p, s] = jws.split(".");
-  const payload = JSON.parse(Buffer.from(p ?? "", "base64url").toString("utf8")) as Record<
-    string,
-    unknown
-  >;
-  mutate(payload);
-  return `${h}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.${s}`;
+/** Replace the proposed terms while keeping the original document signature. */
+export async function tamperMeetingProposal(out: OutboundMessage): Promise<WireMessage> {
+  const { message, wire } = out;
+  if (message.kind !== "propose" || wire.format !== "awp-jsonld/0.1")
+    throw new Error("missing signed meeting proposal");
+  const terms = { ...message.body.terms, durationMinutes: 120 };
+  const changed = MessageNode.toNode({
+    ...message,
+    body: { ...message.body, terms },
+  });
+  const { document, attachments } = await writeAttachmentDocument(changed);
+  const { proof } = readJson(wire.jsonld);
+  return { ...wire, jsonld: JSON.stringify({ ...document, proof }), attachments };
 }
 
 export async function caseTamperReplayAudience() {
   const clock = fixedClock();
   const t = await begin({ now: clock.now });
-  await t.bus.run(({ out }) =>
-    out.kind === "propose" && out.wire.format === "awp-jws-compact/0.1"
-      ? {
-          format: out.wire.format,
-          jws: tamper(out.wire.jws, (p) => {
-            (p.body as { terms: { durationMinutes: number } }).terms.durationMinutes = 120;
-          }),
-        }
-      : undefined,
-  );
-  const tampered = t.bus.trace.find((x) => x.kind === "propose");
+  let proposal: OutboundMessage | undefined;
+  await t.bus.run(({ out }) => {
+    if (out.kind !== "propose") return undefined;
+    proposal = out;
+    return "drop";
+  });
+  if (!proposal) throw new Error("missing proposal");
+  const tampered = await t.bob.runtime.receive(await tamperMeetingProposal(proposal));
 
   const r = await begin({ now: clock.now });
   let accept: { to: AgentRuntime; wire: WireMessage } | undefined;

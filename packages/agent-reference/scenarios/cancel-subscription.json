@@ -1,0 +1,1255 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "cancel-subscription",
+  "useCase": "cancel-subscription",
+  "title": "Cancelling a subscription",
+  "profile": "cancel-subscription",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:cancel-subscription:owner",
+      "name": "The subscriber",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:cancel-subscription:receiver",
+      "name": "The subscription service",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:cancel-subscription:owner-agent",
+      "name": "The subscriber’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:cancel-subscription:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:cancel-subscription:receiver-agent",
+      "name": "The subscription service’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:cancel-subscription:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:cancel-subscription:receiver",
+          "tasks": [
+            "urn:op:cancel-subscription",
+            "urn:op:cancel-subscription:request",
+            "urn:op:cancel-subscription:renew"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:cancel-subscription:owner",
+          "tasks": [
+            "urn:op:cancel-subscription",
+            "urn:op:cancel-subscription:request",
+            "urn:op:cancel-subscription:renew"
+          ]
+        },
+        {
+          "party": "urn:fictional:cancel-subscription:receiver",
+          "tasks": [
+            "urn:op:cancel-subscription"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:cancel-subscription:subscription.control",
+          "version": "1",
+          "source": "urn:fictional:cancel-subscription:receiver",
+          "claimTypes": [
+            "subscription.control"
+          ],
+          "subjects": [
+            "urn:fictional:cancel-subscription:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:cancel-subscription:subscription.control",
+          "version": "1",
+          "source": "urn:fictional:cancel-subscription:receiver",
+          "claimTypes": [
+            "subscription.control"
+          ],
+          "subjects": [
+            "urn:fictional:cancel-subscription:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "subscription",
+      "issuer": "receiver",
+      "subject": "urn:fictional:cancel-subscription:owner",
+      "kind": "subscription.control",
+      "value": {
+        "subscription": "urn:fictional:subscription",
+        "active": true
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:cancel-subscription:subscription",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:cancel-subscription:subscription",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:cancel-subscription"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:cancel-subscription:subscription",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:cancel-subscription"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:cancel-subscription"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:cancel-subscription:request"
+        },
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:cancel-subscription"
+        },
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:cancel-subscription:renew"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "admit-source",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "subscription"
+      ],
+      "purpose": "urn:purpose:cancel-subscription"
+    },
+    {
+      "id": "request",
+      "agent": "receiver-agent",
+      "type": "start",
+      "peer": "owner-agent",
+      "kind": "invoke",
+      "operation": "urn:op:cancel-subscription:request",
+      "contents": {
+        "request": "subscription.control"
+      },
+      "intent": {
+        "action": "use",
+        "target": "urn:op:cancel-subscription:request",
+        "operation": "urn:op:cancel-subscription:request",
+        "recipient": "urn:fictional:cancel-subscription:owner",
+        "purpose": "urn:purpose:cancel-subscription",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:cancel-subscription"
+    },
+    {
+      "id": "request-arrives",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "receiver-agent"
+    },
+    {
+      "id": "share",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "receiver-agent",
+      "kind": "invoke",
+      "operation": "urn:op:cancel-subscription",
+      "contents": {
+        "items": [
+          "urn:scenario:cancel-subscription:subscription"
+        ]
+      },
+      "intent": {
+        "action": "distribute",
+        "target": "urn:op:cancel-subscription",
+        "operation": "urn:op:cancel-subscription",
+        "recipient": "urn:fictional:cancel-subscription:receiver",
+        "purpose": "urn:purpose:cancel-subscription",
+        "parameters": {},
+        "evidence": [
+          {
+            "itemId": "urn:scenario:cancel-subscription:subscription",
+            "claimType": "subscription.control"
+          }
+        ]
+      },
+      "evidence": [
+        "subscription"
+      ],
+      "purpose": "urn:purpose:cancel-subscription"
+    },
+    {
+      "id": "receive",
+      "agent": "receiver-agent",
+      "type": "receive",
+      "from": "owner-agent"
+    },
+    {
+      "id": "cancel-record",
+      "agent": "receiver-agent",
+      "type": "effect",
+      "intent": {
+        "action": "transfer",
+        "operation": "urn:op:cancel-subscription",
+        "target": "urn:op:cancel-subscription",
+        "recipient": "urn:fictional:cancel-subscription:receiver",
+        "purpose": "urn:purpose:cancel-subscription",
+        "conversation": "urn:scenario:cancel-subscription:task",
+        "parameters": {
+          "support": [
+            "urn:scenario:cancel-subscription:subscription"
+          ],
+          "subscription": "urn:fictional:subscription",
+          "status": "cancelled"
+        }
+      },
+      "params": {
+        "subscription": "urn:fictional:subscription",
+        "status": "cancelled"
+      },
+      "activityType": "urn:activity:cancellation"
+    },
+    {
+      "id": "cancelled",
+      "agent": "receiver-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.cancel-record.effect.conclusion"
+      },
+      "expected": "completed"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The service offers three months free to stay",
+      "change": {
+        "script": [
+          {
+            "id": "admit-source",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "subscription"
+            ],
+            "purpose": "urn:purpose:cancel-subscription"
+          },
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "invoke",
+            "operation": "urn:op:cancel-subscription:request",
+            "contents": {
+              "request": "subscription.control"
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:cancel-subscription:request",
+              "operation": "urn:op:cancel-subscription:request",
+              "recipient": "urn:fictional:cancel-subscription:owner",
+              "purpose": "urn:purpose:cancel-subscription",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:cancel-subscription"
+          },
+          {
+            "id": "request-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "share",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:cancel-subscription",
+            "contents": {
+              "items": [
+                "urn:scenario:cancel-subscription:subscription"
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:cancel-subscription",
+              "operation": "urn:op:cancel-subscription",
+              "recipient": "urn:fictional:cancel-subscription:receiver",
+              "purpose": "urn:purpose:cancel-subscription",
+              "parameters": {},
+              "evidence": [
+                {
+                  "itemId": "urn:scenario:cancel-subscription:subscription",
+                  "claimType": "subscription.control"
+                }
+              ]
+            },
+            "evidence": [
+              "subscription"
+            ],
+            "purpose": "urn:purpose:cancel-subscription"
+          },
+          {
+            "id": "receive",
+            "agent": "receiver-agent",
+            "type": "receive",
+            "from": "owner-agent"
+          },
+          {
+            "id": "retention-offer",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "propose",
+            "operation": "urn:op:cancel-subscription:renew",
+            "contents": {
+              "freeMonths": 3
+            },
+            "intent": {
+              "action": "use",
+              "operation": "urn:op:cancel-subscription:renew",
+              "target": "urn:op:cancel-subscription:renew",
+              "recipient": "urn:fictional:cancel-subscription:owner",
+              "purpose": "urn:purpose:cancel-subscription",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:cancel-subscription"
+          },
+          {
+            "id": "offer-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "try-to-renew",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "transfer",
+              "operation": "urn:op:cancel-subscription:renew",
+              "target": "urn:op:cancel-subscription:renew",
+              "recipient": "urn:fictional:cancel-subscription:receiver",
+              "purpose": "urn:purpose:cancel-subscription",
+              "conversation": "urn:scenario:cancel-subscription:task",
+              "parameters": {
+                "freeMonths": 3
+              }
+            },
+            "params": {
+              "freeMonths": 3
+            },
+            "activityType": "urn:activity:renewal"
+          }
+        ],
+        "traceSteps": {
+          "1": "The subscriber’s agent checks the signed statements.",
+          "2": "The subscription service’s agent sends the signed request.",
+          "3": "The subscriber’s agent checks the message and prepares a response.",
+          "4": "The subscriber’s agent sends the signed request.",
+          "5": "The subscription service’s agent checks the message and prepares a response.",
+          "6": "The subscription service’s agent sends the signed request.",
+          "7": "The subscriber’s agent checks the message and prepares a response.",
+          "8": "The subscriber’s agent proposes the local action."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "not-authorised",
+        "check": "mandate"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "pass",
+          "reason": "minimal-disclosure"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "pass",
+          "reason": "terms-allow"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "fail",
+          "reason": "not-authorised"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "not-authorised"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "mandate",
+    "limits-approval"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Subscription cancellation",
+      "replacedBy": "The separately gated service updates a local cancellation record; a signed retention offer cannot authorize renewal under the subscriber’s cancellation-only mandate"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "limits-approval",
+    "reason": "within-limits"
+  },
+  "traceSteps": {
+    "1": "The subscriber’s agent checks the signed statements.",
+    "2": "The subscription service’s agent sends the signed request.",
+    "3": "The subscriber’s agent checks the message and prepares a response.",
+    "4": "The subscriber’s agent sends the signed request.",
+    "5": "The subscription service’s agent checks the message and prepares a response.",
+    "6": "The subscription service’s agent proposes the local action.",
+    "7": "The subscription service’s agent checks the observed result."
+  }
+}

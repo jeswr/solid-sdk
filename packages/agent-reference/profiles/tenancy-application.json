@@ -1,0 +1,261 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "tenancy-application",
+  "parties": {
+    "owner": "The tenant",
+    "receiver": "The letting agency",
+    "bank": "The tenant’s bank",
+    "owner-agent": "The tenant’s agent",
+    "receiver-agent": "The letting agency’s agent"
+  },
+  "claims": [
+    {
+      "kind": "bank.full-statements",
+      "sources": [
+        "urn:fictional:tenancy-application:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "income.monthly",
+      "sources": [
+        "urn:fictional:tenancy-application:employer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "tenancy-application.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:tenancy-application:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "rental.entitled",
+      "sources": [
+        "urn:fictional:tenancy-application:rental-authority"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "rental.reference",
+      "sources": [
+        "urn:fictional:tenancy-application:landlord"
+      ],
+      "methods": [
+        "person-opinion"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:tenancy-application",
+      "claims": [
+        "tenancy-application.answer",
+        "derivation.request",
+        "income.monthly",
+        "rental.entitled",
+        "rental.reference"
+      ]
+    },
+    {
+      "id": "urn:purpose:tenant-finances",
+      "claims": [
+        "bank.full-statements"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:tenancy-application:proof",
+      "template": "threshold",
+      "params": {
+        "input": "income.monthly",
+        "operator": "gte",
+        "value": 3000
+      },
+      "output": "tenancy-application.answer",
+      "inputsFrom": [
+        "urn:fictional:tenancy-application:employer"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:tenancy-application:employer> . GRAPH ?g { ?subject <urn:claim:income.monthly> ?income . FILTER(?income >= 3000) } }"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "bank.full-statements"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "terms.purpose": {
+      "type": "identifier"
+    },
+    "terms.evidenceRequest.*.claimType": {
+      "type": "code",
+      "values": [
+        "tenancy.application"
+      ]
+    },
+    "terms.topic": {
+      "type": "code",
+      "values": [
+        "application-request"
+      ]
+    },
+    "terms.turn": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:tenancy-application",
+      "version": "0.1",
+      "label": "Applying to rent a home",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true,
+      "agreementDelivery": "acceptor"
+    },
+    {
+      "id": "urn:op:tenancy-application:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:raw",
+      "version": "0.1",
+      "label": "Attempt raw-statement disclosure",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:tenancy-application:supporting-statements",
+      "version": "0.1",
+      "label": "Send the signed supporting statements",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:tenancy-application:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:tenancy-application"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:tenancy-application:proof-answer",
+      "claims": [
+        "tenancy-application.answer"
+      ]
+    },
+    {
+      "action": "urn:op:tenancy-application:supporting-statements",
+      "claims": [
+        "rental.entitled",
+        "rental.reference"
+      ]
+    }
+  ],
+  "labels": {
+    "urn:purpose:tenancy-application": "Tenancy application",
+    "urn:purpose:tenant-finances": "Tenant finances"
+  }
+}

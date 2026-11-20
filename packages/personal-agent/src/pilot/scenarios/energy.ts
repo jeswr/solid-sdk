@@ -4,6 +4,7 @@
  */
 
 import { DirectBus } from "../bindings/direct.js";
+import { isUnsignedRequest } from "../bindings/message-packet.js";
 import {
   CDS_SUBSET,
   CDS_SUBSET_OLD,
@@ -108,7 +109,8 @@ export async function runEnergy(now: () => Date) {
       comparatorRequests: comparatorOut.length,
       identityFreeRequests: comparatorOut.every(
         (o) =>
-          o.wire.format === "awp-unsigned-json/0.1" &&
+          o.wire.format === "awp-jsonld/0.1" &&
+          isUnsignedRequest(o.wire) &&
           Object.keys(o.message.from).length === 0 &&
           (o.message.evidence ?? []).length === 0,
       ),

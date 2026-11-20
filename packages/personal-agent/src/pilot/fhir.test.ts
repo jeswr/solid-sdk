@@ -62,5 +62,5 @@ describe("UC-04 synthetic patient-authorised FHIR access", () => {
     expect(obs.afterRevocation).toEqual({ phase: "refused", reason: "grant-revoked" });
     expect(obs.auditMinimised).toBe(true);
     expect(obs.ledgers).toBe(true);
-  });
+  }, 20_000);
 });

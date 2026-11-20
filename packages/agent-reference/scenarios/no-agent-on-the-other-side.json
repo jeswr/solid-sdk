@@ -1,0 +1,550 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "no-agent-on-the-other-side",
+  "useCase": "no-agent-on-the-other-side",
+  "title": "The other side has no agent",
+  "profile": "no-agent-on-the-other-side",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:no-agent-on-the-other-side:party-1",
+      "name": "The customer",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "mailto:shop@fictional.example",
+      "name": "A small business with an email address",
+      "role": "source",
+      "runs": "mailbox"
+    },
+    {
+      "id": "reader-agent",
+      "identity": "urn:fictional:no-agent-on-the-other-side:reader-agent",
+      "actor": "urn:fictional:no-agent-on-the-other-side:reader-agent:actor",
+      "name": "The customer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "party-1"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {
+      "reader-agent": [
+        {
+          "party": "mailto:shop@fictional.example",
+          "tasks": [
+            "urn:op:email"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "reader-agent": []
+    }
+  },
+  "statements": [],
+  "mandates": [
+    {
+      "agent": "reader-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:email"
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:email"
+        },
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:email-bind"
+        }
+      ]
+    }
+  ],
+  "script": [
+    {
+      "id": "draft-enquiry",
+      "agent": "reader-agent",
+      "type": "email-send",
+      "mailbox": "party-2",
+      "purpose": "urn:purpose:business-enquiry",
+      "text": "Hello, is the advertised item available?"
+    },
+    {
+      "id": "approve-enquiry",
+      "agent": "reader-agent",
+      "type": "approve",
+      "decision": "approve",
+      "note": "Send these exact words."
+    },
+    {
+      "id": "read-reply",
+      "agent": "reader-agent",
+      "type": "email-receive",
+      "mailbox": "party-2",
+      "purpose": "urn:purpose:business-enquiry"
+    },
+    {
+      "id": "reading",
+      "agent": "reader-agent",
+      "type": "reading",
+      "originalDigest": {
+        "$ref": "steps.read-reply.digest"
+      },
+      "claimType": "email.reading",
+      "subject": "mailto:shop@fictional.example",
+      "value": "available"
+    },
+    {
+      "id": "inbox",
+      "agent": "reader-agent",
+      "type": "email-inbox",
+      "mailbox": "party-2"
+    },
+    {
+      "id": "one-approved-send",
+      "agent": "reader-agent",
+      "type": "assert",
+      "actual": {
+        "$ref": "steps.inbox.0.to"
+      },
+      "expected": "mailto:shop@fictional.example"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The reply asks for payment details by email",
+      "change": {
+        "script": [
+          {
+            "id": "draft-enquiry",
+            "agent": "reader-agent",
+            "type": "email-send",
+            "mailbox": "party-2",
+            "purpose": "urn:purpose:business-enquiry",
+            "text": "Hello, is the advertised item available?"
+          },
+          {
+            "id": "approve-enquiry",
+            "agent": "reader-agent",
+            "type": "approve",
+            "decision": "approve",
+            "note": "Send these exact words."
+          },
+          {
+            "id": "read-reply",
+            "agent": "reader-agent",
+            "type": "email-receive",
+            "mailbox": "party-2",
+            "purpose": "urn:purpose:business-enquiry",
+            "index": 1
+          },
+          {
+            "id": "reply-with-details",
+            "agent": "reader-agent",
+            "type": "email-send",
+            "mailbox": "party-2",
+            "purpose": "urn:purpose:business-enquiry",
+            "text": "I would like to send my payment details in response to your message."
+          }
+        ],
+        "traceSteps": {
+          "1": "The customer reviews the exact prose before the next email can leave.",
+          "2": "The customer reviews the exact prose before the next email can leave.",
+          "3": "The customer reviews the exact prose before the next email can leave.",
+          "4": "The customer reviews the exact prose before the next email can leave."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "outline": [
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "ask-principal",
+          "reason": "context-not-clear"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "reader-agent",
+          "part": "principal",
+          "kind": "ask-principal",
+          "reason": "approval-required"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-principal",
+        "reason": "approval-required"
+      }
+    }
+  ],
+  "expect": [
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "approval-required"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "reader-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "reason": "fit-for-use"
+    }
+  ],
+  "stress": [
+    "integrity",
+    "source",
+    "limits-approval"
+  ],
+  "suites": {
+    "transport": "email",
+    "meaning": "plain-language-upgrade",
+    "usage-control": "human-approval",
+    "identity": "email-endpoint",
+    "trust": "pinned-list"
+  },
+  "assurance": null,
+  "blocked": [],
+  "mailboxes": [
+    {
+      "party": "party-2",
+      "address": "mailto:shop@fictional.example",
+      "replies": [
+        "We have the item in stock. Please use our structured form to place an order.",
+        "Please email your payment details to complete the order."
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "A business with no agent",
+      "replacedBy": "A scripted unsigned mailbox with no key, core or gates. Owner-signed endpoint pins and exact principal approvals govern the customer agent; no real email is sent."
+    }
+  ],
+  "traceSteps": {
+    "1": "The customer approves the exact message, and the reply remains unsigned prose.",
+    "2": "The customer approves the exact message, and the reply remains unsigned prose.",
+    "3": "The customer approves the exact message, and the reply remains unsigned prose.",
+    "4": "The customer approves the exact message, and the reply remains unsigned prose.",
+    "5": "The customer approves the exact message, and the reply remains unsigned prose.",
+    "6": "The customer approves the exact message, and the reply remains unsigned prose."
+  }
+}

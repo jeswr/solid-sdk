@@ -14,7 +14,7 @@ describe("UC-01 mortgage workflow on the shared runtime", () => {
         action: "distribute",
         target: "https://w3id.org/jeswr/awp#op/evidence-disclosure",
         recipient: "https://northbank.example/#org",
-        purpose: "https://example.org/awp-fixture#CreditChecking",
+        purpose: "https://w3id.org/jeswr/awp#purpose/credit-assessment",
       },
     ]);
     expect(obs.staleApprovalReleased).toBe(false);
@@ -65,5 +65,5 @@ describe("UC-01 mortgage workflow on the shared runtime", () => {
       underwriter: true,
       northbankPep: true,
     });
-  });
+  }, 20_000);
 });

@@ -5,9 +5,11 @@
  * that nothing identifying or about usage reaches a retailer (observed at the retailer's
  * listener and in its files), and that a restart preserves outputs and provenance.
  */
+
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { documentConfiguration } from "@jeswr/agent-reference/wire/message-packet";
 import { afterEach, describe, expect, it } from "vitest";
 import { freePort } from "../test-support/free-port.js";
 import {
@@ -161,7 +163,8 @@ describe("durable energy comparison (anonymous public carriage)", () => {
     expect((started.retailers as string[]).sort()).toEqual(RETAILERS.map((r) => r.actor).sort());
     // Every request is ANONYMOUS and unsigned (no identity, no evidence).
     for (const m of cmp.h.undelivered()) {
-      expect(m.wire.format).toBe("awp-unsigned-json/0.1");
+      if (m.wire.format !== "awp-jsonld/0.1") throw new Error("missing public document");
+      expect(documentConfiguration(m.wire).signed).toBe(false);
       expect(Object.keys(m.message.from)).toEqual([]);
     }
     for (let i = 0; i < 4 && cmp.h.undelivered().length > 0; i++) await cmp.d.dispatch();
