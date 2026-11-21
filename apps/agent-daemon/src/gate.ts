@@ -64,6 +64,7 @@ const storedVerdict = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("admitted"),
     verified: z.literal(true).optional(),
+    admissionReceipt: z.uuid().optional(),
     messageId: z.string(),
     conversation: z.string(),
     ...finalFields,
@@ -113,14 +114,14 @@ function fileVerdicts(directory: string): VerdictStore {
       await rename(join(directory, staged), commit);
       try {
         await syncDirectory(directory);
+        // A surviving commit alone cannot prove that its directory sync succeeded.
+        await writePrivate(directory, `verdict-${hex}.confirmed`, digest);
       } catch (error) {
         await unlink(commit)
           .then(() => syncDirectory(directory))
           .catch(() => {});
         throw error;
       }
-      // A surviving commit alone cannot prove that its directory sync succeeded.
-      await writePrivate(directory, `verdict-${hex}.confirmed`, digest);
     },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
@@ -180,6 +181,7 @@ export function createGate(
   ledger: { entries(): Parameters<typeof verifyLedger>[0] },
   peers: readonly { subject: string; thumbprint: string }[],
   now: () => Date,
+  admittedReceipts = new Set<string>(),
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
@@ -224,10 +226,13 @@ export function createGate(
         return { outcome: "unstructured", digest };
       }
       const key =
-        failure === "human-parity-mismatch" || (!failure && parityMismatch) ? accountKey : hex;
-      const write = (decision: Decision | { outcome: "checking" }) =>
-        verdicts.put(key, { ...decision, time: now().toISOString() });
-      await write({ outcome: "checking" });
+        failure === "human-parity-mismatch" ||
+        (!failure && parityMismatch) ||
+        (failure && previous?.outcome === "admitted")
+          ? accountKey
+          : hex;
+      await verdicts.put(key, { outcome: "checking", time: now().toISOString() });
+      const admissionReceipt = randomUUID();
       let decision: Decision;
       if (failure) {
         await event("binding-rejection", failure);
@@ -244,6 +249,7 @@ export function createGate(
             { format: "awp-jws-compact/0.1", jws },
             {
               binding,
+              admissionReceipt,
               checkEmailParity: () =>
                 parityMismatch
                   ? "The readable channel copy does not match the structured message."
@@ -252,7 +258,12 @@ export function createGate(
           ),
         );
       }
-      await write(decision);
+      await verdicts.put(key, {
+        ...decision,
+        time: now().toISOString(),
+        ...(decision.outcome === "admitted" && { admissionReceipt }),
+      });
+      if (decision.outcome === "admitted") admittedReceipts.add(admissionReceipt);
       return { ...decision, digest };
     } catch {
       try {
@@ -274,7 +285,11 @@ export function createGate(
     recordParseRefusal: (input: ParseRefusalInput) => enqueue(input),
     facts() {
       if (closed) throw new Error("Inbound gate is closed");
-      return rt.admittedFacts();
+      return rt
+        .admittedFacts({ includeSuperseded: true })
+        .flatMap(({ admittingDelivery, ...fact }) =>
+          admittingDelivery && admittedReceipts.has(admittingDelivery.receipt) ? [fact] : [],
+        );
     },
     async status() {
       await pending;
@@ -364,7 +379,16 @@ async function openStoredGate(
       ledger,
       now,
     });
-    return createGate(runtime, fileVerdicts(stored.dir), ledger, pinnedPeers(stored.trust), now);
+    const verdicts = fileVerdicts(stored.dir);
+    const admittedReceipts = new Set<string>();
+    if (admission) {
+      for (const hex of await verdicts.digests()) {
+        const verdict = await verdicts.get(hex);
+        if (verdict?.outcome === "admitted" && verdict.admissionReceipt)
+          admittedReceipts.add(verdict.admissionReceipt);
+      }
+    }
+    return createGate(runtime, verdicts, ledger, pinnedPeers(stored.trust), now, admittedReceipts);
   } catch (error) {
     store.close();
     throw error;

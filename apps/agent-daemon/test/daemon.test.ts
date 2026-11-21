@@ -2041,7 +2041,10 @@ const memoryAdmission = {
         outcomes: [],
       },
       requiresRepresentation: false,
-      onInvoke: () => ({ type: "none" as const }),
+      onInvoke: (_context: unknown, body: { input: { refuse?: unknown } }) =>
+        body.input.refuse
+          ? ({ type: "refuse", reason: "not-authorised" } as const)
+          : ({ type: "none" } as const),
     },
   ],
 };
@@ -2049,6 +2052,7 @@ const memoryAdmission = {
 async function memoryGateFixture(
   root: string,
   variant: "valid" | "bad-signature" | "unknown-source" | "plain",
+  admission = memoryAdmission,
 ) {
   const directory = join(root, "gate");
   const now = () => new Date(AT);
@@ -2083,27 +2087,41 @@ async function memoryGateFixture(
     });
   }
   saveTrust(root, "gate", trust);
-  const options = { directory, now, admission: memoryAdmission };
-  const { jws } = await craftSigned(peer, {
-    profile: PILOT_PROFILE,
-    configuration: CONFIG_ED25519,
-    id: "urn:uuid:00000000-0000-4000-8000-000000000061",
-    conversation: "urn:uuid:00000000-0000-4000-8000-100000000061",
-    kind: "invoke",
-    from: { actor: peer.identity.actor },
-    to: { actor: AGENT_ID },
-    createdAt: memoryAt,
-    expiresAt: new Date(AT + 3_600_000).toISOString(),
-    body: {
-      operation: memoryOperation,
-      input: {},
-      purpose: memoryPurpose,
-      basis: { kind: "public" },
-    },
-    evidence: [
-      { role: "credential", format: "jws-compact", value: await signClaim(issuerKey, assessment) },
-    ],
-  });
+  const options = { directory, now, admission };
+  async function signedInvocation(
+    sequence: number,
+    statement: Omit<typeof assessment, "terms"> & { terms?: typeof assessment.terms },
+    purpose?: string,
+    refuse = false,
+  ) {
+    return (
+      await craftSigned(peer, {
+        profile: PILOT_PROFILE,
+        configuration: CONFIG_ED25519,
+        id: `urn:uuid:00000000-0000-4000-8000-0000000000${sequence}`,
+        conversation: `urn:uuid:00000000-0000-4000-8000-1000000000${sequence}`,
+        kind: "invoke",
+        from: { actor: peer.identity.actor },
+        to: { actor: AGENT_ID },
+        createdAt: memoryAt,
+        expiresAt: new Date(AT + 3_600_000).toISOString(),
+        body: {
+          operation: memoryOperation,
+          input: { refuse },
+          ...(purpose !== undefined && { purpose }),
+          basis: { kind: "public" },
+        },
+        evidence: [
+          {
+            role: "credential",
+            format: "jws-compact",
+            value: await signClaim(issuerKey, statement),
+          },
+        ],
+      })
+    ).jws;
+  }
+  const jws = await signedInvocation(61, assessment, memoryPurpose);
   const [header, payload, proof] = jws.split(".") as [string, string, string];
   const signature = Buffer.from(proof, "base64url");
   signature[0] = (signature[0] as number) ^ 1;
@@ -2115,7 +2133,7 @@ async function memoryGateFixture(
             ? `${header}.${payload}.${signature.toString("base64url")}`
             : jws,
         );
-  return { options, raw };
+  return { options, raw, signedInvocation };
 }
 
 it.each([
@@ -2233,6 +2251,133 @@ it("recalls the same admitted fact after reopening its gate directory", async ()
         items: [recalledAssessment],
         withheld: 0,
       });
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "refused",
+  "default-terms",
+  "repeat",
+  "superseded",
+] as const)("preserves the %s recall result across restart", async (variant) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-review-"));
+  try {
+    const admission = {
+      ...memoryAdmission,
+      reliance: {
+        ...memoryAdmission.reliance,
+        rules: memoryAdmission.reliance.rules.map((rule) => ({
+          ...rule,
+          ...(variant === "superseded" && {
+            precedence: { sources: [memoryIssuer], freshness: "newer-first" as const },
+          }),
+        })),
+      },
+    };
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid", admission);
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    const { terms: _terms, ...noTerms } = assessment;
+    const revision = { ...assessment, value: "Replacement assessment" };
+    const replacement = {
+      ...revision,
+      id: "urn:test:replacement",
+      asOf: memoryAt,
+    };
+    const older = { ...assessment, asOf: new Date(AT - 60_000).toISOString() };
+    const deliveries =
+      variant === "refused"
+        ? [await signedInvocation(61, assessment, memoryPurpose, true)]
+        : variant === "default-terms"
+          ? [
+              await signedInvocation(61, noTerms),
+              await signedInvocation(62, { ...noTerms, id: replacement.id }, memoryPurpose),
+            ]
+          : variant === "repeat"
+            ? [
+                await signedInvocation(61, assessment, memoryPurpose),
+                await signedInvocation(62, revision, memoryPurpose),
+                await signedInvocation(63, assessment, "urn:test:other-purpose"),
+              ]
+            : [
+                await signedInvocation(61, older, memoryPurpose),
+                await signedInvocation(62, replacement, memoryPurpose),
+              ];
+    const gate = await openGate(options);
+    const recall = (active: typeof gate, purpose = memoryPurpose, query = "assessment") =>
+      createRuntimeMemory({
+        facts: active.facts,
+        owner: { recall: async () => [] },
+        purpose,
+      }).recall(query);
+    const verifyRecall = async (active: typeof gate) => {
+      const result = await recall(active);
+      if (variant === "refused") {
+        expect(active.facts()).toEqual([]);
+        expect(result).toEqual({ items: [], withheld: 0 });
+      } else if (variant === "default-terms") {
+        expect(result.items).toHaveLength(1);
+        expect(result).toMatchObject({
+          items: [
+            {
+              id: replacement.id,
+              provenance: {
+                terms: { scope: "interaction", onwardSharing: false, retention: "interaction" },
+              },
+            },
+          ],
+          withheld: 1,
+        });
+        expect(await recall(active, "urn:test:other-purpose")).toEqual({ items: [], withheld: 2 });
+      } else if (variant === "repeat") {
+        expect(result).toEqual({ items: [], withheld: 1 });
+        expect(await recall(active, "urn:test:other-purpose")).toMatchObject({
+          items: [
+            {
+              ...recalledAssessment,
+              provenance: {
+                ...recalledAssessment.provenance,
+                admittedPurpose: "urn:test:other-purpose",
+              },
+            },
+          ],
+          withheld: 0,
+        });
+      } else {
+        expect(result.items).toHaveLength(1);
+        expect(result).toMatchObject({ items: [{ id: replacement.id }], withheld: 1 });
+        expect(await recall(active, memoryPurpose, "no-match")).toEqual({ items: [], withheld: 1 });
+      }
+    };
+    try {
+      for (const jws of deliveries) {
+        const message = reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) });
+        expect(await gate.check({ account: "fixture", binding: "direct", message })).toMatchObject(
+          variant === "refused"
+            ? { outcome: "refused", reason: "not-authorised" }
+            : { outcome: "admitted" },
+        );
+      }
+      if (variant === "refused") {
+        const state = JSON.parse(await readFile(join(options.directory, "state.json"), "utf8"));
+        expect(state.contextItems[memoryAdmission.taskId]).toContainEqual(
+          expect.objectContaining({ id: assessment.id, accepted: true }),
+        );
+      }
+      await verifyRecall(gate);
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      await verifyRecall(reopened);
     } finally {
       await reopened.close();
     }

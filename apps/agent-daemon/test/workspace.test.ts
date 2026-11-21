@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { digestOf, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
+import { buildOwnerOnlyAclTurtle } from "@jeswr/agentic-legacy-bridge";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { StorageError } from "@jeswr/storage-client";
@@ -209,4 +210,47 @@ it("provisions memory and pending under the owner-only ACL before content", asyn
   expect(creations[acl]?.body).toContain(ownerWebId);
   expect(creations[acl]?.body).toContain("default");
   expect(creations[acl]?.body).not.toContain("AgentClass");
+});
+
+it("replaces permissive ACLs on both existing memory containers", async () => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  const other = "https://other.example/profile#agent";
+  const agent = await pod.storage.create(root, null, { name: "agent", kind: "container" });
+  const memory = await pod.storage.create(agent.url, null, { name: "memory", kind: "container" });
+  const pending = await pod.storage.create(memory.url, null, {
+    name: "pending",
+    kind: "container",
+  });
+  const containers = [memory.url, pending.url];
+  for (const url of containers) {
+    const acl = await buildOwnerOnlyAclTurtle(url, ownerWebId);
+    const extra = await buildOwnerOnlyAclTurtle(url, other);
+    await pod.storage.write(`${url}.acl`, acl + extra, {
+      contentType: "text/turtle",
+      ifMatch: "*",
+    });
+  }
+  await workspace.initialize();
+  const wac = "http://www.w3.org/ns/auth/acl#";
+  for (const url of containers) {
+    const aclUrl = `${url}.acl`;
+    const body = await (await pod.storage.read(aclUrl)).text();
+    const acl = new Store(await parseRdf(body, "text/turtle", { baseIRI: aclUrl }));
+    const agents = acl.getQuads(null, DataFactory.namedNode(`${wac}agent`), null, null);
+    expect(agents.map(({ object }) => object.value)).toEqual([ownerWebId]);
+    const authorization = agents[0]?.subject;
+    for (const predicate of ["accessTo", "default"])
+      expect(
+        acl.getObjects(authorization ?? null, `${wac}${predicate}`, null).map((o) => o.value),
+      ).toEqual([url]);
+    expect(
+      acl
+        .getObjects(authorization ?? null, `${wac}mode`, null)
+        .map((o) => o.value)
+        .sort(),
+    ).toEqual(["Control", "Read", "Write"].map((mode) => `${wac}${mode}`));
+    expect(acl.getQuads(null, DataFactory.namedNode(`${wac}agentClass`), null, null)).toEqual([]);
+    expect(acl.getQuads(null, DataFactory.namedNode(`${wac}agentGroup`), null, null)).toEqual([]);
+  }
 });

@@ -14,6 +14,7 @@ const fact: AdmittedFact = {
   subject: "urn:test:owner",
   source: "urn:test:issuer",
   asOf: "2026-11-01T12:00:00Z",
+  admittedPurpose: purpose,
   method: "reported-by-subject",
   terms: { policy: { id: "urn:test:terms" } },
   digest: digestOf(statement),

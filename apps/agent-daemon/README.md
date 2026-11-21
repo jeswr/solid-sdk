@@ -181,8 +181,10 @@ local runtime outbox during this phase.
 
 Supply `DaemonOptions.memory` from the trusted host factory. The daemon uses it
 for the Proposer's `memory_recall` tool. Supply `pod` and `instructions` in
-`proposerContext`. Workspace initialization creates `agent/memory/` and
-`agent/memory/pending/` under the inherited owner-only ACL before writing content.
+`proposerContext`. Workspace initialization installs owner-only WAC ACLs on
+`agent/memory/` and `agent/memory/pending/` before writing content. It replaces
+existing ACLs on both containers and sets the owner-only default inherited by
+descendants that lack their own ACL.
 
 ```ts
 const gate = createInboundGate({
@@ -200,18 +202,26 @@ The factory passes both `gate` and `memory` to the daemon. `gate.facts` reads
 the reference runtime opened under the daemon's lease. The optional `admission`
 configuration gives the runtime a trusted task ID, reliance rules and operation
 handlers for evidence-bearing messages. The reference trust store supplies issuer
-pins and source authority rules. Reopening the same gate directory with the same
-task configuration recovers admitted facts and their labels.
+pins and source authority rules. Gate recall requires a confirmed final `admitted`
+verdict for the specific delivery that supplied the fact. Facts from refused,
+interrupted, or older deliveries without that link are excluded. Reopening the same
+gate directory with the same task configuration preserves the recorded admission
+order, so the last admitted revision of a statement ID keeps its value and labels.
 
 Construct `ownerMemory` with `createAgentMemory`, using the authenticated
 workspace storage and a mandate loader that verifies owner, revocation, signed
 memory scope and purpose policy. Select the purpose IRI in the host. The tool
 treats the model query as a case-insensitive substring of admitted fact fields or
 owner assertion terms. Results are ordered by time and ID and default to 20 items
-and 64 KiB of JSON. Superseded facts and facts admitted for another purpose
-contribute only to the withheld count. Gate facts carry their provenance labels.
-Owner memory carries the four approved graphs as RDF/JS quads plus nanopublication
-metadata.
+and 64 KiB of JSON. Superseded facts with confirmed admissions and current facts
+whose admitted purpose is absent or differs from the host purpose contribute to
+the withheld count independently of the query. Returned facts carry provenance
+and effective terms. The default terms permit use for the interaction only,
+prohibit onward sharing, and require deletion when the interaction ends.
+Owner recall verifies the stored, unexpired owner-signed approval against the
+exact TriG bytes and destination. It skips resources without valid approval
+evidence. Owner memory results carry the four permitted graphs as RDF/JS quads
+and nanopublication metadata.
 
 ## Stop and resume
 

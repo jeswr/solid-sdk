@@ -212,10 +212,13 @@ export class PodWorkspace {
       "conversations/",
       "outbox/",
       "audit/",
-      "memory/",
-      "memory/pending/",
     ])
       await this.container(this.url(path));
+    for (const path of ["memory/", "memory/pending/"]) {
+      const url = this.url(path);
+      await this.container(url);
+      await this.put(`${url}.acl`, await buildOwnerOnlyAclTurtle(url, this.ownerWebId));
+    }
     await this.register();
   }
   async inbox(binding: string, account: string): Promise<string> {

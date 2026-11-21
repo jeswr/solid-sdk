@@ -314,6 +314,8 @@ export interface OutboundMessage {
 
 interface ReceiveMetadata {
   readonly binding?: string;
+  /** Locally assigned receipt for correlation with the host's durable final verdict. */
+  readonly admissionReceipt?: string;
   /** Trusted email adapter hook, run only after integrity succeeds and before dispatch. */
   readonly checkEmailParity?: (message: AnyMessage) => string | undefined;
 }
@@ -723,14 +725,7 @@ export class AgentRuntime {
       const message = peekWire(entry.wire);
       if (message) memory.rememberIdentifiers(entry.conversation, message);
     }
-    for (const items of Object.values(memory.contexts))
-      for (const item of items) {
-        if (
-          (item.kind === "statement" && item.accepted !== false) ||
-          (item.kind === "reading" && item.accepted === true)
-        )
-          memory.facts.set(item.id, item);
-      }
+    memory.restoreFacts();
     // Brief 31 §2.2: a register this agent reads from signed answers sees only the entries
     // of answers its own inbound gate admitted (never a local table).
     gate.resolver?.bindAnswers(() =>
@@ -3302,10 +3297,34 @@ export class AgentRuntime {
   }
 
   /** Detached facts and provenance for the same gate-held statements shown to the core. */
-  admittedFacts(): readonly AdmittedFact[] {
+  admittedFacts({ includeSuperseded = false } = {}): readonly AdmittedFact[] {
     const facts = new Map<string, AdmittedFact>();
-    for (const { kind: _kind, accepted: _accepted, ...fact } of this.admittedStatementItems())
+    const items = [...this.admittedStatementItems()].sort(
+      (a, b) => (a.admissionOrder ?? 0) - (b.admissionOrder ?? 0),
+    );
+    for (const { kind: _kind, accepted: _accepted, admissionOrder: _order, ...fact } of items) {
+      if (
+        fact.admittingDelivery?.receipt !==
+        this.gateMemory.facts.get(fact.id)?.admittingDelivery?.receipt
+      )
+        continue;
       facts.set(fact.id, copyData(fact));
+    }
+    if (includeSuperseded) {
+      const task = this.options.gates?.taskId ?? "*";
+      const context = this.gateMemory.context(task);
+      for (const fact of Object.values(this.gateMemory.precedenceHolds)) {
+        if (
+          fact.supersededBy &&
+          !this.gateMemory.facts.has(fact.id) &&
+          (fact.admittingDelivery?.task === task ||
+            context.some(
+              (item) => item.id === fact.id && item.digest === fact.digest && item.supersededBy,
+            ))
+        )
+          facts.set(fact.id, copyData(fact));
+      }
+    }
     return [...facts.values()];
   }
 
@@ -4675,6 +4694,7 @@ export class AgentRuntime {
   }
 
   private async receiveGuarded(wire: unknown, meta: ReceiveMetadata): Promise<StepResult> {
+    this.gateMemory.receivingReceipt = meta.admissionReceipt;
     try {
       return await this.receiveInner(wire, meta);
     } catch (error) {
@@ -4696,6 +4716,7 @@ export class AgentRuntime {
       }
       throw error;
     } finally {
+      this.gateMemory.receivingReceipt = undefined;
       this.admission = undefined;
     }
   }

@@ -6,9 +6,77 @@ import {
   parseNanopublications,
   serializeNanopublications,
 } from "@jeswr/pkg-memory";
+// biome-ignore lint/style/useNodejsImportProtocol: agent imports require bare package names
+import { createHash } from "crypto";
 import { expect, it, vi } from "vitest";
 import { createAgentMemory } from "../src/index.js";
-import { AGENT, CONTAINER, harness, mandate, NOW, OWNER, PD, QUERY } from "./helpers.js";
+import {
+  AGENT,
+  approvalKey,
+  CONTAINER,
+  claim,
+  harness,
+  mandate,
+  NOW,
+  OWNER,
+  PD,
+  QUERY,
+} from "./helpers.js";
+
+// These fixtures exercise recall on prebuilt batches, including malformed and out-of-scope data.
+async function seedSigned(
+  h: Awaited<ReturnType<typeof harness>>,
+  name: string,
+  trig: string,
+  contentType = "application/trig",
+) {
+  const id = `${CONTAINER}pending/${name}`;
+  const target = `${CONTAINER}${name}`;
+  const terms = JSON.stringify(["remember", OWNER, AGENT, id, target, trig]);
+  const termsDigest = `sha-256:${createHash("sha256").update(terms).digest("hex")}`;
+  const approval = await h.sign({
+    id,
+    target,
+    termsDigest,
+    trig,
+    kind: "remember",
+    nanopublications: [],
+  });
+  await h.storage.create(CONTAINER, trig, { name, contentType });
+  await h.storage.create(CONTAINER, JSON.stringify(approval), {
+    name: `${name}.approval.json`,
+    contentType: "application/json",
+  });
+}
+
+it("requires durable owner approval for the exact approved resource bytes", async () => {
+  const h = await harness();
+  const item = await h.memory.proposeRemember(claim);
+  const name = item.target.slice(CONTAINER.length);
+  const contentType = "application/trig";
+  await h.storage.create(CONTAINER, item.trig, { name, contentType });
+  const reopened = createAgentMemory(h.options);
+  expect(await reopened.recall(QUERY)).toHaveLength(0);
+
+  await h.memory.approveRemember(item.id, await h.sign(item));
+  expect(await reopened.recall(QUERY)).toMatchObject([{ resource: item.target }]);
+  const wrongKey = await approvalKey();
+  const wrongVerifier = createAgentMemory({
+    ...h.options,
+    webIdKeyResolver: {
+      ...h.options.webIdKeyResolver,
+      resolveKey: async () => wrongKey.publicKey,
+    },
+  });
+  expect(await wrongVerifier.recall(QUERY)).toHaveLength(0);
+  const afterExpiry = createAgentMemory({
+    ...h.options,
+    now: () => new Date(NOW.getTime() + 7_200_000),
+  });
+  expect(await afterExpiry.recall(QUERY)).toHaveLength(0);
+  await h.storage.write(item.target, `\uFEFF${item.trig}`, { contentType, ifMatch: "*" });
+  expect(await reopened.recall(QUERY)).toHaveLength(0);
+});
 
 async function seed(h: Awaited<ReturnType<typeof harness>>) {
   const preference = createFactAssertion(OWNER, {
@@ -65,10 +133,7 @@ async function seed(h: Awaited<ReturnType<typeof harness>>) {
     ],
   };
   const data = await buildNanopublications(batch, { owner: OWNER, generatedAt: NOW.toISOString() });
-  await h.storage.create(CONTAINER, await serializeNanopublications(data), {
-    name: "all.trig",
-    contentType: "application/trig",
-  });
+  await seedSigned(h, "all.trig", await serializeNanopublications(data));
   return data;
 }
 
@@ -108,10 +173,7 @@ it.each([
     },
     { owner: OWNER, generatedAt: NOW.toISOString() },
   );
-  await h.storage.create(CONTAINER, await serializeNanopublications(built), {
-    name: "language.trig",
-    contentType: "application/trig",
-  });
+  await seedSigned(h, "language.trig", await serializeNanopublications(built));
 
   const results = await h.memory.recall(QUERY);
   expect(results).toHaveLength(1);
@@ -177,7 +239,10 @@ it("filters by about, category and limit without reading pending or foreign list
     yield* original(url, options);
   };
   await h.memory.recall(QUERY);
-  expect(read.mock.calls.every(([url]) => url === `${CONTAINER}all.trig`)).toBe(true);
+  expect(read.mock.calls.map(([url]) => url)).toEqual([
+    `${CONTAINER}all.trig.approval.json`,
+    `${CONTAINER}all.trig`,
+  ]);
 });
 
 it.each([
@@ -220,10 +285,7 @@ it("rejects wildcard scopes, invalid queries, malformed memory and bounded overf
   await seed(h);
   const bounded = createAgentMemory({ ...h.options, maxResourceBytes: 10 });
   await expect(bounded.recall(QUERY)).rejects.toThrow("size limit");
-  await h.storage.create(CONTAINER, "invalid", {
-    name: "bad.trig",
-    contentType: "application/trig",
-  });
+  await seedSigned(h, "bad.trig", "invalid");
   await expect(
     h.memory.recall({ ...QUERY, categories: ["pd:Preference"], limit: 100 }),
   ).rejects.toThrow();
@@ -261,10 +323,7 @@ it("excludes claims invalidated by a later revision even if their status remains
     ],
   };
   const data = await buildNanopublications(batch, { owner: OWNER, generatedAt: NOW.toISOString() });
-  await h.storage.create(CONTAINER, await serializeNanopublications(data), {
-    name: "revisions.trig",
-    contentType: "application/trig",
-  });
+  await seedSigned(h, "revisions.trig", await serializeNanopublications(data));
   expect((await h.memory.recall(QUERY)).map((result) => result.nanopubs[0]?.identifier)).toEqual([
     "revisions/new",
   ]);
@@ -278,7 +337,7 @@ it("bounds listings and rejects non-TriG resources before parsing", async () => 
   await expect(limited.recall({ ...QUERY, about: "urn:example:absent" })).rejects.toThrow(
     "resource limit",
   );
-  await h.storage.create(CONTAINER, "not RDF", { name: "invalid.trig", contentType: "text/plain" });
+  await seedSigned(h, "invalid.trig", "not RDF", "text/plain");
   await expect(h.memory.recall({ ...QUERY, limit: 100 })).rejects.toThrow("TriG resource");
 });
 

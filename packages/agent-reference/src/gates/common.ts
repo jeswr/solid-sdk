@@ -112,6 +112,8 @@ export interface ItemTerms {
 
 /** A fact the inbound gate admitted, with its labels (shared with the outbound gate). */
 export interface AdmittedFact {
+  /** Local correlation with a host's final receipt, when supplied by the incoming binding. */
+  readonly admittingDelivery?: { readonly receipt: string; readonly task: string };
   /** The unmodified source statement and its proof, beside a locally mapped fact. */
   readonly original?: {
     readonly id: string;
@@ -170,6 +172,8 @@ export interface ContextItem extends AdmittedFact {
   readonly kind: "statement" | "memory" | "message" | "reading" | "content";
   readonly accepted?: boolean;
   readonly digest: string;
+  /** Admission sequence, independent of where a revision first appears in the context. */
+  readonly admissionOrder?: number;
 }
 
 /** Gate-held evidence for a person to inspect; never a fact or a core context item. */
@@ -182,6 +186,8 @@ export interface RelianceHold {
 
 export class GateMemory {
   readonly facts = new Map<string, AdmittedFact>();
+  receivingReceipt?: string;
+  private admissionOrder = 0;
   constructor(
     readonly contexts: Record<string, ContextItem[]> = {},
     readonly identifiers: Record<string, string[]> = {},
@@ -191,6 +197,20 @@ export class GateMemory {
     readonly precedenceHolds: Record<string, AdmittedFact> = {},
     readonly descriptionAddresses: ReadonlySet<string> = new Set(),
   ) {}
+  restoreFacts(): void {
+    const entries = Object.values(this.contexts)
+      .flat()
+      .filter(
+        (item) =>
+          (item.kind === "statement" && item.accepted !== false) ||
+          (item.kind === "reading" && item.accepted === true),
+      )
+      .sort((a, b) => (a.admissionOrder ?? 0) - (b.admissionOrder ?? 0));
+    for (const { admissionOrder, ...item } of entries) {
+      this.admissionOrder = Math.max(this.admissionOrder, admissionOrder ?? 0);
+      this.facts.set(item.id, item);
+    }
+  }
   rememberIdentifiers(scope: string, value: unknown): void {
     this.identifiers[scope] = [
       ...new Set([...(this.identifiers[scope] ?? []), ...identifiersIn(value)]),
@@ -214,6 +234,8 @@ export class GateMemory {
     this.contexts[task] ??= [];
     const items = this.contexts[task];
     const index = items.findIndex((prior) => prior.id === item.id && prior.digest === item.digest);
+    if (item.accepted === true && (item.kind === "statement" || item.kind === "reading"))
+      item = { ...item, admissionOrder: ++this.admissionOrder };
     if (index < 0) items.push(item);
     else if (item.accepted === true) items[index] = item;
   }

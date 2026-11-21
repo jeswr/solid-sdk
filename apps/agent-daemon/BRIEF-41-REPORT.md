@@ -301,27 +301,21 @@ mandate loader. The daemon installs the gateway callback and provisions
 | Reference facts | `TypeError: runtime.admittedFacts is not a function`. | The current task's admitted statement and provenance are returned as a detached copy. Rejected, stale and other-task entries are excluded. |
 | 1. Signed statement through the Proposer tool | `expected [] to match object { items: [...], withheld: +0 }` with a configured reference fixture. | The actual gateway tool returns the statement, source, time, method, digest, terms and purpose. |
 | 2. Bad signature, issuer without a source rule, plain observation | The signature case hit `reopened.facts is not a function`. The other two tool calls returned the bare Phase 1 `[]`. | The signature refusal never calls the Proposer, and the reopened gate has zero facts. The other two return an empty recall result, including for owner-flagged plain text. |
-| 3. Purpose and supersession | `Cannot find module '/src/memory.js'`. | Other-purpose and superseded facts contribute to the withheld count, independent of the query. |
+| 3. Purpose and supersession | `Cannot find module '/src/memory.js'`. | A mocked superseded fact and a fact for a different purpose contribute to the withheld count. |
 | 4. Literal model input and bounds | `Cannot find module '/src/memory.js'`. | Literal wildcard, foreign IRI and 4096-character queries keep the owner request fixed. Case folding, newest-first order, ID ties and UTF-8 byte and item limits pass. |
 | 5. Owner memory | `Cannot find module '/src/memory.js'`. | A signed approval and real SHACL validation make the preference recallable with all four graphs. Pending content and provenance-only matches are excluded. |
 | 6. Restart | `TypeError: gate.facts is not a function` after the real gate admitted the signed message. | Closing and reopening the same gate directory recovers the same statement and provenance through recall. |
 | 7. Workspace privacy | `expected -1 to be greater than 1` because the memory create request was absent. | The owner-only ACL precedes both container creates and content writes. |
 | 8. Composition | `TS2578: Unused '@ts-expect-error' directive`. | The test project typechecks with the expected error on the old host field. |
 
-### Invariants and follow-up
+### Follow-up
 
-- **M1.** Gate recall reads accepted statements that still match the gate's
-  retained digest. Owner recall uses agent-memory's approved-resource and
-  verified-mandate boundary.
-- **M2.** Facts retain the gate's available labels, including original digest
-  for mapped evidence. Owner items preserve the four graphs as RDF/JS quads
-  and include nanopublication metadata.
-- **M3.** The model's only input is the substring. The trusted purpose and
-  `limit: 50` are the only inputs to owner recall. The output defaults to
-  20 items and 64 KiB of JSON.
-- **M4.** Reopening the gate's existing `FileStateStore` recovers the fact and
-  its labels. The restart test passed.
-- **M5.** The refusal and unstructured tests contribute zero facts to recall.
+The initial tests covered restart with one fact, signature refusal, missing
+source authority and plain observations. The 41h review below covers post-admission
+refusal, missing purpose and terms, repeated statement IDs, real precedence and
+pre-existing ACLs. The model's only input is the substring. The trusted purpose
+and `limit: 50` are the only inputs to owner recall. The output defaults to 20
+items and 64 KiB of JSON.
 
 Pairing signed owner approvals with staged remember proposals and calling
 `approveRemember` is the owner-memory write-path follow-up already tracked
@@ -342,3 +336,29 @@ Checks used Node 24.22.3 and Vitest with `--maxWorkers=2`.
 | Biome and root guards | Biome exited successfully with existing warnings in the reference runtime. SDK and agent layers, RDF discipline, app duplication and `git diff --check` passed. |
 
 Changes are in the working tree.
+
+## Phase 2 review fixes (41h)
+
+| Finding | Regression before the fix | Guarantee after the fix |
+| --- | --- | --- |
+| M5 | An operation handler refused a signed invocation after its statement entered task context. The refused statement was recallable. | The daemon correlates each fact with its delivery and requires that delivery's confirmed, durable `admitted` verdict. Refused or unconfirmed deliveries and legacy facts without that link are excluded before and after reopening the gate. |
+| M2 / CORE-IN-11 | A signed invocation without a purpose or terms returned the statement. A scoped statement without terms lacked terms in provenance. | A fact admitted without a purpose is interaction-scoped and contributes to the withheld count for every host purpose. Every returned fact includes effective terms, including the default of interaction-only use, no onward sharing and deletion at the end of the interaction. |
+| M1 | Copying a pending TriG directly into `memory/` exposed it to recall. | Promotion saves the signed owner approval beside the TriG after SHACL validation and before deleting pending. Recall requires a valid, unexpired approve decision from the owner for the exact bytes and destination, plus the verified mandate scope. Pending and unsigned legacy resources are excluded. A changed owner key or changed resource bytes invalidates the stored evidence. |
+| M4 | After receiving versions A, B and A again under one statement ID, restart restored B and its purpose. | Accepted context revisions retain their admission order. Reopening the gate restores the last admitted revision and its provenance labels for that task. |
+| Precedence | A real precedence decision hid the superseded statement with `withheld: 0`. | A superseded fact with a confirmed admission contributes to `withheld` independently of the query. The tool returns only the current eligible fact. |
+| Workspace privacy | Both existing container ACLs retained another agent's grant. | Initialization writes an owner-only access and default ACL on both `memory/` and `memory/pending/`, replacing existing container ACLs before workspace content is written. Descendants inherit the default when they have no ACL of their own. |
+
+Each regression failed against the original code and passed with the fix. The
+daemon tests use signed invocations and reopen the same gate directory. The owner
+memory test also checks an incorrect verifier key, an expired approval and a
+UTF-8 BOM added to the approved TriG. The ACL test parses the ACLs on
+two pre-existing containers and checks their grants and inheritance targets.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Reference library build, admitted-facts and both oracle suites | Passed. Four tests across three files. The Git diff for traces, outlines and `scenario-runs.json` is empty. |
+| Agent memory | All 58 offline tests and both TypeScript projects passed. The full suite could not start its CSS fixture because the sandbox denied loopback listen. |
+| Daemon | Source and test typechecks passed. Full Vitest passed 231 and failed 20. CSS and the D-2 demo hit loopback `EPERM`. Fifteen cloud tests timed out during loopback setup. The plist test hit Python spawn `EPERM`, and the two packaged checks received empty child stdout. The offline run passed 231, with three cases skipped by the test-name filter. |
+| Biome and root guards | Biome passed with existing reference warnings. SDK layers, RDF discipline, app duplication, agent layers and `git diff --check` passed. |

@@ -63,9 +63,13 @@ required and forwarded to the verified mandate loader for host policy checks.
 Each recall result contains only its nanopub's four component graphs. Filtered
 sibling graphs and shared batch/source metadata are never returned. Recall reads
 only directly contained `.trig` files, skipping pending/nested containers and
-foreign listing members. Malformed resources, storage failures and exceeded
-bounds reject the call instead of producing misleading partial results. Defaults
-are 1,000 listing entries and 1 MiB per resource; both are configurable.
+foreign listing members. Each resource needs a sibling `.trig.approval.json`
+with the approval ID and signed document. Recall verifies the approve decision,
+expiry and owner assertion key against the exact TriG bytes and destination.
+Resources without valid evidence, including copies from before evidence was
+stored, are skipped. Malformed approved TriG, storage failures and exceeded
+data bounds reject the call. Defaults are 1,000 listing entries, including
+approval files, and 1 MiB per TriG resource. Approval files are capped at 1 MiB.
 
 Approvals use the real `agent-mandate.verifyApproval`, including the owner's
 assertionMethod, signature, expiry and approve decision. The digest binds exact
@@ -74,11 +78,10 @@ approved snapshot through the real Node `rdf-engine` by default; a host may inje
 an equivalent validator (including a CI pyshacl adapter). Missing shapes or failed
 validation never permits promotion. No substitute KG shapes are bundled here.
 Expiry is checked again after validation. Promotion copies the validated bytes
-with conditional creation, then deletes pending with its strong ETag; it never
-rereads mutable pending content through a generic move operation. A failed delete
-can leave an approved copy and a pending resource; retries accept only identical
-content, and a conflicting target is never overwritten. This is not an atomic
-cross-resource move. Completed retries still verify and validate the signed data.
+with conditional creation, writes the approval file, then deletes pending with
+its strong ETag. An interrupted copy can leave either an unverified target or an
+approved target alongside pending. Retries verify the approval, validate the
+snapshot and accept only identical target content before saving evidence.
 
 `importCommunicationRules({ yaml, commit, source })` accepts the conservative
 schema below, with unique string IDs and rule text. Unknown rule fields, tags,
