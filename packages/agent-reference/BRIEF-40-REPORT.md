@@ -675,3 +675,867 @@ respectively including transformation and module import. Phase 40l measured
 | `recordedJoint` | Verified all six recorded trace hashes across `cohort-count`, `platform-income`, and `salary-benchmark`. |
 | The ten 40i Vitest files with `--maxWorkers=2` | All 88 tests passed in 618.31 s, including both oracle files and the full engine suite with `.sparq` present. Phase 40i established that five runnable paths require that adapter. |
 | `git diff --check` and protected-path comparison against `d257ed2da` | Fixture files, runtime schema source, message context and reader, oracle data, manifest, traces, and outlines match the reviewed head. |
+
+## Phase 2 (40j)
+
+Stopped before implementation at `6741268ed` on
+`claude/project-thread-ee3kq8-p922` under brief 40's stop rule. The verified
+payment mandate cannot be projected by the required ODRL codec, and the
+specified trust-file precedence would silently discard new peer pins from a
+writer outside Addendum A6's allowed consumer changes. The memory, policy,
+trust and snapshot codecs, including the snapshot memo, remain pending.
+
+### Stop conditions
+
+| Evidence | Result |
+| --- | --- |
+| [pay-an-invoice.json:243](scenarios/pay-an-invoice.json#L243), [pay-an-invoice.json:269](scenarios/pay-an-invoice.json#L269), [mandate.ts:191](src/mechanisms/mandate.ts#L191), [solid-odrl policy.ts:309](../solid-odrl/src/policy.ts#L309) | Provisioned the fixture's business agent through `Cast.add` and `mandateOf`. `TrustStore.load` and `loadMandate` accepted the signed mandate. `policyToRdf` then threw `TypeError: value is not iterable` in `escapeIri` for both policies. The writer looks up `ACTION_IRI[rule.action]`, and the table has no entry for `pay`. It returns no graph to which the same-node supplements in section 3.3 could be attached. |
+| [policy-engine.ts:165](src/mechanisms/policy-engine.ts#L165), [mandate.ts:315](src/mechanisms/mandate.ts#L315), [solid-odrl policy.ts:599](../solid-odrl/src/policy.ts#L599) | For the fixture's `pay` request on `urn:op:payment`, the verified mandate returned `permit` and matched `urn:rule:monthly-payments`. Diagnostic round trips that removed `pay` or substituted `compensate` each returned `deny` with “no applicable grant in the mandate (deny by default)”. The existing evaluator's request-local normalization has different semantics from a durable vocabulary mapping. A complete R2 representation needs a design decision for the action and its reverse projection. |
+| [gate-setup.ts:121](../../apps/agent-daemon/src/gate-setup.ts#L121), [gate-setup.ts:176](../../apps/agent-daemon/src/gate-setup.ts#L176), [gate-setup.ts:186](../../apps/agent-daemon/src/gate-setup.ts#L186), [gate.ts:332](../../apps/agent-daemon/src/gate.ts#L332), [gate-setup.test.ts:113](../../apps/agent-daemon/test/gate-setup.test.ts#L113) | The daemon provisions gates via SDK `saveAgent` and reads them via SDK `readAgent`. Under sections 3.5 and A6, provisioning creates `trust.ttl`, while the daemon's `pinPeer` still writes `trust.json` and returns success. With the required Turtle precedence, subsequent opens read the stale trust store. The daemon update path is outside A6's consumer exceptions. Its test also asserts that the JSON file is atomically replaced and mode 0600. |
+
+The test files and ratchet planned in section 6 were not added. The direct
+baseline codec probe reproduced the failure before any source change. A
+second probe asserted that both encoder calls fail, native evaluation permits,
+and the two diagnostic projections deny. These probes used the compiled
+workspace packages and the existing fixture. No existing test assertions,
+generated classes, ontology terms, context terms or guard allowances changed.
+
+### Baseline checks
+
+| Command | Result |
+| --- | --- |
+| `npx tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Passed in `packages/agent-reference` with Node 24.22.3. |
+| `node scripts/check-no-trace-change.mjs` | Passed after the compile. Mortgage-core and pay-an-invoice ran two and three live paths, respectively. Both reported 278 runs, zero disagreements and five blocked. Traces, outlines and manifest rows met Addendum A1. |
+| `pnpm exec vitest run --maxWorkers=2 test/oracle-snapshot.test.ts` | Passed, one test. The live `test/oracle.test.ts`, Phase 2 acceptance tests and remaining package checks were not run after the stop. |
+| `git diff --exit-code HEAD -- scenario-runs.json test/oracle/pre-rdf.json traces outlines profiles scenarios vocab/context/v1.jsonld src/wire/contexts.ts` | Passed. The manifest has 283 paths, 278 run, zero disagreements and five blocked. The manifest and oracle snapshot match HEAD byte for byte. |
+| Repository search for `trust.json` in `packages/` and `apps/` | Confirmed the A6 consumers in [contacts.ts:108](../personal-agent/src/actions/contacts.ts#L108), [calendar/actions.ts:307](../personal-agent/src/actions/calendar/actions.ts#L307), [actions.test.ts:681](../personal-agent/src/actions/actions.test.ts#L681), [actions.test.ts:808](../personal-agent/src/actions/actions.test.ts#L808), [custody.test.ts:106](../personal-agent/src/pilot/custody.test.ts#L106) and [governance.ts:102](../personal-agent/src/pilot/governance.ts#L102). The daemon references above are additional. |
+
+### Speed
+
+`node scripts/profile-journey.mjs --iterations=3 --main-only` completed before
+the stop. All iterations executed one main path per configuration.
+
+| Measurement | Before | After |
+| --- | ---: | --- |
+| Mortgage baseline profile | 33,591 / 22,484 / 21,899 ms, median 22,484 ms | No implementation to measure |
+| Mortgage data integrity profile | 31,431 / 20,472 / 16,996 ms, median 20,472 ms | No implementation to measure |
+| 59 mortgage main state saves across seven stores | 284 ms in `MemoryStateStore.save` and 1,134 ms in `FileStateStore.save` | No implementation to measure |
+
+The save probe replayed each live state into its own baseline file store,
+timing its existing JSON serialization, file fsync, rename and directory
+fsync together. A per-entry check of the states from this journey found no
+violations of the Phase 1 `STORE_LIMITS`. The probe closed the stores and
+removed its temporary directory. These are local measurements. Addendum A7's
+profile medians were 7,399 and 8,015 ms, and section 2's 169 ms measured
+`MemoryStateStore.save` rather than the durable write path. Neither the 3%
+profile limit nor the 253.5 ms durable target was evaluated against RDF.
+
+### Beads to file
+
+| Label | Bead text |
+| --- | --- |
+| `needs:jesse` | Specify the store ODRL representation for the pilot's exact `pay` mandate action. Require both policies of the verified pay-an-invoice mandate to lower, recover the native action and rule order, and retain the permit for `urn:rule:monthly-payments`. Coordinate any codec change in `@jeswr/solid-odrl` separately from Phase 2. |
+| `surface:apps/agent-daemon` | Extend the trust-file migration scope to the daemon's gate provisioning and pinning. Preserve the pin lease, in-lock revalidation, atomic replacement and file permissions. Prove that a confirmed peer is present on reopening a Turtle-backed gate and that legacy JSON gates remain readable. |
+| `needs:jesse` | Confirm the durable-save budget against an equivalent before/after file-store benchmark with file and directory fsync enabled. The brief's 169 ms reference timed the memory store, while the local file-store baseline for the same 59 saves took 1,134 ms. |
+
+The five broader follow-ups under [Other beads to file](#other-beads-to-file)
+still apply. The only tracked change for 40j is this report section.
+
+## Phase 2 (40k)
+
+Implementation at baseline `6741268ed` on
+`claude/project-thread-ee3kq8-p922`. Phase 2 is implemented. All 80 sampled
+scenario/configuration groups passed across the initial partitions and targeted
+reruns. The daemon's full run had 20 failures in loopback or subprocess tests.
+R1, R2 and R3 supersede the stop conditions above.
+
+### Changes
+
+| Area | Implementation |
+| --- | --- |
+| ODRL actions | Rules and duties can carry an absolute profile action IRI. Known action IRIs still decode to their short names. Serializers reject invalid actions before escaping. The standard evaluator keeps its standard-action hierarchy. The policy codec projects native `pay` as `awp:pay` and restores `pay` for evaluation. [policy.ts](../solid-odrl/src/policy.ts#L282), [types.ts](../solid-odrl/src/types.ts#L15), [API report](../solid-odrl/etc/solid-odrl.api.md) |
+| Policy graph | The loaded mandate produces a cached credential and policy projection, with named ODRL graphs and ordered standing and duty rules. Decode checks the exact credential, digest and graph. The policy supplements retain ordered rules and constraints, explicit empties, profile shape, inherited-party omissions, operand type and order, approval requirements and limits. The store restores clean absolute party, target and profile IRIs such as `did:web` on the same ODRL nodes when the standard writer cannot carry those schemes. [policy.ts](src/model/store/policy.ts#L168) |
+| Memory | Typed scoped context items preserve labels, originals, signed evidence, reliance and precedence. Named ODRL graphs hold item terms and data-use policies. The snapshot gives each section its own named graph as required by §3.6. The memory and trust section families are identified by their typed entries. [memory.ts](src/model/store/memory.ts#L157), [state.ts](src/model/store/state.ts#L361) |
+| Durable state | Version 2 N-Quads keeps the configured file path. The serializer memoizes native text, N-Quads payload blocks and position blocks per entry. The reader validates all sections and compares the reconstructed graph. The legacy reader normalises v1 state before its next save. The memory-store default save implementation is unchanged. Only the test constructor path installs the RDF round-trip check. [snapshot codec](src/model/store/state.ts#L361), [file store](src/store/state.ts#L445) |
+| Trust | Typed Turtle retains ordered pins, rules, controllers and record keys. The SDK selects Turtle before JSON and fails closed on malformed Turtle. Provisioning and explicit SDK migration write Turtle using the suite serializer. The daemon pin operation uses the same SDK writer under its existing lease and identity revalidation. Legacy daemon gates update JSON until migrated. File sync, atomic rename, directory sync and mode 0600 apply to both formats. [trust.ts](src/model/store/trust.ts#L106), [setup.ts](src/setup.ts#L482), [gate-setup.ts](../../apps/agent-daemon/src/gate-setup.ts#L143) |
+| Consumers | Calendar and contacts use the trust reader. Governance lists both files. The provisioning and explicit pin callers await the SDK writer. The personal-agent CLI holds its state lock until the asynchronous pin write finishes. [calendar/actions.ts](../personal-agent/src/actions/calendar/actions.ts#L308), [contacts.ts](../personal-agent/src/actions/contacts.ts#L108), [cli.ts](../personal-agent/src/pilot/cli.ts#L715), [governance.ts](../personal-agent/src/pilot/governance.ts#L102) |
+| Pipeline | The snapshot writer's JSON exception is removed and the legacy reader exception follows the shared snapshot reader. Three pre-existing raw-JSON type findings referred to the same runtime context item. The private signature now narrows the existing `ContextItem.statement` property directly. The guard gained no allowance. [check-rdf-pipeline.mjs](scripts/check-rdf-pipeline.mjs), [agent.ts:3375](src/runtime/agent.ts#L3375) |
+
+Authorization-server grants carry a different signed payload from an owner
+mandate. The existing authority verifier lifts them into a native mandate.
+The RDF reader reuses that verified lift for the header fields, checks the
+exact signed grant bytes, and checks the restored policy against the native
+mandate digest. The authorization-server mortgage case initially failed
+because the store tried to parse the grant as an owner mandate. It passed on
+the targeted rerun after this change.
+
+The records-transfer scenario has two valid memory grants with the same native
+policy ID and different targets. Naming both graphs solely by the native ID
+merged those targets. Each memory policy now uses a deterministic projection
+ID derived from its native ID and graph bytes. This ID is both the named graph
+and the subject of the `odrl:Policy`. The node retains the native ID in
+`odrl:uid`, which decode uses to restore each grant. Identical projections
+share a graph. Mandates continue to use their native policy IDs as graph names.
+
+The RDF store uses the exact stored JWS or document string with a digest. Open
+entries use ordered `NamedValueCollection` and `ItemList` structures. The
+recorded-message and approval models store their JWS in typed fields. The
+signed mandate credential retains the existing embedded credential projection.
+No edits were made to `policy-engine.ts` or `mandate.ts`. The SPARQ writer emits
+a request-filtered projection with its own policy node and quad layout. The
+generic ODRL serialization produces a different graph, so the SPARQ input stays
+with its original writer.
+
+### Tests and fixture adjustments
+
+- [action-iri.test.ts](../solid-odrl/test/action-iri.test.ts) initially failed
+  seven cases for profile and invalid actions. The 18 known-action cases
+  passed against the baseline. The prior
+  [policy.test.ts](../solid-odrl/test/policy.test.ts) assertion expected an
+  unknown action rule to disappear. It now asserts the IRI projection.
+- [policy-rdf.test.ts](test/policy-rdf.test.ts#L52),
+  [state-file-format.test.ts](test/state-file-format.test.ts#L23) and
+  [trust-rdf.test.ts](test/trust-rdf.test.ts#L83) initially failed at the missing
+  codec imports. The focused tests cover the verified invoice mandate,
+  `urn:rule:monthly-payments`, ordered rules and operands, unchanged-entry
+  memo reuse, legacy reload, malformed state, delegated keys and Turtle
+  refusal cases. Two additional tests replaced a true approval-use or trust
+  refusal marker with false. Both failed first, then passed when the store
+  enforced the native true-only marker.
+- [state-rdf.test.ts](test/state-rdf.test.ts#L14) checks all 38 state sections with records captured from real saves, along
+  with SHACL, the generic-section ratchet and N-Quads round trips. The
+  [fixture source](test/fixtures/state-complete.README.md) describes the
+  reference, daemon and local synthetic-provider runs used to assemble it.
+  [state-corpus.test.ts](test/state-corpus.test.ts#L15) runs the Phase 1 sampler
+  with the opt-in memory verifier, compares outlines and checks the decisions
+  made under the decoded mandates.
+- [gate-setup.test.ts](../../apps/agent-daemon/test/gate-setup.test.ts#L113)
+  retains the atomic replacement, old descriptor and 0600 assertions while
+  changing the target to Turtle. It also checks the reopened gate. The two
+  added legacy and dual-format cases failed first on the baseline due to
+  absent Turtle and JSON overwrites, respectively.
+- [daemon.test.ts](../../apps/agent-daemon/test/daemon.test.ts#L2442) reads the two
+  live snapshots through the SDK. The assertions on admitted context and held
+  precedence retain their original conditions. Before that edit both reads
+  failed on the N-Quads header. This fixture's trust write and the
+  [outbound fixture](../../apps/agent-daemon/test/outbound.test.ts)
+  now await provisioning. [custody.test.ts](../personal-agent/src/pilot/custody.test.ts)
+  still writes a duplicated pin and verifies startup refusal and lock
+  release. [actions.test.ts](../personal-agent/src/actions/actions.test.ts)
+  writes valid trust through the SDK and tests invalid JSON and Turtle.
+- The vocabulary test's foreign-term inventory now includes ODRL
+  `hasPolicy`, RDFS `label` and security `controller`; the assertions
+  are unchanged. [store-vocabulary.test.ts](test/store-vocabulary.test.ts)
+
+### Generation and vocabulary
+
+The package generator admitted `TrustPin`, `MandateRevocation` and
+`PaymentReservation`. The SHACL property name for a revocation's native
+`id` is `mandateId` because `id` is reserved by the generated wrapper.
+Date-time wrappers validate their fields and the store retains the lexical
+value, including offsets and fractional-second spelling. See
+[codegen.config.json](codegen.config.json) and
+[full-admission.json](src/generated/full-admission.json).
+
+All store terms and their labels, comments, domains and ranges are in
+[answerable-stores.ttl](vocab/answerable-stores.ttl#L406). The
+[store shapes](vocab/answerable-stores.shacl.ttl) and pinned
+[display context](vocab/context/store-v1.jsonld) document their projections.
+The display-only context stays separate from the message context.
+
+| Reused vocabulary | Terms in the store |
+| --- | --- |
+| Answerable | `Agreement`, `CompactJwsProof`, `EvidenceItem`, `LegacyCredentialSubject`, `NamedValueCollection`, `actionDigest`, `actor`, `approvalJws`, `approvalJwsDigest`, `asOf`, `at`, `claimType`, `conversation`, `digest`, `entryHash`, `evidence`, `format`, `jws`, `mandateCredential`, `method`, `party`, `protectedObject`, `recordApprovalBinding`, `recordBinding`, `recordIdentifier`, `role`, `sequence`, `statement`, `subject`, `terms`, `version` |
+| RDF, RDFS and XML Schema | `rdf:type`, `rdfs:label`, and the XSD scalar datatypes, including `string`, `boolean`, `integer` and `dateTime` |
+| PROV-O | `generatedAtTime` and `wasAttributedTo` |
+| ODRL | Standard policy classes, actions, operators and operand individuals. `action`, `assignee`, `assigner`, `constraint`, `duty`, `hasPolicy`, `leftOperand`, `obligation`, `operator`, `permission`, `profile`, `prohibition`, `rightOperand`, `target` and `uid`. |
+| VC Data Model | `VerifiableCredential`, `credentialStatus`, `credentialSubject`, `issuer`, `validFrom`, `validUntil` and `verifiableCredential`. |
+| Schema.org | `ItemList`, `PropertyValue`, `itemListElement`, `name`, `position`, `propertyID` and `value`. |
+| Security | `controller`, `proof` and the related `publicKeyJwk` vocabulary link. |
+
+The following terms use the Answerable namespace.
+
+- New classes
+  `RuntimeSnapshot`, `StateSection`, `StateEntry`, `TypedStateSection`, `TypedStateEntry`,
+  `TrustPin`, `MandateRevocation`, `PaymentReservation`, `TrustStore`, `PinnedKey`,
+  `JsonWebKey`, `SourceAuthorityRule`, `PinnedRecordKey`, `RecordKeyDelegation`, `TrustController`,
+  `TrustHold`, `TrustRefusal`, `OwnListEntry`, `RegisterEntry`, `Register`,
+  `TrustRoot`, `MemoryScope`, `MemoryItem`, `ItemTerms`, `InheritedItemTerms`,
+  `OriginalStatement`, `RelianceHold`, `KnownIdentifiers`, `StatementRefusal`, `RelianceBinding`,
+  `DescriptionAddress`, `StoredMandate`, `StandingRule`, `DutyRule`, `ApprovalGrant`,
+  `OrganisationApprovals`, `RecordHead`, `AuthoredProof`, `RecordedMessage`.
+- New properties
+  `policyFields`, `policyProfile`, `policyRightOperand`, `policyOperandDatatype`, `policyActionSpelling`,
+  `policyRuleKind`, `policyApprovals`, `policyLimit`, `storedBytesDigest`, `stateVersion`,
+  `section`, `sectionPresent`, `stateEntry`, `entryKey`, `entryValue`,
+  `kid`, `admittedPurpose`, `effectiveUntil`, `stateMandateVersion`, `reservationPeriod`,
+  `amountMinor`, `storeVersion`, `owner`, `pinnedKey`, `sourceAuthorityRule`,
+  `trustController`, `recordKeyDelegation`, `keyRole`, `keySubject`, `endpoint`,
+  `note`, `alg`, `publicKey`, `kty`, `crv`,
+  `x`, `y`, `source`, `subjects`, `effectiveFrom`,
+  `framework`, `identity`, `recordPublicKey`, `delegation`, `delegationDigest`,
+  `trustMessage`, `trustWire`, `trustRefused`, `trustTasks`, `trustBlocked`,
+  `authorizedFor`, `trustStatus`, `answersFor`, `registerEntry`, `answerTtlMs`,
+  `trustRegister`, `memoryItem`, `compactProofDigest`, `identifiers`, `supersededBy`,
+  `disputedWith`, `admittingDelivery`, `original`, `itemKind`, `accepted`,
+  `admissionOrder`, `dataUseGrant`, `minimumGroup`, `deleteWithinDays`, `recipientMustBe`,
+  `inheritedTerms`, `evidenceBytes`, `evidenceBytesDigest`, `memoryTask`, `relianceReason`,
+  `refusedStatement`, `relianceBinding`, `descriptionAddress`, `mandateCredentialDigest`, `autonomousPolicy`,
+  `withApprovalPolicy`, `standingRules`, `dutyRules`, `standingWhen`, `standingAllows`,
+  `standingDuties`, `dutyKind`, `dutyItems`, `dutyOn`, `dutyParties`,
+  `dutyWithinSeconds`, `dutyEvent`, `approvalDecisionName`, `approvalPayment`, `approvalUsed`,
+  `approvalSigner`, `issuedAt`, `approvalItems`, `requestDigest`, `recordDirection`,
+  `recordJws`, `recordJwsDigest`, `credentialsAdmitted`.
+- Individuals
+  `pay`, `anySubject`, `key-role/{actor,party,issuer}`, and
+  `item-kind/{statement,memory,message,reading,content}`.
+
+The Phase 1 untyped-record ratchet stands. Phase 2's
+[state-generic-sections.json](test/fixtures/state-generic-sections.json) lists
+`conversations`, `seen`, `outbox`, `effects`, `pending`, `domain`,
+`tasks`, `transmissions`, `generatedConversations`, `notificationDuties`,
+`duties`, `pendingPodGrants`, `emailChallenges`, `paymentOrders`,
+`paymentOrderKeys`, `paymentReceipts`, `paymentTotals` and
+`paymentReleases`. The store context adds zero `@json` terms.
+
+### Generator follow-ups
+
+Each suggested bead below carries `surface:packages/federation-codegen`.
+The per-class results come from passing the class's original, unmodified shapes
+to closed admission. The generator can emit isolated scalar leaves. The brief's
+hand-held store models integrate those leaves with section membership, position
+or exact-byte checks. The full-profile diagnostics are retained in
+[full-admission.json](src/generated/full-admission.json).
+
+| Hand-held class | Closed admission result | Bead text |
+| --- | --- | --- |
+| `RuntimeSnapshot` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `RuntimeSnapshot` with section or entry links, open values and section-level position. |
+| `StateSection` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `StateSection` with section or entry links, open values and section-level position. |
+| `StateEntry` | No runtime projection for `sh:or` or the enclosed `sh:nodeKind`. | Support `StateEntry` with section or entry links, open values and section-level position. |
+| `TypedStateSection` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `TypedStateSection` with section or entry links, open values and section-level position. |
+| `TypedStateEntry` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `TypedStateEntry` with section or entry links, open values and section-level position. |
+| `TrustStore` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `TrustStore` with ordered values and projected nested trust references. |
+| `PinnedKey` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `PinnedKey` with ordered values and projected nested trust references. |
+| `JsonWebKey` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `JsonWebKey` with ordered positions and the native store fields. |
+| `SourceAuthorityRule` | `sh:node` references an unprojected shape and requires a projected composite link. no runtime projection for `sh:or` or the enclosed `sh:nodeKind`. | Support `SourceAuthorityRule` with ordered values and projected nested trust references. |
+| `PinnedRecordKey` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `PinnedRecordKey` with ordered positions and the native store fields. |
+| `RecordKeyDelegation` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `RecordKeyDelegation` with ordered references or an exact JWS literal with a checked digest. |
+| `TrustController` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `TrustController` with ordered values and projected nested trust references. |
+| `TrustHold` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `TrustHold` with ordered positions and the native store fields. |
+| `TrustRefusal` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `TrustRefusal` with ordered positions and the native store fields. |
+| `OwnListEntry` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `OwnListEntry` with ordered positions and the native store fields. |
+| `RegisterEntry` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `RegisterEntry` with ordered values and projected nested trust references. |
+| `Register` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `Register` with ordered values and projected nested trust references. |
+| `TrustRoot` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `TrustRoot` with ordered values and projected nested trust references. |
+| `MemoryScope` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `MemoryScope` with ordered child links, native open values and related ODRL graphs. |
+| `MemoryItem` | No runtime projection for `sh:or` or the enclosed `sh:nodeKind`. `sh:node` references an unprojected shape and requires a projected composite link. | Support `MemoryItem` with ordered child links, native open values and related ODRL graphs. |
+| `ItemTerms` | No runtime projection for `sh:or` or the enclosed `sh:nodeKind`. `sh:node` references an unprojected shape and requires a projected composite link. | Support `ItemTerms` with ordered child links, native open values and related ODRL graphs. |
+| `InheritedItemTerms` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `InheritedItemTerms` with ordered child links, native open values and related ODRL graphs. |
+| `OriginalStatement` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `OriginalStatement` with ordered child links, native open values and related ODRL graphs. |
+| `EvidenceItem` | Multiple NodeShapes for one canonical `targetClass`. The full profiles also reject unsupported `sh:xone`, `sh:nodeKind`, `sh:node` and `sh:pattern`. | Support `EvidenceItem` with ordered positions and the native store fields. |
+| `RelianceHold` | No runtime projection for `sh:or` or the enclosed `sh:nodeKind`. `sh:node` references an unprojected shape and requires a projected composite link. | Support `RelianceHold` with ordered positions and the native store fields. |
+| `KnownIdentifiers` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `KnownIdentifiers` with ordered values and projected nested trust references. |
+| `StatementRefusal` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `StatementRefusal` with ordered positions and the native store fields. |
+| `RelianceBinding` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `RelianceBinding` with ordered positions and the native store fields. |
+| `DescriptionAddress` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `DescriptionAddress` with ordered positions and the native store fields. |
+| `StoredMandate` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `StoredMandate` with ordered positions and the native store fields. |
+| `StandingRule` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `StandingRule` with ordered positions and the native store fields. |
+| `DutyRule` | `sh:node` references an unprojected shape and requires a projected composite link. no runtime projection for `sh:or` or the enclosed `sh:nodeKind`. | Support `DutyRule` with ordered positions and the native store fields. |
+| `ApprovalGrant` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `ApprovalGrant` with ordered references or an exact JWS literal with a checked digest. |
+| `OrganisationApprovals` | `sh:node` references an unprojected shape and requires a projected composite link. | Support `OrganisationApprovals` with ordered references or an exact JWS literal with a checked digest. |
+| `RecordHead` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `RecordHead` with ordered positions and the native store fields. |
+| `AuthoredProof` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `AuthoredProof` with ordered positions and the native store fields. |
+| `RecordedMessage` | Admitted in isolation. Integrated through the brief's hand-held store model. | Support `RecordedMessage` with ordered references or an exact JWS literal with a checked digest. |
+
+### Policy codec follow-ups
+
+| Label | Bead text |
+| --- | --- |
+| `surface:packages/solid-odrl` | Define an opt-in lossless projection for ordered permissions, prohibitions, duties, constraints, profiles and right operands. Preserve duplicate native rule identifiers, exact action spelling and explicit empties. Keep standard ODRL parsing and evaluation semantics. |
+| `surface:packages/solid-odrl` | Preserve explicit and inherited party fields separately during round trips. Define lossless handling for clean DID, target and profile IRIs in policy graphs while retaining validation for existing consumers. |
+| `needs:jesse` | Decide the portable RDF vocabulary for the pilot's `approvals` and `limit` rule properties, item `minimumGroup`, and their relationship to ODRL constraints. The store currently uses local vocabulary and preserves native values. |
+
+### Measurements and verification
+
+The probe captured 59 native saves across seven stores from the baseline
+mortgage main path, then replayed the same input bytes through the baseline and
+changed builds. It timed five replays of each implementation on this machine.
+Each file save includes file fsync, rename and directory fsync.
+
+| 59 saves, milliseconds | Before, five replays | After, five replays | Median ratio |
+| --- | --- | --- | --- |
+| Durable | 6,890 / 11,003 / 8,042 / 7,129 / 6,119 | 3,923 / 3,638 / 4,136 / 8,144 / 7,306 | 4,136 / 7,129 = 0.58, within 1.5× |
+| Memory | 451 / 372 / 407 / 336 / 293 | 189 / 188 / 210 / 690 / 357 | 210 / 372, with the original save implementation |
+
+An intermediate build gave 4,800 ms durable and 218 ms memory medians. After
+the memory grant identity fix, the same probe replayed all 59 saves again.
+The final durable replays took 7,921 / 8,696 / 6,503 / 6,767 / 5,990 ms.
+The 6,767 ms median was 0.95× the 7,129 ms baseline. The corresponding
+memory replays took 270 / 288 / 221 / 212 / 241 ms, with a 241 ms median
+compared with 372 ms before.
+
+The first `profile-journey.mjs --iterations=3 --main-only` baseline medians
+were 15,227 ms and 14,896 ms. After moving the exact-byte digest work fully
+into the store layer, the medians were 9,976 ms and 10,487 ms. A second
+baseline run from compiled HEAD in a disposable directory had medians
+10,126 ms and 10,142 ms. Against that quieter baseline the data-integrity
+change is +3.4%. Timings varied with concurrent work, so the same-CPU repeat
+below records the paired result.
+
+A back-to-back repeat pinned to one CPU gave 10,106 → 10,092 ms for the
+baseline configuration and 10,103 → 10,604 ms for data integrity. The
+data-integrity measurement was 5.0% higher in that pass. To reduce run-order
+bias, a further same-CPU probe loaded compiled HEAD and 40k in one process,
+discarded one warm-up for each combination, and alternated the order of the
+same main journey. It gave the following medians.
+
+| Configuration | Before, ms | After, ms | Change |
+| --- | --- | --- | ---: |
+| Baseline | 19,367 / 12,164 / 20,702 | 17,779 / 10,694 / 18,998 | 19,367 → 17,779, −8.2% |
+| Data integrity | 18,905 / 15,854 / 21,756 | 15,068 / 10,504 / 23,654 | 18,905 → 15,068, −20.3% |
+
+The disposable HEAD build used the runtime emitted before the standalone
+ODRL bundler rejected the temporary host path in its publication
+sanitizer. No temporary-build output was published or copied into the workspace.
+The spread across the timing runs limits comparisons to this machine.
+
+| Check | Result |
+| --- | --- |
+| Reference compile, `npx tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Passed. |
+| Solid ODRL tests, typecheck, `api:report`, `api:check` | Passed, 938 tests in 14 files. The API report was produced by the package script. |
+| ODRL consumer type checks | `agent-mandate`, `agent-authz-verifier`, `pkg-memory` and `personal-agent` passed. No action-type change required edits in a consumer. Additional exploratory checks in packages with missing workspace build dependencies were inconclusive. |
+| Reference typecheck and lint | Passed. Lint reported 679 warnings and 674 informational diagnostics. |
+| Focused reference codec and vocabulary tests | Passed, 21 tests in five files. Added regressions cover non-standard policy IRIs, true-only state markers, repeated rule IDs and different memory grants sharing a policy ID. The two repeated-identity cases failed first and passed after the codec restored each occurrence separately. |
+| Record corpus | Passed in 1,127.38 s with the unchanged untyped-record ratchet. |
+| Durable replay | Reopened all seven stores after the 59 saves and checked the digest and native key order of each final snapshot. |
+| Live RDF memory smoke | With `AWP_STORE_RDF=1`, five mortgage-core and pay-an-invoice paths preserved the recorded outlines. |
+| Generated-artifact drift test | Passed. |
+| Reference restart and Phase 1 regression tests | 148 of 150 initially passed. The payment restart and Pod mirror tests timed out under concurrent load. Both files passed on retry with `--testTimeout=300000`, 14 tests. |
+| Daemon typecheck and targeted gate setup, daemon and outbound suites | Passed, 138 tests with `--maxWorkers=2 --testTimeout=30000`. |
+| Daemon `npx vitest run --maxWorkers=2` | 273 passed, 20 failed. The failures are in loopback-dependent CSS, cloud and D-2 tests, CLI and production dependency subprocess output, and launchd's `python3` subprocess. Loopback bind and subprocess probes reported `EPERM`. The packaged help command and the pnpm dependency query both emitted output when invoked directly. |
+| A6 personal-agent tests | Passed, 35 across actions and custody. Personal-agent typecheck also passed. |
+| Workspace root guards, changed-file Biome and `check:codegen` | Passed. Eight generated projects. |
+| `node scripts/check-rdf-pipeline.mjs` | Zero failures, 216 pre-existing explicit allowances. |
+| `node scripts/check-no-trace-change.mjs` | Mortgage-core and pay-an-invoice ran two and three live paths. Both reported 278 runs, zero disagreements, five blocked. The compared traces, outlines and manifest rows passed. |
+| `NODE_OPTIONS=--max-old-space-size=1100 npx vitest run --maxWorkers=2 test/oracle.test.ts test/oracle-snapshot.test.ts` in the reference package | All three tests passed in 310.18 s. The first execution's live worker exited unexpectedly. |
+| Sampled corpus, `test/state-corpus.test.ts` with `--maxWorkers=2` | All 80 scenario/configuration groups passed across the partitioned runs and targeted reruns. The test enables `AWP_STORE_RDF=1`, compares recorded outlines and re-evaluates each observed intent with the decoded native mandate. |
+
+The first state worker exited unexpectedly. The next reached the DID mortgage
+configuration, where the public ODRL writer refused a native DID assigner.
+The store-only projection carries those IRIs directly on the ODRL nodes.
+The next execution used `STATE_CORPUS_PART=0` and `STATE_CORPUS_PART=1`,
+each with a 1,100 MiB V8 heap cap. The first partition passed all 40 groups.
+The second passed 21 groups, failed the authority-grant case and exited before
+completing the last 18. A targeted retry of 17 of those groups passed 16 and
+found the reused policy ID in records transfer. The salary benchmark exhausted
+a 650 MiB worker heap and passed in isolation with a 1,600 MiB cap. On the final
+codec, the targeted authority-grant, records-transfer and invoice groups passed
+with the stricter assertion that every recorded sampled path appears. The
+optional exhaustive `FULL_CORPUS=1` run was outside this verification.
+
+The manifest remains 283 paths, 278 runs, zero disagreements and five
+blocked. Its SHA-256 is
+`7b490268f90bd3c0541322fc27e490253383aa1abdcf0b54ca50a63f2e78f53`.
+The oracle snapshot SHA-256 is
+`4f63d12f5e58b1d4a2f085c3d524b671663a1d96dd61c45ee875838d1308922f`.
+Neither was edited. The reference package's full build and Turbo gate were
+omitted as required by the brief.
+
+### Remaining design work
+
+The five existing follow-ups under [Other beads to file](#other-beads-to-file)
+still apply. The standing payment vocabulary decision remains
+`needs:jesse` … choose the long-term ODRL profile for the pilot payment action
+and define a reversible migration from `awp:pay`. The native pilot rule
+and evaluator already retain the exact `pay` action.
+
+## Phase 2 CI fix (40n)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Baseline `1c45e5026`. Both solid-odrl readers skip rules and duties with
+unrecognized actions by default. `PolicyReadOptions.allowedActionIris` accepts
+extension actions by exact IRI match. Standard actions still decode to their
+short names and take precedence when a node supplies multiple actions. The
+store codec opts into `awp:pay` and restores native `pay`, including the
+verified invoice mandate's permit for `urn:rule:monthly-payments`. Writers
+continue to preserve clean absolute action IRIs.
+
+Node 24.22.3 and pnpm 10.4.1. The default-skip regression failed before the
+reader change. The allow-list test checks rules, permission duties and
+obligations in both reader entry points, including case-sensitive matching.
+
+| Check | Result |
+| --- | --- |
+| solid-odrl tests, `api:report`, `api:check` | 939 tests passed across 14 files. API Extractor generated and verified the report. |
+| rdf-engine tests | 224 passed across 11 files with the coverage gate enabled. The ordinary run passed 223 tests and hit `EPERM` while capturing the WASM-copy CLI's output. A local rerun supplied file-backed stdout to that real subprocess and kept the package and tests intact. |
+| Agent-reference phase 2 | 21 passed in `state-rdf`, `state-file-format`, `trust-rdf`, `policy-rdf`, and `store-vocabulary`. |
+| Agent-reference restart and regression suites | 231 passed across 20 files. The primary batch covered `email`, `forum`, `durable-capabilities`, `pod-mirror`, `runtime-graph-ingress`, `ledger-file-format`, `record-rdf`, `rdf-pipeline`, `store-quads`, `store-vocabulary`, `codegen`, `agreements`, `general-duties`, and `single-use`. The two follow-up batches covered `capabilities-b-adversarial`, `content`, `dataset-query`, `proofs`, `joint`, and `email-endpoint-alternative`. |
+| Daemon and personal-agent restart checks | 138 daemon tests passed in `gate-setup`, `daemon`, and `outbound`. 38 personal-agent tests passed in `mortgage-durable`, `custody`, and `actions`. |
+| Typecheck and Biome | Typecheck passed for solid-odrl, rdf-engine, agent-reference, agent-daemon, and the seven consumers below. Changed-file Biome, package lint for solid-odrl and agent-reference, and `lint:root` passed. Package lint reported existing warnings. |
+| RDF pipeline and traces | The RDF guard reported zero failures and 216 explicit allowances. Mortgage-core and pay-an-invoice ran two and three live paths. Both reported 278 runs, zero disagreements and five blocked. The trace, outline and manifest comparisons passed. |
+
+The `package.json` search found these seven additional workspace consumers of
+`@jeswr/solid-odrl` beyond rdf-engine and agent-reference. The two apps ran
+with lockfile dependencies installed offline in a disposable workspace copy.
+
+| Workspace consumer | Test result |
+| --- | --- |
+| `@jeswr/agent-authz-verifier` | 141 passed in 5 files |
+| `@jeswr/agent-mandate` | 858 passed in 12 files |
+| `@jeswr/app-access-manager` | 181 passed in 17 files |
+| `@jeswr/app-issues` | 720 passed in 47 files |
+| `@jeswr/personal-agent` | 520 passed, 77 failed, 4 skipped, and 2 unhandled loopback errors across 58 files |
+| `@jeswr/pkg-memory` | 809 passed in 15 files |
+| `@jeswr/pod-access` | 1,183 passed in 26 files |
+
+The full personal-agent run hit the sandbox's loopback and subprocess
+restrictions, including `listen EPERM`, `spawnSync EPERM`, and dependent
+timeouts. The failure, skip and unhandled error counts match the earlier
+sandbox run. [Brief 36J report](../personal-agent/BRIEF-36J-REPORT.md)
+
+The full workspace gate was attempted in the disposable copy. It stopped at
+`@jeswr/solid-webauthn-reauth` because `@simplewebauthn/browser` was absent in
+that copy. The agent-reference build was limited to compiling and copying
+generated modules in the worktree. The trace check ran in its own disposable
+copy, and the checked-in trace, outline and manifest files retain their bytes.
+
+## Phase 2 review fixes (40o)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Baseline `776a9d253`. Node 24.22.3 and pnpm 10.4.1. The 24 initial
+regressions failed on the review baseline. Five additional regressions for
+JSON node count, string length, surrogate entry keys, deeply inherited
+terms and collisions between entry graphs also failed against the baseline encoder.
+
+| Finding | Fix and regression |
+| --- | --- |
+| Rules and duties attach to the wrong RDF node | The ODRL writer reports each lowered object's subject. The store resolves the reported IRI or skolemized blank-node identity before attaching position, field presence, approvals and limits. Tests cover the assigner, profile and duty-target collisions in both projection modes, plus the persisted precedence hold. [Policy codec](src/model/store/policy.ts) · [Policy regressions](test/policy-rdf.test.ts) · [File regressions](test/state-file-format.test.ts) |
+| A save can replace a readable file with bad data | The save decodes the outgoing layout and entry blocks, checks the canonical encoding and compares the result with the legacy JSON projection of the input. Validation is reused for byte-identical entries. A link or shared subject across entries triggers the full reader to verify the combined graph. Tests check that malformed RDF, an encoder exception, a different decoded state and a cross-entry link preserve the last readable file. [File save](src/store/state.ts) · [File regressions](test/state-file-format.test.ts) |
+| Legacy state can contain values outside the RDF projection | The local policy projection carries RDF-safe identifiers such as `urn:x:1` and preserves a non-IRI policy ID as a literal on a deterministically named node. Snapshot keys and open values retain lone surrogates in RDF JSON literals. Values larger or deeper than the named-value projection also use compact RDF JSON literals. Snapshot sections have no separate structural or fixed file-size cap because that would reject data already admitted by the runtime. The ledger's limits and gate admission still apply at their existing boundaries. [Store fields](src/model/store/common.ts) · [File regressions](test/state-file-format.test.ts) |
+| Standard action IRIs change the evaluation outcome on round trip | The public writers require short names for actions from the standard table. The store retains full native spelling in its local supplement. The regressions exercise `odrl:read` and `acl:Append` alongside a short-name permission. [ODRL regression](../solid-odrl/test/policy.test.ts) · [Policy regressions](test/policy-rdf.test.ts) |
+| The Turtle trust writer rejects native trust fields | Safe identifiers and XSD date-times keep their RDF forms. Accepted local identifiers and timestamp spellings use literals where needed. The tests load the original data through the trust verifier, write Turtle, validate the graph and reopen it through the verifier. [Trust codec](src/model/store/trust.ts) · [Trust regressions](test/trust-rdf.test.ts) |
+| Sparse section arrays can produce unreadable files | The encoder rejects a sparse section before writing. The regression checks both the direct encoder and the durable save and verifies the original bytes. [Snapshot codec](src/model/store/state.ts) · [File regressions](test/state-file-format.test.ts) |
+
+A populated v2 snapshot from the baseline encoder reopened with the same
+native state. The v1 migration tests also reopen the resulting v2 files.
+The durable SHACL shapes declare the trust and entry-key literal forms,
+and the package generator refreshed the input locks and admission report.
+
+| Check | Result |
+| --- | --- |
+| solid-odrl | 941 tests passed across 14 files. API report generation and verification passed. |
+| rdf-engine | All 224 tests passed with coverage enabled after routing the WASM-copy subprocess stdout through a file descriptor. The ordinary run passed 223 tests and hit `spawnSync EPERM` on that subprocess. |
+| Agent-reference Phase 2 and codec guards | 54 tests passed across eight files, including codegen drift. |
+| Agent-reference restart and regression suites | All 277 tests passed across 24 files on the final combined run, including Phase 2. The first run timed out in Pod mirror and overlapped regeneration during the drift check. |
+| Daemon and personal-agent restart suites | All 138 daemon tests and 44 personal-agent tests passed on the final codec. The personal-agent run included mortgage, custody, actions, CLI, health, industrial and the 220-message prepared-cache test. |
+| Typecheck and lint | Typecheck passed for agent-reference, solid-odrl, rdf-engine, agent-daemon and the seven direct consumers. Changed-file Biome, targeted package lint and root lint passed. Existing lint warnings remain. |
+| RDF pipeline and traces | Zero RDF pipeline failures and 216 existing allowances. The trace check matched the five live data paths in both default and RDF-verified memory modes, with 278 runs, zero disagreements and five blocked entries. |
+| Direct solid-odrl consumers | Agent authz verifier 141, agent mandate 858, pkg-memory 809, pod-access 1,183, access-manager 181 and issues 720 passed. The app suites used a disposable workspace with offline lockfile installs. |
+
+The initial full personal-agent run reported 513 passed, 84 failed and four
+skipped, with two unhandled loopback errors. The 77 failures from the 40n
+sandbox run recurred. The seven additional failures were test timeouts,
+all of which passed within the existing timeouts in the final targeted run
+after save verification began reusing validated entry blocks.
+
+The full workspace gate was blocked in the disposable copy by missing
+`@capacitor/core` for suite-native. Retrying with a full offline install
+stopped on the uncached, lockfile-pinned federation-registry tarball.
+
+## Phase 2 re-review fixes (40p)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+Baseline `c5ac74729`, which merges `origin/main` over reviewed commit
+`ec26b4526`. Tests used Node 24.22.3, pnpm 10.4.1, and two Vitest workers.
+
+| Finding | Fix and regression |
+| --- | --- |
+| N1 | Typed snapshots preserve the original instant for owner and organisation approvals, trust holds and pins, mandate revocations, admitted and held memory facts, and agreements. Generated pin and revocation nodes retain a queryable date-time alongside the source spelling when needed. A signed minute-precision owner approval survives a durable save and reopen with the exact timestamp and JWS, and the gate returns the same decision as the memory store. Coverage includes an explicit offset and earlier v2 Agreement timestamps. |
+| N2 | The local Agreement model reuses the protocol graph and applies the store's RDF JSON escape where necessary. An operation version containing lone high and low surrogates, a replacement character, and an astral character round-trips exactly. |
+| N3 | Snapshot reads and writes are bounded at 256 MiB and one million quads. Trust reads are capped at 64 MiB, with additional Turtle limits of 128 Mi characters of expanded term text and 250,000 quads. Those limits leave room for accumulated conversations and signed records and contain Turtle prefix amplification. Inherited terms accept 32 levels. Reads and saves report a clear error at the 33rd level. Regressions exercise both paths, an oversized sparse file, and prefix expansion in a small Turtle document. |
+| N4 | The solid-odrl README and skill describe standard action IRI rejection in the RDF and JSON-LD decision-record writers. Both writer regressions accept the short `append` action and reject its standard ACL IRI on an active duty. The package regenerated and verified the API report after documenting `PolicyWriteOptions`. |
+
+The signed-approval, typed-instant, Agreement surrogate, inherited-depth, and
+Turtle expansion regressions failed on the merged review baseline. The
+decision-record writers already rejected the IRI on that head. Their tests
+protect the behavior introduced in 40o and both failed against `776a9d253`,
+before the standard-IRI rejection was introduced.
+
+### Save timings
+
+The diagnostic memory store had been parsing and materializing the entire
+snapshot at every save. Both stores now verify changed layout and payload
+blocks and reuse verified blocks when their bytes are unchanged. If the
+decoded entry has identical JSON, including nested order, the reader checks the
+parsed quads against the original graph. A changed native projection still
+requires canonical re-encoding. Cross-entry links and subject collisions still
+go through the full reader. An injected extra quad with unchanged JSON is
+rejected before rename, and a retry after an encoder error succeeds.
+
+The save benchmark used the populated state fixture, updated one nested value
+per save and appended 25 entries over 50 saves. Each mode ran four times and
+the table reports the median. The encode-and-fsync control used the same
+encoder and durable write steps with the verification bypassed solely for
+measurement. CLI and corpus rows use Vitest's test-body duration from isolated
+runs.
+
+| Workload | Review baseline | Final |
+| --- | ---: | ---: |
+| 50 saves, encode-and-fsync control | 441 ms | 408 ms |
+| 50 saves, durable file store with verification | 1,229 ms | 787 ms |
+| 50 saves, memory store with `AWP_STORE_RDF=1` | 5,928 ms | 662 ms |
+| State corpus, `cohort-count/baseline` | 118.50 s | 79.31 s |
+| Personal-agent, `src/pilot/cli.test.ts` | 11.67 s | 10.39 s |
+
+The baseline verification increased the durable benchmark to 2.78 times its
+encode-and-fsync control. Final durable saves were 36% faster than the review
+baseline. The measured corpus case was 33% faster, and the CLI passed within its
+existing 20-second timeout. The corpus measurement covers one case.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Agent-reference Phase 2 and restart regressions | 284 passed in 24 files, including the generated-model drift test. The final codec rerun passed all 46 tests, and a populated snapshot from the earlier v2 encoder reopened with identical state. |
+| Agent daemon restarts | 138 passed in gate setup, daemon, and outbound. |
+| Personal-agent restarts | All 46 targeted cases passed across the combined run and the isolated mortgage rerun. One mortgage case timed out in the concurrent run. All three mortgage cases passed in isolation within their existing timeouts. |
+| Solid ODRL | 943 passed in 14 files. API report generation and verification passed. |
+| RDF engine | 224 passed in 11 files with coverage enabled. The ordinary run hit `spawnSync EPERM` in the WASM-copy CLI test. The rerun used file-backed stdout for that subprocess. |
+| Other direct solid-odrl consumers | Agent authz verifier 141, agent mandate 858, pkg-memory 809, pod-access 1,183, access-manager 181, and issues 720 passed. The two app suites used an offline install in a disposable workspace. |
+| Typecheck and lint | Agent-reference, agent-daemon, solid-odrl, rdf-engine, and all direct consumers passed typecheck. Changed-file Biome, both changed package lints, and root lint passed. |
+| RDF pipeline and traces | The guard reported zero failures and 216 existing allowances. Default and RDF-verified memory modes reproduced all five selected live paths and preserved the traces, outlines, and manifest rows. Both runs reported 278 runs, zero disagreements and five blocked paths. |
+
+Agent-reference was compiled with `tsc -p tsconfig.build.json` and
+`scripts/copy-generated.mjs`. Temporary package copies were removed.
+
+The full personal-agent run reported 520 passed, 77 failed, four skipped, and
+two unhandled loopback errors. Its failing test names matched the 40n sandbox
+run, which hit loopback and subprocess restrictions and dependent timeouts.
+
+## Merge fixes (40q)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+In all four failures, `localAudit` printed `BREACH gate ledger integrity failure`.
+Main's offline audit parsed `state.json` as JSON. Phase 2 writes N-Quads to that
+same path, so parsing failed on the first `<`. The two retention cases had
+already started the daemon successfully by the time they ran the offline audit.
+
+The offline audit now uses the same read-only snapshot decoder as startup. It
+uses the saved head to verify the committed prefix, retention checkpoints and
+witnesses. The decoder treats only a missing file as empty and propagates other
+read errors. The crash test runs the same assertions against RDF and legacy JSON
+checkpoints, including byte-for-byte preservation of the snapshot and ledger.
+
+The reference compile and generated-file copy passed, as did all 47 requested
+store tests and the daemon typecheck. The trace check passed against the committed
+artifacts in a temporary copy. The worktree run flagged its trace index, which
+already lacked 273 committed rows.
+
+All four reported daemon cases passed. The refused-successor-revision restart
+took 1.70 seconds in the full daemon run and 1.60 seconds in isolation, within its
+5-second limit. The full run passed 295 tests and hit 20 failures involving
+blocked loopback listeners or subprocess output. The packaged CLI's help and
+JSON and CSV exports passed when subprocess output was captured in files.
+
+## Review 40r5 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+- Saves check that each new layout, payload, and policy block starts with a
+  named subject and ends with a complete statement and newline. Each block must
+  match the canonical N-Quads of its parsed graph. The memo reuses those checks
+  for unchanged blocks. Regressions inject terminated and unterminated comments
+  and verify that the previous snapshot survives both faults.
+- The snapshot head carries a SHA-256 digest of the canonical section, entry,
+  and policy blocks. Startup and offline audit verify it before returning any
+  state. Tests truncate the populated fixture at all 40 entry boundaries, cut
+  each section at the same boundaries while preserving the later graphs, and
+  change a value while preserving the entry count. Older RDF snapshots without
+  a digest fail closed. Trusted version 1 JSON still opens and migrates on save.
+- N-Quads and Turtle readers apply their existing quad and term budgets while
+  N3 tokenizes. The regressions put too many small statements under the byte
+  cap and check that parsing stops before it reaches a malformed tail. Local
+  state and trust file reads also refuse invalid UTF-8.
+- Inherited item terms keep their 32-level depth limit. Each fact can now
+  expand at most 8,192 inherited references on read or write. A shallow chain
+  of diamonds exercises the expanded reference limit.
+
+With `AWP_STORE_RDF=1` on Node 24, each run performed 50 memory saves of the
+populated fixture. It changed one nested value on each save and added 25
+entries across the run. The before and after measurements used the same
+workload and four runs each.
+
+| Build | Four runs (ms) | Median (ms) |
+| --- | --- | ---: |
+| Before, `7a802d02e` | 468, 278, 318, 252 | 298 |
+| After | 497, 315, 284, 266 | 299 |
+
+The library compile and generated-file copy passed. All 97 agent-reference
+tests passed, including the store, state RDF, trust, ledger, durable capability,
+vocabulary and codegen drift tests. All 197 fetch-rdf tests and its test
+typecheck passed. The RDF pipeline check reported zero failures and 216
+existing allowances. The trace check matched both scenarios across five live
+paths and preserved the trace, outline and manifest contents.
+
+Daemon typecheck passed. The full daemon run passed 295 tests and reported 20
+failures, matching the previous sandbox run. The following 17 cases tried to
+bind to `127.0.0.1`. The first two reported `listen EPERM` directly, and all
+15 cloud cases timed out waiting for their test port reservation.
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A can propose while transfers and cumulative spending remain executor-gated.
+- `test/css.test.ts` — in-memory CSS pod and direct binding through signed halt.
+- `test/cloud.test.ts`
+  - Requires explicit dev configuration and a trusted host before opening a store or listener.
+  - Retains private persistent state and reads only explicit Key Vault injected model keys.
+  - Refuses local or unclassified bindings `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown` (five cases).
+  - Requires an A2A receiver and refuses a missing A2A binding.
+  - Exposes bounded A2A and probes, preserves authorization bytes and suppresses provider errors.
+  - Aborts the listener and waits for daemon drain before closing credentials.
+  - Closes the composition on daemon and listener startup failures.
+  - Retains the file lease through inbound cancellation and drain, including a released daemon lease.
+  - Releases startup leases after factory failure or cancellation during composition.
+  - Catches synchronous receiver failures and bounds receiver response bytes.
+  - Bounds concurrent A2A verification even for pipelined requests on one connection.
+
+The other three failures involved subprocess output. The packaged CLI received
+empty help output, the installer hit `spawnSync python3 EPERM` during plist
+validation, and the production package test received empty dependency JSON.
+All three passed on rerun with subprocess output captured in temporary files.
+
+## Review round 6 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+- The snapshot reader checks that each memory payload, item, terms node, and
+  inherited reference uses the ID its writer assigns. It rejects a shared
+  chain in under 500 ms with either one or 40 entries. A separate case checks
+  sharing below a correctly scoped root.
+- The 8,192-reference limit now covers the whole RDF snapshot. The save path
+  counts both new and reused entries against that limit. Tests cover the
+  limit across memory sections, a successful round trip, and preservation of
+  the previous file when a save exceeds the limit.
+- The writer reuses the RDF graph for an identical ODRL policy within an
+  entry. The reader takes inherited reference IDs directly from the RDF
+  list. With 3,000 references sharing a policy, the measured file save went
+  from 7.19 s to 2.92 s and load went from 4.40 s to 2.29 s.
+- New and legacy ledger segments use the same fatal UTF-8 decoder as local
+  state and trust files. Tests cover both formats, including a bad append
+  after a cached N-Quads prefix.
+- The README explains that the unkeyed digest catches accidental damage,
+  anyone who can write the file can recompute it, and version 1 JSON has no
+  digest. It describes the ledger's role in tamper evidence.
+
+With Node 24 and `AWP_STORE_RDF=1`, four runs of 50 memory saves took
+466, 432, 448, and 460 ms. Each run used the populated fixture, updated one
+nested value per save, and appended 25 entries. The median total was
+454 ms against the 1 s target.
+
+The library compile and generated-file copy passed. The trace check passed
+across five scenario paths, with 278 manifest runs, zero disagreements, and
+five blocked paths. All 126 tests passed across the seven store, ledger,
+state RDF, and policy RDF test files. Daemon typecheck passed.
+
+The full daemon run passed 297 tests and reported 42 failures. Three passed
+on rerun with subprocess output captured in temporary files. These were
+packaged CLI help and JSON/CSV exports, launchd plist validation, and
+production dependency packaging. The remaining 39 failed to bind to
+`127.0.0.1` with `listen EPERM`:
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A proposals with
+  executor-gated transfers and cumulative spending.
+- `test/css.test.ts` — in-memory CSS pod and direct binding through signed halt.
+- `test/cloud.test.ts` — 37 cases
+  - Private persistent state and explicit Key Vault model keys.
+  - Refusal of `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown`
+    bindings (five cases).
+  - Missing A2A receiver and binding.
+  - Bounded A2A and probes, preserved authorization bytes, and suppressed
+    provider errors.
+  - Signed message admission on `/a2a` (compact), and on `/answerable`
+    (compact and document) (three cases).
+  - Empty 503 on decision commit failure on `/a2a` and `/answerable` (two cases).
+  - Direct HTTP route, media types, and byte limit before the gate.
+  - HTTP 200 admission and refusal at the A2A byte limit with default and
+    explicit receivers (two cases).
+  - Closing unfinished oversized chunked uploads on both routes at 415,
+    413, and the two 417 cases per route (eight cases).
+  - Replying and freeing a slot when final bytes and EOF arrive together
+    for fixed-length and chunked uploads on both routes (four cases).
+  - Reply after the client half-closes on either route (two cases).
+  - Shared upload slots and reclamation on disconnect.
+  - Listener abort, daemon drain, and credential close order.
+  - Composition close on daemon and listener startup failures.
+  - Retention of the file lease through inbound cancellation and drain.
+  - Release of startup leases after factory failure or cancellation.
+  - Synchronous receiver failures and response size bounds.
+  - Shared in-flight limit for pipelined requests.
+
+## Review round 7 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+- The named-value reader checks the IDs the writer assigns to collection
+  entries, nested objects and lists, and nulls. The snapshot reader also checks
+  the root value ID for each field. Stored policy fields use the original
+  subject kept in `odrl:uid` because the writer renames the policy subject
+  after assigning the value IDs.
+- The 8,192-reference limit applies to each memory item or precedence hold.
+  The reader still checks the IDs of inherited references and keeps the file
+  limits of 256 MiB and one million quads. The regression test saves and reloads
+  three holds with 3,000 references each, then verifies that an oversized hold
+  is refused and the previous file is preserved.
+- The sharing tests require rejection in under 500 ms. They cover an
+  18-level shared-sibling probe in both a domain entry and a typed statement,
+  and shared inherited terms at the root and deeper in the tree. Separate
+  round-trip tests cover empty and nested objects and lists, repeated values,
+  nulls, booleans, literals, IRIs, and exact finite numbers.
+
+Four Node 24 runs of 50 RDF-verified memory saves took 625, 542, 438, and
+400 ms. The median was 490 ms against the 1 s target. Each run used the
+populated state fixture, changed one nested value per save, and added 25
+entries. The library compile and generated-file copy passed. The trace check
+passed across five scenario paths with 278 manifest runs, zero disagreements,
+and five blocked paths.
+
+All 164 tests passed across the 11 store, ledger, named-value, policy, and
+message model test files. The reference package typecheck passed. The RDF
+pipeline check reported zero failures and 216 existing allowances.
+
+Daemon typecheck passed. The full daemon run passed 297 tests and reported 42
+failures. The packaged CLI help and exports, launchd plist validation, and
+production dependency packaging passed on rerun with subprocess output
+captured in temporary files. The remaining 39 cases hit `listen EPERM` on
+`127.0.0.1`.
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A proposals with
+  executor-gated transfers and cumulative spending.
+- `test/css.test.ts` — in-memory CSS pod and direct binding through signed halt.
+- `test/cloud.test.ts` — 37 cases
+  - Private persistent state and explicit Key Vault model keys.
+  - Refusal of `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown` bindings
+    (five cases).
+  - Required A2A receiver and missing binding.
+  - Bounded A2A and probes, preserved authorization bytes, and suppressed
+    provider errors.
+  - Signed message admission on `/a2a` (compact) and `/answerable` (compact
+    and document) (three cases).
+  - Empty 503 on decision commit failure on both routes (two cases).
+  - Direct HTTP route, media types, and byte limit before the gate call.
+  - HTTP 200 for admission and refusal at the A2A byte limit with the default
+    and explicit receivers (two cases).
+  - Closing unfinished oversized chunked uploads on both routes at 415, 413,
+    and the two 417 cases per route (eight cases).
+  - Replying and freeing the slot when final bytes arrive with EOF for
+    fixed-length and chunked uploads on both routes (four cases).
+  - Replying after the client half-closes on both routes (two cases).
+  - Shared upload slots and reclamation on disconnect.
+  - Listener abort, daemon drain, and credential close order.
+  - Composition close on daemon and listener startup failures.
+  - Retaining the file lease through inbound cancellation and drain.
+  - Releasing startup leases after factory failure or cancellation.
+  - Synchronous receiver failures and response size bounds.
+  - Shared in-flight limit for pipelined requests.
+
+## Daemon speed (40v)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The Node 24 CPU profile for the two recall tests on `171175102` attributed
+about 1.15 seconds to state reads and 0.88 seconds to saves. Rebuilding and
+parsing the canonical graph took about 0.51 seconds within reads. Per-entry
+verification took about 0.49 seconds within saves. N3 lookups and named-value
+decoding were prominent. Assembling and hashing the contents header took
+about 10 ms in the same profile.
+
+A cold load still decodes the RDF and rebuilds the canonical representation.
+When that representation matches the file, the one parse and byte comparison
+verify both the graph and its contents digest. Files with a different RDF
+layout still go through graph comparison, including the legacy Agreement
+timestamp handling. Repeat loads of a cached snapshot reread the bounded
+file with fatal UTF-8 decoding, match the header, and hash the body before
+returning a fresh copy of the state.
+
+The first save after a canonical load reuses entry encodings by their JSON
+text. Save verification parses the outgoing blocks, checks their canonical
+bytes, and reuses verification for unchanged blocks. It also uses the same
+entry quads for decoding, byte comparison, and checking cross-entry links.
+The writer serializes staged entry quads directly. Named-value reads check
+each list position once and compute value IDs only for collections and nulls.
+Writer-assigned IDs and per-entry reference limits still apply. Tests cover
+same-length corruption after a cached read and verify that changing one entry
+after reopening encodes only that entry.
+
+### Local timings
+
+Daemon timings are median Vitest test-body times from three Node 24.22.3
+runs with file parallelism disabled. Main is `ff5581b55`, including its
+versions of `fetch-rdf` and `solid-odrl`. Before is `171175102`. The 50-save runs
+used the populated state fixture, changed one nested value each save, and
+added 25 entries. Each save benchmark reports the median of four runs.
+The corpus row is one filtered Vitest test per revision with
+`AWP_STORE_RDF=1` set by the test.
+
+| Workload | Main locally | Before | After | After / main |
+| --- | ---: | ---: | ---: | ---: |
+| Recheck a released proposal after installing a deny-all mandate | 1,042 ms | 1,472 ms | 1,236 ms | 1.19× |
+| Recall refused successor across restart | 711 ms | 1,600 ms | 1,074 ms | 1.51× |
+| Recall refused successor revision across restart | 470 ms | 1,420 ms | 980 ms | 2.08× |
+| 50 durable saves | | 504 ms | 401 ms | |
+| 50 RDF-verified memory saves | | 291 ms | 255 ms | |
+| State corpus `cohort-count/baseline` | | 92.48 s | 72.59 s | |
+
+The revision recall case took 813 ms on main, 1,857 ms before, and
+1,464 ms after when run by itself. These are also medians of three runs.
+The isolated case is 1.80× main. It is 2.08× when it follows the other
+recall test in the combined run.
+
+### Verification
+
+The library compile and generated-file copy passed. The trace check passed
+across five scenario paths, with 278 manifest runs, zero disagreements, and
+five blocked paths. All 101 tests passed across the six store, ledger,
+named-value, capability, and state RDF files. The RDF pipeline check passed
+with 216 existing allowances. The populated v2 fixture encoded byte for byte
+as it did on `171175102` and decoded to the same state.
+
+Daemon typecheck passed. The full daemon run passed 297 of 339 tests,
+including the three performance cases at their existing timeouts. These 39
+cases could not listen on `127.0.0.1` in the sandbox and reported
+`listen EPERM`.
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A proposals with
+  executor-gated transfers and cumulative spending.
+- `test/css.test.ts` — the in-memory CSS pod and direct binding through signed
+  halt.
+- `test/cloud.test.ts` — 37 cases
+  - Private persistent state and explicit Key Vault model keys.
+  - Refusal of `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown` bindings.
+  - Required A2A receiver and binding.
+  - Bounded A2A and probes, preserved authorization bytes, and suppressed
+    provider errors.
+  - Signed admission on `/a2a` with compact input and on `/answerable` with
+    compact and document input.
+  - Empty 503 for decision commit failures on both routes.
+  - Direct HTTP route, media types, and request byte bound before the gate.
+  - HTTP 200 for admission and refusal at the A2A byte limit with the default
+    and explicit receivers.
+  - Closing unfinished oversized chunked uploads on both routes at 415,
+    413, and in both 417 cases per route.
+  - Reply and slot release when final bytes and EOF arrive together on both
+    routes with fixed-length and chunked bodies.
+  - Reply after the client half-closes on either route.
+  - Shared slots for unfinished uploads and reclamation on disconnect.
+  - Listener abort, daemon drain, and credential close order.
+  - Composition close on daemon and listener startup failures.
+  - File lease retention through inbound cancellation and drain.
+  - Startup lease release after factory failure or cancellation.
+  - Synchronous receiver failures and response size bounds.
+  - Shared in-flight limit for pipelined requests.
+
+Three other cases passed on rerun with subprocess output captured in regular
+temporary files. They cover packaged CLI help and JSON/CSV exports, launchd
+plist validation, and production dependency packaging.

@@ -22,7 +22,14 @@ const storeShapesTtl = readVocab("answerable-stores.shacl.ttl");
 const shapesTtl = [messageShapesTtl, storeShapesTtl].join("\n");
 const config = JSON.parse(readFileSync(new URL("../codegen.config.json", import.meta.url), "utf8"));
 const original = { ontologyTtl, shapesTtl, config };
-const isStoreEntity = (entity) => ["RecordEntry", "WithheldRecordEntry"].includes(entity.name);
+const isStoreEntity = (entity) =>
+  [
+    "RecordEntry",
+    "WithheldRecordEntry",
+    "TrustPin",
+    "MandateRevocation",
+    "PaymentReservation",
+  ].includes(entity.name);
 function admission(ontologyTtl, shapesTtl, entities) {
   try {
     generateModel({ ontologyTtl, shapesTtl, config: { ...config, entities } });

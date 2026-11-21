@@ -1,4 +1,7 @@
 # AUTHORED-BY Codex GPT-6.2 Sol
+# AUTHORED-BY Codex GPT-6
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix sec: <https://w3id.org/security#> .
 @prefix awp: <https://w3id.org/jeswr/awp#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix vc: <https://www.w3.org/2018/credentials#> .
@@ -400,3 +403,601 @@ awp:transferSubjectText a rdf:Property;
     rdfs:comment "The source claim’s native subject when it supplies text without an identifier.";
     rdfs:domain awp:ItemTransferRecord;
     rdfs:range xsd:string.
+
+awp:RuntimeSnapshot a owl:Class;
+    rdfs:label "runtime snapshot";
+    rdfs:comment "Identifies and versions the complete persisted runtime state." .
+
+awp:StateSection a owl:Class;
+    rdfs:label "state section";
+    rdfs:comment "Identifies one open-value ordered runtime state section." .
+
+awp:StateEntry a owl:Class;
+    rdfs:label "state entry";
+    rdfs:comment "An ordered state entry carrying its native snapshot key." .
+
+awp:TypedStateSection a owl:Class;
+    rdfs:label "typed state section";
+    rdfs:comment "Identifies one typed ordered runtime state section." .
+
+awp:TypedStateEntry a owl:Class;
+    rdfs:label "typed state entry";
+    rdfs:comment "An ordered state entry carrying its native snapshot key." .
+
+awp:TrustPin a owl:Class;
+    rdfs:label "trust pin";
+    rdfs:comment "A locally accepted key, party and purpose association with a fixed expiry." .
+
+awp:MandateRevocation a owl:Class;
+    rdfs:label "mandate revocation";
+    rdfs:comment "The owner-recorded identity, version, digest and date of a revoked mandate." .
+
+awp:PaymentReservation a owl:Class;
+    rdfs:label "payment reservation";
+    rdfs:comment "A reservation of minor currency units in a mandate accounting period." .
+
+awp:TrustStore a owl:Class;
+    rdfs:label "trust store";
+    rdfs:comment "The provisioned local owner, verification keys, and scoped source-authority rules." .
+
+awp:PinnedKey a owl:Class;
+    rdfs:label "pinned key";
+    rdfs:comment "A public verification key pinned to one identity and one role." .
+
+awp:JsonWebKey a owl:Class;
+    rdfs:label "json web key";
+    rdfs:comment "The public scalar components of a JSON Web Key." .
+
+awp:SourceAuthorityRule a owl:Class;
+    rdfs:label "source authority rule";
+    rdfs:comment "Specifies when a source may speak about named subjects and claim kinds." .
+
+awp:PinnedRecordKey a owl:Class;
+    rdfs:label "pinned record key";
+    rdfs:comment "A public key scoped by a record-key delegation." .
+
+awp:RecordKeyDelegation a owl:Class;
+    rdfs:label "record key delegation";
+    rdfs:comment "An exact signed delegation to a record key by an introduced identity." .
+
+awp:TrustController a owl:Class;
+    rdfs:label "trust controller";
+    rdfs:comment "The locally recorded controller of an identity." .
+
+awp:TrustHold a owl:Class;
+    rdfs:label "trust hold";
+    rdfs:comment "A message and exact wire bytes held until its trust conditions can be reviewed." .
+
+awp:TrustRefusal a owl:Class;
+    rdfs:label "trust refusal";
+    rdfs:comment "A remembered refusal of a trust request." .
+
+awp:OwnListEntry a owl:Class;
+    rdfs:label "own list entry";
+    rdfs:comment "An owner-maintained entry about a party accepted for specific tasks." .
+
+awp:RegisterEntry a owl:Class;
+    rdfs:label "register entry";
+    rdfs:comment "A register’s scoped, time-limited entry about a party." .
+
+awp:Register a owl:Class;
+    rdfs:label "register";
+    rdfs:comment "A named source that answers trust queries about a category of parties." .
+
+awp:TrustRoot a owl:Class;
+    rdfs:label "trust root";
+    rdfs:comment "A configured local root and the registers to which it delegates trust queries." .
+
+awp:MemoryScope a owl:Class;
+    rdfs:label "memory scope";
+    rdfs:comment "A task scope, including the shared scope, whose admitted items retain their order." .
+
+awp:MemoryItem a owl:Class;
+    rdfs:label "memory item";
+    rdfs:comment "An admitted or held fact with its native labels and provenance." .
+
+awp:ItemTerms a owl:Class;
+    rdfs:label "item terms";
+    rdfs:comment "The attached ODRL policy and native terms on an item." .
+
+awp:InheritedItemTerms a owl:Class;
+    rdfs:label "inherited item terms";
+    rdfs:comment "Terms inherited for a referenced target, including a known absence of terms." .
+
+awp:OriginalStatement a owl:Class;
+    rdfs:label "original statement";
+    rdfs:comment "An original statement, its digest and evidence before a local transformation." .
+
+awp:RelianceHold a owl:Class;
+    rdfs:label "reliance hold";
+    rdfs:comment "A statement held outside admitted memory pending reliance review." .
+
+awp:KnownIdentifiers a owl:Class;
+    rdfs:label "known identifiers";
+    rdfs:comment "An ordered list of identifiers previously observed in a memory scope." .
+
+awp:StatementRefusal a owl:Class;
+    rdfs:label "statement refusal";
+    rdfs:comment "A remembered statement refusal." .
+
+awp:RelianceBinding a owl:Class;
+    rdfs:label "reliance binding";
+    rdfs:comment "The recorded binding of a reliance identifier." .
+
+awp:DescriptionAddress a owl:Class;
+    rdfs:label "description address";
+    rdfs:comment "A current or former local Agent-Description address." .
+
+awp:StoredMandate a owl:Class;
+    rdfs:label "stored mandate";
+    rdfs:comment "The durable projection of a verified mandate credential and its two policies." .
+
+awp:StandingRule a owl:Class;
+    rdfs:label "standing rule";
+    rdfs:comment "An ordered standing authorization rule from the signed mandate." .
+
+awp:DutyRule a owl:Class;
+    rdfs:label "duty rule";
+    rdfs:comment "A native delete, notify, or onward-information duty from the signed mandate." .
+
+awp:ApprovalGrant a owl:Class;
+    rdfs:label "approval grant";
+    rdfs:comment "A recorded authorization, or a marker of its use in the runtime." .
+
+awp:OrganisationApprovals a owl:Class;
+    rdfs:label "organisation approvals";
+    rdfs:comment "An ordered group of organization approvals for a request." .
+
+awp:RecordHead a owl:Class;
+    rdfs:label "record head";
+    rdfs:comment "A trusted local copy of the record ledger head." .
+
+awp:AuthoredProof a owl:Class;
+    rdfs:label "authored proof";
+    rdfs:comment "A ledger head supporting a locally authored proof or an exact stored approval token." .
+
+awp:RecordedMessage a owl:Class;
+    rdfs:label "recorded message";
+    rdfs:comment "An exact compact message retained for record and credential-admission purposes." .
+
+awp:policyFields a rdf:Property; rdfs:label "policy fields";
+    rdfs:comment "The ordered names of native fields present on an ODRL projection node."; rdfs:domain odrl:Policy; rdfs:range rdfs:Resource .
+
+awp:policyProfile a rdf:Property; rdfs:label "policy profile";
+    rdfs:comment "The original ordered profile list, including explicit emptiness."; rdfs:domain odrl:Policy; rdfs:range rdfs:Resource .
+
+awp:policyRightOperand a rdf:Property; rdfs:label "policy right operand";
+    rdfs:comment "The exact ordered, typed native right operand before RDF set projection."; rdfs:domain odrl:Constraint; rdfs:range rdfs:Resource .
+
+awp:policyOperandDatatype a rdf:Property; rdfs:label "policy operand datatype";
+    rdfs:comment "The explicitly supplied native operand datatype."; rdfs:domain odrl:Constraint; rdfs:range rdfs:Resource .
+
+awp:policyActionSpelling a rdf:Property; rdfs:label "policy action spelling";
+    rdfs:comment "The native spelling when it differs from the standard action short name."; rdfs:domain odrl:Rule; rdfs:range rdfs:Resource .
+
+awp:policyRuleKind a rdf:Property; rdfs:label "policy rule kind";
+    rdfs:comment "The native rule discriminator before projection into an ODRL relation."; rdfs:domain odrl:Rule; rdfs:range rdfs:Resource .
+
+awp:policyApprovals a rdf:Property; rdfs:label "policy approvals";
+    rdfs:comment "The pilot approval requirements supplementing an ODRL rule."; rdfs:domain odrl:Rule; rdfs:range rdfs:Resource .
+
+awp:policyLimit a rdf:Property; rdfs:label "policy limit";
+    rdfs:comment "The pilot accounting limit supplementing an ODRL rule."; rdfs:domain odrl:Rule; rdfs:range rdfs:Resource .
+
+awp:storedBytesDigest a rdf:Property; rdfs:label "stored bytes digest";
+    rdfs:comment "The SHA-256 digest of exact signed bytes in this stored field."; rdfs:domain schema:PropertyValue; rdfs:range rdfs:Resource .
+
+awp:stateVersion a rdf:Property; rdfs:label "state version";
+    rdfs:comment "Records the state version in a durable store projection.";
+    rdfs:domain awp:RuntimeSnapshot; rdfs:range xsd:integer .
+
+awp:snapshotContentsDigest a rdf:Property; rdfs:label "snapshot contents digest";
+    rdfs:comment "Commits to the canonical ordered section, entry, and policy blocks of a runtime snapshot using SHA-256.";
+    rdfs:domain awp:RuntimeSnapshot; rdfs:range xsd:string .
+
+awp:section a rdf:Property; rdfs:label "section";
+    rdfs:comment "Records the section in a durable store projection.";
+    rdfs:domain awp:RuntimeSnapshot; rdfs:range rdfs:Resource .
+
+awp:sectionPresent a rdf:Property; rdfs:label "section present";
+    rdfs:comment "Records the section present in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range xsd:boolean .
+
+awp:stateEntry a rdf:Property; rdfs:label "state entry";
+    rdfs:comment "Records the state entry in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource .
+
+awp:entryKey a rdf:Property; rdfs:label "entry key";
+    rdfs:comment "Records the entry key in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
+
+awp:entryValue a rdf:Property; rdfs:label "entry value";
+    rdfs:comment "Records the entry value in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource .
+
+awp:kid a rdf:Property; rdfs:label "kid";
+    rdfs:comment "Records the kid in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range xsd:string .
+
+awp:admittedPurpose a rdf:Property; rdfs:label "admitted purpose";
+    rdfs:comment "Records the admitted purpose in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource .
+
+awp:effectiveUntil a rdf:Property; rdfs:label "effective until";
+    rdfs:comment "Records the effective until in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
+
+awp:instantLexical a rdf:Property; rdfs:label "instant lexical form";
+    rdfs:comment "Preserves the original spelling of an instant beside its generated date-time projection.";
+    rdfs:domain rdfs:Resource; rdfs:range xsd:string .
+
+awp:stateMandateVersion a rdf:Property; rdfs:label "state mandate version";
+    rdfs:comment "Records the state mandate version in a durable store projection.";
+    rdfs:domain awp:MandateRevocation; rdfs:range xsd:integer .
+
+awp:reservationPeriod a rdf:Property; rdfs:label "reservation period";
+    rdfs:comment "Records the reservation period in a durable store projection.";
+    rdfs:domain awp:PaymentReservation; rdfs:range xsd:string .
+
+awp:amountMinor a rdf:Property; rdfs:label "amount minor";
+    rdfs:comment "Records the amount minor in a durable store projection.";
+    rdfs:domain awp:PaymentReservation; rdfs:range xsd:integer .
+
+awp:storeVersion a rdf:Property; rdfs:label "store version";
+    rdfs:comment "Records the store version in a durable store projection.";
+    rdfs:domain awp:TrustStore; rdfs:range xsd:integer .
+
+awp:owner a rdf:Property; rdfs:label "owner";
+    rdfs:comment "Records the owner in a durable store projection.";
+    rdfs:domain awp:TrustStore; rdfs:range rdfs:Resource .
+
+awp:pinnedKey a rdf:Property; rdfs:label "pinned key";
+    rdfs:comment "Records the pinned key in a durable store projection.";
+    rdfs:domain awp:TrustStore; rdfs:range rdfs:Resource .
+
+awp:sourceAuthorityRule a rdf:Property; rdfs:label "source authority rule";
+    rdfs:comment "Records the source authority rule in a durable store projection.";
+    rdfs:domain awp:TrustStore; rdfs:range rdfs:Resource .
+
+awp:trustController a rdf:Property; rdfs:label "trust controller";
+    rdfs:comment "Records the trust controller in a durable store projection.";
+    rdfs:domain awp:TrustStore; rdfs:range rdfs:Resource .
+
+awp:recordKeyDelegation a rdf:Property; rdfs:label "record key delegation";
+    rdfs:comment "Records the record key delegation in a durable store projection.";
+    rdfs:domain awp:TrustStore; rdfs:range rdfs:Resource .
+
+awp:keyRole a rdf:Property; rdfs:label "key role";
+    rdfs:comment "Records the key role in a durable store projection.";
+    rdfs:domain awp:PinnedKey; rdfs:range rdfs:Resource .
+
+awp:keySubject a rdf:Property; rdfs:label "key subject";
+    rdfs:comment "Records the key subject in a durable store projection.";
+    rdfs:domain awp:PinnedKey; rdfs:range rdfs:Resource .
+
+awp:endpoint a rdf:Property; rdfs:label "endpoint";
+    rdfs:comment "Records the endpoint in a durable store projection.";
+    rdfs:domain awp:PinnedKey; rdfs:range rdfs:Resource .
+
+awp:note a rdf:Property; rdfs:label "note";
+    rdfs:comment "Records the note in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
+
+awp:alg a rdf:Property; rdfs:label "alg";
+    rdfs:comment "Records the alg in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range xsd:string .
+
+awp:publicKey a rdf:Property; rdfs:label "public key";
+    rdfs:comment "Records the public key in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource;
+    skos:relatedMatch sec:publicKeyJwk .
+
+awp:kty a rdf:Property; rdfs:label "kty";
+    rdfs:comment "Records the kty in a durable store projection.";
+    rdfs:domain awp:JsonWebKey; rdfs:range xsd:string .
+
+awp:crv a rdf:Property; rdfs:label "crv";
+    rdfs:comment "Records the crv in a durable store projection.";
+    rdfs:domain awp:JsonWebKey; rdfs:range xsd:string .
+
+awp:x a rdf:Property; rdfs:label "x";
+    rdfs:comment "Records the x in a durable store projection.";
+    rdfs:domain awp:JsonWebKey; rdfs:range xsd:string .
+
+awp:y a rdf:Property; rdfs:label "y";
+    rdfs:comment "Records the y in a durable store projection.";
+    rdfs:domain awp:JsonWebKey; rdfs:range xsd:string .
+
+awp:source a rdf:Property; rdfs:label "source";
+    rdfs:comment "Records the source in a durable store projection.";
+    rdfs:domain awp:SourceAuthorityRule; rdfs:range rdfs:Resource .
+
+awp:subjects a rdf:Property; rdfs:label "subjects";
+    rdfs:comment "Records the subjects in a durable store projection.";
+    rdfs:domain awp:SourceAuthorityRule; rdfs:range rdfs:Resource .
+
+awp:effectiveFrom a rdf:Property; rdfs:label "effective from";
+    rdfs:comment "Records the effective from in a durable store projection.";
+    rdfs:domain awp:SourceAuthorityRule; rdfs:range rdfs:Literal .
+
+awp:framework a rdf:Property; rdfs:label "framework";
+    rdfs:comment "Records the framework in a durable store projection.";
+    rdfs:domain awp:SourceAuthorityRule; rdfs:range rdfs:Resource .
+
+awp:identity a rdf:Property; rdfs:label "identity";
+    rdfs:comment "Records the identity in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource .
+
+awp:recordPublicKey a rdf:Property; rdfs:label "record public key";
+    rdfs:comment "Records the record public key in a durable store projection.";
+    rdfs:domain awp:RecordKeyDelegation; rdfs:range rdfs:Resource .
+
+awp:delegation a rdf:Property; rdfs:label "delegation";
+    rdfs:comment "Records the delegation in a durable store projection.";
+    rdfs:domain awp:RecordKeyDelegation; rdfs:range rdfs:Literal .
+
+awp:delegationDigest a rdf:Property; rdfs:label "delegation digest";
+    rdfs:comment "Records the delegation digest in a durable store projection.";
+    rdfs:domain awp:RecordKeyDelegation; rdfs:range xsd:string .
+
+awp:trustMessage a rdf:Property; rdfs:label "trust message";
+    rdfs:comment "Records the trust message in a durable store projection.";
+    rdfs:domain awp:TrustHold; rdfs:range rdfs:Resource .
+
+awp:trustWire a rdf:Property; rdfs:label "trust wire";
+    rdfs:comment "Records the trust wire in a durable store projection.";
+    rdfs:domain awp:TrustHold; rdfs:range rdfs:Resource .
+
+awp:trustRefused a rdf:Property; rdfs:label "trust refused";
+    rdfs:comment "Records the trust refused in a durable store projection.";
+    rdfs:domain awp:TrustRefusal; rdfs:range xsd:boolean .
+
+awp:trustTasks a rdf:Property; rdfs:label "trust tasks";
+    rdfs:comment "Records the trust tasks in a durable store projection.";
+    rdfs:domain awp:OwnListEntry; rdfs:range rdfs:Resource .
+
+awp:trustBlocked a rdf:Property; rdfs:label "trust blocked";
+    rdfs:comment "Records the trust blocked in a durable store projection.";
+    rdfs:domain awp:OwnListEntry; rdfs:range xsd:boolean .
+
+awp:authorizedFor a rdf:Property; rdfs:label "authorized for";
+    rdfs:comment "Records the authorized for in a durable store projection.";
+    rdfs:domain awp:RegisterEntry; rdfs:range rdfs:Resource .
+
+awp:trustStatus a rdf:Property; rdfs:label "trust status";
+    rdfs:comment "Records the trust status in a durable store projection.";
+    rdfs:domain awp:RegisterEntry; rdfs:range xsd:string .
+
+awp:answersFor a rdf:Property; rdfs:label "answers for";
+    rdfs:comment "Records the answers for in a durable store projection.";
+    rdfs:domain awp:Register; rdfs:range xsd:string .
+
+awp:registerEntry a rdf:Property; rdfs:label "register entry";
+    rdfs:comment "Records the register entry in a durable store projection.";
+    rdfs:domain awp:Register; rdfs:range rdfs:Resource .
+
+awp:answerTtlMs a rdf:Property; rdfs:label "answer ttl ms";
+    rdfs:comment "Records the answer ttl ms in a durable store projection.";
+    rdfs:domain awp:Register; rdfs:range xsd:integer .
+
+awp:trustRegister a rdf:Property; rdfs:label "trust register";
+    rdfs:comment "Records the trust register in a durable store projection.";
+    rdfs:domain awp:TrustRoot; rdfs:range rdfs:Resource .
+
+awp:memoryItem a rdf:Property; rdfs:label "memory item";
+    rdfs:comment "Records the memory item in a durable store projection.";
+    rdfs:domain awp:MemoryScope; rdfs:range rdfs:Resource .
+
+awp:compactProofDigest a rdf:Property; rdfs:label "compact proof digest";
+    rdfs:comment "Records the compact proof digest in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range xsd:string .
+
+awp:identifiers a rdf:Property; rdfs:label "identifiers";
+    rdfs:comment "Records the identifiers in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource .
+
+awp:supersededBy a rdf:Property; rdfs:label "superseded by";
+    rdfs:comment "Records the superseded by in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range rdfs:Resource .
+
+awp:disputedWith a rdf:Property; rdfs:label "disputed with";
+    rdfs:comment "Records the disputed with in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range rdfs:Resource .
+
+awp:admittingDelivery a rdf:Property; rdfs:label "admitting delivery";
+    rdfs:comment "Records the admitting delivery in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range rdfs:Resource .
+
+awp:original a rdf:Property; rdfs:label "original";
+    rdfs:comment "Records the original in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range rdfs:Resource .
+
+awp:itemKind a rdf:Property; rdfs:label "item kind";
+    rdfs:comment "Records the item kind in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range rdfs:Resource .
+
+awp:accepted a rdf:Property; rdfs:label "accepted";
+    rdfs:comment "Records the accepted in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range xsd:boolean .
+
+awp:admissionOrder a rdf:Property; rdfs:label "admission order";
+    rdfs:comment "Records the admission order in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range xsd:integer .
+
+awp:dataUseGrant a rdf:Property; rdfs:label "data use grant";
+    rdfs:comment "Records the data use grant in a durable store projection.";
+    rdfs:domain awp:MemoryItem; rdfs:range rdfs:Resource .
+
+awp:minimumGroup a rdf:Property; rdfs:label "minimum group";
+    rdfs:comment "Records the minimum group in a durable store projection.";
+    rdfs:domain awp:ItemTerms; rdfs:range xsd:integer .
+
+awp:deleteWithinDays a rdf:Property; rdfs:label "delete within days";
+    rdfs:comment "Records the delete within days in a durable store projection.";
+    rdfs:domain awp:ItemTerms; rdfs:range rdfs:Resource .
+
+awp:recipientMustBe a rdf:Property; rdfs:label "recipient must be";
+    rdfs:comment "Records the recipient must be in a durable store projection.";
+    rdfs:domain awp:ItemTerms; rdfs:range rdfs:Resource .
+
+awp:inheritedTerms a rdf:Property; rdfs:label "inherited terms";
+    rdfs:comment "Records the inherited terms in a durable store projection.";
+    rdfs:domain awp:ItemTerms; rdfs:range rdfs:Resource .
+
+awp:evidenceBytes a rdf:Property; rdfs:label "evidence bytes";
+    rdfs:comment "Records the evidence bytes in a durable store projection.";
+    rdfs:domain awp:EvidenceItem; rdfs:range xsd:string .
+
+awp:evidenceBytesDigest a rdf:Property; rdfs:label "evidence bytes digest";
+    rdfs:comment "Records the evidence bytes digest in a durable store projection.";
+    rdfs:domain awp:EvidenceItem; rdfs:range xsd:string .
+
+awp:memoryTask a rdf:Property; rdfs:label "memory task";
+    rdfs:comment "Records the memory task in a durable store projection.";
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Resource .
+
+awp:relianceReason a rdf:Property; rdfs:label "reliance reason";
+    rdfs:comment "Records the reliance reason in a durable store projection.";
+    rdfs:domain awp:RelianceHold; rdfs:range xsd:string .
+
+awp:refusedStatement a rdf:Property; rdfs:label "refused statement";
+    rdfs:comment "Records the refused statement in a durable store projection.";
+    rdfs:domain awp:StatementRefusal; rdfs:range xsd:string .
+
+awp:relianceBinding a rdf:Property; rdfs:label "reliance binding";
+    rdfs:comment "Records the reliance binding in a durable store projection.";
+    rdfs:domain awp:RelianceBinding; rdfs:range xsd:string .
+
+awp:descriptionAddress a rdf:Property; rdfs:label "description address";
+    rdfs:comment "Records the description address in a durable store projection.";
+    rdfs:domain awp:DescriptionAddress; rdfs:range rdfs:Resource .
+
+awp:mandateCredentialDigest a rdf:Property; rdfs:label "mandate credential digest";
+    rdfs:comment "Records the mandate credential digest in a durable store projection.";
+    rdfs:domain awp:StoredMandate; rdfs:range xsd:string .
+
+awp:autonomousPolicy a rdf:Property; rdfs:label "autonomous policy";
+    rdfs:comment "Records the autonomous policy in a durable store projection.";
+    rdfs:domain awp:StoredMandate; rdfs:range rdfs:Resource .
+
+awp:withApprovalPolicy a rdf:Property; rdfs:label "with approval policy";
+    rdfs:comment "Records the with approval policy in a durable store projection.";
+    rdfs:domain awp:StoredMandate; rdfs:range rdfs:Resource .
+
+awp:standingRules a rdf:Property; rdfs:label "standing rules";
+    rdfs:comment "Records the standing rules in a durable store projection.";
+    rdfs:domain awp:StoredMandate; rdfs:range rdfs:Resource .
+
+awp:dutyRules a rdf:Property; rdfs:label "duty rules";
+    rdfs:comment "Records the duty rules in a durable store projection.";
+    rdfs:domain awp:StoredMandate; rdfs:range rdfs:Resource .
+
+awp:standingWhen a rdf:Property; rdfs:label "standing when";
+    rdfs:comment "Records the standing when in a durable store projection.";
+    rdfs:domain awp:StandingRule; rdfs:range rdfs:Resource .
+
+awp:standingAllows a rdf:Property; rdfs:label "standing allows";
+    rdfs:comment "Records the standing allows in a durable store projection.";
+    rdfs:domain awp:StandingRule; rdfs:range rdfs:Resource .
+
+awp:standingDuties a rdf:Property; rdfs:label "standing duties";
+    rdfs:comment "Records the standing duties in a durable store projection.";
+    rdfs:domain awp:StandingRule; rdfs:range rdfs:Resource .
+
+awp:dutyKind a rdf:Property; rdfs:label "duty kind";
+    rdfs:comment "Records the duty kind in a durable store projection.";
+    rdfs:domain awp:DutyRule; rdfs:range xsd:string .
+
+awp:dutyItems a rdf:Property; rdfs:label "duty items";
+    rdfs:comment "Records the duty items in a durable store projection.";
+    rdfs:domain awp:DutyRule; rdfs:range rdfs:Resource .
+
+awp:dutyOn a rdf:Property; rdfs:label "duty on";
+    rdfs:comment "Records the duty on in a durable store projection.";
+    rdfs:domain awp:DutyRule; rdfs:range xsd:string .
+
+awp:dutyParties a rdf:Property; rdfs:label "duty parties";
+    rdfs:comment "Records the duty parties in a durable store projection.";
+    rdfs:domain awp:DutyRule; rdfs:range rdfs:Resource .
+
+awp:dutyWithinSeconds a rdf:Property; rdfs:label "duty within seconds";
+    rdfs:comment "Records the duty within seconds in a durable store projection.";
+    rdfs:domain awp:DutyRule; rdfs:range rdfs:Resource .
+
+awp:dutyEvent a rdf:Property; rdfs:label "duty event";
+    rdfs:comment "Records the duty event in a durable store projection.";
+    rdfs:domain awp:DutyRule; rdfs:range xsd:string .
+
+awp:approvalDecisionName a rdf:Property; rdfs:label "approval decision name";
+    rdfs:comment "Records the approval decision name in a durable store projection.";
+    rdfs:domain awp:ApprovalGrant; rdfs:range xsd:string .
+
+awp:approvalPayment a rdf:Property; rdfs:label "approval payment";
+    rdfs:comment "Records the approval payment in a durable store projection.";
+    rdfs:domain awp:ApprovalGrant; rdfs:range rdfs:Resource .
+
+awp:approvalUsed a rdf:Property; rdfs:label "approval used";
+    rdfs:comment "Records the approval used in a durable store projection.";
+    rdfs:domain awp:ApprovalGrant; rdfs:range xsd:boolean .
+
+awp:approvalSigner a rdf:Property; rdfs:label "approval signer";
+    rdfs:comment "Records the approval signer in a durable store projection.";
+    rdfs:domain awp:ApprovalGrant; rdfs:range rdfs:Resource .
+
+awp:issuedAt a rdf:Property; rdfs:label "issued at";
+    rdfs:comment "Records the issued at in a durable store projection.";
+    rdfs:domain awp:ApprovalGrant; rdfs:range rdfs:Literal .
+
+awp:approvalItems a rdf:Property; rdfs:label "approval items";
+    rdfs:comment "Records the approval items in a durable store projection.";
+    rdfs:domain awp:OrganisationApprovals; rdfs:range rdfs:Resource .
+
+awp:requestDigest a rdf:Property; rdfs:label "request digest";
+    rdfs:comment "Records the request digest in a durable store projection.";
+    rdfs:domain awp:AuthoredProof; rdfs:range xsd:string .
+
+awp:recordDirection a rdf:Property; rdfs:label "record direction";
+    rdfs:comment "Records the record direction in a durable store projection.";
+    rdfs:domain awp:RecordedMessage; rdfs:range xsd:string .
+
+awp:recordJws a rdf:Property; rdfs:label "record jws";
+    rdfs:comment "Records the record jws in a durable store projection.";
+    rdfs:domain awp:RecordedMessage; rdfs:range xsd:string .
+
+awp:recordJwsDigest a rdf:Property; rdfs:label "record jws digest";
+    rdfs:comment "Records the record jws digest in a durable store projection.";
+    rdfs:domain awp:RecordedMessage; rdfs:range xsd:string .
+
+awp:credentialsAdmitted a rdf:Property; rdfs:label "credentials admitted";
+    rdfs:comment "Records the credentials admitted in a durable store projection.";
+    rdfs:domain awp:RecordedMessage; rdfs:range xsd:boolean .
+
+<https://w3id.org/jeswr/awp#pay> a odrl:Action; rdfs:label "pay";
+    rdfs:comment "Pilot payment action pending an ODRL profile decision." .
+
+<https://w3id.org/jeswr/awp#anySubject> a owl:NamedIndividual; rdfs:label "any subject";
+    rdfs:comment "Allows any subject under a source-authority rule." .
+
+<https://w3id.org/jeswr/awp#key-role/actor> a owl:NamedIndividual; rdfs:label "actor";
+    rdfs:comment "Public key pinned for the actor role." .
+
+<https://w3id.org/jeswr/awp#key-role/party> a owl:NamedIndividual; rdfs:label "party";
+    rdfs:comment "Public key pinned for the party role." .
+
+<https://w3id.org/jeswr/awp#key-role/issuer> a owl:NamedIndividual; rdfs:label "issuer";
+    rdfs:comment "Public key pinned for the issuer role." .
+
+<https://w3id.org/jeswr/awp#item-kind/statement> a owl:NamedIndividual; rdfs:label "statement";
+    rdfs:comment "An item admitted under the statement memory kind." .
+
+<https://w3id.org/jeswr/awp#item-kind/memory> a owl:NamedIndividual; rdfs:label "memory";
+    rdfs:comment "An item admitted under the memory memory kind." .
+
+<https://w3id.org/jeswr/awp#item-kind/message> a owl:NamedIndividual; rdfs:label "message";
+    rdfs:comment "An item admitted under the message memory kind." .
+
+<https://w3id.org/jeswr/awp#item-kind/reading> a owl:NamedIndividual; rdfs:label "reading";
+    rdfs:comment "An item admitted under the reading memory kind." .
+
+<https://w3id.org/jeswr/awp#item-kind/content> a owl:NamedIndividual; rdfs:label "content";
+    rdfs:comment "An item admitted under the content memory kind." .

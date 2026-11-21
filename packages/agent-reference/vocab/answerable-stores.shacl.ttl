@@ -1,4 +1,6 @@
 # AUTHORED-BY Codex GPT-6.2 Sol
+# AUTHORED-BY Codex GPT-6
+@prefix sec: <https://w3id.org/security#> .
 @prefix awp: <https://w3id.org/jeswr/awp#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix vc: <https://www.w3.org/2018/credentials#> .
@@ -192,3 +194,343 @@ awp:StoreValueEntryShape a sh:NodeShape;
     sh:property [ sh:path schema:propertyID; sh:nodeKind sh:IRI; sh:minCount 1; sh:maxCount 1 ];
     sh:property [ sh:path schema:value; sh:minCount 1; sh:maxCount 1;
         sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ].
+
+awp:RuntimeSnapshotShape a sh:NodeShape;
+    sh:targetClass awp:RuntimeSnapshot;
+    sh:name "RuntimeSnapshot";
+    sh:property [ sh:path awp:stateVersion; sh:name "stateVersion"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:snapshotContentsDigest; sh:name "snapshotContentsDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:section; sh:name "section"; sh:minCount 1; sh:nodeKind sh:IRI ] .
+
+awp:StateSectionShape a sh:NodeShape;
+    sh:targetClass awp:StateSection;
+    sh:name "StateSection";
+    sh:property [ sh:path awp:sectionPresent; sh:name "sectionPresent"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:boolean ];
+    sh:property [ sh:path awp:stateEntry; sh:name "stateEntry"; sh:node awp:StateEntryShape ] .
+
+awp:StateEntryShape a sh:NodeShape;
+    sh:targetClass awp:StateEntry;
+    sh:name "StateEntry";
+    sh:property [ sh:path awp:entryKey; sh:name "entryKey"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path schema:position; sh:name "position"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:entryValue; sh:name "entryValue"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ] .
+
+awp:TypedStateSectionShape a sh:NodeShape;
+    sh:targetClass awp:TypedStateSection;
+    sh:name "TypedStateSection";
+    sh:property [ sh:path awp:sectionPresent; sh:name "sectionPresent"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:boolean ];
+    sh:property [ sh:path awp:stateEntry; sh:name "stateEntry"; sh:node awp:TypedStateEntryShape ] .
+
+awp:TypedStateEntryShape a sh:NodeShape;
+    sh:targetClass awp:TypedStateEntry;
+    sh:name "TypedStateEntry";
+    sh:property [ sh:path awp:entryKey; sh:name "entryKey"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path schema:position; sh:name "position"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:entryValue; sh:name "entryValue"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype rdf:JSON ] ) ] .
+
+awp:TrustPinShape a sh:NodeShape;
+    sh:targetClass awp:TrustPin;
+    sh:name "TrustPin";
+    sh:property [ sh:path awp:kid; sh:name "kid"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:admittedPurpose; sh:name "purpose"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "expiresAt"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:dateTime ];
+    sh:property [ sh:path awp:instantLexical; sh:name "instantLexical"; sh:maxCount 1; sh:datatype xsd:string ] .
+
+awp:MandateRevocationShape a sh:NodeShape;
+    sh:targetClass awp:MandateRevocation;
+    sh:name "MandateRevocation";
+    sh:property [ sh:path awp:recordIdentifier; sh:name "mandateId"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:stateMandateVersion; sh:name "version"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:at; sh:name "at"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:dateTime ];
+    sh:property [ sh:path awp:instantLexical; sh:name "instantLexical"; sh:maxCount 1; sh:datatype xsd:string ] .
+
+awp:PaymentReservationShape a sh:NodeShape;
+    sh:targetClass awp:PaymentReservation;
+    sh:name "PaymentReservation";
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:reservationPeriod; sh:name "period"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:amountMinor; sh:name "amountMinor"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ] .
+
+awp:TrustStoreShape a sh:NodeShape;
+    sh:targetClass awp:TrustStore;
+    sh:name "TrustStore";
+    sh:property [ sh:path awp:storeVersion; sh:name "storeVersion"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:owner; sh:name "owner"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:pinnedKey; sh:name "pinnedKey"; sh:node awp:PinnedKeyShape ];
+    sh:property [ sh:path awp:sourceAuthorityRule; sh:name "sourceAuthorityRule"; sh:node awp:StoreSourceAuthorityRuleShape ];
+    sh:property [ sh:path awp:trustController; sh:name "trustController"; sh:node awp:TrustControllerShape ];
+    sh:property [ sh:path awp:recordKeyDelegation; sh:name "recordKeyDelegation"; sh:node awp:RecordKeyDelegationShape ] .
+
+awp:PinnedKeyShape a sh:NodeShape;
+    sh:targetClass awp:PinnedKey;
+    sh:name "PinnedKey";
+    sh:property [ sh:path awp:keyRole; sh:name "keyRole"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:keySubject; sh:name "keySubject"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:endpoint; sh:name "endpoint"; sh:maxCount 1; sh:or ( [ sh:node awp:StoreOrderedValuesShape ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:note; sh:name "note"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:kid; sh:name "kid"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:alg; sh:name "alg"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:publicKey; sh:name "publicKey"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreJsonWebKeyShape ] .
+
+awp:StoreJsonWebKeyShape a sh:NodeShape;
+    sh:targetClass awp:JsonWebKey;
+    sh:name "JsonWebKey";
+    sh:property [ sh:path awp:kty; sh:name "kty"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:crv; sh:name "crv"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:x; sh:name "x"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:y; sh:name "y"; sh:maxCount 1; sh:datatype xsd:string ] .
+
+awp:StoreSourceAuthorityRuleShape a sh:NodeShape;
+    sh:targetClass awp:SourceAuthorityRule;
+    sh:name "SourceAuthorityRule";
+    sh:property [ sh:path awp:recordIdentifier; sh:name "id"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:version; sh:name "version"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:source; sh:name "source"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:claimType; sh:name "claimType"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:node awp:StoreOrderedValuesShape ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:subjects; sh:name "subjects"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:effectiveFrom; sh:name "effectiveFrom"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
+    sh:property [ sh:path awp:framework; sh:name "framework"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ] .
+
+awp:PinnedRecordKeyShape a sh:NodeShape;
+    sh:targetClass awp:PinnedRecordKey;
+    sh:name "PinnedRecordKey";
+    sh:property [ sh:path awp:kid; sh:name "kid"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:alg; sh:name "alg"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:publicKey; sh:name "publicKey"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreJsonWebKeyShape ] .
+
+awp:RecordKeyDelegationShape a sh:NodeShape;
+    sh:targetClass awp:RecordKeyDelegation;
+    sh:name "RecordKeyDelegation";
+    sh:property [ sh:path awp:identity; sh:name "identity"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:recordPublicKey; sh:name "recordPublicKey"; sh:maxCount 1; sh:minCount 1; sh:node awp:PinnedRecordKeyShape ];
+    sh:property [ sh:path awp:delegation; sh:name "delegation"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:delegationDigest; sh:name "delegationDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
+
+awp:TrustControllerShape a sh:NodeShape;
+    sh:targetClass awp:TrustController;
+    sh:name "TrustController";
+    sh:property [ sh:path awp:identity; sh:name "identity"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path sec:controller; sh:name "controller"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path schema:position; sh:name "position"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ] .
+
+awp:TrustHoldShape a sh:NodeShape;
+    sh:targetClass awp:TrustHold;
+    sh:name "TrustHold";
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:trustMessage; sh:name "trustMessage"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:trustWire; sh:name "trustWire"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:recordBinding; sh:name "recordBinding"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:kid; sh:name "kid"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:admittedPurpose; sh:name "admittedPurpose"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ] .
+
+awp:TrustRefusalShape a sh:NodeShape;
+    sh:targetClass awp:TrustRefusal;
+    sh:name "TrustRefusal";
+    sh:property [ sh:path awp:trustRefused; sh:name "trustRefused"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:boolean; sh:in ( true ) ] .
+
+awp:OwnListEntryShape a sh:NodeShape;
+    sh:targetClass awp:OwnListEntry;
+    sh:name "OwnListEntry";
+    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:trustTasks; sh:name "trustTasks"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:trustBlocked; sh:name "trustBlocked"; sh:maxCount 1; sh:datatype xsd:boolean ];
+    sh:property [ sh:path awp:note; sh:name "note"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:datatype xsd:dateTime ] .
+
+awp:RegisterEntryShape a sh:NodeShape;
+    sh:targetClass awp:RegisterEntry;
+    sh:name "RegisterEntry";
+    sh:property [ sh:path awp:recordIdentifier; sh:name "id"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:authorizedFor; sh:name "authorizedFor"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:claimType; sh:name "claimType"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:trustStatus; sh:name "trustStatus"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:datatype xsd:dateTime ] .
+
+awp:RegisterShape a sh:NodeShape;
+    sh:targetClass awp:Register;
+    sh:name "Register";
+    sh:property [ sh:path rdfs:label; sh:name "label"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:answersFor; sh:name "answersFor"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:registerEntry; sh:name "registerEntry"; sh:node awp:RegisterEntryShape ];
+    sh:property [ sh:path awp:answerTtlMs; sh:name "answerTtlMs"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ] .
+
+awp:TrustRootShape a sh:NodeShape;
+    sh:targetClass awp:TrustRoot;
+    sh:name "TrustRoot";
+    sh:property [ sh:path rdfs:label; sh:name "label"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:trustRegister; sh:name "trustRegister"; sh:node awp:RegisterShape ] .
+
+awp:MemoryScopeShape a sh:NodeShape;
+    sh:targetClass awp:MemoryScope;
+    sh:name "MemoryScope";
+    sh:property [ sh:path awp:memoryItem; sh:name "memoryItem"; sh:node awp:MemoryItemShape ] .
+
+awp:MemoryItemShape a sh:NodeShape;
+    sh:targetClass awp:MemoryItem;
+    sh:name "MemoryItem";
+    sh:property [ sh:path awp:recordIdentifier; sh:name "id"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path rdfs:label; sh:name "label"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:claimType; sh:name "claimType"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path prov:wasAttributedTo; sh:name "wasAttributedTo"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ];
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:compactProofDigest; sh:name "compactProofDigest"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:subject; sh:name "subject"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ];
+    sh:property [ sh:path awp:method; sh:name "method"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ];
+    sh:property [ sh:path awp:asOf; sh:name "asOf"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
+    sh:property [ sh:path awp:identifiers; sh:name "identifiers"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:admittedPurpose; sh:name "admittedPurpose"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:supersededBy; sh:name "supersededBy"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:disputedWith; sh:name "disputedWith"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:admittingDelivery; sh:name "admittingDelivery"; sh:maxCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:original; sh:name "original"; sh:maxCount 1; sh:node awp:OriginalStatementShape ];
+    sh:property [ sh:path awp:statement; sh:name "statement"; sh:maxCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:itemKind; sh:name "itemKind"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:accepted; sh:name "accepted"; sh:maxCount 1; sh:datatype xsd:boolean ];
+    sh:property [ sh:path awp:admissionOrder; sh:name "admissionOrder"; sh:maxCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:terms; sh:name "terms"; sh:maxCount 1; sh:node awp:ItemTermsShape ];
+    sh:property [ sh:path awp:dataUseGrant; sh:name "dataUseGrant"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path odrl:hasPolicy; sh:name "hasPolicy"; sh:maxCount 1; sh:nodeKind sh:IRI ] .
+
+awp:ItemTermsShape a sh:NodeShape;
+    sh:targetClass awp:ItemTerms;
+    sh:name "ItemTerms";
+    sh:property [ sh:path awp:minimumGroup; sh:name "minimumGroup"; sh:maxCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:deleteWithinDays; sh:name "deleteWithinDays"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ];
+    sh:property [ sh:path awp:recipientMustBe; sh:name "recipientMustBe"; sh:maxCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path odrl:hasPolicy; sh:name "hasPolicy"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:inheritedTerms; sh:name "inheritedTerms"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ] .
+
+awp:InheritedItemTermsShape a sh:NodeShape;
+    sh:targetClass awp:InheritedItemTerms;
+    sh:name "InheritedItemTerms";
+    sh:property [ sh:path awp:protectedObject; sh:name "protectedObject"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:terms; sh:name "terms"; sh:maxCount 1; sh:node awp:ItemTermsShape ] .
+
+awp:OriginalStatementShape a sh:NodeShape;
+    sh:targetClass awp:OriginalStatement;
+    sh:name "OriginalStatement";
+    sh:property [ sh:path awp:recordIdentifier; sh:name "id"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:statement; sh:name "statement"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:evidence; sh:name "evidence"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreEvidenceItemShape ] .
+
+awp:StoreEvidenceItemShape a sh:NodeShape;
+    sh:targetClass awp:EvidenceItem;
+    sh:name "EvidenceItem";
+    sh:property [ sh:path awp:role; sh:name "role"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:format; sh:name "format"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:evidenceBytes; sh:name "evidenceBytes"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:evidenceBytesDigest; sh:name "evidenceBytesDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
+
+awp:RelianceHoldShape a sh:NodeShape;
+    sh:targetClass awp:RelianceHold;
+    sh:name "RelianceHold";
+    sh:property [ sh:path awp:memoryTask; sh:name "memoryTask"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ];
+    sh:property [ sh:path awp:statement; sh:name "statement"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:relianceReason; sh:name "relianceReason"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
+
+awp:KnownIdentifiersShape a sh:NodeShape;
+    sh:targetClass awp:KnownIdentifiers;
+    sh:name "KnownIdentifiers";
+    sh:property [ sh:path awp:identifiers; sh:name "identifiers"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreOrderedValuesShape ] .
+
+awp:StatementRefusalShape a sh:NodeShape;
+    sh:targetClass awp:StatementRefusal;
+    sh:name "StatementRefusal";
+    sh:property [ sh:path awp:refusedStatement; sh:name "refusedStatement"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
+
+awp:RelianceBindingShape a sh:NodeShape;
+    sh:targetClass awp:RelianceBinding;
+    sh:name "RelianceBinding";
+    sh:property [ sh:path awp:relianceBinding; sh:name "relianceBinding"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
+
+awp:DescriptionAddressShape a sh:NodeShape;
+    sh:targetClass awp:DescriptionAddress;
+    sh:name "DescriptionAddress";
+    sh:property [ sh:path awp:descriptionAddress; sh:name "descriptionAddress"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ] .
+
+awp:StoredMandateShape a sh:NodeShape;
+    sh:targetClass awp:StoredMandate;
+    sh:name "StoredMandate";
+    sh:property [ sh:path awp:mandateCredential; sh:name "mandateCredential"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:mandateCredentialDigest; sh:name "mandateCredentialDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:autonomousPolicy; sh:name "autonomousPolicy"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:withApprovalPolicy; sh:name "withApprovalPolicy"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:standingRules; sh:name "standingRules"; sh:node awp:StandingRuleShape ];
+    sh:property [ sh:path awp:dutyRules; sh:name "dutyRules"; sh:node awp:DutyRuleShape ] .
+
+awp:StandingRuleShape a sh:NodeShape;
+    sh:targetClass awp:StandingRule;
+    sh:name "StandingRule";
+    sh:property [ sh:path awp:standingWhen; sh:name "standingWhen"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:standingAllows; sh:name "standingAllows"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:standingDuties; sh:name "standingDuties"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:dateTime ] .
+
+awp:DutyRuleShape a sh:NodeShape;
+    sh:targetClass awp:DutyRule;
+    sh:name "DutyRule";
+    sh:property [ sh:path awp:dutyKind; sh:name "dutyKind"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:dutyItems; sh:name "dutyItems"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:datatype xsd:dateTime ];
+    sh:property [ sh:path awp:dutyOn; sh:name "dutyOn"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:dutyParties; sh:name "dutyParties"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ];
+    sh:property [ sh:path awp:dutyWithinSeconds; sh:name "dutyWithinSeconds"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ];
+    sh:property [ sh:path awp:dutyEvent; sh:name "dutyEvent"; sh:maxCount 1; sh:datatype xsd:string ] .
+
+awp:ApprovalGrantShape a sh:NodeShape;
+    sh:targetClass awp:ApprovalGrant;
+    sh:name "ApprovalGrant";
+    sh:property [ sh:path awp:recordIdentifier; sh:name "recordIdentifier"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:approvalDecisionName; sh:name "approvalDecisionName"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
+    sh:property [ sh:path awp:approvalJws; sh:name "approvalJws"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:approvalJwsDigest; sh:name "approvalJwsDigest"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:approvalPayment; sh:name "approvalPayment"; sh:maxCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:recordApprovalBinding; sh:name "recordApprovalBinding"; sh:maxCount 1; sh:node awp:StoreNamedValuesShape ];
+    sh:property [ sh:path awp:approvalUsed; sh:name "approvalUsed"; sh:maxCount 1; sh:datatype xsd:boolean; sh:in ( true ) ];
+    sh:property [ sh:path awp:approvalSigner; sh:name "approvalSigner"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:actor; sh:name "actor"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:actionDigest; sh:name "actionDigest"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:conversation; sh:name "conversation"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:issuedAt; sh:name "issuedAt"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
+    sh:property [ sh:path awp:kid; sh:name "kid"; sh:maxCount 1; sh:datatype xsd:string ] .
+
+awp:OrganisationApprovalsShape a sh:NodeShape;
+    sh:targetClass awp:OrganisationApprovals;
+    sh:name "OrganisationApprovals";
+    sh:property [ sh:path awp:approvalItems; sh:name "approvalItems"; sh:node awp:ApprovalGrantShape ] .
+
+awp:RecordHeadShape a sh:NodeShape;
+    sh:targetClass awp:RecordHead;
+    sh:name "RecordHead";
+    sh:property [ sh:path awp:sequence; sh:name "sequence"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:entryHash; sh:name "entryHash"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
+
+awp:AuthoredProofShape a sh:NodeShape;
+    sh:targetClass awp:AuthoredProof;
+    sh:name "AuthoredProof";
+    sh:property [ sh:path awp:sequence; sh:name "sequence"; sh:maxCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:entryHash; sh:name "entryHash"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:memoryTask; sh:name "memoryTask"; sh:maxCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:requestDigest; sh:name "requestDigest"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:approvalJws; sh:name "approvalJws"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:approvalJwsDigest; sh:name "approvalJwsDigest"; sh:maxCount 1; sh:datatype xsd:string ] .
+
+awp:RecordedMessageShape a sh:NodeShape;
+    sh:targetClass awp:RecordedMessage;
+    sh:name "RecordedMessage";
+    sh:property [ sh:path awp:recordDirection; sh:name "recordDirection"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:conversation; sh:name "conversation"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:digest; sh:name "digest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:recordJws; sh:name "recordJws"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:recordJwsDigest; sh:name "recordJwsDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:credentialsAdmitted; sh:name "credentialsAdmitted"; sh:maxCount 1; sh:datatype xsd:boolean ] .

@@ -320,3 +320,53 @@ The store ontology and SHACL shapes are published in `vocab/answerable-stores.tt
 and `vocab/answerable-stores.shacl.ttl`. The separately pinned
 `vocab/context/store-v1.jsonld` context is for display. The engine keeps the scenario
 ledger in memory and builds record graphs only when a consumer requests them.
+
+## Durable runtime state and trust
+
+`FileStateStore` keeps the configured filename and writes version 2 N-Quads.
+The default graph declares the snapshot and its sections and holds a SHA-256
+digest of the canonical section, entry, and policy blocks. Each section graph
+retains native entry order, with ODRL item policies in named graphs. The digest
+is unkeyed and detects accidental truncation or corruption. Anyone who can
+write the file can edit its contents and recompute the digest. Local files
+are inside the trust boundary. The ledger provides tamper evidence for
+recorded events when verified against a trusted head. Version 1 JSON has
+no snapshot digest and becomes version 2 on the next successful save.
+Startup and offline audit refuse empty, malformed, or incomplete RDF snapshots,
+including earlier version 2 snapshots without a digest. Restore a trusted backup
+if you have one. A trusted version 1 JSON backup can still be opened and migrated.
+
+File saves compare each entry's JSON text with the previous save and reuse its
+N-Quads block when unchanged. Positions can change independently of payloads.
+The save verifies that each outgoing block contains complete canonical N-Quads
+statements and compares the decoded state before the atomic replacement.
+Unchanged blocks reuse their validation. The file and
+containing directory are synced around the replacement. Snapshots preserve
+runtime-admitted timestamp spellings and escape unpaired surrogates in RDF JSON
+literals. Open values can also use RDF JSON when they exceed the named-value
+projection limits. Inherited item terms can nest up to 32 levels and expand at
+most 8,192 inherited references across the whole RDF snapshot.
+
+Local files must contain valid UTF-8. Local snapshot files are capped at 256 MiB
+and one million quads. Trust files
+are capped at 64 MiB. These budgets provide room for the expanded RDF of many
+accumulated conversations and signed records, and for a provisioned trust
+directory much larger than the pilot fixtures can exercise. Turtle trust parsing
+also caps expansion at 128 Mi characters of RDF term text and 250,000 quads,
+since a prefix or shorthand can repeat terms without repeating their bytes on
+disk.
+`AWP_STORE_RDF=1` enables save-time round-trip assertions in the memory store
+for tests.
+
+Provisioned trust is written to `trust.ttl`. `readTrustFile` chooses Turtle when
+present and uses legacy `trust.json` otherwise. A malformed Turtle file stops
+startup even when JSON exists alongside it. `writeTrustFile` atomically updates
+the selected format in mode 0600. The daemon uses it under its peer-pin lease.
+The existing trust verifier checks the resulting keys and delegations.
+Turtle preserves identifiers and timestamp spellings admitted by the verifier,
+using literals when a named node or XSD date-time cannot carry the original.
+`saveAgent` and `saveTrust` return promises so callers can wait for durable writes.
+
+The mandate store projection reuses the loaded credential and preserves ODRL
+rule order and native supplements. The RDF vocabulary uses `awp:pay` for the
+pilot payment action pending an ODRL profile decision.

@@ -3,8 +3,10 @@
 import type { Term } from "@jeswr/fetch-rdf";
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { RequiredAs, TermAs, TermFrom } from "@rdfjs/wrapper";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { createHash } from "crypto";
 import { DataFactory, Store } from "n3";
-import { digestBytes, isIri } from "../core/canonical.js";
+import { isIri } from "../core/canonical.js";
 import { assertJsonBounds, DEFAULT_LIMITS, type PilotLimits } from "../core/limits.js";
 import type { Json, JsonObject } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
@@ -15,12 +17,20 @@ import { RdfNode } from "./nodes.js";
 export const SCHEMA = "https://schema.org/";
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
 export function scopedId(parent: string, field: string): string {
-  return (
-    "urn:awp:n:" +
-    Buffer.from(digestBytes(parent + "\0" + field).slice(8), "hex").toString("base64url")
-  );
+  const digest = createHash("sha256").update(`${parent}\0${field}`).digest("base64url");
+  return `urn:awp:n:${digest}`;
 }
 const FIELD = "urn:awp:legacy-field:";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const DEFAULT_GRAPH = DataFactory.defaultGraph();
+const COLLECTION = DataFactory.namedNode(`${AWP}NamedValueCollection`);
+const ITEM_LIST = DataFactory.namedNode(`${SCHEMA}ItemList`);
+const NULL_VALUE = DataFactory.namedNode(`${AWP}NullValue`);
+
+function hasType(node: NamedValuesNode, type: Term): boolean {
+  return node.dataset.countQuads(node as never, RDF_TYPE, type, DEFAULT_GRAPH) === 1;
+}
+
 const liveCollections = new WeakMap<object, NamedValuesNode>();
 /** Recover the graph behind an actual live view; object properties cannot forge this association. */
 export function namedValuesOf(value: unknown): NamedValuesNode | undefined {
@@ -117,29 +127,48 @@ export class NamedValuesNode extends RdfNode {
   get entries(): readonly NamedValueNode[] {
     const graph = attachmentGraph(this.dataset, this.id);
     if (graph) return new NamedValuesNode(this.id, graph).entries;
-    const entries = this.objects(SCHEMA + "itemListElement").map(
-      (t) => new NamedValueNode(t, this.dataset),
-    );
-    entries.sort((a, b) => a.position - b.position);
-    for (let i = 0; i < entries.length; i++)
-      if (entries[i]?.position !== i)
+    const terms = this.objects(SCHEMA + "itemListElement");
+    const entries = new Array<NamedValueNode>(terms.length);
+    for (const term of terms) {
+      const entry = new NamedValueNode(term, this.dataset);
+      const position = entry.position;
+      if (
+        !Number.isInteger(position) ||
+        position < 0 ||
+        position >= entries.length ||
+        entries[position]
+      )
         throw new TypeError("Non-contiguous or duplicate list position");
+      entries[position] = entry;
+    }
     return entries;
   }
   get isObject(): boolean {
-    return this.types.has(AWP + "NamedValueCollection");
+    return hasType(this, COLLECTION);
   }
   toValue(seen = new Set<string>(), depth = 0): JsonObject | Json[] {
     if (seen.has(this.id) || depth > 32) throw new TypeError("Cyclic or overdeep named values");
     seen.add(this.id);
-    const pairs = this.entries.map((entry) => {
-      if (entry.propertyID !== parameterIri(entry.name))
+    const pairs = this.entries.map((entry, index) => {
+      if (entry.termType !== "NamedNode" || entry.id !== scopedId(this.id, "entry:" + index))
+        throw new TypeError("Invalid scoped named-value entry");
+      const name = entry.name;
+      if (entry.propertyID !== parameterIri(name))
         throw new TypeError("Parameter name/IRI mismatch");
-      return [entry.name, readValue(entry.domainValue, entry.dataset, seen, depth + 1)] as const;
+      return [
+        name,
+        readValue(
+          entry.domainValue,
+          entry.dataset,
+          () => scopedId(entry.id, "value"),
+          seen,
+          depth + 1,
+        ),
+      ] as const;
     });
     seen.delete(this.id);
     if (!this.isObject) {
-      if (!this.types.has(SCHEMA + "ItemList")) throw new TypeError("Expected an ItemList");
+      if (!hasType(this, ITEM_LIST)) throw new TypeError("Expected an ItemList");
       if (pairs.some(([key], index) => key !== String(index)))
         throw new TypeError("Invalid array entry name");
       return pairs.map(([, value]) => value);
@@ -167,7 +196,7 @@ export class NamedValuesNode extends RdfNode {
     for (const [index, [name, item]] of Object.entries(value).entries()) {
       const entry = new NamedValueNode(scopedId(id, "entry:" + index), dataset);
       entry.initialise(name, index);
-      entry.domainValue = writeValue(item, scopedId(entry.id, "value"), dataset, limits);
+      entry.domainValue = writeValue(item, () => scopedId(entry.id, "value"), dataset, limits);
       dataset.addQuad(
         node as never,
         DataFactory.namedNode(SCHEMA + "itemListElement"),
@@ -178,14 +207,19 @@ export class NamedValuesNode extends RdfNode {
   }
 }
 
-export function writeValue(value: Json, id: string, dataset: Store, limits?: PilotLimits): Term {
-  if (value === null) {
-    const node = new RdfNode(id, dataset);
+export function writeValue(
+  value: Json,
+  id: string | (() => string),
+  dataset: Store,
+  limits?: PilotLimits,
+): Term {
+  if (typeof value === "object") {
+    const nodeId = typeof id === "string" ? id : id();
+    if (value !== null) return TermAs.term(NamedValuesNode.from(value, nodeId, dataset, limits));
+    const node = new RdfNode(nodeId, dataset);
     node.types.add(AWP + "NullValue");
     return TermAs.term(node);
   }
-  if (typeof value === "object")
-    return TermAs.term(NamedValuesNode.from(value, id, dataset, limits));
   if (typeof value === "string")
     return isIri(value) && isSafeAbsoluteIri(value)
       ? DataFactory.namedNode(value)
@@ -215,7 +249,13 @@ export function decimalLexical(value: number): string {
         : digits.slice(0, point) + "." + digits.slice(point))
   );
 }
-export function readValue(term: Term, dataset: Store, seen = new Set<string>(), depth = 0): Json {
+export function readValue(
+  term: Term,
+  dataset: Store,
+  expectedId?: string | (() => string),
+  seen = new Set<string>(),
+  depth = 0,
+): Json {
   term = attachmentTerm(dataset, term);
   if (term.termType === "Literal") {
     if (term.language) throw new TypeError("Language literal has no legacy scalar representation");
@@ -239,10 +279,15 @@ export function readValue(term: Term, dataset: Store, seen = new Set<string>(), 
   }
   if (term.termType !== "NamedNode") throw new TypeError("Expected a named domain value");
   const node = new NamedValuesNode(term, dataset);
-  if (node.types.has(AWP + "NullValue")) return null;
-  if (node.types.has(AWP + "NamedValueCollection") || node.types.has(SCHEMA + "ItemList"))
-    return node.toValue(seen, depth);
-  return term.value;
+  const isNull = hasType(node, NULL_VALUE);
+  if (!isNull && !hasType(node, COLLECTION) && !hasType(node, ITEM_LIST)) return term.value;
+  // A structured value belongs to exactly one position in its parent's tree.
+  if (
+    expectedId !== undefined &&
+    node.id !== (typeof expectedId === "string" ? expectedId : expectedId())
+  )
+    throw new TypeError(seen.has(node.id) ? "Cyclic named values" : "Invalid scoped named value");
+  return isNull ? null : node.toValue(seen, depth);
 }
 function missing(field: string): never {
   throw new TypeError(`Missing named value ${field}`);

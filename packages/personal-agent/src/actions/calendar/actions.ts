@@ -9,13 +9,15 @@
  *                                        module decides its steps) and writes the first signed
  *                                        outbound message for review; nothing is sent
  */
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { agentRunning } from "../../dashboard/calendars.js";
 import { readAvailabilityOverlay } from "../../pilot/availability.js";
 import { main as pilot } from "../../pilot/cli.js";
 import { iso } from "../../pilot/core/schema.js";
+import { TrustStore } from "../../pilot/mechanisms/trust.js";
+import { readTrustFile } from "../../pilot/setup.js";
 import type { ActionsEnv, Ctx } from "../env.js";
 import type { ActionDefinition } from "../types.js";
 import {
@@ -303,11 +305,14 @@ const proposePlan = z.strictObject({
   effect: z.string(),
 });
 
-function pinnedSubjects(agentsDir: string, agent: string): Set<string> {
-  const path = join(agentsDir, agent, "trust.json");
-  if (!existsSync(path)) return new Set();
-  const trust = JSON.parse(readFileSync(path, "utf8")) as { keys?: { subject?: string }[] };
-  return new Set((trust.keys ?? []).map((k) => String(k.subject ?? "")));
+async function pinnedSubjects(agentsDir: string, agent: string): Promise<Set<string>> {
+  try {
+    const { data } = await TrustStore.load(await readTrustFile(join(agentsDir, agent)));
+    return new Set(data.keys.map(({ subject }) => subject));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set();
+    throw error;
+  }
 }
 
 export const proposeAction: ActionDefinition<
@@ -337,9 +342,9 @@ export const proposeAction: ActionDefinition<
     durationMinutes: 30,
     title: "A synthetic catch-up",
   }),
-  permissions(ctx, input) {
+  async permissions(ctx, input) {
     const managed = ctx.env.settings.managedAgents.includes(input.agent);
-    const pinned = pinnedSubjects(ctx.env.agentsDir, input.agent);
+    const pinned = await pinnedSubjects(ctx.env.agentsDir, input.agent);
     return [
       {
         subject: input.agent,

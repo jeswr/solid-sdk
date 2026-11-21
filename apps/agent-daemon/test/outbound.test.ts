@@ -63,7 +63,7 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
   for (const provisioned of [sender, receiver]) {
     const trust = cast.trust.get(provisioned.identity.name);
     if (!trust) throw new Error("Missing fixture trust");
-    saveAgent(root, { ...provisioned, trust }, [CONFIG_ED25519], {
+    await saveAgent(root, { ...provisioned, trust }, [CONFIG_ED25519], {
       ownerDir: join(root, "owner"),
     });
   }

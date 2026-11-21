@@ -10,9 +10,10 @@ import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { digestBytes } from "@jeswr/agent-model";
-import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
+import { CONFIG_ED25519, PILOT_PROFILE, readAgent } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
+import { readRuntimeStateFile } from "@jeswr/agent-reference/store/state";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
@@ -113,12 +114,12 @@ it("rejects a nested key subject that names the daemon's own actor", async () =>
   expect((await readGateStatus(o.directory)).peers).toEqual([]);
 });
 
-it("atomically replaces trust.json and preserves the previously opened pins", async () => {
+it("atomically replaces trust.ttl and preserves the previously opened pins", async () => {
   const o = options();
   const { peer, gate } = await createTestGate();
   await gate.close();
   await daemon.initGate(o);
-  const path = join(o.directory, "trust.json");
+  const path = join(o.directory, "trust.ttl");
   const previous = await open(path, "r");
   try {
     const before = await readFile(path, "utf8");
@@ -126,9 +127,30 @@ it("atomically replaces trust.json and preserves the previously opened pins", as
     expect(await previous.readFile("utf8")).toBe(before);
     expect(await readFile(path, "utf8")).toContain(peer.actorKey.kid);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect((await readGateStatus(o.directory)).peers.map(({ thumbprint }) => thumbprint)).toContain(
+      peer.actorKey.kid,
+    );
   } finally {
     await previous.close();
   }
+});
+
+it.each(["legacy", "both"])("persists confirmed pins with %s trust files", async (format) => {
+  const o = options();
+  const { peer, gate } = await createTestGate();
+  await gate.close();
+  await daemon.initGate(o);
+  const before = await readAgent(root, "gate");
+  const json = join(o.directory, "trust.json");
+  const turtle = join(o.directory, "trust.ttl");
+  const oldJson = JSON.stringify(before.trust);
+  await writeFile(json, oldJson);
+  if (format === "legacy") await unlink(turtle);
+  expect(await daemon.pinPeer({ ...o, card: peer.card })).toBe(true);
+  const reopened = await readAgent(root, "gate");
+  expect(reopened.trust.keys.map(({ kid }) => kid)).toContain(peer.actorKey.kid);
+  if (format === "both") expect(await readFile(json, "utf8")).toBe(oldJson);
+  else expect((await stat(json)).mode & 0o777).toBe(0o600);
 });
 
 it("allows another pin after the new lease fails to sync", async () => {
@@ -869,7 +891,10 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   expect(print).toHaveBeenCalledWith(expect.stringContaining("witnessed head"));
 });
 
-it("excludes a witness fsynced beyond the saved gate checkpoint from offline audit", async () => {
+it.each([
+  "RDF",
+  "legacy JSON",
+])("excludes a witness fsynced beyond the saved gate checkpoint from offline audit (%s)", async (format) => {
   const o = options();
   await daemon.initGate(o);
   const gate = await daemon.openGate(o);
@@ -888,7 +913,10 @@ it("excludes a witness fsynced beyond the saved gate checkpoint from offline aud
       reason: "malformed",
       digest: digestBytes("fixture"),
     });
-    saved = await readFile(statePath);
+    saved =
+      format === "legacy JSON"
+        ? Buffer.from(JSON.stringify(readRuntimeStateFile(statePath)))
+        : await readFile(statePath);
     const jws = await gate.anchor({ seq, hash });
     ledger.append(
       { ...identity, type: "record-anchor", id: "urn:anchor:unsaved", seq, hash, jws },
@@ -912,6 +940,7 @@ it("excludes a witness fsynced beyond the saved gate checkpoint from offline aud
   expect(await readFile(gatePath)).toEqual(suffix);
   expect(await readFile(statePath)).toEqual(saved);
   expect(await readdir(o.directory)).toEqual(paths);
+
   const reopened = await daemon.openGate(o);
   try {
     expect(reopened.evidence().witnessedHeads).toEqual([]);

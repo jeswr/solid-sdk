@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Local provisioning: keys, owner-signed mandate and representation statement, public
  * introduction cards, and the reviewed step that pins a peer's card.
@@ -17,8 +18,22 @@
  * Separate directories for the same OS user are a filesystem boundary only — not hardware
  * custody or OS-level isolation. No location is discovered: the operator names it each time.
  */
+import { serialize } from "@jeswr/rdf-serialize";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { randomUUID } from "crypto";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { open } from "fs/promises";
 import type { JWK } from "jose";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join, resolve, sep } from "path";
@@ -33,6 +48,10 @@ import {
 import { type OwnerMandate, signMandate } from "./mechanisms/mandate.js";
 import { type RepresentationStatement, signStatement, TYP } from "./mechanisms/statements.js";
 import type { PinnedKey, SourceAuthorityRule, TrustStoreData } from "./mechanisms/trust.js";
+import { trustFromRdf, trustTurtleGraph } from "./model/store/trust.js";
+import { AWP, PROV, SCHEMA } from "./profile/vocabulary.js";
+import { fsyncDir } from "./store/state.js";
+import { readLocalStoreFile, readLocalStoreRdf } from "./wire/store-quads.js";
 
 export interface IntroductionCard {
   readonly type: "AwpIntroductionCard";
@@ -312,7 +331,7 @@ export function ownerKeyPath(ownerDir: string, name: string): string {
  * key goes to `ownerDir/<name>/` only (separate custody); without it, it is colocated in the
  * service directory (compatibility).
  */
-export function saveAgent(
+export async function saveAgent(
   root: string,
   agent: ProvisionedAgent,
   accepted: readonly string[],
@@ -323,7 +342,7 @@ export function saveAgent(
     /** The owner key already exists there (shared organisation key): do not write it. */
     reuseOwnerKey?: boolean;
   } = {},
-): string {
+): Promise<string> {
   const dir = agentDir(root, agent.identity.name);
   if (!agent.privateJwks) throw new Error("private key material unavailable to save");
   const ownerRecord = { alg: agent.ownerKey.alg, jwk: agent.privateJwks.owner };
@@ -367,7 +386,7 @@ export function saveAgent(
   );
   writeFileSync(join(dir, "mandate.jws"), agent.mandateJws);
   writeFileSync(join(dir, "representation.jws"), agent.representationJws);
-  writeFileSync(join(dir, "trust.json"), JSON.stringify(agent.trust, null, 2));
+  await writeTrustFile(dir, agent.trust, "turtle");
   writeFileSync(join(dir, "card.json"), JSON.stringify(agent.card, null, 2));
   return dir;
 }
@@ -398,7 +417,7 @@ export async function readAgent(root: string, name: string): Promise<StoredAgent
     actorKey: await loadSigningKey(actor.jwk, actor.alg),
     mandateJws: read("mandate.jws").trim(),
     representationJws: read("representation.jws").trim(),
-    trust: JSON.parse(read("trust.json")),
+    trust: await readTrustFile(dir),
     card: JSON.parse(read("card.json")),
   };
 }
@@ -449,6 +468,62 @@ export async function existingOwnerKey(
   return loadSigningKey(owner.jwk, owner.alg);
 }
 
-export function saveTrust(root: string, name: string, trust: TrustStoreData): void {
-  writeFileSync(join(agentDir(root, name), "trust.json"), JSON.stringify(trust, null, 2));
+function hasTrustFile(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return false;
+  }
+}
+
+/** Read the authoritative trust file. A present Turtle file always wins, including on error. */
+export async function readTrustFile(dir: string): Promise<TrustStoreData> {
+  const turtle = join(dir, "trust.ttl");
+  if (!hasTrustFile(turtle))
+    return JSON.parse(readLocalStoreFile(join(dir, "trust.json"), "text/turtle"));
+  try {
+    return trustFromRdf(
+      readLocalStoreRdf(readLocalStoreFile(turtle, "text/turtle"), "text/turtle"),
+    );
+  } catch (cause) {
+    throw new Error("trust store Turtle is malformed", { cause });
+  }
+}
+
+/** Atomically replace the selected trust file. New stores use Turtle. */
+export async function writeTrustFile(
+  dir: string,
+  data: TrustStoreData,
+  format?: "turtle",
+): Promise<void> {
+  const turtle = join(dir, "trust.ttl");
+  const json = join(dir, "trust.json");
+  const legacy = format !== "turtle" && !hasTrustFile(turtle) && hasTrustFile(json);
+  const destination = legacy ? json : turtle;
+  const text = legacy
+    ? JSON.stringify(data, null, 2)
+    : await serialize([...trustTurtleGraph(data)], {
+        format: "text/turtle",
+        prefixes: { awp: AWP, prov: PROV, schema: SCHEMA, sec: "https://w3id.org/security#" },
+      });
+  const temporary = join(dir, `trust-${randomUUID()}.tmp`);
+  try {
+    const file = await open(temporary, "wx", 0o600);
+    try {
+      await file.writeFile(text, "utf8");
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    renameSync(temporary, destination);
+    fsyncDir(dir);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+export function saveTrust(root: string, name: string, trust: TrustStoreData): Promise<void> {
+  return writeTrustFile(agentDir(root, name), trust, "turtle");
 }

@@ -712,7 +712,7 @@ export async function main(
               "this service's own issuing key",
             )
           : provisioned.trust;
-      const dir = saveAgent(
+      const dir = await saveAgent(
         root,
         { ...p, trust },
         role.accepted ? [...role.accepted] : [alg === "EdDSA" ? CONFIG_ED25519 : CONFIG_P256],
@@ -834,7 +834,12 @@ export async function main(
       });
       await TrustStore.load(trust);
       // Trust changes take the single-writer lock: refused while a service owns the agent.
-      withAgentLock(stored.dir, () => saveTrust(root, name, trust));
+      const lock = new FileStateStore(join(stored.dir, "state.json"));
+      try {
+        await saveTrust(root, name, trust);
+      } finally {
+        lock.close();
+      }
       print({ pinned: { party: card.party, actor: card.actor, endpoints: card.endpoints } });
       return 0;
     }

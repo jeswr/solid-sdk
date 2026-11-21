@@ -1,0 +1,793 @@
+{
+  "x-authored-by": "AUTHORED-BY Codex GPT-6.2 Sol",
+  "state": {
+    "version": 1,
+    "duties": {
+      "transfers": [],
+      "incoming": [
+        {
+          "item": "urn:awp:engine-mortgage-main-main:sam-agent:0008",
+          "digest": "sha-256:2a49b832ec6246b4a5d8a271dc870f475f5470599fd9701cd747ed0aceb5937b",
+          "subject": "https://sam.example/#me",
+          "to": {
+            "actor": "https://agents.hostco.example/sam#agent",
+            "party": "https://sam.example/#me"
+          },
+          "duties": [],
+          "message": "urn:awp:engine-mortgage-main-main:sam-agent:0009",
+          "at": "2026-11-13T09:01:00.000Z"
+        }
+      ],
+      "work": {}
+    },
+    "pendingPodGrants": {
+      "https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#reference-sha-256c1fc0eac6bea59c75c4d0001f0478cb6b062363aa614996eb16ac507f11874bd": {
+        "grant": {
+          "fragment": "reference-sha-256c1fc0eac6bea59c75c4d0001f0478cb6b062363aa614996eb16ac507f11874bd",
+          "pointer": {
+            "id": "https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#reference-sha-256c1fc0eac6bea59c75c4d0001f0478cb6b062363aa614996eb16ac507f11874bd",
+            "issuer": "https://agents.hostco.example/sam#agent",
+            "owner": "https://sam.example/#me",
+            "resource": "https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10",
+            "digest": "sha-256:dafb427212178a8d501cc444ec88e9a3b450a7a426712816131c032cc98989f1",
+            "agreement": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0",
+            "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
+            "item": {
+              "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
+              "claimType": "deposit.balance",
+              "issuer": "https://harbourbank.example/#org"
+            },
+            "reader": {
+              "actor": "https://northbank.example/agents/intake#agent",
+              "party": "https://northbank.example/#org"
+            },
+            "modes": ["Read"],
+            "validFrom": "2026-11-13T09:02:00.000Z",
+            "validUntil": "2027-01-11T09:02:00.000Z",
+            "terms": {
+              "supplier": {
+                "policy": {
+                  "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
+                  "type": "Set",
+                  "assigner": "https://harbourbank.example/#org",
+                  "conflict": "prohibit",
+                  "permissions": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#use",
+                      "type": "permission",
+                      "action": "use",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#share",
+                      "type": "permission",
+                      "action": "distribute",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": [
+                            "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                            "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "obligations": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                      "action": "delete",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "elapsedTime",
+                          "operator": "lteq",
+                          "rightOperand": "P90D"
+                        }
+                      ]
+                    }
+                  ],
+                  "prohibitions": [
+                    {
+                      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
+                      "type": "prohibition",
+                      "action": "use",
+                      "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "isAnyOf",
+                          "rightOperand": ["https://w3id.org/dpv#Marketing"]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "recipientMustBe": {
+                  "task": "urn:role:mortgage-lending",
+                  "label": "a regulated lender"
+                }
+              },
+              "grant": {
+                "id": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#grant",
+                "type": "Agreement",
+                "assigner": "https://sam.example/#me",
+                "assignee": "https://northbank.example/#org",
+                "conflict": "prohibit",
+                "permissions": [
+                  {
+                    "id": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#read-for-purpose",
+                    "type": "permission",
+                    "action": "read",
+                    "target": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#evidence",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "isAnyOf",
+                        "rightOperand": ["https://w3id.org/jeswr/awp#purpose/credit-assessment"]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#onward-0",
+                    "type": "permission",
+                    "action": "distribute",
+                    "target": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#evidence",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "isAnyOf",
+                        "rightOperand": ["https://w3id.org/jeswr/awp#purpose/credit-assessment"]
+                      },
+                      {
+                        "leftOperand": "recipient",
+                        "operator": "isAnyOf",
+                        "rightOperand": ["https://underwriter.example/#org"]
+                      }
+                    ]
+                  }
+                ],
+                "prohibitions": [
+                  {
+                    "id": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#prohibited-0",
+                    "type": "prohibition",
+                    "action": "use",
+                    "target": "urn:awp:agreement:fc166321ddda927a311cbcb3a314d2a0#evidence",
+                    "constraints": [
+                      {
+                        "leftOperand": "purpose",
+                        "operator": "isAnyOf",
+                        "rightOperand": ["https://w3id.org/dpv#Marketing"]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "termsDigest": "sha-256:95ada055e38c315292c7280490f5186606aaa6fdf9f595cf51b8a3e4bc691e18"
+            },
+            "copy": {
+              "permitted": true,
+              "deleteBy": "2027-01-12T09:02:00.000Z"
+            }
+          }
+        },
+        "before": "<https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#rule-0> a <http://www.w3.org/ns/auth/acl#Authorization>;\n    <http://www.w3.org/ns/auth/acl#accessTo> <https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10>;\n    <http://www.w3.org/ns/auth/acl#agent> <https://sam.example/#me>;\n    <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read>, <http://www.w3.org/ns/auth/acl#Write>, <http://www.w3.org/ns/auth/acl#Control>.\n<https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#rule-1> a <http://www.w3.org/ns/auth/acl#Authorization>;\n    <http://www.w3.org/ns/auth/acl#accessTo> <https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10>;\n    <http://www.w3.org/ns/auth/acl#agent> <https://agents.hostco.example/sam#agent>;\n    <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read>, <http://www.w3.org/ns/auth/acl#Write>, <http://www.w3.org/ns/auth/acl#Control>.\n",
+        "beforeEtag": "\"acl-3\"",
+        "after": "<https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#rule-0> a <http://www.w3.org/ns/auth/acl#Authorization>;\n    <http://www.w3.org/ns/auth/acl#accessTo> <https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10>;\n    <http://www.w3.org/ns/auth/acl#agent> <https://sam.example/#me>;\n    <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read>, <http://www.w3.org/ns/auth/acl#Write>, <http://www.w3.org/ns/auth/acl#Control>.\n<https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#rule-1> a <http://www.w3.org/ns/auth/acl#Authorization>;\n    <http://www.w3.org/ns/auth/acl#accessTo> <https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10>;\n    <http://www.w3.org/ns/auth/acl#agent> <https://agents.hostco.example/sam#agent>;\n    <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read>, <http://www.w3.org/ns/auth/acl#Write>, <http://www.w3.org/ns/auth/acl#Control>.\n<https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10.acl#reference-sha-256c1fc0eac6bea59c75c4d0001f0478cb6b062363aa614996eb16ac507f11874bd> a <http://www.w3.org/ns/auth/acl#Authorization>;\n    <http://www.w3.org/ns/auth/acl#accessTo> <https://fictional-evidence-pod.example/sam/evidence/harbourbank-deposit-2026-10>;\n    <http://www.w3.org/ns/auth/acl#agent> <https://northbank.example/agents/intake#agent>;\n    <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read>.\n",
+        "actionDigest": "sha-256:007362aea83a0193c1c0874ae51206f727a5c765fdcc9c6dfcb9dc597669099f"
+      }
+    },
+    "precedenceHolds": {
+      "urn:scenario:records-to-new-practice:patient-note": {
+        "admittedPurpose": "urn:purpose:health-record",
+        "statement": {
+          "id": "urn:scenario:records-to-new-practice:patient-note",
+          "issuer": "urn:fictional:records-to-new-practice:patient",
+          "claimType": "health.allergy",
+          "subject": "urn:fictional:records-to-new-practice:patient",
+          "method": "reported-by-subject",
+          "asOf": "2026-11-13T09:00:00.000Z",
+          "terms": {
+            "policy": {
+              "id": "urn:terms:records-to-new-practice:patient-note",
+              "permissions": [
+                {
+                  "type": "permission",
+                  "action": "use",
+                  "target": "urn:scenario:records-to-new-practice:patient-note",
+                  "constraints": [
+                    {
+                      "leftOperand": "purpose",
+                      "operator": "eq",
+                      "rightOperand": "urn:purpose:health-record"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "allergy": "penicillin"
+        },
+        "identifiers": [
+          "urn:scenario:records-to-new-practice:patient-note",
+          "urn:fictional:records-to-new-practice:patient",
+          "urn:terms:records-to-new-practice:patient-note",
+          "urn:purpose:health-record"
+        ],
+        "id": "urn:scenario:records-to-new-practice:patient-note",
+        "digest": "sha-256:ef0c7f1e4c6f7688e73c2ecc07d174e069097e240b414a0383099f1501ad8e3b",
+        "compactProofDigest": "sha-256:ba403a297090cc297942d543c228a121b21e260f6fa79c8cb457f99c218af32c",
+        "label": "The patient's health allergy statement",
+        "claimType": "health.allergy",
+        "source": "urn:fictional:records-to-new-practice:patient",
+        "subject": "urn:fictional:records-to-new-practice:patient",
+        "method": "reported-by-subject",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "policy": {
+            "id": "urn:grant:records-to-new-practice:record",
+            "permissions": [
+              {
+                "type": "permission",
+                "action": "use",
+                "target": "urn:scenario:records-to-new-practice:patient-note",
+                "constraints": [
+                  {
+                    "leftOperand": "purpose",
+                    "operator": "eq",
+                    "rightOperand": "urn:purpose:health-record"
+                  },
+                  {
+                    "leftOperand": "dateTime",
+                    "operator": "lt",
+                    "rightOperand": "2026-12-01T00:00:00.000Z"
+                  }
+                ]
+              }
+            ]
+          },
+          "inherited": [
+            {
+              "target": "urn:scenario:records-to-new-practice:patient-note",
+              "terms": {
+                "policy": {
+                  "id": "urn:terms:records-to-new-practice:patient-note",
+                  "permissions": [
+                    {
+                      "type": "permission",
+                      "action": "use",
+                      "target": "urn:scenario:records-to-new-practice:patient-note",
+                      "constraints": [
+                        {
+                          "leftOperand": "purpose",
+                          "operator": "eq",
+                          "rightOperand": "urn:purpose:health-record"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "supersededBy": "urn:scenario:records-to-new-practice:clinical"
+      }
+    },
+    "recordMessages": {
+      "urn:test:unrelated-invoke": {
+        "direction": "out",
+        "conversation": "urn:test:range",
+        "digest": "sha-256:4bb5980e1e8240b2b3713073ce5d2715741ac1c82aa444b60d67de40176c8017",
+        "jws": "eyJhbGciOiJFZERTQSIsImtpZCI6InJQd3BKS1JyTzc5RDhUd29CdkQ2ZlZBT3lBdGF6VXFFRjVMNGtNd0lGMXciLCJ0eXAiOiJhd3AtbWVzc2FnZStqd3MifQ.eyJpZCI6InVybjp0ZXN0OnVucmVsYXRlZC1pbnZva2UiLCJraW5kIjoiaW52b2tlIiwiY29udmVyc2F0aW9uIjoidXJuOnRlc3Q6cmFuZ2UiLCJwcm9maWxlIjoidXJuOnByb2ZpbGUiLCJjb25maWd1cmF0aW9uIjoidXJuOmNvbmZpZ3VyYXRpb24iLCJmcm9tIjp7ImFjdG9yIjoidXJuOmEiLCJvbkJlaGFsZk9mIjoidXJuOm93bmVyIn0sInRvIjp7ImFjdG9yIjoidXJuOnBlZXI6YWdlbnQiLCJwYXJ0eSI6InVybjpwZWVyIn0sImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6IjIwMjYtMTEtMTRUMDk6MDA6MDAuMDAwWiIsImJvZHkiOnsib3BlcmF0aW9uIjp7ImlkIjoidXJuOm9wOnVucmVsYXRlZCIsInZlcnNpb24iOiIxIn0sImJhc2lzIjp7ImtpbmQiOiJyZXByZXNlbnRlZCJ9LCJpbnB1dCI6e319fQ.nvSz-zJQgeKxjg-d4VXYRdgbNOgUVv6z6OCuKXGSq79RVo0Xnp1qP9QP2QC2EmzOjSmrpOkjT9nz5yhO98-ECg"
+      }
+    },
+    "authoredProofs": {
+      "sha-256:8a59cc8ceb86268d9ba94115a6cdcc8898d0b5e82cb614fbb9c67a2e1eedd171": {
+        "seq": 29,
+        "hash": "sha-256:3ef884443d05fcbf85177842e1ce499ddcf7ac851be0b2b517b55f3db10a25e4",
+        "task": "urn:scenario:introduction:task",
+        "requestDigest": "sha-256:a04950db3618e9e5fa5cad7ec83b903e3bf66d8f4e6f03776c07b14be0141228"
+      }
+    },
+    "auditApprovalProofs": {
+      "sha-256:feed558ff13cb6e68b87e8e703cf957de0d7c1e5ac3091289c82d9a812cadd6d": "eyJhbGciOiJFZERTQSIsImtpZCI6IkVrMWhzcU9LS0R6NHpFa2R6bkNDbllsZUZtN2VFYjRPRjdldVFOOEdvcWMiLCJ0eXAiOiJhd3AtYXBwcm92YWwrandzIn0.eyJ0eXBlIjoiT3duZXJBcHByb3ZhbCIsImlkIjoidXJuOnV1aWQ6ZWUyZTkyNjMtMTFhMy00NmZkLWE0MDQtYTZiMDc3MjQ1NzkzIiwiaXNzdWVyIjoidXJuOm93bmVyIiwiYWN0b3IiOiJ1cm46YSIsImFjdGlvbkRpZ2VzdCI6InNoYS0yNTY6MTM3ZDQzNDlmOTM5MjZkYjkxOGUzYWZhOTc2NDIwY2FlMDJmYThhY2JmYTZiODBhY2YyMjlkNDM3Mzc1NDkxMSIsImNvbnZlcnNhdGlvbiI6InVybjpzZW5kIiwiZGVjaXNpb24iOiJhcHByb3ZlIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMS0xM1QxMDowMDowMC4wMDBaIiwibm90ZSI6InN5bnRoZXRpYyBvd25lciBkZWNpc2lvbiAoc2NyaXB0ZWQgaW4gdGhlIHNjZW5hcmlvIGRyaXZlcikifQ.80buR6Hn-PLvx6PhyKcOcE56zaYWnyZ_7aDcyzW3TqC1cDRGxvyfo-2w6kXGaWQP7ID8Ns1FtPbfM0LYWhgsAg"
+    },
+    "emailChallenges": {
+      "[\"mailto:shop@fictional.example\",\"urn:purpose:enquiry\"]": "f3d1a714320fc3b60b8e77d2718dfaea6c6091f1be362f7f"
+    },
+    "conversations": {
+      "urn:uuid:9d292191-78dd-49fd-9baa-0bec02fea2b6": {
+        "id": "urn:uuid:9d292191-78dd-49fd-9baa-0bec02fea2b6",
+        "role": "initiator",
+        "peer": {
+          "actor": "urn:test:receiver",
+          "party": "urn:test:lender"
+        },
+        "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
+        "phase": "discovering",
+        "rounds": 0,
+        "messageCount": 1,
+        "requiredOutcomes": [],
+        "outcomes": {},
+        "openedAt": "2026-11-13T09:00:00.000Z",
+        "updatedAt": "2026-11-13T09:00:00.000Z",
+        "history": [
+          {
+            "direction": "out",
+            "kind": "describe",
+            "id": "urn:uuid:ab90c38c-c39b-4f7b-87dc-ff85bb28e8bd",
+            "phaseAfter": "discovering"
+          }
+        ]
+      }
+    },
+    "seen": {
+      "urn:uuid:29644c37-8c06-4ec5-a0ac-4ccce37e7406": {
+        "digest": "sha-256:561037cdc57509cb0a627bcfe3533b982e44f41308b6ac80cf37e446965aab81",
+        "expiresAt": "2026-11-21T18:00:00.000Z",
+        "disposition": "accepted",
+        "responses": [],
+        "conversation": "urn:uuid:262fd1f7-6b14-4bf5-9f54-196a7e702a84"
+      }
+    },
+    "outbox": {
+      "urn:uuid:ab90c38c-c39b-4f7b-87dc-ff85bb28e8bd": {
+        "id": "urn:uuid:ab90c38c-c39b-4f7b-87dc-ff85bb28e8bd",
+        "conversation": "urn:uuid:9d292191-78dd-49fd-9baa-0bec02fea2b6",
+        "kind": "describe",
+        "toActor": "urn:test:receiver",
+        "wire": {
+          "format": "awp-jsonld/0.1",
+          "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:uuid:ab90c38c-c39b-4f7b-87dc-ff85bb28e8bd\",\"type\":[\"Message\",\"Describe\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/transport-email/0.1\",\"kind\":\"describe\",\"conversation\":\"urn:uuid:9d292191-78dd-49fd-9baa-0bec02fea2b6\",\"from\":{\"id\":\"urn:awp:n:BRdxkzoe6Kg02WFxHElK_9Oe94k6f2Detcu0Q22T3ek\",\"type\":\"ParticipantRef\",\"actor\":\"urn:test:sender\",\"onBehalfOf\":\"urn:test:principal\"},\"to\":{\"id\":\"urn:awp:n:4Lu7bbiEhqy70UcifWrWOaV2r_MmwGuYiuiPrIo0Jx8\",\"type\":\"AudienceRef\",\"actor\":\"urn:test:receiver\",\"party\":\"urn:test:lender\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:wdzZ5ucRlPSpKoJuhp5zFKR_SHc4h_BABdmUHQjdOBI\",\"type\":\"DescribeBody\"},\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ijh2Y2pWR1hnS1RCd0FzT0dkbW1WenFBYlctOXJ1cmRRdlNZYjlvRlJyd0kiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOndkelo1dWNSbFBTcEtvSnVocDV6RktSX1NIYzRoX0JBQmRtVUhRamRPQkkiLCJ0eXBlIjoiRGVzY3JpYmVCb2R5In0sImNvbmZpZ3VyYXRpb24iOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNjb25maWcvdHJhbnNwb3J0LWVtYWlsLzAuMSIsImNvbnZlcnNhdGlvbiI6InVybjp1dWlkOjlkMjkyMTkxLTc4ZGQtNDlmZC05YmFhLTBiZWMwMmZlYTJiNiIsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImV4cGlyZXNBdCI6IjIwMjYtMTEtMTNUMTU6MDA6MDAuMDAwWiIsImZyb20iOnsiYWN0b3IiOiJ1cm46dGVzdDpzZW5kZXIiLCJpZCI6InVybjphd3A6bjpCUmR4a3pvZTZLZzAyV0Z4SEVsS185T2U5NGs2ZjJEZXRjdTBRMjJUM2VrIiwib25CZWhhbGZPZiI6InVybjp0ZXN0OnByaW5jaXBhbCIsInR5cGUiOiJQYXJ0aWNpcGFudFJlZiJ9LCJpZCI6InVybjp1dWlkOmFiOTBjMzhjLWMzOWItNGY3Yi04N2RjLWZmODViYjI4ZThiZCIsImtpbmQiOiJkZXNjcmliZSIsInByb2ZpbGUiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cC9wcm9maWxlL3BpbG90LzAuMSIsInRvIjp7ImFjdG9yIjoidXJuOnRlc3Q6cmVjZWl2ZXIiLCJpZCI6InVybjphd3A6bjo0THU3YmJpRWhxeTcwVWNpZldyV09hVjJyX01td0d1WWl1aVBySW8wSng4IiwicGFydHkiOiJ1cm46dGVzdDpsZW5kZXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSwidHlwZSI6WyJNZXNzYWdlIiwiRGVzY3JpYmUiXX0.yPnjD9flR6eTIvk8DRwY2UJvNkqtH3afBeO2FTIINpSP3_O8aoZrUi--0NEOrB5agcAwQCepQ8zKg-oID4VmCA\"}}",
+          "attachments": []
+        },
+        "message": {
+          "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+          "configuration": "https://w3id.org/jeswr/awp#config/transport-email/0.1",
+          "id": "urn:uuid:ab90c38c-c39b-4f7b-87dc-ff85bb28e8bd",
+          "conversation": "urn:uuid:9d292191-78dd-49fd-9baa-0bec02fea2b6",
+          "kind": "describe",
+          "from": {
+            "actor": "urn:test:sender",
+            "onBehalfOf": "urn:test:principal"
+          },
+          "to": {
+            "actor": "urn:test:receiver",
+            "party": "urn:test:lender"
+          },
+          "createdAt": "2026-11-13T09:00:00.000Z",
+          "expiresAt": "2026-11-13T15:00:00.000Z",
+          "body": {}
+        },
+        "createdAt": "2026-11-13T09:00:00.000Z"
+      }
+    },
+    "effects": {
+      "urn:scenario:supplier-onboarding:buyer-onboards": {
+        "key": "urn:scenario:supplier-onboarding:buyer-onboards",
+        "adapter": "urn:scenario:effect",
+        "activity": "urn:awp:engine-supplier-onboarding-main:buyer-agent:0001",
+        "conversation": "urn:scenario:supplier-onboarding:buyer-onboards",
+        "basis": "urn:scenario:supplier-onboarding:buyer-onboards",
+        "params": {},
+        "intentDigest": "sha-256:c28330973c7c4819ce9491d040f36199b59433f490441cb2e7c8d4c53fababf7",
+        "activityType": "urn:activity:onboarding",
+        "status": "attempting",
+        "attempts": 1,
+        "receiptSent": true,
+        "startedAt": "2026-11-13T09:00:00.000Z"
+      }
+    },
+    "pending": {
+      "sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764": {
+        "actionDigest": "sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764",
+        "intent": {
+          "action": "use",
+          "operation": "urn:op:master-data-change",
+          "target": "urn:op:master-data-change",
+          "recipient": "urn:fictional:erp",
+          "purpose": "urn:purpose:master-data-change",
+          "parameters": {
+            "account": "urn:account:confirmed",
+            "support": ["urn:scenario:master-data-change:account"]
+          },
+          "conversation": "urn:awp:engine-master-data-change-main:finance-agent:0001"
+        },
+        "conversation": "urn:awp:engine-master-data-change-main:finance-agent:0001",
+        "continuation": {
+          "type": "invoke",
+          "operation": {
+            "id": "urn:op:master-data-change",
+            "version": "0.1"
+          },
+          "input": {
+            "account": "urn:account:confirmed",
+            "support": ["urn:scenario:master-data-change:account"]
+          },
+          "basis": {
+            "kind": "represented"
+          },
+          "purpose": "urn:purpose:master-data-change"
+        },
+        "releaseBinding": {
+          "intentDigest": "sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764",
+          "fields": {
+            "operation": {
+              "id": "urn:op:master-data-change",
+              "version": "0.1"
+            },
+            "basis": {
+              "kind": "represented"
+            },
+            "purpose": "urn:purpose:master-data-change",
+            "challenge": null,
+            "input": {
+              "account": "urn:account:confirmed",
+              "support": ["urn:scenario:master-data-change:account"]
+            }
+          },
+          "kind": "invoke"
+        },
+        "createdAt": "2026-11-13T09:00:00.000Z"
+      }
+    },
+    "approvals": {
+      "sha-256:137d4349f93926db918e3afa976420cae02fa8acbfa6b80acf229d4373754911": {
+        "id": "urn:uuid:ee2e9263-11a3-46fd-a404-a6b077245793",
+        "decision": "approve",
+        "validUntil": "2026-11-13T10:00:00.000Z",
+        "jws": "eyJhbGciOiJFZERTQSIsImtpZCI6IkVrMWhzcU9LS0R6NHpFa2R6bkNDbllsZUZtN2VFYjRPRjdldVFOOEdvcWMiLCJ0eXAiOiJhd3AtYXBwcm92YWwrandzIn0.eyJ0eXBlIjoiT3duZXJBcHByb3ZhbCIsImlkIjoidXJuOnV1aWQ6ZWUyZTkyNjMtMTFhMy00NmZkLWE0MDQtYTZiMDc3MjQ1NzkzIiwiaXNzdWVyIjoidXJuOm93bmVyIiwiYWN0b3IiOiJ1cm46YSIsImFjdGlvbkRpZ2VzdCI6InNoYS0yNTY6MTM3ZDQzNDlmOTM5MjZkYjkxOGUzYWZhOTc2NDIwY2FlMDJmYThhY2JmYTZiODBhY2YyMjlkNDM3Mzc1NDkxMSIsImNvbnZlcnNhdGlvbiI6InVybjpzZW5kIiwiZGVjaXNpb24iOiJhcHByb3ZlIiwiaXNzdWVkQXQiOiIyMDI2LTExLTEzVDA5OjAwOjAwLjAwMFoiLCJ2YWxpZFVudGlsIjoiMjAyNi0xMS0xM1QxMDowMDowMC4wMDBaIiwibm90ZSI6InN5bnRoZXRpYyBvd25lciBkZWNpc2lvbiAoc2NyaXB0ZWQgaW4gdGhlIHNjZW5hcmlvIGRyaXZlcikifQ.80buR6Hn-PLvx6PhyKcOcE56zaYWnyZ_7aDcyzW3TqC1cDRGxvyfo-2w6kXGaWQP7ID8Ns1FtPbfM0LYWhgsAg",
+        "releaseBinding": {
+          "intentDigest": "sha-256:137d4349f93926db918e3afa976420cae02fa8acbfa6b80acf229d4373754911",
+          "fields": {}
+        }
+      }
+    },
+    "agreements": {
+      "urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77": {
+        "type": "agreement",
+        "id": "urn:awp:agreement:1848facdd7e69ff96519d67c4c429c77",
+        "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+        "operation": {
+          "id": "urn:op:flat-share",
+          "version": "0.1"
+        },
+        "offer": "urn:awp:engine-flat-share-main:alex-agent:0002",
+        "acceptance": "urn:awp:engine-flat-share-main:blair-agent:0001",
+        "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+        "terms": {
+          "purpose": "urn:purpose:flat-share",
+          "depositSplit": 0.5,
+          "moveIn": "2026-12-01"
+        },
+        "offeror": {
+          "actor": "urn:fictional:alex-agent:agent",
+          "onBehalfOf": "urn:fictional:alex"
+        },
+        "acceptor": {
+          "actor": "urn:fictional:blair-agent:agent",
+          "onBehalfOf": "urn:fictional:blair"
+        },
+        "formedAt": "2026-11-13T09:00:00.000Z"
+      }
+    },
+    "domain": {
+      "derivedRequests": {}
+    },
+    "revokedMandates": [
+      {
+        "id": "urn:awp:mandate:4c52b19e2d73c62fa2ca06b6af81c0df:mortgage-main",
+        "version": 1,
+        "digest": "sha-256:8bb06cbf0a1dc84fe50940f1206b02d22317ef5bd4bc1fdbb8f4b4a444e4372a",
+        "at": "2026-11-13T09:02:00.000Z"
+      }
+    ],
+    "tasks": {
+      "urn:send": {
+        "id": "urn:send",
+        "kind": "email",
+        "effectKey": "urn:send",
+        "status": "pending-approval",
+        "createdAt": "2026-11-13T09:00:00.000Z",
+        "updatedAt": "2026-11-13T09:00:00.000Z"
+      }
+    },
+    "transmissions": {
+      "urn:uuid:4d1264e3-f4b0-450f-81a7-db3607901d3f": {
+        "messageId": "urn:uuid:4d1264e3-f4b0-450f-81a7-db3607901d3f",
+        "binding": "gmail-api",
+        "externalId": "<awp-00d8293625f0ee4d8d8a293c3553f85acfa87848@awp-pilot.invalid>",
+        "wireDigest": "sha-256:168dc922b52627a4d02cabf2e66b2f6eefb6bfb3d127956c0d398fecdc9bbf8b",
+        "mimeDigest": "sha-256:d4677ba55b64e02cbf9038030e55ef6c32be72960b29f233503b0a73abd7b0a7",
+        "attempts": 1,
+        "createdAt": "2026-10-19T08:00:00.000Z",
+        "status": "attempting",
+        "updatedAt": "2026-10-19T08:00:00.000Z"
+      }
+    },
+    "contextItems": {
+      "urn:scenario:mortgage-main:task": [
+        {
+          "id": "urn:awp:instruction:8a64e19d76266ba819b6a67c89314e53",
+          "digest": "sha-256:136355cd9dfac6b4b3bd35aac3307034ae5017b3e4645e51c492f596c8109a4a",
+          "kind": "message",
+          "label": "Principal instruction",
+          "source": "https://sam.example/#me",
+          "subject": "https://sam.example/#me",
+          "claimType": "principal-instruction"
+        }
+      ]
+    },
+    "knownIdentifiers": {
+      "*": [
+        "urn:payer:agent",
+        "urn:payer",
+        "urn:payee",
+        "urn:payee:agent",
+        "urn:bank",
+        "urn:rule:bank",
+        "urn:op:paid-service",
+        "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "urn:awp:mandate:89d8f8ebef7261f765e9f98709100e16:pay",
+        "urn:awp:policy:29576f9f0d785c801aa1c0b3d296b5e2:pay/autonomous",
+        "urn:rule:spend",
+        "urn:op:pay",
+        "urn:rule:agree",
+        "urn:awp:policy:0c28ec0cbc0d50d188316ddfbb4511b4:pay/with-approval",
+        "urn:rule:approval"
+      ]
+    },
+    "generatedConversations": {
+      "urn:uuid:262fd1f7-6b14-4bf5-9f54-196a7e702a84": true
+    },
+    "usedApprovals": {
+      "urn:uuid:c3444785-402b-42e7-8c60-c8ffbbd06ae0": true
+    },
+    "notificationDuties": {
+      "sha-256:572ce76aec20fdc7760fa134d8f6afff047995a08becd0a0205a07ae3139dac0": {
+        "id": "sha-256:572ce76aec20fdc7760fa134d8f6afff047995a08becd0a0205a07ae3139dac0",
+        "rule": "urn:rule:emergency-read",
+        "use": "urn:awp:engine-emergency-access-main:record-agent:0001",
+        "recipient": "principal",
+        "due": "2026-11-13T10:00:00.000Z",
+        "status": "pending"
+      }
+    },
+    "organisationApprovals": {
+      "sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764": [
+        {
+          "type": "OrganisationApproval",
+          "id": "urn:awp:engine-master-data-change-main:approval:0001",
+          "signer": "urn:fictional:controller-one",
+          "actor": "urn:fictional:finance-agent:agent",
+          "actionDigest": "sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764",
+          "conversation": "urn:awp:engine-master-data-change-main:finance-agent:0001",
+          "issuedAt": "2026-11-13T09:00:00.000Z",
+          "validUntil": "2026-11-13T09:01:00.000Z",
+          "kid": "-7h0JXCD6yubh63g46b53B0zyrDtfYbwqccp1FByzuE",
+          "jws": "eyJhbGciOiJFZERTQSIsImtpZCI6Ii03aDBKWENENnl1Ymg2M2c0NmI1M0IwenlyRHRmWWJ3cWNjcDFGQnl6dUUiLCJ0eXAiOiJhd3Atb3JnYW5pc2F0aW9uLWFwcHJvdmFsK2p3cyJ9.eyJ0eXBlIjoiT3JnYW5pc2F0aW9uQXBwcm92YWwiLCJpZCI6InVybjphd3A6ZW5naW5lLW1hc3Rlci1kYXRhLWNoYW5nZS1tYWluOmFwcHJvdmFsOjAwMDEiLCJzaWduZXIiOiJ1cm46ZmljdGlvbmFsOmNvbnRyb2xsZXItb25lIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmZpbmFuY2UtYWdlbnQ6YWdlbnQiLCJhY3Rpb25EaWdlc3QiOiJzaGEtMjU2OmE5ZjQzNzU0ZDM1YzRiM2U4MGM3MGRiNDk3MDgzMjQxMmUxNTkwNTFkNTY5ZTM0ZTdmZGJkY2M1N2Q3MjU3NjQiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1tYXN0ZXItZGF0YS1jaGFuZ2UtbWFpbjpmaW5hbmNlLWFnZW50OjAwMDEiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTExLTEzVDA5OjAxOjAwLjAwMFoifQ.Hb7qIBXob6y8sLRVJYPtTrzFsW57a7MibwprxHq0KfqRINkEtax9PNnOP_QNZoTXZJPeePr4MVfP_XddG952Aw",
+          "releaseBinding": {
+            "intentDigest": "sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764",
+            "fields": {
+              "operation": {
+                "id": "urn:op:master-data-change",
+                "version": "0.1"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:master-data-change",
+              "challenge": null,
+              "input": {
+                "account": "urn:account:confirmed",
+                "support": ["urn:scenario:master-data-change:account"]
+              }
+            },
+            "kind": "invoke"
+          }
+        }
+      ]
+    },
+    "paymentOrders": {
+      "urn:awp:payment:sha-256-a98ea1561309e7d4cc2141bbff965ad85ac7b73af7491346286cab389647f8dd": {
+        "data": {
+          "id": "urn:awp:payment:sha-256-a98ea1561309e7d4cc2141bbff965ad85ac7b73af7491346286cab389647f8dd",
+          "agreement": "sha-256:8d3293cfd62c4352874ef64af52e500c3081b71b1db2454268a4322ae266ab7f",
+          "payer": "urn:payer",
+          "payee": "urn:payee",
+          "account": "urn:account:payee",
+          "amount": "500",
+          "currency": "GBP",
+          "invoice": "urn:uuid:38394d21-b359-4a57-bf6c-72ca303fbcd9",
+          "onceKey": "sha-256:8eedf8d82b698a04c88fb1b7382e84b9675c2a159b6f410de72034830657b5b4",
+          "validUntil": "2026-12-31T09:00:00.000Z",
+          "instalment": 1
+        },
+        "provider": "urn:bank",
+        "intentDigest": "sha-256:a98ea1561309e7d4cc2141bbff965ad85ac7b73af7491346286cab389647f8dd"
+      }
+    },
+    "paymentOrderKeys": {
+      "sha-256:45c1c8aba1d6e779c702b2ff0bd5b724267debd77ecc087ba04a783ba9e92e25": "sha-256:9860d953023f95cf0d91264e266d07d766e1fcbcba9c23447e1c28ed8046f13d"
+    },
+    "paymentReceipts": {
+      "urn:awp:payment:sha-256-9860d953023f95cf0d91264e266d07d766e1fcbcba9c23447e1c28ed8046f13d:receipt": {
+        "document": {
+          "@context": "https://w3id.org/jeswr/awp/context/v1",
+          "id": "urn:awp:payment:sha-256-9860d953023f95cf0d91264e266d07d766e1fcbcba9c23447e1c28ed8046f13d:receipt",
+          "type": "PaymentReceipt",
+          "claim": "payment-receipt",
+          "ledgerReference": "sha-256:82136b912ccec226b867261e1c915d3f8e2385ff39368f2d0688f1f6ba196dba",
+          "paymentAbout": {
+            "id": "urn:awp:payment:sha-256-9860d953023f95cf0d91264e266d07d766e1fcbcba9c23447e1c28ed8046f13d",
+            "type": "PayAction",
+            "instalment": "1",
+            "onceKey": "sha-256:45c1c8aba1d6e779c702b2ff0bd5b724267debd77ecc087ba04a783ba9e92e25",
+            "payeeAccount": "urn:account:bracken-lantern",
+            "paymentAgent": "https://sam.example/#me",
+            "paymentObject": "urn:awp:engine-mortgage-main-main:valuer-agent:0004",
+            "paymentRecipient": "urn:fictional:bracken-lantern-valuations",
+            "paymentValidUntil": "2026-11-13T10:00:00.000Z",
+            "price": "450.00",
+            "priceCurrency": "USD",
+            "settles": "sha-256:c55166a76ecc5e8bb9e0d2a7a0fff3cd67bee1e0f5437b1d433609a6b6775f40"
+          },
+          "paymentRecipient": "urn:fictional:bracken-lantern-valuations",
+          "paymentStatus": "https://schema.org/CompletedActionStatus",
+          "price": "450.00",
+          "priceCurrency": "USD",
+          "settles": "sha-256:c55166a76ecc5e8bb9e0d2a7a0fff3cd67bee1e0f5437b1d433609a6b6775f40",
+          "source": "urn:fictional:mossbridge-payment-desk"
+        },
+        "order": "urn:awp:payment:sha-256-9860d953023f95cf0d91264e266d07d766e1fcbcba9c23447e1c28ed8046f13d"
+      }
+    },
+    "paymentTotals": {
+      "urn:rule:spend|GBP|2026-11": 50000
+    },
+    "statementRefusals": {
+      "urn:scenario:mortgage-main:task|mortgage.product|": "source-unknown"
+    },
+    "relianceHolds": {
+      "urn:scenario:introduction:task|urn:scenario:introduction:self-profile": {
+        "task": "urn:scenario:introduction:task",
+        "statement": {
+          "value": true,
+          "id": "urn:scenario:introduction:self-profile",
+          "issuer": "urn:fictional:introduction:owner",
+          "subject": "urn:fictional:introduction:owner",
+          "claimType": "identity.verified",
+          "method": "self-reported",
+          "asOf": "2026-11-13T09:00:00.000Z",
+          "terms": {
+            "policy": {
+              "id": "urn:terms:introduction:self-profile",
+              "permissions": [
+                {
+                  "type": "permission",
+                  "action": "use",
+                  "target": "urn:scenario:introduction:self-profile",
+                  "constraints": [
+                    {
+                      "leftOperand": "purpose",
+                      "operator": "eq",
+                      "rightOperand": "urn:purpose:introduction"
+                    }
+                  ]
+                },
+                {
+                  "type": "permission",
+                  "action": "distribute",
+                  "target": "urn:scenario:introduction:self-profile",
+                  "constraints": [
+                    {
+                      "leftOperand": "purpose",
+                      "operator": "eq",
+                      "rightOperand": "urn:purpose:introduction"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "digest": "sha-256:622b8acff06a916c03dbeedc257df4ade3dfb8b4e31a5e463cca6356a912b9ca",
+        "reason": "source-not-authoritative"
+      }
+    },
+    "relianceBindings": {
+      "sha-256:28f4240970c320f44421b0259b024bd88dae39f55a1c132d7117c4c540199c07": "sha-256:359731eb287dfdfabcf1848f0c3577f755e3940de39e21c398761aae7a6450a5"
+    },
+    "trustPins": [
+      {
+        "kid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+        "party": "urn:fictional:alex",
+        "purpose": "urn:purpose:flat-share",
+        "expiresAt": "2026-11-13T15:00:00.000Z"
+      }
+    ],
+    "trustHolds": {
+      "urn:awp:trust-request:6b8859b0299bd67fcbb3feb966624696": {
+        "digest": "sha-256:aaa718a08fa972c84bd3d776080c7663bdb6115b5a3894512eb2da43fb0e3123",
+        "message": {
+          "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+          "configuration": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+          "id": "urn:awp:engine-flat-share-main:alex-agent:0002",
+          "conversation": "urn:awp:engine-flat-share-main:alex-agent:0001",
+          "kind": "propose",
+          "from": {
+            "actor": "urn:fictional:alex-agent:agent",
+            "onBehalfOf": "urn:fictional:alex"
+          },
+          "to": {
+            "actor": "urn:fictional:blair-agent:agent",
+            "party": "urn:fictional:blair"
+          },
+          "createdAt": "2026-11-13T09:00:00.000Z",
+          "expiresAt": "2026-11-13T15:00:00.000Z",
+          "body": {
+            "operation": {
+              "id": "urn:op:flat-share",
+              "version": "0.1"
+            },
+            "terms": {
+              "purpose": "urn:purpose:flat-share",
+              "depositSplit": 0.5,
+              "moveIn": "2026-12-01"
+            },
+            "termsDigest": "sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc",
+            "round": 1
+          },
+          "evidence": [
+            {
+              "role": "representation",
+              "format": "jws-compact",
+              "value": "eyJhbGciOiJFZERTQSIsImtpZCI6Ii1GMWhGUXR0VW5xZHZLbW9pSDA4TWVEZHNpZjMxZTZNclFMczJSalFBV1kiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MzRiODUxN2M0YmY4ZTlhNmYzODQ0YWI5YWRhYmQ0YTE6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphbGV4IiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmFsZXgtYWdlbnQ6YWdlbnQiLCJhY3RvcktpZCI6Im5HVm9UOFNyQTlUakExcU9QWXo3dm05d0Zremt0SXZrMWkyUm1XcmZCS1kiLCJvcGVyYXRpb25zIjpbInVybjpvcDpmbGF0LXNoYXJlIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Bfxi2aZVZt5kDfWH640eiWGlcY_rCPCnN5ESf252CTJ-T3NEveATdq_5O5Pj_xGzglLZZQoxcqWyTxfV2MgpAg"
+            }
+          ]
+        },
+        "wire": {
+          "format": "awp-jsonld/0.1",
+          "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-flat-share-main:alex-agent:0002\",\"type\":[\"Message\",\"Propose\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\",\"kind\":\"propose\",\"conversation\":\"urn:awp:engine-flat-share-main:alex-agent:0001\",\"from\":{\"id\":\"urn:awp:n:3BEhTo_yWwUcAUM_UBTObSKqJB5xjsDhRZZMm4LDQWM\"},\"to\":{\"id\":\"urn:awp:n:337l3HYVwrSsN_hMSC3oQmA9YuwNmwSwjPGFoTeOU6M\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:FImUxLuvUFKUY6Xl8ZyLOANI40iaYlLybMtCQAXWm3o\"},\"evidence\":{\"id\":\"urn:awp:n:W4mxPaz2VaPXVkGXpwz6rgfqZSsZov3E4O15TitChwg\"},\"@included\":[{\"id\":\"urn:awp:n:3BEhTo_yWwUcAUM_UBTObSKqJB5xjsDhRZZMm4LDQWM\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:alex-agent:agent\",\"onBehalfOf\":\"urn:fictional:alex\"},{\"id\":\"urn:awp:n:337l3HYVwrSsN_hMSC3oQmA9YuwNmwSwjPGFoTeOU6M\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:blair-agent:agent\",\"party\":\"urn:fictional:blair\"},{\"id\":\"urn:awp:n:FImUxLuvUFKUY6Xl8ZyLOANI40iaYlLybMtCQAXWm3o\",\"type\":\"ProposeBody\",\"operation\":{\"id\":\"urn:op:flat-share\"},\"round\":\"1\",\"terms\":{\"id\":\"urn:awp:n:MiXVVZpchI96y0EK6Unujpmc3ptgiQCiMAH46buc9Zg\"},\"termsDigest\":\"sha-256:cefbc4a6eac4b9bb2cf258dae2154555a016287e2e07b05a7c27986164edbedc\"},{\"id\":\"urn:awp:n:W4mxPaz2VaPXVkGXpwz6rgfqZSsZov3E4O15TitChwg\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:8o9FdyuRY6GB1qlSElAfpMkh9fClKkXKrRCQAW7rNfg\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:flat-share\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:MiXVVZpchI96y0EK6Unujpmc3ptgiQCiMAH46buc9Zg\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:bkYclfzZ9XekO4082eRWwS39L__Z7maovwMiwMMhHR8\"},{\"id\":\"urn:awp:n:FSiXk-veayMOW-sFxu-3yTFX1_ge71YonRYF9s6pjQY\"},{\"id\":\"urn:awp:n:nVcf_5mg05uR85gTULctEDhvfpw7DtdfvXkJL75C-W8\"}]},{\"id\":\"urn:awp:n:8o9FdyuRY6GB1qlSElAfpMkh9fClKkXKrRCQAW7rNfg\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:cBK8C9VF_yc93sEqoRhBRpN0F53hQGmby-DqVMQAA54\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:alex\",\"proofGraph\":\"urn:awp:n:WgDmlCbmIh-ezxmeKLano3vRUwB2nT5nWT8qMkqzotY\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:bkYclfzZ9XekO4082eRWwS39L__Z7maovwMiwMMhHR8\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:purpose:flat-share\"},\"name\":\"purpose\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:purpose\"},{\"id\":\"urn:awp:n:FSiXk-veayMOW-sFxu-3yTFX1_ge71YonRYF9s6pjQY\",\"type\":\"PropertyValue\",\"domainValue\":{\"type\":\"http://www.w3.org/2001/XMLSchema#decimal\",\"@value\":\"0.5\"},\"name\":\"depositSplit\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:depositSplit\"},{\"id\":\"urn:awp:n:nVcf_5mg05uR85gTULctEDhvfpw7DtdfvXkJL75C-W8\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-12-01\",\"name\":\"moveIn\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:moveIn\"},{\"id\":\"urn:awp:n:cBK8C9VF_yc93sEqoRhBRpN0F53hQGmby-DqVMQAA54\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:aWJ2X159Z7FlTNC-7mnqXfzjCosgYf3wqiAgsc5HwS0\"}},{\"id\":\"urn:awp:n:aWJ2X159Z7FlTNC-7mnqXfzjCosgYf3wqiAgsc5HwS0\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:Ag6RIvYXUzqVp1lM8YyZsSGir0fHexYX_15v4ikh09Y\"},{\"id\":\"urn:awp:n:Lbcieh1nEULx4QiSAGT64EkM0Y2DSMQMIMIdKdZ1Lec\"},{\"id\":\"urn:awp:n:X1zny2sh9a3KL_G_-s0DR7WPM5VMHhu6p0Hl7eRTJCY\"},{\"id\":\"urn:awp:n:62-E8KagHrlR83a3lil7xmK2n49sYTzhPRoQQfledi8\"},{\"id\":\"urn:awp:n:FIfXqWx8sqmGaEUKe0nWTh26FcIUtMB4m28e_aTgSU0\"},{\"id\":\"urn:awp:n:c_886eiXszT0VlTe5mf5g8_klCXeYxUMHWe_a6KRwwI\"},{\"id\":\"urn:awp:n:MBuN8XGThl_QEraq7vZFVwmpf3zZmoD0vn2xDZiWDiY\"},{\"id\":\"urn:awp:n:KVbZDR31pYRnl-kGn35mnP4hgoSUkwdaOoIeP3V9Cis\"},{\"id\":\"urn:awp:n:rPKCJcnct0JRRuLRTzJoR2rU22KV3VjbZR6AA-PMaZ0\"}]},{\"id\":\"urn:awp:n:Ag6RIvYXUzqVp1lM8YyZsSGir0fHexYX_15v4ikh09Y\",\"type\":\"PropertyValue\",\"domainValue\":\"RepresentationStatement\",\"name\":\"type\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:type\"},{\"id\":\"urn:awp:n:Lbcieh1nEULx4QiSAGT64EkM0Y2DSMQMIMIdKdZ1Lec\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:representation:34b8517c4bf8e9a6f3844ab9adabd4a1:1794560400000\"},\"name\":\"id\",\"position\":\"1\",\"propertyID\":\"urn:awp:legacy-field:id\"},{\"id\":\"urn:awp:n:X1zny2sh9a3KL_G_-s0DR7WPM5VMHhu6p0Hl7eRTJCY\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:alex\"},\"name\":\"party\",\"position\":\"2\",\"propertyID\":\"urn:awp:legacy-field:party\"},{\"id\":\"urn:awp:n:62-E8KagHrlR83a3lil7xmK2n49sYTzhPRoQQfledi8\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:fictional:alex-agent:agent\"},\"name\":\"actor\",\"position\":\"3\",\"propertyID\":\"urn:awp:legacy-field:actor\"},{\"id\":\"urn:awp:n:FIfXqWx8sqmGaEUKe0nWTh26FcIUtMB4m28e_aTgSU0\",\"type\":\"PropertyValue\",\"domainValue\":\"nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY\",\"name\":\"actorKid\",\"position\":\"4\",\"propertyID\":\"urn:awp:legacy-field:actorKid\"},{\"id\":\"urn:awp:n:c_886eiXszT0VlTe5mf5g8_klCXeYxUMHWe_a6KRwwI\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:awp:n:G0seEc-Y3g3P4MsTfIBKTkuwHE2n_7fTHEsw_lZJw9U\"},\"name\":\"operations\",\"position\":\"5\",\"propertyID\":\"urn:awp:legacy-field:operations\"},{\"id\":\"urn:awp:n:MBuN8XGThl_QEraq7vZFVwmpf3zZmoD0vn2xDZiWDiY\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-11-13T08:59:00.000Z\",\"name\":\"validFrom\",\"position\":\"6\",\"propertyID\":\"urn:awp:legacy-field:validFrom\"},{\"id\":\"urn:awp:n:KVbZDR31pYRnl-kGn35mnP4hgoSUkwdaOoIeP3V9Cis\",\"type\":\"PropertyValue\",\"domainValue\":\"2027-01-12T09:00:00.000Z\",\"name\":\"validUntil\",\"position\":\"7\",\"propertyID\":\"urn:awp:legacy-field:validUntil\"},{\"id\":\"urn:awp:n:rPKCJcnct0JRRuLRTzJoR2rU22KV3VjbZR6AA-PMaZ0\",\"type\":\"PropertyValue\",\"domainValue\":\"2026-11-13T09:00:00.000Z\",\"name\":\"issuedAt\",\"position\":\"8\",\"propertyID\":\"urn:awp:legacy-field:issuedAt\"},{\"id\":\"urn:awp:n:G0seEc-Y3g3P4MsTfIBKTkuwHE2n_7fTHEsw_lZJw9U\",\"type\":\"ItemList\",\"itemListElement\":[{\"id\":\"urn:awp:n:zbdJqO9aZlgc3lNPxzI0_-5cX05olSxJKJlKDpD5mbk\"}]},{\"id\":\"urn:awp:n:zbdJqO9aZlgc3lNPxzI0_-5cX05olSxJKJlKDpD5mbk\",\"type\":\"PropertyValue\",\"domainValue\":{\"id\":\"urn:op:flat-share\"},\"name\":\"0\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:0\"},{\"id\":\"urn:awp:n:WgDmlCbmIh-ezxmeKLano3vRUwB2nT5nWT8qMkqzotY\",\"@graph\":[{\"id\":\"urn:awp:n:gn0UIXlkyp2NVp65ni-dkBnSE04gV8CcST7Ptxk9NTk\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Ii1GMWhGUXR0VW5xZHZLbW9pSDA4TWVEZHNpZjMxZTZNclFMczJSalFBV1kiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MzRiODUxN2M0YmY4ZTlhNmYzODQ0YWI5YWRhYmQ0YTE6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDphbGV4IiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmFsZXgtYWdlbnQ6YWdlbnQiLCJhY3RvcktpZCI6Im5HVm9UOFNyQTlUakExcU9QWXo3dm05d0Zremt0SXZrMWkyUm1XcmZCS1kiLCJvcGVyYXRpb25zIjpbInVybjpvcDpmbGF0LXNoYXJlIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.Bfxi2aZVZt5kDfWH640eiWGlcY_rCPCnN5ESf252CTJ-T3NEveATdq_5O5Pj_xGzglLZZQoxcqWyTxfV2MgpAg\"}]}],\"presentFields\":\"https://w3id.org/jeswr/awp#evidence\",\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Im5HVm9UOFNyQTlUakExcU9QWXo3dm05d0Zremt0SXZrMWkyUm1XcmZCS1kiLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDphbGV4LWFnZW50OmFnZW50IiwiaWQiOiJ1cm46YXdwOm46M0JFaFRvX3lXd1VjQVVNX1VCVE9iU0txSkI1eGpzRGhSWlpNbTRMRFFXTSIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmFsZXgiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpibGFpci1hZ2VudDphZ2VudCIsImlkIjoidXJuOmF3cDpuOjMzN2wzSFlWd3JTc05faE1TQzNvUW1BOVl1d05td1N3alBHRm9UZU9VNk0iLCJwYXJ0eSI6InVybjpmaWN0aW9uYWw6YmxhaXIiLCJ0eXBlIjoiQXVkaWVuY2VSZWYifSx7ImlkIjoidXJuOmF3cDpuOkZJbVV4THV2VUZLVVk2WGw4WnlMT0FOSTQwaWFZbEx5Yk10Q1FBWFdtM28iLCJvcGVyYXRpb24iOnsiaWQiOiJ1cm46b3A6ZmxhdC1zaGFyZSJ9LCJyb3VuZCI6IjEiLCJ0ZXJtcyI6eyJpZCI6InVybjphd3A6bjpNaVhWVlpwY2hJOTZ5MEVLNlVudWpwbWMzcHRnaVFDaU1BSDQ2YnVjOVpnIn0sInRlcm1zRGlnZXN0Ijoic2hhLTI1NjpjZWZiYzRhNmVhYzRiOWJiMmNmMjU4ZGFlMjE1NDU1NWEwMTYyODdlMmUwN2IwNWE3YzI3OTg2MTY0ZWRiZWRjIiwidHlwZSI6IlByb3Bvc2VCb2R5In0seyJlbWJlZGRlZENyZWRlbnRpYWwiOnsiaWQiOiJ1cm46YXdwOm46OG85RmR5dVJZNkdCMXFsU0VsQWZwTWtoOWZDbEtrWEtyUkNRQVc3ck5mZyJ9LCJmb3JtYXQiOiJqd3MtY29tcGFjdCIsImlkIjoidXJuOmF3cDpuOlc0bXhQYXoyVmFQWFZrR1hwd3o2cmdmcVpTc1pvdjNFNE8xNVRpdENod2ciLCJwb3NpdGlvbiI6IjAiLCJyb2xlIjoicmVwcmVzZW50YXRpb24iLCJ0eXBlIjoiRXZpZGVuY2VJdGVtIn0seyJpZCI6InVybjpvcDpmbGF0LXNoYXJlIiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOk1pWFZWWnBjaEk5NnkwRUs2VW51anBtYzNwdGdpUUNpTUFINDZidWM5WmciLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOmJrWWNsZnpaOVhla080MDgyZVJXd1MzOUxfX1o3bWFvdndNaXdNTWhIUjgifSx7ImlkIjoidXJuOmF3cDpuOkZTaVhrLXZlYXlNT1ctc0Z4dS0zeVRGWDFfZ2U3MVlvblJZRjlzNnBqUVkifSx7ImlkIjoidXJuOmF3cDpuOm5WY2ZfNW1nMDV1Ujg1Z1RVTGN0RURodmZwdzdEdGRmdlhrSkw3NUMtVzgifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46Y0JLOEM5VkZfeWM5M3NFcW9SaEJScE4wRjUzaFFHbWJ5LURxVk1RQUE1NCIsImlkIjoidXJuOmF3cDpuOjhvOUZkeXVSWTZHQjFxbFNFbEFmcE1raDlmQ2xLa1hLclJDUUFXN3JOZmciLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6YWxleCIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46V2dEbWxDYm1JaC1lenhtZUtMYW5vM3ZSVXdCMm5UNW5XVDhxTWtxem90WSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOnB1cnBvc2U6ZmxhdC1zaGFyZSJ9LCJpZCI6InVybjphd3A6bjpia1ljbGZ6WjlYZWtPNDA4MmVSV3dTMzlMX19aN21hb3Z3TWl3TU1oSFI4IiwibmFtZSI6InB1cnBvc2UiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cHVycG9zZSIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6eyJAdmFsdWUiOiIwLjUiLCJ0eXBlIjoiaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEjZGVjaW1hbCJ9LCJpZCI6InVybjphd3A6bjpGU2lYay12ZWF5TU9XLXNGeHUtM3lURlgxX2dlNzFZb25SWUY5czZwalFZIiwibmFtZSI6ImRlcG9zaXRTcGxpdCIsInBvc2l0aW9uIjoiMSIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpkZXBvc2l0U3BsaXQiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOiIyMDI2LTEyLTAxIiwiaWQiOiJ1cm46YXdwOm46blZjZl81bWcwNXVSODVnVFVMY3RFRGh2ZnB3N0R0ZGZ2WGtKTDc1Qy1XOCIsIm5hbWUiOiJtb3ZlSW4iLCJwb3NpdGlvbiI6IjIiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6bW92ZUluIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOmNCSzhDOVZGX3ljOTNzRXFvUmhCUnBOMEY1M2hRR21ieS1EcVZNUUFBNTQiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOmFXSjJYMTU5WjdGbFROQy03bW5xWGZ6akNvc2dZZjN3cWlBZ3NjNUh3UzAifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJpZCI6InVybjphd3A6bjphV0oyWDE1OVo3RmxUTkMtN21ucVhmempDb3NnWWYzd3FpQWdzYzVId1MwIiwiaXRlbUxpc3RFbGVtZW50IjpbeyJpZCI6InVybjphd3A6bjpBZzZSSXZZWFV6cVZwMWxNOFl5WnNTR2lyMGZIZXhZWF8xNXY0aWtoMDlZIn0seyJpZCI6InVybjphd3A6bjpMYmNpZWgxbkVVTHg0UWlTQUdUNjRFa00wWTJEU01RTUlNSWRLZFoxTGVjIn0seyJpZCI6InVybjphd3A6bjpYMXpueTJzaDlhM0tMX0dfLXMwRFI3V1BNNVZNSGh1NnAwSGw3ZVJUSkNZIn0seyJpZCI6InVybjphd3A6bjo2Mi1FOEthZ0hybFI4M2EzbGlsN3htSzJuNDlzWVR6aFBSb1FRZmxlZGk4In0seyJpZCI6InVybjphd3A6bjpGSWZYcVd4OHNxbUdhRVVLZTBuV1RoMjZGY0lVdE1CNG0yOGVfYVRnU1UwIn0seyJpZCI6InVybjphd3A6bjpjXzg4NmVpWHN6VDBWbFRlNW1mNWc4X2tsQ1hlWXhVTUhXZV9hNktSd3dJIn0seyJpZCI6InVybjphd3A6bjpNQnVOOFhHVGhsX1FFcmFxN3ZaRlZ3bXBmM3pabW9EMHZuMnhEWmlXRGlZIn0seyJpZCI6InVybjphd3A6bjpLVmJaRFIzMXBZUm5sLWtHbjM1bW5QNGhnb1NVa3dkYU9vSWVQM1Y5Q2lzIn0seyJpZCI6InVybjphd3A6bjpyUEtDSmNuY3QwSlJSdUxSVHpKb1IyclUyMktWM1ZqYlpSNkFBLVBNYVowIn1dLCJ0eXBlIjoiTmFtZWRWYWx1ZUNvbGxlY3Rpb24ifSx7ImRvbWFpblZhbHVlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6bjpBZzZSSXZZWFV6cVZwMWxNOFl5WnNTR2lyMGZIZXhZWF8xNXY0aWtoMDlZIiwibmFtZSI6InR5cGUiLCJwb3NpdGlvbiI6IjAiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6dHlwZSIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246MzRiODUxN2M0YmY4ZTlhNmYzODQ0YWI5YWRhYmQ0YTE6MTc5NDU2MDQwMDAwMCJ9LCJpZCI6InVybjphd3A6bjpMYmNpZWgxbkVVTHg0UWlTQUdUNjRFa00wWTJEU01RTUlNSWRLZFoxTGVjIiwibmFtZSI6ImlkIiwicG9zaXRpb24iOiIxIiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOmlkIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOmZpY3Rpb25hbDphbGV4In0sImlkIjoidXJuOmF3cDpuOlgxem55MnNoOWEzS0xfR18tczBEUjdXUE01Vk1IaHU2cDBIbDdlUlRKQ1kiLCJuYW1lIjoicGFydHkiLCJwb3NpdGlvbiI6IjIiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6cGFydHkiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOnsiaWQiOiJ1cm46ZmljdGlvbmFsOmFsZXgtYWdlbnQ6YWdlbnQifSwiaWQiOiJ1cm46YXdwOm46NjItRThLYWdIcmxSODNhM2xpbDd4bUsybjQ5c1lUemhQUm9RUWZsZWRpOCIsIm5hbWUiOiJhY3RvciIsInBvc2l0aW9uIjoiMyIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDphY3RvciIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6Im5HVm9UOFNyQTlUakExcU9QWXo3dm05d0Zremt0SXZrMWkyUm1XcmZCS1kiLCJpZCI6InVybjphd3A6bjpGSWZYcVd4OHNxbUdhRVVLZTBuV1RoMjZGY0lVdE1CNG0yOGVfYVRnU1UwIiwibmFtZSI6ImFjdG9yS2lkIiwicG9zaXRpb24iOiI0IiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOmFjdG9yS2lkIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImRvbWFpblZhbHVlIjp7ImlkIjoidXJuOmF3cDpuOkcwc2VFYy1ZM2czUDRNc1RmSUJLVGt1d0hFMm5fN2ZUSEVzd19sWkp3OVUifSwiaWQiOiJ1cm46YXdwOm46Y184ODZlaVhzelQwVmxUZTVtZjVnOF9rbENYZVl4VU1IV2VfYTZLUnd3SSIsIm5hbWUiOiJvcGVyYXRpb25zIiwicG9zaXRpb24iOiI1IiwicHJvcGVydHlJRCI6InVybjphd3A6bGVnYWN5LWZpZWxkOm9wZXJhdGlvbnMiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOiIyMDI2LTExLTEzVDA4OjU5OjAwLjAwMFoiLCJpZCI6InVybjphd3A6bjpNQnVOOFhHVGhsX1FFcmFxN3ZaRlZ3bXBmM3pabW9EMHZuMnhEWmlXRGlZIiwibmFtZSI6InZhbGlkRnJvbSIsInBvc2l0aW9uIjoiNiIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDp2YWxpZEZyb20iLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiZG9tYWluVmFsdWUiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpZCI6InVybjphd3A6bjpLVmJaRFIzMXBZUm5sLWtHbjM1bW5QNGhnb1NVa3dkYU9vSWVQM1Y5Q2lzIiwibmFtZSI6InZhbGlkVW50aWwiLCJwb3NpdGlvbiI6IjciLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6dmFsaWRVbnRpbCIsInR5cGUiOiJQcm9wZXJ0eVZhbHVlIn0seyJkb21haW5WYWx1ZSI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlkIjoidXJuOmF3cDpuOnJQS0NKY25jdDBKUlJ1TFJUekpvUjJyVTIyS1YzVmpiWlI2QUEtUE1hWjAiLCJuYW1lIjoiaXNzdWVkQXQiLCJwb3NpdGlvbiI6IjgiLCJwcm9wZXJ0eUlEIjoidXJuOmF3cDpsZWdhY3ktZmllbGQ6aXNzdWVkQXQiLCJ0eXBlIjoiUHJvcGVydHlWYWx1ZSJ9LHsiaWQiOiJ1cm46YXdwOm46RzBzZUVjLVkzZzNQNE1zVGZJQktUa3V3SEUybl83ZlRIRXN3X2xaSnc5VSIsIml0ZW1MaXN0RWxlbWVudCI6W3siaWQiOiJ1cm46YXdwOm46emJkSnFPOWFabGdjM2xOUHh6STBfLTVjWDA1b2xTeEpLSmxLRHBENW1iayJ9XSwidHlwZSI6Ikl0ZW1MaXN0In0seyJkb21haW5WYWx1ZSI6eyJpZCI6InVybjpvcDpmbGF0LXNoYXJlIn0sImlkIjoidXJuOmF3cDpuOnpiZEpxTzlhWmxnYzNsTlB4ekkwXy01Y1gwNW9sU3hKS0psS0RwRDVtYmsiLCJuYW1lIjoiMCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDowIiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7IkBncmFwaCI6W3siaWQiOiJ1cm46YXdwOm46Z24wVUlYbGt5cDJOVnA2NW5pLWRrQm5TRTA0Z1Y4Q2NTVDdQdHhrOU5UayIsImp3cyI6ImV5SmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJaTFHTVdoR1VYUjBWVzV4WkhaTGJXOXBTREE0VFdWRVpITnBaak14WlRaTmNsRk1jekpTYWxGQlYxa2lMQ0owZVhBaU9pSmhkM0F0Y21Wd2NtVnpaVzUwWVhScGIyNHJhbmR6SW4wLmV5SjBlWEJsSWpvaVVtVndjbVZ6Wlc1MFlYUnBiMjVUZEdGMFpXMWxiblFpTENKcFpDSTZJblZ5YmpwaGQzQTZjbVZ3Y21WelpXNTBZWFJwYjI0Nk16UmlPRFV4TjJNMFltWTRaVGxoTm1Zek9EUTBZV0k1WVdSaFltUTBZVEU2TVRjNU5EVTJNRFF3TURBd01DSXNJbkJoY25SNUlqb2lkWEp1T21acFkzUnBiMjVoYkRwaGJHVjRJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09tRnNaWGd0WVdkbGJuUTZZV2RsYm5RaUxDSmhZM1J2Y2t0cFpDSTZJbTVIVm05VU9GTnlRVGxVYWtFeGNVOVFXWG8zZG0wNWQwWnJlbXQwU1hack1Xa3lVbTFYY21aQ1Mxa2lMQ0p2Y0dWeVlYUnBiMjV6SWpwYkluVnlianB2Y0RwbWJHRjBMWE5vWVhKbElsMHNJblpoYkdsa1JuSnZiU0k2SWpJd01qWXRNVEV0TVROVU1EZzZOVGs2TURBdU1EQXdXaUlzSW5aaGJHbGtWVzUwYVd3aU9pSXlNREkzTFRBeExURXlWREE1T2pBd09qQXdMakF3TUZvaUxDSnBjM04xWldSQmRDSTZJakl3TWpZdE1URXRNVE5VTURrNk1EQTZNREF1TURBd1dpSjkuQmZ4aTJhWlZadDVrRGZXSDY0MGVpV0dsY1lfckNQQ25ONUVTZjI1MkNUSi1UM05FdmVBVGRxXzVPNVBqX3hHemdsTFpaUW94Y3FXeVR4ZlYyTWdwQWciLCJ0eXBlIjoiQ29tcGFjdEp3c1Byb29mIn1dLCJpZCI6InVybjphd3A6bjpXZ0RtbENibUloLWV6eG1lS0xhbm8zdlJVd0IyblQ1bldUOHFNa3F6b3RZIn1dLCJib2R5Ijp7ImlkIjoidXJuOmF3cDpuOkZJbVV4THV2VUZLVVk2WGw4WnlMT0FOSTQwaWFZbEx5Yk10Q1FBWFdtM28ifSwiY29uZmlndXJhdGlvbiI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbmZpZy9waW5uZWQtbGlzdC1sb2NhbC8wLjEiLCJjb252ZXJzYXRpb24iOiJ1cm46YXdwOmVuZ2luZS1mbGF0LXNoYXJlLW1haW46YWxleC1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46VzRteFBhejJWYVBYVmtHWHB3ejZyZ2ZxWlNzWm92M0U0TzE1VGl0Q2h3ZyJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjNCRWhUb195V3dVY0FVTV9VQlRPYlNLcUpCNXhqc0RoUlpaTW00TERRV00ifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1mbGF0LXNoYXJlLW1haW46YWxleC1hZ2VudDowMDAyIiwia2luZCI6InByb3Bvc2UiLCJwcmVzZW50RmllbGRzIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjZXZpZGVuY2UiLCJwcm9maWxlIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AvcHJvZmlsZS9waWxvdC8wLjEiLCJ0byI6eyJpZCI6InVybjphd3A6bjozMzdsM0hZVndyU3NOX2hNU0Mzb1FtQTlZdXdObXdTd2pQR0ZvVGVPVTZNIn0sInR5cGUiOlsiTWVzc2FnZSIsIlByb3Bvc2UiXX0.vm9d2rbzx90O2p_1Y9dCgwtewkgBHhfk6sdBTxnaSXcXVSSFlUCCvM9BB_rF6xZhVMaHfBCpdXMjFWNkVFe_BA\"}}",
+          "attachments": []
+        },
+        "binding": "direct-local/0.1",
+        "kid": "nGVoT8SrA9TjA1qOPYz7vm9wFkzktIvk1i2RmWrfBKY",
+        "party": "urn:fictional:alex",
+        "purpose": "urn:purpose:flat-share",
+        "expiresAt": "2026-11-13T15:00:00.000Z"
+      }
+    },
+    "trustRefusals": {
+      "sha-256:c28035e319bd2cf95f48c503980fe5d27637f53957ec8c62a79552b0b1d53d57": true
+    },
+    "paymentReleases": {
+      "urn:effect:admitted-reference": true
+    },
+    "paymentReservations": {
+      "urn:effect:admitted-reference": {
+        "digest": "sha-256:a98ea1561309e7d4cc2141bbff965ad85ac7b73af7491346286cab389647f8dd",
+        "period": "urn:rule:spend|GBP|2026-11",
+        "amountMinor": 50000
+      }
+    },
+    "descriptionAddresses": ["https://fictional.example/payer/description"],
+    "ledgerAuditHead": {
+      "seq": 0,
+      "hash": "sha-256:genesis"
+    }
+  }
+}

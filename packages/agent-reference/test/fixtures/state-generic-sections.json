@@ -1,0 +1,23 @@
+{
+  "x-authored-by": "AUTHORED-BY Codex GPT-6.2 Sol",
+  "sections": [
+    "conversations",
+    "seen",
+    "outbox",
+    "effects",
+    "pending",
+    "domain",
+    "tasks",
+    "transmissions",
+    "generatedConversations",
+    "notificationDuties",
+    "duties",
+    "pendingPodGrants",
+    "emailChallenges",
+    "paymentOrders",
+    "paymentOrderKeys",
+    "paymentReceipts",
+    "paymentTotals",
+    "paymentReleases"
+  ]
+}

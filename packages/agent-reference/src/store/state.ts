@@ -23,7 +23,6 @@
 import { randomUUID } from "crypto";
 import {
   closeSync,
-  existsSync,
   fsyncSync,
   linkSync,
   mkdirSync,
@@ -32,6 +31,7 @@ import {
   renameSync,
   rmSync,
   unlinkSync,
+  writeFileSync,
   writeSync,
   // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 } from "fs";
@@ -39,6 +39,8 @@ import {
 import { hostname } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { dirname } from "path";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { isDeepStrictEqual } from "util";
 import type { ConversationState } from "../core/conversation.js";
 import type {
   ActionIntent,
@@ -50,7 +52,9 @@ import type {
   OutcomeConclusion,
 } from "../core/types.js";
 import type { ContextItem } from "../gates/common.js";
+import { readStateSnapshot, SnapshotMemo, SnapshotReader } from "../model/store/state.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
+import { decodeSnapshotEntry, readLocalStoreFile } from "../wire/store-quads.js";
 
 export interface SeenEntry {
   readonly digest: string;
@@ -321,8 +325,35 @@ export interface StateStore {
   close(): void;
 }
 
+function assertSameSnapshot(expected: RuntimeState, actual: RuntimeState): void {
+  if (!isDeepStrictEqual(actual, expected)) throw new Error("state changed during RDF round trip");
+  for (const section of Object.keys(expected) as (keyof RuntimeState)[]) {
+    const value = expected[section];
+    if (
+      value &&
+      typeof value === "object" &&
+      !isDeepStrictEqual(Object.keys(value), Object.keys(actual[section]!))
+    )
+      throw new Error(`state section key order changed in ${section}`);
+  }
+}
+
 export class MemoryStateStore implements StateStore {
   private snapshot = JSON.stringify(emptyState());
+
+  constructor() {
+    if (process.env.AWP_STORE_RDF === "1") {
+      const memo = new SnapshotMemo();
+      const save = this.save;
+      this.save = (state) => {
+        save.call(this, state);
+        const expected = this.load();
+        const actual = memo.decode(memo.write(expected));
+        assertSameSnapshot(expected, actual);
+      };
+    }
+  }
+
   load(): RuntimeState {
     return normaliseState(JSON.parse(this.snapshot));
   }
@@ -401,16 +432,36 @@ export function fsyncDir(dir: string): void {
 export function writeFileDurable(path: string, content: string, flags: string): void {
   const fd = openSync(path, flags, 0o600);
   try {
-    writeSync(fd, content);
+    writeFileSync(fd, content, "utf8");
     fsyncSync(fd);
   } finally {
     closeSync(fd);
   }
 }
 
+/** Read one atomic snapshot without acquiring a writer lease. */
+export function readRuntimeStateFile(path: string): RuntimeState {
+  return loadRuntimeStateFile(path, readStateSnapshot);
+}
+
+function loadRuntimeStateFile(path: string, readRdf: (text: string) => RuntimeState): RuntimeState {
+  let text: string;
+  try {
+    text = readLocalStoreFile(path, "application/n-quads");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyState();
+    throw error;
+  }
+  return text.trimStart().startsWith("{")
+    ? normaliseState(decodeSnapshotEntry(text))
+    : readRdf(text);
+}
+
 export class FileStateStore implements StateStore {
   readonly lockPath: string;
   private readonly recoveryPath: string;
+  private memo?: SnapshotMemo;
+  private reader?: SnapshotReader;
   private token: string | undefined;
 
   constructor(private readonly path: string) {
@@ -505,19 +556,36 @@ export class FileStateStore implements StateStore {
   }
 
   load(): RuntimeState {
-    if (!existsSync(this.path)) return emptyState();
-    return normaliseState(JSON.parse(readFileSync(this.path, "utf8")));
+    this.reader ??= new SnapshotReader();
+    const reader = this.reader;
+    return loadRuntimeStateFile(this.path, (text) => reader.read(text, !this.memo));
   }
 
   save(state: RuntimeState): void {
     if (!this.token) throw new Error("state store is closed");
     const tmp = `${this.path}.tmp-${this.token}`;
-    writeFileDurable(tmp, JSON.stringify(state), "w");
-    renameSync(tmp, this.path);
-    fsyncDir(dirname(this.path));
+    let bytes: string;
+    try {
+      this.memo ??= this.reader?.takeWriteMemo() ?? new SnapshotMemo();
+      bytes = this.memo.write(state);
+      const expected = normaliseState(decodeSnapshotEntry(JSON.stringify(state)));
+      assertSameSnapshot(expected, this.memo.decode(bytes));
+    } catch (cause) {
+      this.memo = undefined;
+      const detail = cause instanceof Error ? `: ${cause.message}` : "";
+      throw new Error(`cannot save state snapshot${detail}`, { cause });
+    }
+    try {
+      writeFileDurable(tmp, bytes, "w");
+      renameSync(tmp, this.path);
+      fsyncDir(dirname(this.path));
+    } finally {
+      rmSync(tmp, { force: true });
+    }
   }
 
   close(): void {
+    this.reader = undefined;
     if (!this.token) return;
     const holder = readLock(this.lockPath);
     if (holder !== "missing" && holder?.token === this.token) {
