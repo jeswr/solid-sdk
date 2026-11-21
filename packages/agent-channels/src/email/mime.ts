@@ -209,7 +209,6 @@ function parseEntity(
   }
   if (carriersOnly && type !== "text/html" && type !== "application/ld+json")
     return { headers, type, params };
-  if (carriersOnly && ++count.parts > limits.maxParts) throw new MimeError("too many MIME parts");
   const cte = headers.filter(([n]) => n === "content-transfer-encoding");
   if (cte.length > 1) throw new MimeError("duplicate Content-Transfer-Encoding");
   // Remove the single line break that precedes a boundary delimiter.

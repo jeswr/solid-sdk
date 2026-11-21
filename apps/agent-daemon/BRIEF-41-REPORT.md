@@ -212,3 +212,35 @@ Node 24.22.3 was used throughout. Each Vitest invocation used `--maxWorkers=2`.
 The reference manifest is 283 / 278 / 0 / 5. The manifest, traces, outlines and
 oracle fixtures match `0825ae9f3` byte-for-byte. `git diff --check` passed.
 The worktree is uncommitted.
+
+## Review fixes (41e)
+
+| Finding | Change | Regression observed before the fix |
+| --- | --- | --- |
+| 1. Verdict durability | `apps/agent-daemon/src/gate.ts:99` syncs the directory after the final `.commit` rename. A failed sync attempts to remove the commit record so the verdict remains interrupted. | `apps/agent-daemon/test/gate-setup.test.ts:335` observed admission with no directory sync after the commit file appeared. The test now covers admitted, unstructured and refused verdicts. The failure-injection test checks immediate and reopened retries. |
+| 2. Ordinary HTML attachments | `packages/agent-channels/src/email-mime.ts:119` counts JSON-LD MIME leaves and HTML leaves with a JSON-LD script during discovery. Full MIME parity still applies to signed messages. | `apps/agent-daemon/test/daemon.test.ts:1419` observed no Reader call for a plain message with 13 ordinary HTML attachments and zero carriers. It now verifies import, classification and checkpointing. |
+| 3. Oversized Graph Mail | `packages/agent-channels/src/graph-mail.ts:166` returns a `bounds-exceeded` refusal and continues the delta page. Refusals carry the MIME digest when available. If the guard withholds the bytes, the digest identifies the binding, account and provider item ID. | `packages/agent-channels/test/graph-mail.test.ts:138` observed `list()` fail on the oversized MIME before returning the next valid item. Transport cap tests also cover declared and streamed refusals. |
+| 4. Oversized Teams rows | `packages/agent-channels/src/graph-teams.ts:44` stores oversized pending rows as an ID, digest and refusal reason. `apps/agent-daemon/src/daemon.ts:158` records both bindings' refusals through the gate before checkpointing. | `packages/agent-channels/test/graph-teams.test.ts:123` observed `invalid Teams JSON` when six oversized rows inflated the cursor beyond 1 MiB. The test resumes from the compact cursor and parses the later valid row. The daemon test at line 1552 verifies the ledger before checkpointing. |
+| 5. Failed pin lease acquisition | `apps/agent-daemon/src/local.ts:66` closes and removes the newly created lock when acquisition fails. | `apps/agent-daemon/test/gate-setup.test.ts:129` observed `pin.lock` survive a forced sync failure. It now verifies a subsequent pin succeeds. |
+
+The review's upgrade and old shared parity findings remain as requested. Existing
+read behavior for verdicts written by earlier unreleased commits is unchanged.
+No new tracker items were identified.
+
+Checks used Node 24.22.3 and Vitest with `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| Daemon Vitest | The lane 41d offline filters passed 215 tests with 3 filtered. The unfiltered run passed 215 and hit 20 failures in the loopback, cloud, subprocess and production fixtures. |
+| Channels Vitest | 936 passed, one existing skip and 10 origin tests blocked by `EPERM` on loopback bind. The offline run excluding `test/origins.test.ts` passed 895 tests with one skip. |
+| Lane 41d focused channels coverage, including Graph Mail REST | 303 passed with one skip. The eight files measured reached 100% statements, branches, functions and lines. |
+| Reference library-only build and typecheck | `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` and `pnpm run typecheck` passed. |
+| Reference closing, Introduction Card, x402 settlement and `test/oracle` | 12 passed. The separate trace suite passed all 15 tests. |
+| Daemon and channels `pnpm run build`, `pnpm run typecheck` and `pnpm run lint` | Passed. |
+| Offline production packaging and binary smoke checks | The pruned workspace installed 173 cached packages with zero downloads using pnpm's hardlink mode. Both workspace help commands, packaged `gate --help` and a plain Node import of the isolated app entry point passed. |
+| Root SDK and agent layers, RDF discipline, app duplication, codegen, lockfile transport and reference dependency policy | Passed. |
+| Root agent-layer fixture suites with the lane 41d filters | 399 passed and 4 subprocess fixtures filtered. |
+
+The reference manifest is 283 / 278 / 0 / 5. The manifest, traces, outlines and
+oracle fixtures match `0825ae9f3` byte-for-byte. `git diff --check` passed. The
+worktree is uncommitted.

@@ -19,10 +19,10 @@ import {
   verifyLedger,
 } from "@jeswr/agent-reference";
 import { randomUUID } from "crypto";
-import { lstat, readdir, rename } from "fs/promises";
+import { lstat, readdir, rename, unlink } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
-import { readPrivate, writePrivate } from "./local.js";
+import { readPrivate, syncDirectory, writePrivate } from "./local.js";
 
 export type GateOutcome = "admitted" | "unstructured" | "refused";
 export interface GateVerdict {
@@ -41,12 +41,10 @@ export interface InboundGatePort {
   open?(identity: GateIdentity): Promise<Gate>;
 }
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
-type ParseRefusalInput = {
-  binding: string;
-  account: string;
-  raw: string | Uint8Array;
+export type ParseRefusal = {
   reason: ChannelParseRefusalReason;
-};
+} & ({ raw: string | Uint8Array } | { digest: string });
+type ParseRefusalInput = { binding: string; account: string } & ParseRefusal;
 type GateOptions = { directory: string; now?: () => Date };
 const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -98,8 +96,16 @@ function fileVerdicts(directory: string): VerdictStore {
       await writePrivate(directory, staged, digestBytes(record));
       await writePrivate(directory, name, record);
       // Publish proof only after both writes have completed their directory syncs.
-      // The atomic rename is the commit point. No cleanup can expose a failed write.
-      await rename(join(directory, staged), join(directory, `verdict-${hex}.commit`));
+      const commit = join(directory, `verdict-${hex}.commit`);
+      await rename(join(directory, staged), commit);
+      try {
+        await syncDirectory(directory);
+      } catch (error) {
+        await unlink(commit)
+          .then(() => syncDirectory(directory))
+          .catch(() => {});
+        throw error;
+      }
     },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
@@ -165,9 +171,14 @@ export function createGate(
   async function check(input: CheckInput | ParseRefusalInput): Promise<GateVerdict> {
     const { binding, account } = input;
     const message = "message" in input ? input.message : undefined;
-    const hex = "raw" in input ? digestBytes(input.raw).slice(8) : input.message.rawSha256;
-    const digest = `sha-256:${hex}`;
-    const validDigest = /^[a-f0-9]{64}$/.test(hex);
+    const digest =
+      "message" in input
+        ? `sha-256:${input.message.rawSha256}`
+        : "raw" in input
+          ? digestBytes(input.raw)
+          : input.digest;
+    const validDigest = /^sha-256:[a-f0-9]{64}$/.test(digest);
+    const hex = digest.slice(8);
     const event = (type: string, reason: string) =>
       rt.commitBindingEvent({ type, binding, ...(validDigest ? { digest } : {}), reason });
     try {

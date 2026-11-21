@@ -13,7 +13,7 @@ import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
-import type { Gate, GateVerdict, InboundGatePort } from "./gate.js";
+import type { Gate, GateVerdict, InboundGatePort, ParseRefusal } from "./gate.js";
 import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
@@ -147,28 +147,30 @@ export function createDaemon(o: DaemonOptions): Daemon {
     const cursor = await o.checkpoints.get(account.id);
     const batch = await account.binding.ingest.list({ id: account.id }, cursor, limits);
     if (
-      batch.items.length > limits.maxItems ||
+      batch.items.length + (batch.refusals?.length ?? 0) > limits.maxItems ||
       batch.items.reduce((n, item) => n + Buffer.byteLength(item.raw), 0) > limits.maxBytes
     )
       throw new Error("Ingest bound exceeded");
     if (batch.next === undefined) throw new Error("Missing ingest cursor");
     const cache = new Map<InboundRawMessage, BridgeMessage>();
     const parsed: { message: BridgeMessage; id: string; verdict: GateVerdict }[] = [];
+    const source = { binding: account.binding.id, account: account.id };
+    async function recordRefusal(refusal: ParseRefusal) {
+      const verdict = await gate.recordParseRefusal?.({ ...source, ...refusal });
+      if (verdict?.outcome !== "refused" || verdict.reason === "indeterminate")
+        throw new Error("Inbound gate could not record the parser refusal");
+    }
     // importInbound prepares its ACL before pulling. Complete all checks before invoking it.
+    for (const { digest, reason } of batch.refusals ?? []) {
+      await recordRefusal({ digest, reason });
+    }
     for (const item of batch.items) {
-      const source = { binding: account.binding.id, account: account.id };
       let message: BridgeMessage;
       try {
         message = account.binding.ingest.parse(item);
       } catch (error) {
         if (!(error instanceof ChannelParseError)) throw new Error("Reader parse failed");
-        const verdict = await gate.recordParseRefusal?.({
-          ...source,
-          raw: item.raw,
-          reason: error.reason,
-        });
-        if (verdict?.outcome !== "refused" || verdict.reason === "indeterminate")
-          throw new Error("Inbound gate could not record the parser refusal");
+        await recordRefusal({ raw: item.raw, reason: error.reason });
         continue;
       }
       const verdict = await gate.check({ ...source, message });

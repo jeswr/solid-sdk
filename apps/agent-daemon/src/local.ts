@@ -3,7 +3,7 @@
 import { CredentialStore } from "@jeswr/agent-credentials";
 import { canonicalJson } from "@jeswr/agent-model";
 import { randomUUID } from "crypto";
-import { constants, lstatSync } from "fs";
+import { constants, lstatSync, type Stats } from "fs";
 import { lstat, open, rename, unlink } from "fs/promises";
 import { join } from "path";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
@@ -75,15 +75,19 @@ export async function acquireLocalLease(directory: string, name: string, attempt
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   }
+  let identity: Stats;
   try {
     await file.writeFile(String(process.pid));
     await file.sync();
     await syncDirectory(directory);
+    identity = await file.stat();
   } catch (error) {
-    await file.close();
+    await file.close().catch(() => {});
+    await unlink(path)
+      .then(() => syncDirectory(directory))
+      .catch(() => {});
     throw error;
   }
-  const identity = await file.stat();
   let released = false;
   return async () => {
     if (released) return;

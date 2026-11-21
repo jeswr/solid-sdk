@@ -3,6 +3,7 @@
 import type { ReasonCode } from "@jeswr/agent-model";
 import type { ChannelCapability } from "./capability.js";
 import type { InboundRawMessage } from "./channel.js";
+import type { ChannelParseRefusalReason } from "./errors.js";
 import type { BridgeMessage } from "./message.js";
 import type {
   AccountRef,
@@ -15,6 +16,13 @@ import type {
   TransmissionIo,
   Wire,
 } from "./types.js";
+
+/** An item refused before parsing, with a provenance digest and no retained body. */
+export interface InboundRefusal {
+  readonly id: string;
+  readonly digest: string;
+  readonly reason: ChannelParseRefusalReason;
+}
 
 export interface ChannelBinding<Raw = unknown> {
   /** Stable id, lower-case: "gmail" | "graph-mail" | "graph-teams" | "matrix" | "slack" | … */
@@ -32,7 +40,7 @@ export interface ChannelBinding<Raw = unknown> {
       account: AccountRef,
       cursor: Cursor | undefined,
       limits: Bounds,
-    ): Promise<{ items: InboundRawMessage<Raw>[]; next: Cursor }>;
+    ): Promise<{ items: InboundRawMessage<Raw>[]; refusals?: InboundRefusal[]; next: Cursor }>;
     /** Pure, hostile-input-hardened transform. Throws ChannelParseError to skip one item. */
     parse(item: InboundRawMessage<Raw>): BridgeMessage;
     /** Optional: resolve the thread/room for a BridgeMessage (for conversation stitching). */

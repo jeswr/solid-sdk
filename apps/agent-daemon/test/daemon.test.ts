@@ -1413,7 +1413,10 @@ it("imports Latin-1 HTML mail before committing its cursor", async () => {
   }
 });
 
-it("imports ordinary mail with many attachments before committing its cursor", async () => {
+it.each([
+  ["application/octet-stream", "attachment"],
+  ["text/html", "<p>Ordinary attachment</p>"],
+])("imports ordinary mail with 13 %s attachments before committing its cursor", async (type, body) => {
   const h = harness();
   const { gate } = await createTestGate();
   const raw = [
@@ -1427,10 +1430,10 @@ it("imports ordinary mail with many attachments before committing its cursor", a
     "Ordinary mail",
     ...Array.from({ length: 13 }, () => [
       "--parts",
-      "Content-Type: application/octet-stream",
+      `Content-Type: ${type}`,
       "Content-Disposition: attachment",
       "",
-      "attachment",
+      body,
     ]).flat(),
     "--parts--",
   ].join("\r\n");
@@ -1543,6 +1546,44 @@ it.each([
     expect(extract).not.toHaveBeenCalled();
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it("records a body-free Teams refusal before checkpointing the later valid message", async () => {
+  const h = harness();
+  const { gate, ledger } = await createTestGate();
+  const oversized = { id: "oversized", subject: "x".repeat(65_536) };
+  const { binding } = teams.reader([
+    teams.page([{ id: teams.chat }]),
+    teams.page([teams.row(oversized), teams.row({ id: "later" })]),
+    teams.page(),
+  ]);
+  const extract = vi.spyOn(h.options.gateway.reader, "extract");
+  const put = h.options.checkpoints.put.bind(h.options.checkpoints);
+  h.options.checkpoints.put = async (account, cursor) => {
+    expect(ledger.entries().map(({ record }) => record)).toContainEqual(
+      expect.objectContaining({
+        type: "binding-rejection",
+        binding: "graph-teams",
+        digest: digestBytes(teams.item(oversized).raw),
+        reason: "bounds-exceeded",
+      }),
+    );
+    await put(account, cursor);
+  };
+  try {
+    await createDaemon({
+      ...h.options,
+      accounts: [{ id: "fixture", enabled: true, category: "chat", binding }],
+      gate,
+    }).once();
+    expect(h.state.cursors.get("fixture")).toBeDefined();
+    expect(extract).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ messageId: teams.item({ id: "later" }).id }),
+      expect.anything(),
+    );
+  } finally {
+    await gate.close();
   }
 });
 

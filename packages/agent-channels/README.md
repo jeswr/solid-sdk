@@ -255,8 +255,10 @@ then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows valid
 `/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
 Requests use immutable Graph IDs. Cursors bind the account and preserve pending
 IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
-tombstones are skipped; a MIME 404 skips a deleted item. A failed or oversized MIME
-read holds the cursor for retry. HTTP 410 or a 4xx response
+tombstones are skipped. A MIME 404 skips a deleted item. An oversized MIME item
+returns a `bounds-exceeded` refusal and paging continues. The refusal carries the
+message ID and a digest of the MIME bytes, or a digest derived from the binding,
+account and ID when the transport withholds the bytes. HTTP 410 or a 4xx response
 with error code `syncStateNotFound` on a saved delta state restarts the initial
 inbox sync. Other errors preserve the previous cursor for retry. Pages cap at 512
 rows and cursors at 64 KiB.
@@ -315,12 +317,14 @@ and Graph-only `ORIGINS` (A-025 / sst-688). It traverses `/me/chats` →
 `ChannelMessage.Read.All`; channel access can require tenant administrator consent.
 Send grants use `ChatMessage.Send`. OAuth and tenant consent stay with the host.
 
-Account-scoped cursors retain queued collections and pending raw messages across
+Account-scoped cursors retain queued collections and pending messages across
 restarts. Each call reads at most 32 collection pages, each scan at most 512 pages,
 with at most 512 queued collections or pending items. Pages and cursors cap at
 1 MiB; individual messages, cards and complete local send wires cap at 64 KiB,
-with the shared depth/node/array limits. Caller item/byte bounds never discard a
-pending message. A message that cannot fit alone refuses the call. Completed scans
+with the shared depth/node/array limits. The cursor retains oversized messages as
+`bounds-exceeded` refusals with the ID and digest. Pending refusals count toward the
+caller item bound. A valid-sized message that cannot fit the caller byte bound
+alone refuses the call. Completed scans
 restart on the next poll; consumers deduplicate stable IDs. This snapshot poller
 does not provide delta synchronization or fetch channel reply collections.
 

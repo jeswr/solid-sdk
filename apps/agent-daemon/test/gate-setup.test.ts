@@ -126,6 +126,27 @@ it("atomically replaces trust.json and preserves the previously opened pins", as
   }
 });
 
+it("allows another pin after the new lease fails to sync", async () => {
+  const o = options();
+  const { peer, gate } = await createTestGate();
+  await gate.close();
+  await daemon.initGate(o);
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  const lock = join(o.directory, "pin.lock");
+  vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+    const handle = await fs.open(path, flags, mode);
+    if (path === lock && flags === "wx")
+      handle.sync = async () => {
+        throw new Error("pin lease sync failed");
+      };
+    return handle;
+  });
+  await expect(daemon.pinPeer({ ...o, card: peer.card })).rejects.toThrow("pin lease sync failed");
+  vi.mocked(open).mockReset();
+  await expect(stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(daemon.pinPeer({ ...o, card: peer.card })).resolves.toBe(true);
+});
+
 it("keeps both pins when two operators confirm concurrently", async () => {
   const o = options();
   await daemon.initGate(o);
@@ -307,7 +328,51 @@ async function signedInput(
   };
 }
 
-it("never caches an admission after a failed verdict sync and failed cleanup write", async () => {
+it.each([
+  "admitted",
+  "unstructured",
+  "refused",
+])("syncs the verdict directory after publishing the commit before returning %s", async (outcome) => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  await daemon.pinPeer({ ...o, card: peer.card });
+  const { input } = await signedInput(o, peer);
+  if (outcome !== "admitted") {
+    input.message = {
+      ...input.message,
+      jsonLdBlocks: outcome === "refused" ? ['{"@type":"agent:SignedMessage"}'] : [],
+    };
+  }
+  const gate = await daemon.openGate(o);
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  const commit = `verdict-${input.message.rawSha256}.commit`;
+  let committed = false;
+  vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+    const handle = await fs.open(path, flags, mode);
+    if (path === o.directory) {
+      const sync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        const files = await fs.readdir(o.directory);
+        await sync();
+        if (files.includes(commit)) committed = true;
+      };
+    }
+    return handle;
+  });
+  try {
+    expect(await gate.check(input)).toMatchObject({ outcome });
+    expect(committed).toBe(true);
+  } finally {
+    await gate.close();
+  }
+});
+
+it.each([
+  false,
+  true,
+])("never caches an admission if verdict sync fails (commit published: %s)", async (published) => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();
@@ -324,7 +389,7 @@ it("never caches an admission after a failed verdict sync and failed cleanup wri
     if (path === o.directory) {
       const record = JSON.parse(await fs.readFile(join(o.directory, `${base}.json`), "utf8"));
       const files = await fs.readdir(o.directory);
-      if (record.outcome === "admitted" && !files.includes(`${base}.pending`)) {
+      if (record.outcome === "admitted" && files.includes(`${base}.commit`) === published) {
         handle.sync = async () => {
           failed = true;
           throw new Error("directory fsync failed");

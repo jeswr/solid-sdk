@@ -80,9 +80,12 @@ export function json(raw: string | Uint8Array, limits = JSON_LIMITS): Record<str
     throw new ChannelParseError("invalid Teams JSON");
   }
 }
-export async function responseJson(response: Response): Promise<Record<string, unknown>> {
+export async function responseJson(
+  response: Response,
+  limits = PAGE_LIMITS,
+): Promise<Record<string, unknown>> {
   try {
-    return json(await response.text(), PAGE_LIMITS);
+    return json(await response.text(), limits);
   } catch {
     throw new ChannelParseError("invalid Teams JSON response");
   }

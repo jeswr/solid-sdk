@@ -8,7 +8,14 @@ import {
   validateMessage,
 } from "@jeswr/agent-model";
 import { renderBodies } from "./email/bodies.js";
-import { headerValues, leaves, type MimeNode, parseMime, shapeOf } from "./email/mime.js";
+import {
+  DEFAULT_MIME_LIMITS,
+  headerValues,
+  leaves,
+  type MimeNode,
+  parseMime,
+  shapeOf,
+} from "./email/mime.js";
 import type { EmailMessage } from "./email-message.js";
 import { decodeEnvelopeObject, encodeEnvelope } from "./envelope.js";
 import { ChannelParseError } from "./errors.js";
@@ -111,10 +118,19 @@ function scriptTagEnd(text: string, start: number): number {
 /** Inspect every carrier in the bounded tree, without the legacy parser's extraction caps. */
 function mimeCarriers(root: MimeNode): string[] {
   const blocks: string[] = [];
+  let parts = 0;
+  const countCarrierPart = () => {
+    if (++parts > DEFAULT_MIME_LIMITS.maxParts)
+      throw new ChannelParseError("incomplete structured-copy extraction");
+  };
   for (const part of leaves(root)) {
     const text = part.text as string;
-    if (part.type === "application/ld+json") blocks.push(text);
+    if (part.type === "application/ld+json") {
+      countCarrierPart();
+      blocks.push(text);
+    }
     if (part.type !== "text/html") continue;
+    const previous = blocks.length;
     // ASCII folding preserves indices even when body text contains expanding Unicode case folds.
     const lower = text.replace(/[A-Z]/g, (c) => c.toLowerCase());
     let cursor = 0;
@@ -137,6 +153,7 @@ function mimeCarriers(root: MimeNode): string[] {
         throw new ChannelParseError("incomplete structured-copy extraction");
       cursor = closeEnd + 1;
     }
+    if (blocks.length > previous) countCarrierPart();
   }
   return blocks;
 }

@@ -120,6 +120,44 @@ it("accepts Graph's raw and percent-encoded Teams IDs without widening the colle
   );
 });
 
+it("paginates oversized Teams rows as body-free refusals and reaches a later valid row", async () => {
+  const oversized = Array.from({ length: 6 }, (_, index) => ({
+    id: `oversized-${index}`,
+    subject: '"'.repeat(30_000),
+    summary: '"'.repeat(30_000),
+  }));
+  const later = { id: "later" };
+  const r = reader([page([...oversized.map(row), row(later)])]);
+  const first = await r.binding.ingest.list(account, cursor(), { ...bounds, maxItems: 1 });
+  const refused = oversized.map((value) => ({
+    id: item(value).id,
+    digest: digestBytes(item(value).raw),
+    reason: "bounds-exceeded",
+  }));
+  expect(first.items).toEqual([]);
+  expect(first.refusals).toEqual(refused.slice(0, 1));
+  expect(Buffer.byteLength(first.next)).toBeLessThan(4 * 1024);
+  const restarted = reader([]).binding;
+  const result = await restarted.ingest.list(account, first.next, bounds);
+  expect(result.refusals).toEqual(refused.slice(1));
+  expect(result.items.map(({ id }) => id)).toEqual([item(later).id]);
+  expect(restarted.ingest.parse(result.items[0] as never).textBody).toContain("Hello");
+});
+
+it("refuses a Teams row with one long field and saves the later message when it exceeds the batch byte bound", async () => {
+  const oversized = { subject: "x".repeat(TEAMS_CARD.maxBytes + 1) };
+  const later = { id: "later" };
+  const r = reader([page([row(oversized), row(later)])]);
+  const result = await r.binding.ingest.list(account, cursor(), { ...bounds, maxBytes: 1 });
+  expect(result.items).toEqual([]);
+  expect(result.refusals).toEqual([
+    { id: item(oversized).id, digest: digestBytes(item(oversized).raw), reason: "bounds-exceeded" },
+  ]);
+  expect(result.next).not.toContain(oversized.subject);
+  const resumed = await reader([]).binding.ingest.list(account, result.next, bounds);
+  expect(resumed.items).toEqual([item(later)]);
+});
+
 it("skips system and deleted events and retains malformed messages across cursor paging", async () => {
   const r = reader([
     page([
@@ -142,14 +180,14 @@ it("skips system and deleted events and retains malformed messages across cursor
   );
   const restarted = reader([]).binding;
   const result = await restarted.ingest.list(account, first.next, bounds);
-  expect(result.items).toHaveLength(3);
+  expect(result.items).toHaveLength(2);
   expect(() => restarted.ingest.parse(result.items[0] as never)).toThrow(
     "invalid Teams inbound message",
   );
-  expect(() => restarted.ingest.parse(result.items[1] as never)).toThrow(
-    "invalid Teams inbound message",
-  );
-  expect(restarted.ingest.parse(result.items[2] as never).sender).toEqual({ handle: "sender" });
+  expect(result.refusals).toEqual([
+    expect.objectContaining({ id: item({ id: "oversized" }).id, reason: "bounds-exceeded" }),
+  ]);
+  expect(restarted.ingest.parse(result.items[1] as never).sender).toEqual({ handle: "sender" });
 });
 
 it("projects HTML and mentions to control-free text, drops closed/unclosed active content and decodes entities once", () => {

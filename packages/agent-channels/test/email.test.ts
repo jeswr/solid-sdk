@@ -425,6 +425,20 @@ it.each([
   expect(observation.message.textBody.trim()).toBe(text);
 });
 
+it("bounds discovery by carrier-bearing leaves, including JSON-LD scripts in HTML", () => {
+  const json = '{"@type":"Person"}';
+  const leaf = (type: string, body: string) => ["--parts", `Content-Type: ${type}`, "", body];
+  const parts = [
+    'Content-Type: multipart/mixed; boundary="parts"',
+    "",
+    ...Array.from({ length: 11 }, () => leaf("application/ld+json", json)).flat(),
+    ...leaf("text/html", `<script type="application/ld+json">${json}</script>`.repeat(2)),
+  ];
+  expect(inspectEmail([...parts, "--parts--"].join("\r\n"), config).parity).toBe("none");
+  const over = [...parts, ...leaf("application/ld+json", json), "--parts--"].join("\r\n");
+  expect(() => inspectEmail(over, config)).toThrow("incomplete structured-copy extraction");
+});
+
 it("refuses an oversized MIME part when it is the only signed copy", () => {
   const carrier = envelope(signed().compactJws);
   const oversized = `${" ".repeat(65536)}${carrier}`;

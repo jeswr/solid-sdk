@@ -15,6 +15,7 @@
 
 export type ChannelParseRefusalReason =
   | "malformed"
+  | "bounds-exceeded"
   | "human-parity-mismatch"
   | "conflicting-structured-copies";
 
