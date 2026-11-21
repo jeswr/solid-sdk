@@ -42,7 +42,7 @@
 import { escapeIri, safeIri } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
 import { constraintSatisfied, evaluate } from "./evaluate.js";
-import { inferDatatype, isIriValued } from "./policy.js";
+import { actionIri, inferDatatype, isIriValued } from "./policy.js";
 import type {
   ActiveDuty,
   DecisionRule,
@@ -377,7 +377,7 @@ function writeActiveDuty(b: GraphBuilder, rec: NodeRef, duty: ActiveDuty): void 
   if (duty.id !== undefined) {
     b.addIri(node, legacyOdrlIri(ODRLD_ON_DUTY), duty.id);
   }
-  b.addIri(node, ODRL_ACTION, ACTION_IRI[duty.action]);
+  b.addIri(node, ODRL_ACTION, actionIri(duty.action));
   if (duty.target !== undefined) {
     b.addIri(node, ODRL_TARGET, duty.target);
   }
@@ -477,7 +477,7 @@ function decidingRuleJsonLd(
 function activeDutyJsonLd(duty: ActiveDuty): Record<string, unknown> {
   const node: Record<string, unknown> = {
     "@type": "odrl:Duty",
-    action: { "@id": ACTION_IRI[duty.action] },
+    action: { "@id": actionIri(duty.action) },
     fulfilled: duty.fulfilled,
   };
   if (duty.id !== undefined) {

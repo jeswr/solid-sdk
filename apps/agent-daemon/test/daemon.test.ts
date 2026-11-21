@@ -53,6 +53,7 @@ import { testKey } from "@jeswr/agent-reference/reference/keys";
 import { Cast, craftSigned, mandateOf, signClaim } from "@jeswr/agent-reference/scenarios/common";
 import { addSourceRule, pinIssuer, saveTrust } from "@jeswr/agent-reference/setup";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
+import { readRuntimeStateFile } from "@jeswr/agent-reference/store/state";
 import { parseEmail } from "@jeswr/agentic-legacy-bridge";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
@@ -2088,7 +2089,7 @@ async function memoryGateFixture(
       subjects: "any",
     });
   }
-  saveTrust(root, "gate", trust);
+  await saveTrust(root, "gate", trust);
   const options = { directory, now, admission };
   async function signedInvocation(
     sequence: number,
@@ -2438,13 +2439,13 @@ it.each([
         );
       }
       if (variant === "refused") {
-        const state = JSON.parse(await readFile(join(options.directory, "state.json"), "utf8"));
+        const state = readRuntimeStateFile(join(options.directory, "state.json"));
         expect(state.contextItems[memoryAdmission.taskId]).toContainEqual(
           expect.objectContaining({ id: assessment.id, accepted: true }),
         );
       }
       if (refusedSuccessor) {
-        const state = JSON.parse(await readFile(join(options.directory, "state.json"), "utf8"));
+        const state = readRuntimeStateFile(join(options.directory, "state.json"));
         expect(state.precedenceHolds[older.id]).toMatchObject({ supersededBy: replacement.id });
       }
       await verifyRecall(gate, "live");

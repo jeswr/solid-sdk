@@ -119,6 +119,11 @@ are attributed correctly. Records preserve the `isPartOf` constraint and collect
 ## Key API
 
 - Express: `policyToRdf`, `policyToTurtle`, `policyToJsonLd`, `serialize`.
+  Rule and duty actions accept an ODRL short name or an absolute profile IRI.
+  Writers retain profile IRIs verbatim and reject invalid actions with
+  `OdrlSerializationError`. Readers return the existing short names for the
+  standard table and return other absolute IRIs as strings. Standard evaluation
+  applies only the standard action hierarchy.
 - Parse: `parsePolicy`, `policyFromRdf`.
 - Evaluate: `evaluate`, `constraintSatisfied`, `matchingPermissions`.
 - Delegation: `evaluateDelegated`, `delegationProvenance`.

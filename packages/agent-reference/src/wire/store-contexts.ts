@@ -12,7 +12,7 @@ import {
 
 export const STORE_CONTEXT = "https://w3id.org/jeswr/awp/context/store/v1";
 export const STORE_CONTEXT_SHA256 =
-  "89cd3147ed2ff3a784eb13d1e6e831711e1546f56c091cbbc85bc803a37792d4";
+  "3765c7117bc234e2d391ea900e85403f350488a13a11f5d5482e8b31b2a2705e";
 
 let storeContext: Record<string, unknown> | undefined;
 

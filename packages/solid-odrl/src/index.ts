@@ -87,6 +87,7 @@ export type {
   DecisionRule,
   EvaluateOptions,
   EvaluationResult,
+  OdrlAction,
   OdrlConstraint,
   OdrlDuty,
   OdrlPolicy,

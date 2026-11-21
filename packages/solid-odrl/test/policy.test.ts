@@ -236,16 +236,17 @@ describe("policyFromRdf edge cases", () => {
     expect(parsed?.type).toBe("Set");
   });
 
-  it("drops a rule with an unrecognised action concept (round-trip safety)", async () => {
+  it("retains the IRI of a profile action concept", async () => {
     // A hand-written graph whose rule action is not a known ODRL action.
     const ttl = `
       @prefix odrl: <${ODRL}> .
       <https://x/p> a odrl:Set ; odrl:permission [ odrl:action <https://x/unknownAction> ; odrl:target <https://x/r> ] .
     `;
     const parsed = await parsePolicy(ttl);
-    // The policy parses but the unrecognised-action rule is dropped.
     expect(parsed?.id).toBe("https://x/p");
-    expect(parsed?.permissions ?? []).toEqual([]);
+    expect(parsed?.permissions).toEqual([
+      { type: "permission", action: "https://x/unknownAction", target: "https://x/r" },
+    ]);
   });
 
   it("policyFromRdf reads from an already-parsed dataset", async () => {

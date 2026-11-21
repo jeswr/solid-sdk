@@ -39,6 +39,7 @@ import {
 import { hostname } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { dirname } from "path";
+import { digestOf } from "../core/canonical.js";
 import type { ConversationState } from "../core/conversation.js";
 import type {
   ActionIntent,
@@ -50,6 +51,11 @@ import type {
   OutcomeConclusion,
 } from "../core/types.js";
 import type { ContextItem } from "../gates/common.js";
+import {
+  decodeSnapshotForRoundTrip,
+  readStateSnapshot,
+  SnapshotMemo,
+} from "../model/store/state.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
 
 export interface SeenEntry {
@@ -323,6 +329,33 @@ export interface StateStore {
 
 export class MemoryStateStore implements StateStore {
   private snapshot = JSON.stringify(emptyState());
+
+  constructor() {
+    if (process.env.AWP_STORE_RDF === "1") {
+      const memo = new SnapshotMemo();
+      const save = this.save;
+      this.save = (state) => {
+        save.call(this, state);
+        const expected = this.load();
+        const actual = decodeSnapshotForRoundTrip(memo.write(expected));
+        if (digestOf(actual) !== digestOf(expected))
+          throw new Error("State snapshot changed during RDF round trip");
+        for (const section of Object.keys(expected) as (keyof RuntimeState)[]) {
+          const left = expected[section];
+          const right = actual[section];
+          if (
+            left &&
+            right &&
+            typeof left === "object" &&
+            typeof right === "object" &&
+            JSON.stringify(Object.keys(left)) !== JSON.stringify(Object.keys(right))
+          )
+            throw new Error(`State section key order changed in ${section}`);
+        }
+      };
+    }
+  }
+
   load(): RuntimeState {
     return normaliseState(JSON.parse(this.snapshot));
   }
@@ -408,9 +441,19 @@ export function writeFileDurable(path: string, content: string, flags: string): 
   }
 }
 
+/** Read one atomic snapshot without acquiring a writer lease. */
+export function readRuntimeStateFile(path: string): RuntimeState {
+  if (!existsSync(path)) return emptyState();
+  const text = readFileSync(path, "utf8");
+  return text.trimStart().startsWith("{")
+    ? normaliseState(JSON.parse(text))
+    : readStateSnapshot(text);
+}
+
 export class FileStateStore implements StateStore {
   readonly lockPath: string;
   private readonly recoveryPath: string;
+  private memo?: SnapshotMemo;
   private token: string | undefined;
 
   constructor(private readonly path: string) {
@@ -505,14 +548,15 @@ export class FileStateStore implements StateStore {
   }
 
   load(): RuntimeState {
-    if (!existsSync(this.path)) return emptyState();
-    return normaliseState(JSON.parse(readFileSync(this.path, "utf8")));
+    return readRuntimeStateFile(this.path);
   }
 
   save(state: RuntimeState): void {
     if (!this.token) throw new Error("state store is closed");
     const tmp = `${this.path}.tmp-${this.token}`;
-    writeFileDurable(tmp, JSON.stringify(state), "w");
+    this.memo ??= new SnapshotMemo();
+    const bytes = this.memo.write(state);
+    writeFileDurable(tmp, bytes, "w");
     renameSync(tmp, this.path);
     fsyncDir(dirname(this.path));
   }

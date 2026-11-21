@@ -161,6 +161,14 @@ export type {
   ProviderContext,
   SettlementSuite,
 } from "./settlement/types.js";
-export { type IntroductionCard, introduce, provisionAgent, readAgent, saveAgent } from "./setup.js";
+export {
+  type IntroductionCard,
+  introduce,
+  provisionAgent,
+  readAgent,
+  readTrustFile,
+  saveAgent,
+  writeTrustFile,
+} from "./setup.js";
 export { FileLedger, MemoryLedger, verifyLedger } from "./store/ledger.js";
 export { FileStateStore, MemoryStateStore, type WireMessage } from "./store/state.js";

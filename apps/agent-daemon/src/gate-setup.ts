@@ -10,11 +10,12 @@ import {
   scopedUrn,
   TrustStore,
   type TrustStoreData,
+  writeTrustFile,
 } from "@jeswr/agent-reference";
 import { lstat, mkdir, realpath } from "fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "path";
 import { readGate } from "./gate.js";
-import { acquireLocalLease, writePrivate } from "./local.js";
+import { acquireLocalLease } from "./local.js";
 
 type Confirm = (prompt: string) => Promise<boolean>;
 
@@ -118,7 +119,7 @@ export async function initGate(o: {
     representationOperations: [],
   });
   await mkdir(directory, { mode: 0o700 });
-  saveAgent(dirname(directory), agent, [CONFIG_ED25519], { ownerDir });
+  await saveAgent(dirname(directory), agent, [CONFIG_ED25519], { ownerDir });
   return true;
 }
 
@@ -183,7 +184,7 @@ export async function pinPeer(o: {
     )
       throw new Error("Gate identity changed during confirmation");
     const trust = await addPin(latest.trust, card);
-    await writePrivate(current.dir, "trust.json", JSON.stringify(trust, null, 2));
+    await writeTrustFile(current.dir, trust);
   } finally {
     await release();
   }

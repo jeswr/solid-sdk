@@ -29,7 +29,7 @@ export interface Corpus {
  * all forum-operation paths to preserve the six large intent occurrences too.
  * The live run must reproduce the complete recorded coverage, not just this plan.
  */
-function samplePlan(root: string) {
+export function samplePlan(root: string) {
   const manifest = JSON.parse(readFileSync(root + "scenario-runs.json", "utf8")) as {
     paths: { scenario: string; path: string; configuration?: string; trace?: string }[];
   };

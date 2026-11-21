@@ -40,6 +40,27 @@
       "subject": {
         "convention": "self"
       }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#TrustPin",
+      "name": "TrustPin",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#MandateRevocation",
+      "name": "MandateRevocation",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#PaymentReservation",
+      "name": "PaymentReservation",
+      "subject": {
+        "convention": "self"
+      }
     }
   ]
 }

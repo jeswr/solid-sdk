@@ -64,3 +64,11 @@ Cover members and non-members, resolver absence/failure, malformed operands,
 prohibitions, duties, RDF round trips, and decision-record attribution with fixture
 tests. Run the package lint, build, typecheck, and test scripts in that order;
 follow the repository's affected and full gate requirements before finishing.
+
+## Profile actions
+
+Use a standard `OdrlActionName` or an absolute profile IRI in rules and duties.
+The writers preserve profile IRIs lexically and reject unknown short names and
+IRIs that require escaping. The reader maps standard IRIs back to their existing
+names and preserves other absolute IRIs. Standard evaluation has no implication
+rules for profile IRIs. A profile must supply its own evaluation semantics.

@@ -13,6 +13,7 @@ import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { serialize } from "./serialize.js";
 import type {
+  OdrlAction,
   OdrlConstraint,
   OdrlDuty,
   OdrlPolicy,
@@ -52,7 +53,6 @@ import {
   ODRL_UID,
   ODRLD_DELEGATED_UNDER,
   ODRLD_INLINE_CONTEXT_EXTENSION,
-  type OdrlActionName,
   OPERATOR_IRI,
   type OperatorName,
   RDF_TYPE,
@@ -278,13 +278,26 @@ function requirePolicyIri(value: string | undefined, field: string): string | un
   return safe;
 }
 
+/** Resolve a standard name or retain an absolute profile action unchanged. */
+export function actionIri(action: OdrlAction): string {
+  if (Object.hasOwn(ACTION_IRI, action)) return ACTION_IRI[action as keyof typeof ACTION_IRI];
+  if (absoluteAction(action)) return action;
+  throw new OdrlSerializationError(
+    "An action must be a standard ODRL name or a clean absolute IRI",
+  );
+}
+
+function absoluteAction(value: string): value is `${string}:${string}` {
+  return typeof value === "string" && !/[\ud800-\udfff]/u.test(value) && safeIri(value) === value;
+}
+
 /** Write a duty node under `parent` via `predicate`. */
 function writeDuty(b: GraphBuilder, parent: NodeRef, predicate: string, duty: OdrlDuty): void {
   // duty.id is a SUBJECT id that may legitimately be a non-http absolute IRI
   // (urn:/uuid:) — it is made breakout-proof at the GraphBuilder chokepoint
   // (escapeIri), so it is NOT dropped here.
   const node = b.linkChild(parent, predicate, duty.id);
-  b.addIri(node, ODRL_ACTION, ACTION_IRI[duty.action]);
+  b.addIri(node, ODRL_ACTION, actionIri(duty.action));
   const dutyTarget = requirePolicyIri(duty.target, "duty.target");
   if (dutyTarget !== undefined) {
     b.addIri(node, ODRL_TARGET, dutyTarget);
@@ -306,7 +319,7 @@ function writeRule(
   // rule.id is a SUBJECT id that may legitimately be a non-http absolute IRI
   // (urn:/uuid:) — made breakout-proof at the GraphBuilder chokepoint, not dropped.
   const node = b.linkChild(policy, predicate, rule.id);
-  b.addIri(node, ODRL_ACTION, ACTION_IRI[rule.action]);
+  b.addIri(node, ODRL_ACTION, actionIri(rule.action));
   const target = requirePolicyIri(rule.target, "rule.target");
   if (target !== undefined) {
     b.addIri(node, ODRL_TARGET, target);
@@ -449,7 +462,7 @@ export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
 function ruleJsonLd(rule: OdrlRule, policy: OdrlPolicy): Record<string, unknown> {
   const node: Record<string, unknown> = {};
   if (rule.id !== undefined) node["@id"] = escapeIri(rule.id);
-  node.action = { "@id": ACTION_IRI[rule.action] };
+  node.action = { "@id": actionIri(rule.action) };
   const target = requirePolicyIri(rule.target, "rule.target");
   if (target !== undefined) node.target = { "@id": target };
   const assignee = requirePolicyIri(rule.assignee ?? policy.assignee, "rule.assignee");
@@ -468,7 +481,7 @@ function ruleJsonLd(rule: OdrlRule, policy: OdrlPolicy): Record<string, unknown>
 function dutyJsonLd(duty: OdrlDuty): Record<string, unknown> {
   const node: Record<string, unknown> = {};
   if (duty.id !== undefined) node["@id"] = escapeIri(duty.id);
-  node.action = { "@id": ACTION_IRI[duty.action] };
+  node.action = { "@id": actionIri(duty.action) };
   const target = requirePolicyIri(duty.target, "duty.target");
   if (target !== undefined) node.target = { "@id": target };
   if (duty.constraints && duty.constraints.length > 0) {
@@ -710,19 +723,17 @@ function coerceValue(value: string, datatype: string | undefined, isIri: boolean
   return value;
 }
 
-/** Map a rule/duty action term set to the ODRL action short name, if recognised. */
+/** Retain the existing preference for a recognised action when several are supplied. */
 function actionOf(
   actions: ReadonlySet<{ termType: string; value: string }>,
-): OdrlActionName | undefined {
-  for (const a of actions) {
-    if (a.termType === "NamedNode") {
-      const name = IRI_TO_ACTION[a.value];
-      if (name !== undefined) {
-        return name;
-      }
-    }
+): OdrlAction | undefined {
+  let extension: OdrlAction | undefined;
+  for (const action of actions) {
+    if (action.termType !== "NamedNode") continue;
+    if (Object.hasOwn(IRI_TO_ACTION, action.value)) return IRI_TO_ACTION[action.value];
+    if (extension === undefined && absoluteAction(action.value)) extension = action.value;
   }
-  return undefined;
+  return extension;
 }
 
 // Re-export the reverse maps so consumers reading raw IRIs don't reach into vocab.
