@@ -75,10 +75,13 @@ it(
     console.log(
       `Record corpus checked ${count} entries from ${agentLedgers} ledgers over ${corpus.paths} paths.`,
     );
-    expect({ requiredUntyped: [...failures].sort(), untyped: [...untyped].sort() }).toEqual({
-      requiredUntyped: [],
-      untyped: baseline.types,
-    });
+    expect([...failures].sort()).toEqual([]);
+    // The ratchet: no record kind may become untyped. Paths that need the optional sparq
+    // adapters (joint and derivation evidence) only run when all three are loaded, so the
+    // full equality check applies only then; otherwise every untyped kind must be baselined.
+    const fullRegistry = registry.loaded.length === 3;
+    if (fullRegistry) expect([...untyped].sort()).toEqual(baseline.types);
+    else expect([...untyped].filter((type) => !baseline.types.includes(type))).toEqual([]);
   },
   process.env.FULL_CORPUS === "1" ? 3_600_000 : 1_200_000,
 );
