@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "@playwright/test";
+import { createFeedbackHandlers } from "../../src/feedback/server";
+import { createGithubStore } from "../../src/feedback/store";
+import { feedbackGithub } from "../../test/helpers/feedback-github";
 
 test("guided feedback includes Agent and its debrief", async ({ page }) => {
   await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
@@ -80,6 +83,9 @@ test("guided interview taps a scale, confirms read-back and submits", async ({ p
   });
   await page.route("**/api/feedback/submit", async (route) => {
     const body = route.request().postData() ?? "";
+    expect(route.request().postDataJSON().submissionId).toMatch(
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+    );
     expect(body).toContain('"seq_drive":6');
     expect(body).toContain('"walkthrough":["drive"]');
     expect(body).toContain('"confirmed":"yes"');
@@ -120,10 +126,10 @@ test("unhosted quick feedback offers a ZIP after a platform rejects submission",
   await page.getByRole("button", { name: "Download my feedback" }).click();
   expect((await downloading).suggestedFilename()).toBe("solid-suite-feedback.zip");
 });
-for (const fails of [false, true])
-  test(`voice upload ${fails ? "failure keeps raw audio for download" : "retries and submits a receipt"}`, async ({
-    page,
-  }) => {
+for (const outcome of ["success", "failure", "cooldown"] as const)
+  test(`voice upload ${outcome}: keeps audio and submission identity`, async ({ page }) => {
+    const fails = outcome !== "success";
+    const limited = outcome === "cooldown";
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
@@ -159,20 +165,32 @@ for (const fails of [false, true])
     });
     await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
     let uploads = 0;
+    let submissionId = "";
     let releaseUploads = () => {};
     const allowUploads = new Promise<void>((resolve) => {
       releaseUploads = resolve;
     });
-    await page.route("**/api/feedback/audio", async (route) => {
+    await page.route("**/api/feedback/audio?*", async (route) => {
       uploads++;
+      const id = new URL(route.request().url()).searchParams.get("submissionId");
+      expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+      if (submissionId) expect(id).toBe(submissionId);
+      else submissionId = id ?? "";
       await allowUploads;
       expect(route.request().headers()["content-type"]).toBe("audio/webm");
       expect(route.request().postDataBuffer()?.length).toBe(12);
-      if (uploads === 1 || fails) {
+      if (limited) {
+        await route.fulfill({
+          status: 503,
+          headers: { "Retry-After": "90" },
+          json: { error: "RAW_AUDIO_ERROR" },
+        });
+      } else if (uploads === 1 || fails) {
         await route.fulfill({ status: 413, contentType: "text/plain", body: "RAW_AUDIO_ERROR" });
       } else {
         await route.fulfill({
           json: {
+            submissionId,
             sha: "a".repeat(40),
             size: 12,
             ext: "webm",
@@ -186,6 +204,7 @@ for (const fails of [false, true])
       expect(body).toContain('"audio":[0]');
       expect(body).toContain("voice answer recorded; no transcript");
       expect(route.request().headers()["content-type"]).toBe("application/json");
+      expect(route.request().postDataJSON().submissionId).toBe(submissionId);
       expect(route.request().postDataJSON().receipts).toEqual([
         expect.objectContaining({ sha: "a".repeat(40), size: 12, ext: "webm" }),
       ]);
@@ -203,10 +222,10 @@ for (const fails of [false, true])
     releaseUploads();
     if (fails) {
       await expect(page.getByRole("main").getByRole("alert")).toContainText(
-        "couldn't save that recording",
+        limited ? "try again later" : "couldn't save that recording",
       );
       await expect(page.getByRole("main")).not.toContainText("RAW_AUDIO_ERROR");
-      expect(uploads).toBe(2);
+      expect(uploads).toBe(limited ? 1 : 2);
       const downloading = page.waitForEvent("download");
       await page.getByRole("button", { name: "Download my feedback" }).click();
       const path = await (await downloading).path();
@@ -258,3 +277,254 @@ test("non-JSON turn failures and unsafe submit errors produce only friendly mess
     await expect(page.getByRole("main")).not.toContainText("RAW_PARSE_ERROR");
   }
 });
+
+test("a GitHub cooldown asks the participant to try later and preserves their download", async ({
+  page,
+}) => {
+  await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+  let submits = 0;
+  await page.route("**/api/feedback/submit", (route) => {
+    submits++;
+    return route.fulfill({
+      status: 503,
+      headers: { "Retry-After": "90" },
+      json: { error: "RAW_GITHUB_ERROR" },
+    });
+  });
+  await page.goto("/feedback");
+  await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+  await page.getByLabel("Your answer", { exact: true }).fill("Alice found the demo confusing.");
+  await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("try again later");
+  await expect(page.getByRole("main")).not.toContainText("RAW_GITHUB_ERROR");
+  expect(submits).toBe(1);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download my feedback" }).click();
+  const path = await (await downloading).path();
+  if (!path) throw new Error("Feedback download is unavailable.");
+  const { readFile } = await import("node:fs/promises");
+  const { unzipSync } = await import("fflate");
+  const archive = unzipSync(await readFile(path));
+  expect(new TextDecoder().decode(archive["submission.json"])).toContain(
+    "Alice found the demo confusing.",
+  );
+});
+
+for (const recovery of ["retry", "reload", "start new"] as const)
+  test(`partial save freezes answers and contact details: ${recovery}`, async ({ page }) => {
+    const github = feedbackGithub();
+    const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+    github.holdIssue(async () => {
+      throw new Error("Issue creation failed after the record was committed");
+    });
+    const bodies: string[] = [];
+    await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+    await page.route("**/api/feedback/submit", async (route) => {
+      bodies.push(route.request().postData() ?? "");
+      const handlers = createFeedbackHandlers({
+        env,
+        store: createGithubStore(env, github.transport),
+        limiter: () => undefined,
+      });
+      const response = await handlers.submit(
+        new Request(route.request().url(), {
+          method: "POST",
+          headers: {
+            Origin: new URL(route.request().url()).origin,
+            "Content-Type": "application/json",
+          },
+          body: route.request().postData(),
+        }),
+      );
+      await route.fulfill({
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: await response.text(),
+      });
+    });
+    await page.goto("/feedback");
+    await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+    const answer = page.getByLabel("Your answer", { exact: true });
+    const name = page.getByLabel("Name (optional)", { exact: true });
+    const email = page.getByLabel("Email (optional)", { exact: true });
+    await answer.fill("Alice found the demo confusing.");
+    await name.fill("Alice");
+    await email.fill("alice@example.test");
+    await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Download my feedback");
+    expect(github.records).toHaveLength(1);
+    expect(github.issues).toHaveLength(0);
+    // Attempt actual keyboard edits after the partial save; the frozen inputs retain their values.
+    for (const [field, value] of [
+      [answer, "Alice found the demo confusing."],
+      [name, "Alice"],
+      [email, "alice@example.test"],
+    ] as const) {
+      await expect(field).not.toBeEditable();
+      await field.press("ControlOrMeta+A");
+      await field.pressSequentially("Changed");
+      await expect(field).toHaveValue(value);
+    }
+    await expect(page.getByRole("button", { name: "Send answer", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Skip", exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Speak your answer", exact: true }),
+    ).toBeDisabled();
+    const original = JSON.parse(bodies[0] ?? "");
+    const draft = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("suite.feedback.draft.v1") ?? "null"),
+    );
+    expect(draft.submissionId).toBe(original.submissionId);
+    expect(draft.record).toBe(JSON.stringify(original.record));
+    github.holdIssue(async () => {});
+    if (recovery === "reload") {
+      // Fresh browser context must not rebuild the reserved record with new walkthrough metadata.
+      await page.evaluate(() =>
+        localStorage.setItem("suite.walkthrough.v1", JSON.stringify({ done: ["drive"] })),
+      );
+      await page.reload();
+      await expect(name).toHaveValue("Alice");
+      await expect(email).not.toBeEditable();
+    } else if (recovery === "start new") {
+      await page.getByRole("button", { name: "Start a new submission", exact: true }).click();
+      await expect(answer).toBeEditable();
+      await expect(name).toHaveValue("");
+      await expect(email).toHaveValue("");
+      expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
+      await answer.fill("Bob liked the demo.");
+    }
+    await page
+      .getByRole("button", {
+        name: recovery === "reload" ? "Submit" : "Submit what I've said so far",
+        exact: true,
+      })
+      .click();
+    await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText(`#${123}`);
+    expect(bodies).toHaveLength(2);
+    if (recovery === "start new") {
+      expect(JSON.parse(bodies[1] ?? "").submissionId).not.toBe(original.submissionId);
+      expect(github.records).toHaveLength(2);
+    } else {
+      expect(bodies[1]).toBe(bodies[0]);
+      expect(github.records).toHaveLength(1);
+    }
+    expect(github.issues).toHaveLength(1);
+    expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
+  });
+
+// A rejected email used to freeze the record, so every retry resent the invalid payload.
+test("a rejected email stays editable and the corrected feedback submits", async ({ page }) => {
+  const github = feedbackGithub();
+  const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+  const statuses: number[] = [];
+  await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+  await page.route("**/api/feedback/submit", async (route) => {
+    const handlers = createFeedbackHandlers({
+      env,
+      store: createGithubStore(env, github.transport),
+      limiter: () => undefined,
+    });
+    const response = await handlers.submit(
+      new Request(route.request().url(), {
+        method: "POST",
+        headers: {
+          Origin: new URL(route.request().url()).origin,
+          "Content-Type": "application/json",
+        },
+        body: route.request().postData(),
+      }),
+    );
+    statuses.push(response.status);
+    await route.fulfill({
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+      body: await response.text(),
+    });
+  });
+  await page.goto("/feedback");
+  await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+  const answer = page.getByLabel("Your answer", { exact: true });
+  const email = page.getByLabel("Email (optional)", { exact: true });
+  await answer.fill("Alice found the demo confusing.");
+  await email.fill("alice");
+  await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("email address");
+  expect(statuses).toEqual([400]);
+  expect(github.records).toHaveLength(0);
+  await expect(email).toBeEditable();
+  await expect(answer).toBeEditable();
+  await email.fill("alice@example.test");
+  await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText("#");
+  expect(statuses).toEqual([400, 200]);
+  expect(github.records).toHaveLength(1);
+});
+
+for (const outcome of [
+  "lost response",
+  "resume without issue",
+  "low ref and final budget",
+] as const)
+  test(`GitHub ${outcome} preserves one submission and its reference`, async ({ page }) => {
+    const github = feedbackGithub();
+    const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+    let submits = 0;
+    let submissionId = "";
+    let firstCalls = 0;
+    if (outcome === "lost response") github.loseIssueResponse();
+    else if (outcome === "resume without issue") github.loseRefResponse();
+    else {
+      github.lowBudget("ref");
+      github.lowBudget();
+    }
+    await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+    await page.route("**/api/feedback/submit", async (route) => {
+      const payload = route.request().postDataJSON();
+      if (submissionId) expect(payload.submissionId).toBe(submissionId);
+      submissionId = payload.submissionId;
+      submits++;
+      // Exercise the real handlers/store over an injected GitHub transport.
+      const handlers = createFeedbackHandlers({
+        env,
+        store: createGithubStore(env, github.transport),
+        limiter: () => undefined,
+      });
+      const response = await handlers.submit(
+        new Request(route.request().url(), {
+          method: "POST",
+          headers: {
+            Origin: new URL(route.request().url()).origin,
+            "Content-Type": "application/json",
+          },
+          body: route.request().postData(),
+        }),
+      );
+      if (submits === 1) {
+        firstCalls = github.calls.length;
+        if (outcome === "lost response")
+          for (let i = 0; i < 10_000; i++)
+            github.issues.push({ number: 124 + i, body: "Unrelated demo feedback" });
+      } else {
+        expect(github.calls.length - firstCalls).toBe(outcome === "lost response" ? 4 : 5);
+      }
+      await route.fulfill({
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: await response.text(),
+      });
+    });
+    await page.goto("/feedback");
+    await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+    await page.getByLabel("Your answer", { exact: true }).fill("Alice found the demo confusing.");
+    await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+    const retries = outcome === "lost response" || outcome === "resume without issue";
+    if (retries) {
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("Download my feedback");
+      await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+    }
+    await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText(`#${123}`);
+    expect(submits).toBe(retries ? 2 : 1);
+    expect(github.records).toHaveLength(1);
+    expect(github.records[0]?.record.id).toBe(submissionId);
+    expect(github.issues).toHaveLength(outcome === "lost response" ? 10_001 : 1);
+  });
