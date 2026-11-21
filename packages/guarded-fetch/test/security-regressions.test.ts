@@ -24,7 +24,7 @@ const wrappers = [
     name: "SSRF",
     error: SsrfError,
     wrap: (fetch: typeof globalThis.fetch, maxRedirects = 5) =>
-      createGuardedFetch({ fetch, dnsLookup, maxRedirects }),
+      createGuardedFetch({ pinningFetch: fetch, dnsLookup, maxRedirects }),
   },
   {
     name: "pod scope",
@@ -202,7 +202,7 @@ describe("guard composition", () => {
             : new Response("leaked"),
       );
       const f = createPodScopedFetch(BASE, {
-        fetch: createGuardedFetch({ fetch: transport, dnsLookup }),
+        fetch: createGuardedFetch({ pinningFetch: transport, dnsLookup }),
       });
       await expect(
         f(`${BASE}item`, {
@@ -227,7 +227,7 @@ describe("guard composition", () => {
           : new Response("followed"),
     );
     await expect(
-      refuseRedirects(createGuardedFetch({ fetch: transport, dnsLookup }))(`${BASE}item`),
+      refuseRedirects(createGuardedFetch({ pinningFetch: transport, dnsLookup }))(`${BASE}item`),
     ).rejects.toBeInstanceOf(RedirectRefusedError);
     expect(transport).toHaveBeenCalledTimes(1);
   });
@@ -243,7 +243,7 @@ describe("manual responses retain guard limits", () => {
             headers: { location: "next", ...(declared ? { "content-length": "999" } : {}) },
           }),
       );
-      const f = createGuardedFetch({ fetch, dnsLookup, maxBytes: 2 });
+      const f = createGuardedFetch({ pinningFetch: fetch, dnsLookup, maxBytes: 2 });
       await expect(f(`${BASE}item`, { redirect: "manual" })).rejects.toBeInstanceOf(SsrfError);
       expect(fetch).toHaveBeenCalledTimes(1);
     });
@@ -259,9 +259,12 @@ describe("manual responses retain guard limits", () => {
         }),
     );
     let outcome: unknown;
-    const pending = createGuardedFetch({ fetch, dnsLookup, timeoutMs: 10 })(`${BASE}item`, {
-      redirect: "manual",
-    }).catch((e: unknown) => {
+    const pending = createGuardedFetch({ pinningFetch: fetch, dnsLookup, timeoutMs: 10 })(
+      `${BASE}item`,
+      {
+        redirect: "manual",
+      },
+    ).catch((e: unknown) => {
       outcome = e;
     });
     await vi.advanceTimersByTimeAsync(11);
@@ -282,9 +285,9 @@ describe("NAT64 address policy", () => {
       expect(isPublicAddress(address, false)).toBe(false);
       expect(isPublicAddress(address, true)).toBe(false);
       const fetch = vi.fn(async () => new Response("unsafe"));
-      await expect(createGuardedFetch({ fetch })(`https://[${address}]/`)).rejects.toBeInstanceOf(
-        SsrfError,
-      );
+      await expect(
+        createGuardedFetch({ pinningFetch: fetch })(`https://[${address}]/`),
+      ).rejects.toBeInstanceOf(SsrfError);
       expect(fetch).not.toHaveBeenCalled();
       const lookup = createValidatingLookup(async () => [{ address, family: 6 }], false, false);
       await expect(
@@ -320,11 +323,14 @@ describe("DNS deadlines and cancellation", () => {
       const ac = new AbortController();
       if (abort === "already aborted") ac.abort();
       let outcome: unknown;
-      const pending = createGuardedFetch({ fetch, dnsLookup: lookup, timeoutMs: 10 })(BASE, {
-        signal: ac.signal,
-        method: "POST",
-        body,
-      }).catch((e: unknown) => {
+      const pending = createGuardedFetch({ pinningFetch: fetch, dnsLookup: lookup, timeoutMs: 10 })(
+        BASE,
+        {
+          signal: ac.signal,
+          method: "POST",
+          body,
+        },
+      ).catch((e: unknown) => {
         outcome = e;
       });
       await vi.advanceTimersByTimeAsync(0);
@@ -355,11 +361,11 @@ describe("DNS deadlines and cancellation", () => {
       return new Promise<typeof PUBLIC>(() => {});
     });
     let outcome: unknown;
-    const pending = createGuardedFetch({ fetch, dnsLookup: lookup, timeoutMs: 10 })(BASE).catch(
-      (e: unknown) => {
-        outcome = e;
-      },
-    );
+    const pending = createGuardedFetch({ pinningFetch: fetch, dnsLookup: lookup, timeoutMs: 10 })(
+      BASE,
+    ).catch((e: unknown) => {
+      outcome = e;
+    });
     await vi.advanceTimersByTimeAsync(11);
     expect(outcome).toBeInstanceOf(SsrfError);
     expect(lookup).toHaveBeenCalledTimes(2);
@@ -376,7 +382,7 @@ describe("error URL sanitisation", () => {
     for (const url of [secretUrl, malformed]) {
       const f = createGuardedFetch({
         dnsLookup,
-        fetch: async () => {
+        pinningFetch: async () => {
           throw new TypeError(`duplex is required for ${url}`, {
             cause: Object.assign(new Error(`transport failed at ${url}`), { secret: "password" }),
           });
@@ -401,7 +407,8 @@ describe("error URL sanitisation", () => {
     }
   }
   it("does not expose the native fetch cause for a secret-bearing malformed referrer", async () => {
-    const f = createGuardedFetch({ dnsLookup });
+    // Exercise native Request validation specifically; no socket is opened by this refusal.
+    const f = createGuardedFetch({ dnsLookup, fetch: globalThis.fetch, requireDnsPinning: false });
     expectSafe(await f(BASE, { referrer: malformed }).catch((e: unknown) => e));
   });
   it("drops a quoted header value echoed by a header-validation error", async () => {
@@ -409,7 +416,7 @@ describe("error URL sanitisation", () => {
     const wrapped = `${credential.slice(0, 20)}\n${credential.slice(20)}`;
     const f = createGuardedFetch({
       dnsLookup,
-      fetch: async () => {
+      pinningFetch: async () => {
         throw new TypeError(`Headers.append: "Basic ${wrapped}" is an invalid header value.`);
       },
     });
@@ -423,7 +430,7 @@ describe("error URL sanitisation", () => {
     const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJlLXNlY3JldA";
     const f = createGuardedFetch({
       dnsLookup,
-      fetch: async () => {
+      pinningFetch: async () => {
         throw new TypeError(
           `Headers.append: "session="${jwt}"; preferences=light\nmode" is an invalid header value.`,
         );
@@ -444,7 +451,8 @@ describe("error URL sanitisation", () => {
     "https: ho st/callback?code=oauth-secret#access-token",
     "/callback?code=oauth-secret#access-token",
   ])("does not expose a malformed referrer spelling %s", async (referrer) => {
-    const f = createGuardedFetch({ dnsLookup });
+    // Exercise native Request validation specifically; no socket is opened by this refusal.
+    const f = createGuardedFetch({ dnsLookup, fetch: globalThis.fetch, requireDnsPinning: false });
     expectSafe(await f(BASE, { referrer }).catch((e: unknown) => e));
   });
   it("does not expose a raw DNS failure cause", async () => {
@@ -462,7 +470,7 @@ describe("error URL sanitisation", () => {
     refusal.cause = cause;
     const f = createGuardedFetch({
       dnsLookup,
-      fetch: async () => {
+      pinningFetch: async () => {
         throw cause;
       },
     });
@@ -474,7 +482,7 @@ describe("error URL sanitisation", () => {
     const controller = new AbortController();
     const f = createGuardedFetch({
       dnsLookup,
-      fetch: async () => {
+      pinningFetch: async () => {
         controller.abort();
         throw new Error(`aborted at ${secretUrl}`);
       },

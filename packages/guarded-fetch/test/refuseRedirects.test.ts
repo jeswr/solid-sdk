@@ -297,7 +297,7 @@ describe("refuseRedirects — composition with the SSRF guard", () => {
     const inner = vi.fn(async () => movedTo("https://elsewhere.example/x"));
     const composed = createGuardedFetch({
       // IP-literal target so the guard needs no DNS resolver; refuseRedirects wraps the inner.
-      fetch: refuseRedirects(inner as unknown as typeof fetch),
+      pinningFetch: refuseRedirects(inner as unknown as typeof fetch),
     });
     const err = (await composed("https://93.184.216.34/x").catch(
       (e: unknown) => e,
@@ -313,7 +313,7 @@ describe("refuseRedirects — composition with the SSRF guard", () => {
   it("nested under createGuardedFetch: a non-redirect passes through", async () => {
     const inner = vi.fn(async () => new Response("ok"));
     const composed = createGuardedFetch({
-      fetch: refuseRedirects(inner as unknown as typeof fetch),
+      pinningFetch: refuseRedirects(inner as unknown as typeof fetch),
     });
     const res = await composed("https://93.184.216.34/x");
     expect(res.status).toBe(200);

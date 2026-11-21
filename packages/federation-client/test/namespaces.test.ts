@@ -141,7 +141,11 @@ describe.each([
   "https://jeswr.org/ns/fedreg#",
   "https://w3id.org/jeswr/fedreg#",
 ])("client registry delegation: %s", (namespace) => {
-  const guard = { dnsLookup: async () => [{ address: "93.184.216.34", family: 4 as const }] };
+  // A stub fetch cannot pin DNS, so these delegation tests opt out explicitly.
+  const guard = {
+    dnsLookup: async () => [{ address: "93.184.216.34", family: 4 as const }],
+    requireDnsPinning: false,
+  };
   it("discovers trusted memberships and resolves advertised storage versions", async () => {
     const registry = "https://registry.example/catalog";
     const body = `<${registry}> a <${namespace}Registry> ; <${namespace}member> <${registry}#m> .
