@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { CompactSign } from "jose";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { tmpdir } from "os";
@@ -23,14 +23,15 @@ import { AgentRuntime, type AgentRuntimeOptions } from "../src/runtime/agent.js"
 import { Cast, mandateOf } from "../src/scenarios/common.js";
 import {
   FileLedger,
+  type FileLedgerOptions,
   LEDGER_GENESIS,
-  type LedgerBounds,
   MemoryLedger,
 } from "../src/store/ledger.js";
 import { FileStateStore, MemoryStateStore } from "../src/store/state.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
 import { TrustResolver } from "../src/trust/resolver.js";
 import { decodeCompactPayload } from "../src/wire/inspect.js";
+import { tamperLedgerEntry } from "./helpers/ledger-tamper.js";
 
 const address = "mailto:shop@fictional.example",
   purpose = "urn:purpose:enquiry",
@@ -48,7 +49,7 @@ async function fixture({
   uncertainDelivery?: boolean;
   stateDir?: string;
   emailApprovalOnly?: boolean;
-  ledgerBounds?: LedgerBounds;
+  ledgerBounds?: FileLedgerOptions;
 } = {}) {
   let at = new Date("2026-11-13T09:00:00.000Z");
   const cast = new Cast(() => at);
@@ -1028,14 +1029,9 @@ it("refuses to resume writes when the saved ledger prefix fails verification", a
   try {
     await f.send();
     f.runtime.recordObservation({ type: "orphaned-suffix", observedBy: "urn:test" });
-    const entries = f.ledger.entries();
-    const [first, ...rest] = entries;
-    if (!first) throw new Error("Missing saved ledger prefix");
-    const corrupted =
-      [{ ...first, record: { type: "altered" } }, ...rest]
-        .map((entry) => JSON.stringify(entry))
-        .join("\n") + "\n";
-    writeFileSync(path, corrupted);
+    const first = required(f.ledger.entries()[0]);
+    tamperLedgerEntry(path, first, { ...first, record: { type: "altered" } });
+    const corrupted = readFileSync(path, "utf8");
     await f.reopen();
     expect(() =>
       f.runtime.recordObservation({ type: "after-recovery", observedBy: "urn:test" }),
@@ -1201,13 +1197,28 @@ it("fails closed when an authenticated file ledger entry has changed", async () 
     await f.send();
     await f.approve();
     const entry = required(f.ledger.entries().at(-1));
-    writeFileSync(
-      path,
-      readFileSync(path, "utf8").replace(
-        JSON.stringify(entry),
-        JSON.stringify({ ...entry, record: { ...entry.record, value: "changed" } }),
-      ),
-    );
+    tamperLedgerEntry(path, entry, { ...entry, record: { ...entry.record, value: "changed" } });
+    await f.reopen();
+    expect(() =>
+      f.runtime.recordObservation({ type: "after-reopen", observedBy: "urn:test" }),
+    ).toThrow("Cannot resume the evidence ledger without a valid saved prefix");
+    expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
+    expect(await f.runtime.auditRecord()).toMatchObject({ ok: false, released: [] });
+  } finally {
+    f.runtime.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("fails closed when an authenticated legacy JSONL ledger entry has changed", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-corrupt-audit-"));
+  const f = await fixture({ stateDir: dir, ledgerBounds: { segmentFormat: "jsonl" } });
+  try {
+    const path = join(dir, "record.jsonl");
+    await f.send();
+    await f.approve();
+    const entry = required(f.ledger.entries().at(-1));
+    tamperLedgerEntry(path, entry, { ...entry, record: { ...entry.record, value: "changed" } });
     await f.reopen();
     expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
     expect(await f.runtime.auditRecord()).toMatchObject({ ok: false, released: [] });

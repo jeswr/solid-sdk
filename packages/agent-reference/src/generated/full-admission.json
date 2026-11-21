@@ -1450,5 +1450,881 @@
     "severity": "warning",
     "subject": "https://w3id.org/jeswr/awp#kind",
     "message": "property in https://w3id.org/jeswr/awp#UnsupportedShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#34d025aa0ff97bd5abda2778df16a7598819f774171bc64cf754cd6b64b4b143-GateCheckRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#34d025aa0ff97bd5abda2778df16a7598819f774171bc64cf754cd6b64b4b143-GateCheckRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#70e5d7f9c827b2144848582b9b25aa3ab0ac1ebdb4775eef1576af7fb6b7bf65-GateDecisionRecord-recordChecks",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#70e5d7f9c827b2144848582b9b25aa3ab0ac1ebdb4775eef1576af7fb6b7bf65-GateDecisionRecord-recordChecks",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#257c5d81a67fc412de231608a356deaa11011cfd6748402fcd55a955de7da084-GateDecisionRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#257c5d81a67fc412de231608a356deaa11011cfd6748402fcd55a955de7da084-GateDecisionRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#00eccf2bb7a1ccec9b4e3fe4c1e419b0b4ad8e9a3ef3a75fb116b4876c727645-VerificationResult-recordLimitations",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#00eccf2bb7a1ccec9b4e3fe4c1e419b0b4ad8e9a3ef3a75fb116b4876c727645-VerificationResult-recordLimitations",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#43e9583ea451076d53dcdf1c8b8493b4749d1a71fa4618f6e3b4dc0990c39eaa-VerificationResult-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#43e9583ea451076d53dcdf1c8b8493b4749d1a71fa4618f6e3b4dc0990c39eaa-VerificationResult-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#73115ad65b0fe9cb6c93b04ff989520ac4570fded0be8b088cf7d040d6c692d6-RepresentationAssessment-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#73115ad65b0fe9cb6c93b04ff989520ac4570fded0be8b088cf7d040d6c692d6-RepresentationAssessment-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StoreAuthorisationDecisionShape",
+    "message": "http://www.w3.org/ns/shacl#xone: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#07e566ced162e18b2341997f102c3acf6607a8b76361ea3990a8e64700786aa2-AuthorisationDecision-action",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#07e566ced162e18b2341997f102c3acf6607a8b76361ea3990a8e64700786aa2-AuthorisationDecision-action",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2d2604308cf8fc470d1661081b13e8e0c0364bae3bd9caff474605f23fc35069-AuthorisationDecision-policy",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2d2604308cf8fc470d1661081b13e8e0c0364bae3bd9caff474605f23fc35069-AuthorisationDecision-policy",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#24bad776004391e2ad3c7ede35383def0bf136924619fa08fcc8f9f5ae429806-AuthorisationDecision-recordOriginalDigests",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#24bad776004391e2ad3c7ede35383def0bf136924619fa08fcc8f9f5ae429806-AuthorisationDecision-recordOriginalDigests",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#aa57acc8bffc9438dfbf3aafe6e27ba39c8da8b1d50e3b0e6d937ef8d506650b-AuthorisationDecision-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#aa57acc8bffc9438dfbf3aafe6e27ba39c8da8b1d50e3b0e6d937ef8d506650b-AuthorisationDecision-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#703cc2ab8e75c52718186274f2eff990b7a4636a30c17c7b1ff944156adeaada-GrantRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#703cc2ab8e75c52718186274f2eff990b7a4636a30c17c7b1ff944156adeaada-GrantRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2f3936136e68a881390da4fafdda0eab07c3a18b899ca29d011a7cccee370df1-MessageRecord-recordApprovalBinding",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2f3936136e68a881390da4fafdda0eab07c3a18b899ca29d011a7cccee370df1-MessageRecord-recordApprovalBinding",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#55180ee1ba0378cd143b10dbccdcacf16f25046efc8886d2aa81b944091fb77c-MessageRecord-recordConditions",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#40734e511cf714b29f10362e014e25365eecc18731d8fd6db749c6d890ee91ab-n12",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#f5e8106884bc9c33e8bd163f71a3f1a7026faeb4b8b0634424456e37fc1e196e-n13",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8a947fbc122fb083e1dd29fa3be1b1156abf97d62da80b3048812663aaa19f66-MessageRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8a947fbc122fb083e1dd29fa3be1b1156abf97d62da80b3048812663aaa19f66-MessageRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#6dde18095d52c8e960ae89f87da4edc2bdea8a84e56c40c1acac4c2639994462-ItemTransferRecord-transferRecipient",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#6dde18095d52c8e960ae89f87da4edc2bdea8a84e56c40c1acac4c2639994462-ItemTransferRecord-transferRecipient",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ccc2a8b96d0cdb057f565054f62ff2792940b3fa9ff666b1fccb486ba2c871a2-ItemTransferRecord-transferDuties",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#938df8c51209fd31c14c47f211482109fc1431bdb1dde967d5d977c2414cde7f-n18",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#50fcfda0e3e018573425e2924108ca63080682a5c5521b113ccac794e87b4142-n23",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#84ab29652ad13d2c1e1b43b2c18052c576fa39e6123d53fb26b9fcf21fd2f89d-ItemTransferRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#84ab29652ad13d2c1e1b43b2c18052c576fa39e6123d53fb26b9fcf21fd2f89d-ItemTransferRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d5061f647c069afc45a1d80c192f911a6ac5ea9adb3effc2d05ff27bce6f81f9-ApprovalRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d5061f647c069afc45a1d80c192f911a6ac5ea9adb3effc2d05ff27bce6f81f9-ApprovalRecord-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#67276754364249a0c7a2c7e906d257a3ea2d7570ab44ffa018d4ce81ff2a2b1f-RecordCheckpoint-prunedSegments",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#67276754364249a0c7a2c7e906d257a3ea2d7570ab44ffa018d4ce81ff2a2b1f-RecordCheckpoint-prunedSegments",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#eb0ffe718e1afc7f47abad661a979ca51e47b108a9db4ead02b9c9500cd82c7d-RecordCheckpoint-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#eb0ffe718e1afc7f47abad661a979ca51e47b108a9db4ead02b9c9500cd82c7d-RecordCheckpoint-recordFieldOrder",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#44a00e3fee0a5123f7586791372a45de21614ca81612ec7e2f4260f3cda9e2ec-UntypedRecord-recordValues",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#44a00e3fee0a5123f7586791372a45de21614ca81612ec7e2f4260f3cda9e2ec-UntypedRecord-recordValues",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StoreNamedValuesShape",
+    "message": "http://www.w3.org/ns/shacl#class: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cb880c778fe1928c2a58166175249cdd7a60fd080df668553b98098df286f3db-n16",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cb880c778fe1928c2a58166175249cdd7a60fd080df668553b98098df286f3db-n16",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StoreOrderedValuesShape",
+    "message": "http://www.w3.org/ns/shacl#class: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c006d80314a781bd8418cb978499487617e3e73be688df34fb3ff5d113719cc8-n14",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c006d80314a781bd8418cb978499487617e3e73be688df34fb3ff5d113719cc8-n14",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StoreValueEntryShape",
+    "message": "http://www.w3.org/ns/shacl#class: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a1387b9f3b4565f277349fa1105811d8834d804a3b7e0763cc132cda02eb8e87-n20",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8cb39d86a1b3475245cc5c1578310521490a1ba27552f183c59c27bcfa6c8386-n17",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#726d28a1bfd61f3994f40385270505849825166c69664fbb8578b1ee7566f7cc-n2",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://purl.org/dc/terms/PeriodOfTime",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/dx/prof/Profile",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/odrl/2/Agreement",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/odrl/2/Constraint",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/odrl/2/Duty",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/odrl/2/Offer",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/odrl/2/Permission",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/odrl/2/Policy",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/prov#Activity",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "http://www.w3.org/ns/prov#Agent",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/CreativeWork",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/Event",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/Invoice",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/ItemList",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/ListItem",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/Offer",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/PayAction",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://schema.org/PropertyValue",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Accept",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#AcceptBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ActionIntent",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#AgreementRecord",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Assurance",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Attachment",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#AudienceRef",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#AuthorisationDecisionPolicy",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#BasisKind",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Challenge",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ChallengeBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ChallengeNeeds",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CheckName",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CheckResultCode",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#CompactJwsProof",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Configuration",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ContentPart",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Deliver",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#DeliverBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Describe",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#DescribeBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Description",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#DescriptionBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#EvidenceItem",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#EvidenceRole",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#GateOutcome",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#GrantKind",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ImplementationDescription",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Indeterminate",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#IndeterminateBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#IntentEvidenceRef",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Invoke",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#InvokeBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#InvokeBodyChallenge",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#JwsProof",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#LegacyCredentialSubject",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Message",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#MessageAuthorship",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#MessageKind",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#NamedValueCollection",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#NullValue",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#OperationRef",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#OutcomeConclusion",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#OutcomeRecord",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#OwnerMandate",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ParticipantRef",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#PaymentReceipt",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ProofBinding",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Propose",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ProposeBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ReasonCode",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Receipt",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#ReceiptBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Refuse",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#RefuseBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#RepresentationStatement",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#RequestBasis",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#SourceAuthorityAssessment",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#SourceAuthorityAssessmentRule",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#StatementSubject",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Unsupported",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#UnsupportedBody",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp#Verdict",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://w3id.org/security#DataIntegrityProof",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/2018/credentials#EnvelopedVerifiableCredential",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/2018/credentials#EnvelopedVerifiablePresentation",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/2018/credentials#JsonSchema",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/2018/credentials#JsonSchemaCredential",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/2018/credentials#VerifiableCredential",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/2018/credentials#VerifiablePresentation",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/ns/credentials/status#BitstringStatusList",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/ns/credentials/status#BitstringStatusListCredential",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-shape",
+    "severity": "error",
+    "subject": "https://www.w3.org/ns/credentials/status#BitstringStatusListEntry",
+    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
   }
 ]

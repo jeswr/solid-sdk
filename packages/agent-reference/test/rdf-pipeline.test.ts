@@ -183,3 +183,34 @@ it("enforces RDF signatures and parsing boundaries through the TypeScript compil
     rmSync(root, { recursive: true, force: true });
   }
 }, 60_000);
+
+it("refuses direct and locally assigned JSON bytes reaching a store file write", () => {
+  const root = mkdtempSync(join(tmpdir(), "rdf-pipeline-store-"));
+  try {
+    mkdirSync(join(root, "src/store"), { recursive: true });
+    writeFileSync(
+      join(root, "src/store/fixture.ts"),
+      `
+      import { writeFileSync as write } from "fs";
+      export function save(path: string, value: unknown) {
+        write(path, JSON.stringify(value));
+        const bytes = JSON.stringify(value);
+        write(path, \`\${bytes}\\n\`);
+        let assigned: string;
+        assigned = JSON.stringify(value);
+        write(path, assigned);
+        return JSON.parse(JSON.stringify(value));
+      }
+      export function read(bytes: string) { return JSON.parse(bytes); }
+    `,
+    );
+    expect(checkRdfPipeline(root).failures).toEqual([
+      expect.objectContaining({ rule: "foreign-json-parse", function: "read" }),
+      expect.objectContaining({ rule: "store-json-write", function: "save" }),
+      expect.objectContaining({ rule: "store-json-write", function: "save" }),
+      expect.objectContaining({ rule: "store-json-write", function: "save" }),
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

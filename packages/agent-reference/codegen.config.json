@@ -7,6 +7,20 @@
   },
   "entities": [
     {
+      "targetClass": "https://w3id.org/jeswr/awp#RecordEntry",
+      "name": "RecordEntry",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://w3id.org/jeswr/awp#WithheldRecordEntry",
+      "name": "WithheldRecordEntry",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
       "targetClass": "https://w3id.org/jeswr/awp#GrantRecord",
       "name": "GrantRecord",
       "subject": {

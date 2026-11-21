@@ -7,15 +7,7 @@
  * scripts/pilot-a2a-integration.mjs. Agents use the explicitly selected solid-odrl module so
  * the gate needs no Rust binary.
  */
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,7 +19,7 @@ import { AgentHost, type Json } from "./host.js";
 import { signApproval } from "./mechanisms/mandate.js";
 import { PURPOSE } from "./profile/vocabulary.js";
 import { readAgent } from "./setup.js";
-import { FileLedger } from "./store/ledger.js";
+import { FileLedger, readLedgerSegment } from "./store/ledger.js";
 
 const NOW = "2026-10-19T08:00:00Z";
 const clock = { t: Date.parse(NOW) };
@@ -330,10 +322,8 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
 
     // No duplicate storage, and grants are unchanged (no widening) after all of it.
     expect((nb.status().domain as { dataStore: Json[] }).dataStore).toEqual(before);
-    const stores = readFileSync(join(nb.agent.dir, "data-store-ledger.jsonl"), "utf8")
-      .trim()
-      .split("\n")
-      .map((l) => JSON.parse(l).record as Json)
+    const stores = readLedgerSegment(join(nb.agent.dir, "data-store-ledger.jsonl"))
+      .map(({ record }) => record)
       .filter((r) => r.type === "data-stored");
     expect(stores.length).toBe(before.length);
     expect(ledger(nb).filter((r) => r.type === "message-in").length).toBeGreaterThan(0);

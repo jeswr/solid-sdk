@@ -35,6 +35,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -841,10 +842,9 @@ try {
     const v = await cli(["verify-ledger", "--name", n]);
     post6[n] = [g.code, v.json.ok === true];
   }
-  const storeLedger = readFileSync(join(dir, "northbank", "data-store-ledger.jsonl"), "utf8")
-    .trim()
-    .split("\n")
-    .map((l) => JSON.parse(l).record);
+  const storeLedger = readLedgerSegment(join(dir, "northbank", "data-store-ledger.jsonl")).map(
+    ({ record }) => record,
+  );
   check(
     "B.8",
     "after shutdown: every retained file is registered (governance exit 0), ledgers verify, the enforcement ledger stored each item exactly once and holds no payloads",

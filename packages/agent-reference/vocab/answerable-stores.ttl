@@ -1,0 +1,402 @@
+# AUTHORED-BY Codex GPT-6.2 Sol
+@prefix awp: <https://w3id.org/jeswr/awp#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix vc: <https://www.w3.org/2018/credentials#> .
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+@prefix schema: <https://schema.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+awp:RecordEntry a owl:Class;
+    rdfs:label "Record entry";
+    rdfs:comment "A sealed ledger row that discloses its record payload.".
+
+awp:WithheldRecordEntry a owl:Class;
+    rdfs:label "Withheld record entry";
+    rdfs:comment "The public chain fields for one ledger row whose record was withheld.".
+
+awp:GateCheckRecord a owl:Class;
+    rdfs:label "Gate check record";
+    rdfs:comment "One check evaluated by an inbound or outbound gate.".
+
+awp:GateDecisionRecord a owl:Class;
+    rdfs:label "Gate decision record";
+    rdfs:comment "The decision following a run of gate checks.".
+
+awp:MessageRecord a owl:Class;
+    rdfs:label "Message record";
+    rdfs:comment "Receipt or dispatch of a message identified by its digest.".
+
+awp:ItemTransferRecord a owl:Class;
+    rdfs:label "Item transfer record";
+    rdfs:comment "The receipt or release of a governed data item.".
+
+awp:ApprovalRecord a owl:Class;
+    rdfs:label "Approval record";
+    rdfs:comment "A request for approval or a principal’s answer.".
+
+awp:RecordCheckpoint a owl:Class;
+    rdfs:label "Record checkpoint";
+    rdfs:comment "An attestation of the ledger prefix removed under a retention bound.".
+
+awp:UntypedRecord a owl:Class;
+    rdfs:label "Open record";
+    rdfs:comment "A ledger record represented by its ordered named values.".
+
+awp:sequence a rdf:Property;
+    rdfs:label "Entry sequence";
+    rdfs:comment "The one-based position in the sealed evidence chain.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:integer.
+
+awp:previousEntryHash a rdf:Property;
+    rdfs:label "Previous entry hash";
+    rdfs:comment "The digest of the preceding ledger row, or the genesis marker.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+
+awp:previousEntry a rdf:Property;
+    rdfs:label "Previous entry";
+    rdfs:comment "The record graph identified by the preceding row’s digest.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+
+awp:entryHash a rdf:Property;
+    rdfs:label "Entry hash";
+    rdfs:comment "The digest that identifies this sealed ledger row.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+
+awp:recordDigest a rdf:Property;
+    rdfs:label "Record digest";
+    rdfs:comment "The separate canonical JSON digest committed by the entry.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+
+awp:recordType a rdf:Property;
+    rdfs:label "Record type";
+    rdfs:comment "The native type discriminator of a disclosed record.";
+    rdfs:domain awp:RecordEntry;
+    rdfs:range xsd:string.
+
+awp:record a rdf:Property;
+    rdfs:label "Record payload";
+    rdfs:comment "The node that describes the disclosed record of this entry.";
+    rdfs:domain awp:RecordEntry;
+    rdfs:range rdfs:Resource.
+
+awp:recordFieldOrder a rdf:Property;
+    rdfs:label "Record field order";
+    rdfs:comment "The positions of the native fields when they differ from the typed model order.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range schema:ItemList.
+
+awp:recordValues a rdf:Property;
+    rdfs:label "Record values";
+    rdfs:comment "The ordered named values of an open record.";
+    rdfs:domain awp:UntypedRecord;
+    rdfs:range awp:NamedValueCollection.
+
+awp:recordIdentifier a rdf:Property;
+    rdfs:label "Recorded identifier";
+    rdfs:comment "The original identifier of the grant, message or approval described by the payload.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+
+awp:recordAgent a rdf:Property;
+    rdfs:label "Recording agent";
+    rdfs:comment "The agent that evaluated the check or decided the gate outcome.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+
+awp:recordGate a rdf:Property;
+    rdfs:label "Recording gate";
+    rdfs:comment "The runtime gate that made the recorded check or decision.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+
+awp:recordChecks a rdf:Property;
+    rdfs:label "Recorded checks";
+    rdfs:comment "An ordered list of canonical JSON digests of the checks behind a gate decision.";
+    rdfs:domain awp:GateDecisionRecord;
+    rdfs:range schema:ItemList.
+
+awp:recordLimitations a rdf:Property;
+    rdfs:label "Verification limitations";
+    rdfs:comment "An ordered list of limitations of the verification performed.";
+    rdfs:domain awp:VerificationResult;
+    rdfs:range schema:ItemList.
+
+awp:recordExplanation a rdf:Property;
+    rdfs:label "Decision explanation";
+    rdfs:comment "A free-text reason supplied by the authorisation evaluator.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range xsd:string.
+
+awp:messageKind a rdf:Property;
+    rdfs:label "Recorded message kind";
+    rdfs:comment "The native interaction kind of the recorded message.";
+    rdfs:domain awp:MessageRecord;
+    rdfs:range xsd:string.
+
+awp:recordBinding a rdf:Property;
+    rdfs:label "Recorded binding";
+    rdfs:comment "The transport binding used to receive the recorded message.";
+    rdfs:domain awp:MessageRecord;
+    rdfs:range xsd:string.
+
+awp:recordApprovalBinding a rdf:Property;
+    rdfs:label "Recorded approval binding";
+    rdfs:comment "The named values describing how approval was bound to the release.";
+    rdfs:domain awp:MessageRecord;
+    rdfs:range awp:NamedValueCollection.
+
+awp:recordConditions a rdf:Property;
+    rdfs:label "Recorded conditions";
+    rdfs:comment "The ordered data describing conditions attached to the release.";
+    rdfs:domain awp:MessageRecord;
+    rdfs:range rdfs:Resource.
+
+awp:transferItem a rdf:Property;
+    rdfs:label "Transferred item";
+    rdfs:comment "The identifier of the item received or released.";
+    rdfs:domain awp:ItemTransferRecord;
+    rdfs:range rdfs:Resource.
+
+awp:transferRecipient a rdf:Property;
+    rdfs:label "Transfer recipient";
+    rdfs:comment "The named values identifying the actor and party receiving the item.";
+    rdfs:domain awp:ItemTransferRecord;
+    rdfs:range awp:NamedValueCollection.
+
+awp:transferAgreement a rdf:Property;
+    rdfs:label "Transfer agreement";
+    rdfs:comment "The identifier of the agreement governing the transfer.";
+    rdfs:domain awp:ItemTransferRecord;
+    rdfs:range rdfs:Resource.
+
+awp:transferDuties a rdf:Property;
+    rdfs:label "Transfer duties";
+    rdfs:comment "The ordered duties that apply to the received or released item.";
+    rdfs:domain awp:ItemTransferRecord;
+    rdfs:range schema:ItemList.
+
+awp:transferMessage a rdf:Property;
+    rdfs:label "Transfer message";
+    rdfs:comment "The identifier of the message carrying the item.";
+    rdfs:domain awp:ItemTransferRecord;
+    rdfs:range rdfs:Resource.
+
+awp:approvalDecision a rdf:Property;
+    rdfs:label "Approval decision";
+    rdfs:comment "The recorded principal’s decision on the proposed action.";
+    rdfs:domain awp:ApprovalRecord;
+    rdfs:range rdfs:Resource.
+
+awp:approvalProofDigest a rdf:Property;
+    rdfs:label "Approval proof digest";
+    rdfs:comment "The canonical JSON digest of the approval proof.";
+    rdfs:domain awp:ApprovalRecord;
+    rdfs:range xsd:string.
+
+awp:approvalJwsDigest a rdf:Property;
+    rdfs:label "Approval JWS byte digest";
+    rdfs:comment "SHA-256 of the exact approval JWS bytes.";
+    rdfs:domain awp:ApprovalRecord;
+    rdfs:range xsd:string.
+
+awp:recordStandIn a rdf:Property;
+    rdfs:label "Record stand-in";
+    rdfs:comment "The stand-in that supplied this recorded observation.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+
+awp:approvalJws a rdf:Property;
+    rdfs:label "Approval JWS";
+    rdfs:comment "The exact original compact JWS of an approval.";
+    rdfs:domain awp:ApprovalRecord;
+    rdfs:range xsd:string.
+
+awp:prunedSegments a rdf:Property;
+    rdfs:label "Pruned segments";
+    rdfs:comment "An ordered list of archived segment filenames documented by the checkpoint.";
+    rdfs:domain awp:RecordCheckpoint;
+    rdfs:range schema:ItemList.
+
+awp:lastPrunedSeq a rdf:Property;
+    rdfs:label "Last pruned sequence";
+    rdfs:comment "The sequence of the final ledger entry in the discarded prefix.";
+    rdfs:domain awp:RecordCheckpoint;
+    rdfs:range xsd:integer.
+
+awp:lastPrunedHash a rdf:Property;
+    rdfs:label "Last pruned hash";
+    rdfs:comment "The hash of the final ledger entry in the discarded prefix.";
+    rdfs:domain awp:RecordCheckpoint;
+    rdfs:range xsd:string.
+
+awp:checkpointNote a rdf:Property;
+    rdfs:label "Checkpoint note";
+    rdfs:comment "The retention explanation recorded when a ledger prefix is removed.";
+    rdfs:domain awp:RecordCheckpoint;
+    rdfs:range xsd:string.
+
+<https://w3id.org/jeswr/awp#reason/approval-given> a awp:ReasonCode;
+    rdfs:label "Approval given";
+    rdfs:comment "The required matching approval was given.".
+
+<https://w3id.org/jeswr/awp#reason/authority-valid> a awp:ReasonCode;
+    rdfs:label "Authority valid";
+    rdfs:comment "The required authority was established.".
+
+<https://w3id.org/jeswr/awp#reason/established-earlier> a awp:ReasonCode;
+    rdfs:label "Established earlier";
+    rdfs:comment "An earlier check established the required fact.".
+
+<https://w3id.org/jeswr/awp#reason/evidence-complete> a awp:ReasonCode;
+    rdfs:label "Evidence complete";
+    rdfs:comment "All required evidence is available.".
+
+<https://w3id.org/jeswr/awp#reason/fit-for-use> a awp:ReasonCode;
+    rdfs:label "Fit for use";
+    rdfs:comment "The checked evidence is fit for the declared use.".
+
+<https://w3id.org/jeswr/awp#reason/intact> a awp:ReasonCode;
+    rdfs:label "Intact";
+    rdfs:comment "The checked material passed its integrity requirements.".
+
+<https://w3id.org/jeswr/awp#reason/minimal-disclosure> a awp:ReasonCode;
+    rdfs:label "Minimal disclosure";
+    rdfs:comment "The proposed disclosure is limited to the required material.".
+
+<https://w3id.org/jeswr/awp#reason/no-action> a awp:ReasonCode;
+    rdfs:label "No action";
+    rdfs:comment "No action requiring authorisation was proposed.".
+
+<https://w3id.org/jeswr/awp#reason/no-claims> a awp:ReasonCode;
+    rdfs:label "No claims";
+    rdfs:comment "The message carries no claims subject to this check.".
+
+<https://w3id.org/jeswr/awp#reason/no-data> a awp:ReasonCode;
+    rdfs:label "No data";
+    rdfs:comment "The message carries no data subject to this check.".
+
+<https://w3id.org/jeswr/awp#reason/no-personal-data> a awp:ReasonCode;
+    rdfs:label "No personal data";
+    rdfs:comment "The message carries no personal data subject to this check.".
+
+<https://w3id.org/jeswr/awp#reason/no-principal> a awp:ReasonCode;
+    rdfs:label "No principal";
+    rdfs:comment "There is no principal action subject to this check.".
+
+<https://w3id.org/jeswr/awp#reason/recipient-established> a awp:ReasonCode;
+    rdfs:label "Recipient established";
+    rdfs:comment "The intended recipient is established.".
+
+<https://w3id.org/jeswr/awp#reason/source-accepted> a awp:ReasonCode;
+    rdfs:label "Source accepted";
+    rdfs:comment "The evaluator accepts the source for this use.".
+
+<https://w3id.org/jeswr/awp#reason/terms-acceptable> a awp:ReasonCode;
+    rdfs:label "Terms acceptable";
+    rdfs:comment "The terms are acceptable for the intended use.".
+
+<https://w3id.org/jeswr/awp#reason/terms-allow> a awp:ReasonCode;
+    rdfs:label "Terms allow";
+    rdfs:comment "The terms allow the proposed use.".
+
+<https://w3id.org/jeswr/awp#reason/within-limits> a awp:ReasonCode;
+    rdfs:label "Within limits";
+    rdfs:comment "The proposed action is within the applicable limits.".
+
+<https://w3id.org/jeswr/awp#reason/within-mandate> a awp:ReasonCode;
+    rdfs:label "Within mandate";
+    rdfs:comment "The owner mandate permits the action.".
+
+<https://w3id.org/jeswr/awp#verification-outcome/valid> a owl:NamedIndividual;
+    rdfs:label "Valid";
+    rdfs:comment "The examined bytes have valid integrity and attribution.".
+
+<https://w3id.org/jeswr/awp#verification-outcome/invalid> a owl:NamedIndividual;
+    rdfs:label "Invalid";
+    rdfs:comment "The checked integrity or attribution failed.".
+
+<https://w3id.org/jeswr/awp#verification-outcome/unsupported> a owl:NamedIndividual;
+    rdfs:label "Unsupported";
+    rdfs:comment "The verification mechanism is unsupported.".
+
+<https://w3id.org/jeswr/awp#verification-outcome/unknown-key> a owl:NamedIndividual;
+    rdfs:label "Unknown key";
+    rdfs:comment "The verifier did not recognise the signing key.".
+
+<https://w3id.org/jeswr/awp#verification-outcome/not-applicable> a owl:NamedIndividual;
+    rdfs:label "Not applicable";
+    rdfs:comment "The checked object did not call for this verification.".
+
+<https://w3id.org/jeswr/awp#assessment-outcome/accepted> a owl:NamedIndividual;
+    rdfs:label "Accepted";
+    rdfs:comment "The evaluator accepts the claimed representation.".
+
+<https://w3id.org/jeswr/awp#assessment-outcome/not-accepted> a owl:NamedIndividual;
+    rdfs:label "Not accepted";
+    rdfs:comment "The evaluator does not accept the claimed representation.".
+
+<https://w3id.org/jeswr/awp#assessment-outcome/unresolved> a owl:NamedIndividual;
+    rdfs:label "Unresolved";
+    rdfs:comment "The evaluator could not resolve the claimed representation.".
+
+<https://w3id.org/jeswr/awp#authorisation-outcome/permit> a owl:NamedIndividual;
+    rdfs:label "Permit";
+    rdfs:comment "The evaluator permits the action.".
+
+<https://w3id.org/jeswr/awp#authorisation-outcome/deny> a owl:NamedIndividual;
+    rdfs:label "Deny";
+    rdfs:comment "The evaluator denies the action.".
+
+<https://w3id.org/jeswr/awp#authorisation-outcome/approval-required> a owl:NamedIndividual;
+    rdfs:label "Approval required";
+    rdfs:comment "The evaluator requires the principal’s approval.".
+
+<https://w3id.org/jeswr/awp#authorisation-outcome/indeterminate> a owl:NamedIndividual;
+    rdfs:label "Indeterminate";
+    rdfs:comment "The evaluator could not determine permission.".
+
+<https://w3id.org/jeswr/awp#authorisation-outcome/ask-more> a owl:NamedIndividual;
+    rdfs:label "Ask more";
+    rdfs:comment "The evaluator requires further information.".
+
+<https://w3id.org/jeswr/awp#approval-decision/approve> a owl:NamedIndividual;
+    rdfs:label "Approve";
+    rdfs:comment "The principal approved the requested action.".
+
+<https://w3id.org/jeswr/awp#approval-decision/deny> a owl:NamedIndividual;
+    rdfs:label "Deny";
+    rdfs:comment "The principal denied the requested action.".
+
+<https://w3id.org/jeswr/awp#approval-decision/decline> a owl:NamedIndividual;
+    rdfs:label "Decline";
+    rdfs:comment "The principal declined the requested action.".
+
+<https://w3id.org/jeswr/awp#representation-status/anonymous> a owl:NamedIndividual;
+    rdfs:label "Anonymous actor";
+    rdfs:comment "An actor whose identity is absent from the message under assessment.".
+
+<https://w3id.org/jeswr/awp#representation-status/unknown> a owl:NamedIndividual;
+    rdfs:label "Unknown party";
+    rdfs:comment "The represented party was unavailable for the assessment.".
+
+
+awp:recordOriginalDigests a rdf:Property;
+    rdfs:label "Original evidence digests";
+    rdfs:comment "An ordered list of original evidence digests consulted for the decision.";
+    rdfs:domain awp:AuthorisationDecision;
+    rdfs:range schema:ItemList.
+
+awp:transferSubjectText a rdf:Property;
+    rdfs:label "Transferred item subject text";
+    rdfs:comment "The source claim’s native subject when it supplies text without an identifier.";
+    rdfs:domain awp:ItemTransferRecord;
+    rdfs:range xsd:string.

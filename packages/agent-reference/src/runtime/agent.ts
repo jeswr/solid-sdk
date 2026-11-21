@@ -578,12 +578,13 @@ export class AgentRuntime {
     this.state.auditApprovalProofs ??= {};
     this.state.emailChallenges ??= {};
     const head = this.ledger.head?.();
-    const checkpoint = this.state.ledgerAuditHead;
+    const checkpoint = this.state.ledgerAuditHead ?? LEDGER_GENESIS;
     this.ledgerAuditTrusted =
       !!head &&
       (!this.ledger.requiresTrustedCheckpoint ||
-        (head.seq === LEDGER_GENESIS.seq && head.hash === LEDGER_GENESIS.hash && !checkpoint) ||
-        (head.seq === checkpoint?.seq && head.hash === checkpoint.hash));
+        (head.seq === checkpoint.seq &&
+          head.hash === checkpoint.hash &&
+          verifyLedgerAtHead(this.ledger.entries(), checkpoint).ok));
     this.state.domain.derivedRequests ??= {};
     this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;
@@ -1117,8 +1118,15 @@ export class AgentRuntime {
    */
   private legacyCredentialDecisions() {
     const decisions = new Map<string, { digest: string; admitted: boolean }>();
+    const entries = this.auditEntries();
+    const head = this.trustedAuditHead();
+    const check =
+      head || this.ledger.requiresTrustedCheckpoint
+        ? verifyLedgerAtHead(entries, head)
+        : verifyLedger(entries);
+    if (!check.ok) return decisions;
     let message: { id: string; digest: string } | undefined;
-    for (const { record } of this.auditEntries()) {
+    for (const { record } of entries) {
       if (
         record.type === "message-in" &&
         typeof record.id === "string" &&
