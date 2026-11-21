@@ -426,8 +426,8 @@ receiver.
 
 Cloud configuration requires `AGENT_ENVIRONMENT=dev`, `AGENT_A2A_ENABLED=true`, an
 absolute `AGENT_CREDENTIAL_DIR` and port `AGENT_A2A_PORT` (default 8080). Only this
-explicit entrypoint opens ingress. Both POST routes share a 64 KiB request body
-limit and 64 slots that cover reading the body through the end of the receiver call.
+explicit entrypoint opens ingress. Both POST routes share 64 slots. Each slot is
+reserved before reading the request body and held through the receiver call.
 
 - `POST /a2a` accepts `application/json` with an A2A 1.0 JSON-RPC
   `SendMessage` request declaring the required message-format extension. The built-in
@@ -435,21 +435,28 @@ limit and 64 slots that cover reading the body through the end of the receiver c
   gate checks the signed data part and discards untrusted text and file parts.
   Invalid JSON-RPC request framing returns 400 with a `malformed` reason. For
   recognized requests, the A2A response carries the JSON receipt or refusal code.
+  The built-in receiver accepts up to 65,024 request bytes, reserving 512 bytes
+  of the reference client's 64 KiB limit for the response envelope and receipt,
+  including the longest refusal reason. It allows up to 16,384 UTF-16 code units
+  and 32,512 serialized UTF-8 bytes per string correlation ID, including JSON
+  quotes and escapes, because the response carries two copies of the ID.
 - `POST /answerable` requires the composed gate and accepts a signed message as
   the body with `application/vnd.answerable.document+json` or
-  `application/vnd.answerable.signed+json`. Under TR-8, HTTP 200 acknowledges
-  receipt of the bytes. The JSON body is `{"outcome":"admitted"}` or a reason code
-  such as `{"reason":"bad-signature"}`.
+  `application/vnd.answerable.signed+json`, up to 64 KiB. The JSON body is
+  `{"outcome":"admitted"}` or a reason code such as `{"reason":"bad-signature"}`.
 
-The listener rejects unsupported media types with 415 and oversized bodies with
-413. At capacity or while the gate is unavailable it returns 503. For early
-refusals it stops reading and closes the connection after sending the response.
+The listener rejects unsupported media types with 415, oversized bodies with
+413 and unsupported `Expect` values with 417. At capacity or during shutdown
+it returns 503 before processing the request. For early refusals it stops reading
+and closes the connection after sending the response.
+Under TR-8 both built-in entrances return HTTP 200 once the gate records its
+decision, for admission and refusal alike. Once the listener reads a complete
+body, an empty HTTP 503 means the daemon could not record a decision. Either
+outcome's commit failure produces the same status, empty body and headers.
 The gate verifies against its pinned trust and records its decision. It refuses malformed
 or unsigned messages, unknown keys, failed proofs, replayed messages, and invalid
 audiences or validity windows. Both built-in receivers expose only the receipt
-or reason code. Their response sizes are bounded by the fixed receipt format and,
-for A2A, two copies of the correlation ID from the bounded request. Both gate
-outcomes use HTTP 200. Custom A2A receivers retain a 64 KiB response limit.
+or reason code. Custom A2A receivers have a 64 KiB limit in each direction.
 Any protocol message the reference runtime prepares stays in
 its internal outbox. Ingress has no send capability.
 

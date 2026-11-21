@@ -5,6 +5,7 @@ import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { A2A_BINDING, a2aRequest, a2aResponse, readA2a } from "@jeswr/agent-reference/bindings/a2a";
 import { type ByteMessage, envelopeJson } from "@jeswr/agent-reference/bindings/bytes";
 import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
+import { AgentRuntime } from "@jeswr/agent-reference/runtime/agent";
 import { carriageBytes, DOCUMENT_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
 import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { chmod, mkdtemp, readdir, rm, stat } from "fs/promises";
@@ -264,7 +265,7 @@ it.each([
         "content-type": `${wire.mediaType}; charset=utf-8`,
       });
       expect(response.status).toBe(200);
-      return JSON.parse(response.body);
+      return envelopeJson(Buffer.from(response.body));
     }
     const frame = a2aRequest(wire, id, "/a2a", "Discard this untrusted text.");
     const { params, jsonrpc } = JSON.parse(Buffer.from(frame.body).toString());
@@ -349,14 +350,88 @@ it.each([
   }
 });
 
+it.each([
+  "/a2a",
+  "/answerable",
+])("reports the same empty 503 for either decision commit failure on %s", async (path) => {
+  const { env, port } = await setup();
+  const { gate, open, peer, receiver, sign, now } = await createTestGate();
+  const second = await open();
+  const commit = AgentRuntime.prototype.commitBindingEvent;
+  const attempted: unknown[] = [];
+  const write = vi.spyOn(AgentRuntime.prototype, "commitBindingEvent").mockImplementation(function (
+    this: AgentRuntime,
+    record,
+  ) {
+    if (record.type === "suite-gate-decision") {
+      attempted.push(record.outcome);
+      return Promise.reject(new Error("synthetic decision commit failure"));
+    }
+    return commit.call(this, record);
+  });
+  try {
+    const jws = await sign({
+      profile: PILOT_PROFILE,
+      configuration: CONFIG_ED25519,
+      id: "urn:uuid:00000000-0000-4000-8000-000000000042",
+      conversation: "urn:uuid:00000000-0000-4000-8000-100000000042",
+      kind: "describe",
+      from: { actor: peer.identity.actor },
+      to: { actor: receiver.identity.actor },
+      createdAt: now().toISOString(),
+      expiresAt: "2026-10-19T09:00:00.000Z",
+      body: {},
+    });
+    const host = {
+      ...composition(),
+      a2a: undefined,
+      gate: {
+        receiveCarriage: vi
+          .fn<Gate["receiveCarriage"]>()
+          .mockImplementationOnce(gate.receiveCarriage)
+          .mockImplementationOnce(second.gate.receiveCarriage),
+      },
+    };
+    host.daemon.run = vi.fn(async () => {
+      async function post(signed: string) {
+        const wire = carriageBytes({ format: "awp-jws-compact/0.1", jws: signed });
+        const frame =
+          path === "/a2a"
+            ? a2aRequest(wire, "commit", path)
+            : { body: wire.bytes, headers: { "Content-Type": wire.mediaType } };
+        const { status, body, headers } = await send(port, path, "POST", frame.body, frame.headers);
+        const { date, ...stableHeaders } = headers;
+        expect(date).toBeDefined();
+        expect(status).toBe(503);
+        expect(body).toBe("");
+        expect(stableHeaders).toMatchObject({
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        });
+        return stableHeaders;
+      }
+      const admitted = await post(jws);
+      expect(await post(tamper(jws))).toEqual(admitted);
+    });
+    await runCloud(async () => host, new AbortController().signal, env);
+    expect(attempted).toEqual(["admit", "refuse"]);
+    expect(gate.decisions(0)).toEqual([]);
+    expect(second.gate.decisions(0)).toEqual([]);
+  } finally {
+    write.mockRestore();
+    await Promise.all([gate.close(), second.gate.close()]);
+  }
+});
+
 it("enforces the direct HTTP route, media types and byte bound before calling the gate", async () => {
   const { env, port } = await setup();
   const host = {
     ...composition(),
     gate: {
-      receiveCarriage: vi.fn(
-        async () => ({ outcome: "refused", reason: "malformed", digest: "" }) as const,
-      ),
+      receiveCarriage: vi
+        .fn<Gate["receiveCarriage"]>()
+        .mockResolvedValueOnce({ outcome: "admitted", digest: "" })
+        .mockResolvedValueOnce({ outcome: "refused", reason: "malformed", digest: "" }),
     },
   };
   host.daemon.run = vi.fn(async () => {
@@ -377,10 +452,12 @@ it("enforces the direct HTTP route, media types and byte bound before calling th
     ).toBe(413);
     expect(host.gate.receiveCarriage).not.toHaveBeenCalled();
     const body = Buffer.alloc(65536, 0xff);
-    expect(await send(port, "/answerable", "POST", body, headers)).toMatchObject({
-      status: 200,
-      body: '{"reason":"malformed"}',
-    });
+    for (const expected of [{ outcome: "admitted" }, { reason: "malformed" }]) {
+      const reply = await send(port, "/answerable", "POST", body, headers);
+      expect(reply.status).toBe(200);
+      expect(envelopeJson(Buffer.from(reply.body))).toEqual(expected);
+    }
+    expect(host.gate.receiveCarriage).toHaveBeenCalledTimes(2);
     expect(host.gate.receiveCarriage).toHaveBeenCalledWith(
       { binding: "direct-http", delivery: { bytes: body, mediaType: DOCUMENT_MEDIA_TYPE } },
       expect.any(AbortSignal),
@@ -393,15 +470,9 @@ it.each([
   "explicit",
 ])("uses HTTP 200 for admission and refusal at the A2A request byte limit (%s receiver)", async (receiver) => {
   const { env, port } = await setup();
-  const limit = 64 * 1024;
-  const sample = a2aResponse(
-    { mediaType: "application/json", bytes: Buffer.from('{"outcome":"admitted"}') },
-    "",
-    "/a2a",
-  );
-  // The response repeats the correlation ID. Two-byte characters stay within the parser's
-  // string length limit while making the larger refusal cross the request byte limit.
-  const id = "é".repeat(Math.floor((limit - sample.body.byteLength) / 4));
+  const limit = 64 * 1024 - 512;
+  const id = "é".repeat((limit / 2 - 2) / 2);
+  const reason = "conflicting-structured-copies";
   const frame = a2aRequest(
     carriageBytes({ format: "awp-jws-compact/0.1", jws: "a.b.c" }),
     "message",
@@ -413,7 +484,7 @@ it.each([
   const receiveCarriage = vi
     .fn<Gate["receiveCarriage"]>()
     .mockResolvedValueOnce({ outcome: "admitted", digest: "" })
-    .mockResolvedValueOnce({ outcome: "refused", reason: "replay-conflict", digest: "" });
+    .mockResolvedValueOnce({ outcome: "refused", reason, digest: "" });
   const gate = { receiveCarriage };
   const host = {
     ...composition(),
@@ -421,42 +492,75 @@ it.each([
     gate,
   };
   host.daemon.run = vi.fn(async () => {
-    const admitted = await send(port, "/a2a", "POST", body, frame.headers);
-    const refused = await send(port, "/a2a", "POST", body, frame.headers);
-    expect([admitted.status, refused.status]).toEqual([200, 200]);
-    expect(Buffer.byteLength(admitted.body)).toBeLessThanOrEqual(limit);
-    expect(Buffer.byteLength(refused.body)).toBeGreaterThan(limit);
-    const reply = JSON.parse(refused.body);
-    expect(reply.id).toBe(id);
-    expect(Buffer.from(reply.result.message.parts[0].data.bytes, "base64").toString()).toBe(
-      '{"reason":"replay-conflict"}',
-    );
+    for (const headers of [frame.headers, { ...frame.headers, "transfer-encoding": "chunked" }]) {
+      const oversized = await send(port, "/a2a", "POST", `${body} `, headers);
+      expect(oversized.status).toBe(413);
+      expect(oversized.headers.connection).toBe("close");
+    }
+    const oversizedId = JSON.stringify({ ...JSON.parse(json), id: `${id}é` });
+    expect(await send(port, "/a2a", "POST", oversizedId, frame.headers)).toMatchObject({
+      status: 400,
+      body: '{"reason":"malformed"}',
+    });
+    expect(receiveCarriage).not.toHaveBeenCalled();
+    for (const expected of [{ outcome: "admitted" }, { reason }]) {
+      const reply = await send(port, "/a2a", "POST", body, frame.headers);
+      expect(reply.status).toBe(200);
+      const exchange = {
+        ...frame,
+        body: Buffer.from(reply.body),
+        headers: {
+          "A2A-Version": String(reply.headers["a2a-version"]),
+          "A2A-Extensions": String(reply.headers["a2a-extensions"]),
+        },
+      };
+      const { message } = readA2a(exchange);
+      expect(message.mediaType).toBe("application/json");
+      expect(envelopeJson(message.bytes)).toEqual(expected);
+      expect(envelopeJson(exchange.body)).toMatchObject({ id });
+    }
     expect(receiveCarriage).toHaveBeenCalledTimes(2);
   });
   await runCloud(async () => host, new AbortController().signal, env);
 });
 
 it.each([
-  { path: "/a2a", mediaType: "text/plain", status: 415 },
-  { path: "/answerable", mediaType: undefined, status: 415 },
-  { path: "/a2a", mediaType: "application/json", status: 413 },
-  { path: "/answerable", mediaType: DOCUMENT_MEDIA_TYPE, status: 413 },
+  { path: "/a2a", mediaType: "text/plain", status: 415, expectation: undefined },
+  { path: "/answerable", mediaType: undefined, status: 415, expectation: undefined },
+  { path: "/a2a", mediaType: "application/json", status: 413, expectation: undefined },
+  { path: "/answerable", mediaType: DOCUMENT_MEDIA_TYPE, status: 413, expectation: undefined },
+  { path: "/a2a", mediaType: "application/json", status: 417, expectation: "unsupported" },
+  { path: "/answerable", mediaType: DOCUMENT_MEDIA_TYPE, status: 417, expectation: "unsupported" },
+  {
+    path: "/a2a",
+    mediaType: "application/json",
+    status: 417,
+    expectation: "100-continue, unsupported",
+  },
+  {
+    path: "/answerable",
+    mediaType: DOCUMENT_MEDIA_TYPE,
+    status: 417,
+    expectation: "100-continue, unsupported",
+  },
 ])("closes $path after $status with an unfinished oversized chunked upload", async ({
   path,
   mediaType,
   status,
+  expectation,
 }) => {
   const { env, port } = await setup();
   const host = { ...composition(), gate: { receiveCarriage: vi.fn() } };
-  const read = IncomingMessage.prototype.read;
+  const emit = IncomingMessage.prototype.emit;
   let consumed = 0;
-  const reads = vi.spyOn(IncomingMessage.prototype, "read").mockImplementation(function (
+  const emitted = vi.spyOn(IncomingMessage.prototype, "emit").mockImplementation(function (
     this: IncomingMessage,
-    size,
+    event,
+    ...args
   ) {
-    const chunk: unknown = read.call(this, size);
-    if (this.url === path && Buffer.isBuffer(chunk)) consumed += chunk.length;
-    return chunk;
+    const [chunk] = args;
+    if (this.url === path && event === "data" && Buffer.isBuffer(chunk)) consumed += chunk.length;
+    return emit.call(this, event, ...args);
   });
   host.daemon.run = vi.fn(async () => {
     const socket = connect(port, "127.0.0.1");
@@ -472,13 +576,14 @@ it.each([
     try {
       const headers = `POST ${path} HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n`;
       const type = mediaType ? `Content-Type: ${mediaType}\r\n` : "";
+      const expectHeader = expectation ? `Expect: ${expectation}\r\n` : "";
       const chunk = `2000\r\n${"x".repeat(8192)}\r\n`;
-      socket.write(`${headers}${type}\r\n${chunk.repeat(32)}`);
+      socket.write(`${headers}${type}${expectHeader}\r\n${chunk.repeat(32)}`);
       await closed;
       const response = Buffer.concat(reply).toString();
       expect(response).toMatch(new RegExp(`^HTTP/1\\.1 ${status} `));
       expect(response).toMatch(/\r\nconnection: close\r\n/i);
-      expect(consumed).toBeLessThanOrEqual(status === 415 ? 0 : 64 * 1024);
+      expect(consumed).toBeLessThanOrEqual(status === 413 ? 64 * 1024 : 0);
       expect(host.gate.receiveCarriage).not.toHaveBeenCalled();
       expect(host.a2a).not.toHaveBeenCalled();
     } finally {
@@ -488,8 +593,84 @@ it.each([
   try {
     await runCloud(async () => host, new AbortController().signal, env);
   } finally {
-    reads.mockRestore();
+    emitted.mockRestore();
   }
+});
+
+it.each([
+  ["/a2a", "application/json", "fixed-length"],
+  ["/a2a", "application/json", "chunked"],
+  ["/answerable", DOCUMENT_MEDIA_TYPE, "fixed-length"],
+  ["/answerable", DOCUMENT_MEDIA_TYPE, "chunked"],
+])("replies and frees the slot when the final bytes and EOF arrive together on %s (%s, %s)", async (path, type, framing) => {
+  const { env, port } = await setup();
+  const host = {
+    ...composition(),
+    a2a: undefined,
+    gate: {
+      receiveCarriage: vi.fn<Gate["receiveCarriage"]>().mockResolvedValue({
+        outcome: "admitted",
+        digest: "",
+      }),
+    },
+  };
+  const wire = carriageBytes({ format: "awp-jws-compact/0.1", jws: "a.b.c" });
+  const frame = a2aRequest(wire, "complete", "/a2a");
+  const payload = Buffer.from(path === "/a2a" ? frame.body : wire.bytes);
+  const [framingHeader, body] =
+    framing === "chunked"
+      ? ["Transfer-Encoding: chunked", `${payload.length.toString(16)}\r\n${payload}\r\n0\r\n\r\n`]
+      : [`Content-Length: ${payload.length}`, payload.toString()];
+  const a2aHeaders =
+    path === "/a2a"
+      ? `A2A-Version: ${frame.headers["A2A-Version"]}\r\nA2A-Extensions: ${frame.headers["A2A-Extensions"]}\r\n`
+      : "";
+  const headers = `POST ${path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: ${type}\r\n${a2aHeaders}${framingHeader}\r\n`;
+  host.daemon.run = vi.fn(async () => {
+    const socket = connect(port, "127.0.0.1");
+    const reply: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => reply.push(chunk));
+    const closed = new Promise<void>((resolve, reject) => {
+      socket.once("close", resolve);
+      socket.once("error", reject);
+      socket.setTimeout(2000, () => reject(new Error("Completed requests did not drain")));
+    });
+    const statuses = () =>
+      Array.from(
+        Buffer.concat(reply)
+          .toString()
+          .matchAll(/HTTP\/1\.1 (\d+)/g),
+        ([, status]) => status,
+      );
+    try {
+      // Deliver the headers, final payload byte and HTTP body terminator in one write.
+      socket.write(`${headers}\r\n${body}`);
+      await vi.waitFor(() => expect(statuses()).toEqual(["200"]));
+      // A full batch of 64 pipelined requests fits only once the first slot is released.
+      socket.write(
+        `${`${headers}\r\n${body}`.repeat(63)}${headers}Connection: close\r\n\r\n${body}`,
+      );
+      await closed;
+      expect(statuses()).toEqual(Array(65).fill("200"));
+      expect(host.gate.receiveCarriage).toHaveBeenCalledTimes(65);
+      expect(host.gate.receiveCarriage).toHaveBeenLastCalledWith(
+        path === "/a2a"
+          ? {
+              binding: A2A_BINDING,
+              delivery: {
+                carriage: "a2a-request",
+                frame: expect.objectContaining({ body: payload }),
+              },
+            }
+          : { binding: "direct-http", delivery: { bytes: payload, mediaType: type } },
+        expect.any(AbortSignal),
+      );
+    } finally {
+      socket.destroy();
+      await closed.catch(() => undefined);
+    }
+  });
+  await runCloud(async () => host, new AbortController().signal, env);
 });
 
 it("reserves shared slots for unfinished uploads and reclaims them on disconnect", async () => {
@@ -509,6 +690,17 @@ it("reserves shared slots for unfinished uploads and reclaims them on disconnect
       },
     });
   host.daemon.run = vi.fn(async () => {
+    for (const [path, type] of [
+      ["/a2a", "application/json"],
+      ["/answerable", DOCUMENT_MEDIA_TYPE],
+    ] as const) {
+      const reply = await send(port, path, "POST", "{}", {
+        "content-type": type,
+        expect: "unsupported",
+      });
+      expect(reply.status).toBe(417);
+      expect(reply.headers.connection).toBe("close");
+    }
     const uploads = Array.from({ length: 64 }, (_, index) =>
       index % 2 === 0
         ? upload("/a2a", "application/json")

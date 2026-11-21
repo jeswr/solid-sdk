@@ -779,3 +779,39 @@ integration test. The packaged CLI, production packaging and launchd subprocess
 tests also failed. A separate run over local socket pairs passed all 26 cloud
 tests using Node's HTTP parser. The full workspace gate stopped at the unrelated
 suite-native build because `@capacitor/core` was unavailable.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Review round 2 fixes
+
+- Both entrances assemble exact body bytes from the request's `data` and `end`
+  events. The listener reserves a slot before attaching the reader and checks
+  each parser chunk against the remaining budget before buffering or emitting it.
+  Four fixed-length and chunked cases send each request in one write, check its
+  reply and then fill all 64 slots again. All four reproduced the missing reply
+  on `0265962e6` over socket pairs with Node's buffered HTTP parser path.
+- Unsupported `Expect` values, including mixed values containing
+  `100-continue`, receive 417 and `Connection: close` on both routes. Tests
+  verify zero body bytes read and full slot capacity after the refusals.
+- The built-in A2A receiver accepts 65,024 bytes and reserves 512 bytes of the
+  reference client's 64 KiB limit for the reply envelope and receipt. The
+  serialized correlation ID can take up to half the request budget because
+  the reply carries it twice. The boundary tests read admission and refusal
+  with `readA2a`. The direct HTTP cases use the reference bounded JSON reader
+  for both outcomes at 64 KiB.
+- Under TR-8 a committed admission or refusal receives HTTP 200. Tests force a
+  real decision-record commit failure for each outcome on each route and
+  verify identical empty HTTP 503 replies with matching headers apart from the
+  generated Date. The existing fact visibility regression still passes.
+
+### Verification
+
+- Source and test TypeScript checks, Biome and the agent layer guard passed
+  on Node 24.22.3.
+- The regular Vitest run passed 294 tests. Loopback setup returned `EPERM`
+  in 35 cloud tests, the CSS composition test and the D-2 integration test.
+  The packaged CLI, launchd and production packaging subprocess tests also
+  failed in the sandbox. The socket-pair rerun passed 329 tests, including all
+  36 cloud tests using Node's HTTP parser, with those five fixtures excluded.
+- The full workspace gate stopped on unrelated builds missing
+  `oauth4webapi` and `@capacitor/core`.

@@ -1,21 +1,21 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
+
 import { A2A_BINDING, a2aResponse } from "@jeswr/agent-reference/bindings/a2a";
 import { envelopeBytes, envelopeJson } from "@jeswr/agent-reference/bindings/bytes";
+import { DEFAULT_LIMITS } from "@jeswr/agent-reference/core/limits";
 import type { DOCUMENT_MEDIA_TYPE, LEGACY_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
 import type { A2aRequest, CloudReceiver } from "./cloud.js";
 import { auditGateReason, type Gate, type GateVerdict } from "./gate.js";
 
 type CarriageGate = Pick<Gate, "receiveCarriage">;
-const gateReceivers = new WeakSet<CloudReceiver>();
+const builtInA2aReceivers = new WeakSet<CloudReceiver>();
+// Reserve 512 bytes for the JSON-RPC envelope and base64 receipt, including the longest reason.
+// The rest is split between two copies of the serialized correlation ID.
+export const MAX_A2A_BODY = DEFAULT_LIMITS.maxEnvelopeBytes - 512;
 
-function gateReceiver(receive: CloudReceiver) {
-  gateReceivers.add(receive);
-  return receive;
-}
-
-export function isGateReceiver(receive: CloudReceiver) {
-  return gateReceivers.has(receive);
+export function isBuiltInA2aReceiver(receive: CloudReceiver) {
+  return builtInA2aReceivers.has(receive);
 }
 
 function receipt(verdict: GateVerdict) {
@@ -37,11 +37,17 @@ function requestId(body: Uint8Array): string | number | undefined {
       envelope?.jsonrpc === "2.0" &&
       envelope.method === "SendMessage" &&
       envelope.params?.message?.role === "ROLE_USER" &&
-      envelope.result === undefined &&
-      (typeof envelope.id === "string" ||
-        (typeof envelope.id === "number" && Number.isFinite(envelope.id)))
-    )
-      return envelope.id;
+      envelope.result === undefined
+    ) {
+      const { id } = envelope;
+      if (typeof id === "number" && Number.isFinite(id)) return id;
+      if (
+        typeof id === "string" &&
+        id.length <= DEFAULT_LIMITS.maxStringLength &&
+        Buffer.byteLength(JSON.stringify(id)) <= MAX_A2A_BODY / 2
+      )
+        return id;
+    }
   } catch {
     // An unreadable envelope has no usable JSON-RPC correlation ID.
   }
@@ -63,7 +69,7 @@ function a2aHeaders(headers: A2aRequest["headers"]) {
 
 /** Accept A2A carriage through the daemon's existing, leased inbound gate. */
 export function createGateReceiver(gate: CarriageGate): CloudReceiver {
-  return gateReceiver(async ({ body, headers, signal }) => {
+  const receive: CloudReceiver = async ({ body, headers, signal }) => {
     signal.throwIfAborted();
     const id = requestId(body);
     if (id === undefined) return { status: 400, body: '{"reason":"malformed"}' };
@@ -90,14 +96,16 @@ export function createGateReceiver(gate: CarriageGate): CloudReceiver {
       headers: response.headers,
       body: typeof id === "string" ? json : JSON.stringify({ ...JSON.parse(json), id }),
     };
-  });
+  };
+  builtInA2aReceivers.add(receive);
+  return receive;
 }
 
 export function createDirectHttpReceiver(
   gate: CarriageGate,
   mediaType: typeof DOCUMENT_MEDIA_TYPE | typeof LEGACY_MEDIA_TYPE,
 ): CloudReceiver {
-  return gateReceiver(async ({ body, signal }) => {
+  return async ({ body, signal }) => {
     signal.throwIfAborted();
     const verdict = await gate.receiveCarriage(
       { binding: "direct-http", delivery: { bytes: body, mediaType } },
@@ -105,5 +113,5 @@ export function createDirectHttpReceiver(
     );
     // TR-8: either verdict uses the same successful transport status.
     return { status: 200, body: JSON.stringify(receipt(verdict)) };
-  });
+  };
 }

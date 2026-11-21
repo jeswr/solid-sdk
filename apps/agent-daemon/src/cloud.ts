@@ -3,10 +3,15 @@
 // AUTHORED-BY Codex GPT-6
 import { CredentialStore } from "@jeswr/agent-credentials";
 import { DOCUMENT_MEDIA_TYPE, LEGACY_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "http";
+import { createServer, IncomingMessage, type Server, type ServerResponse } from "http";
 import type { Socket } from "net";
 import { isAbsolute } from "path";
-import { createDirectHttpReceiver, createGateReceiver, isGateReceiver } from "./cloud-receivers.js";
+import {
+  createDirectHttpReceiver,
+  createGateReceiver,
+  isBuiltInA2aReceiver,
+  MAX_A2A_BODY,
+} from "./cloud-receivers.js";
 import type { Gate } from "./gate.js";
 import { createLocalState, createProcessLease } from "./local.js";
 import type { Daemon } from "./types.js";
@@ -78,46 +83,72 @@ function configuration(env: NodeJS.ProcessEnv) {
   return { directory, port };
 }
 
-function readBody(req: IncomingMessage, refuse: (status: number) => void) {
-  return new Promise<Buffer | undefined>((resolve) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    function finish(body?: Buffer) {
-      req.off("readable", read);
-      req.off("end", end);
-      chunks.length = 0;
-      resolve(body);
+class CloudRequest extends IncomingMessage {
+  bodyRead?: { remaining: number; overflow: () => void };
+
+  override push(chunk: Buffer | null): boolean {
+    if (chunk === null) return super.push(null);
+    const bodyRead = this.bodyRead;
+    if (!bodyRead) return false;
+    // Check the parser's chunk before the stream can buffer or emit it.
+    if (chunk.length > bodyRead.remaining) {
+      bodyRead.overflow();
+      return false;
     }
-    function read() {
-      const available = req.readableLength;
-      if (available > MAX_BODY - size) {
-        refuse(413);
-        finish();
-      } else if (available > 0) {
-        chunks.push(req.read(available) as Buffer);
-        size += available;
-      } else {
-        req.read(0);
-      }
-    }
-    function end() {
-      finish(Buffer.concat(chunks, size));
-    }
-    req.once("end", end);
-    req.once("error", () => {
-      refuse(400);
+    bodyRead.remaining -= chunk.length;
+    return super.push(chunk);
+  }
+}
+
+function readBody(
+  req: CloudRequest,
+  limit: number,
+  refuse: (status: number) => void,
+  resolve: (body?: Buffer) => void,
+) {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  function finish(body?: Buffer) {
+    req.bodyRead = undefined;
+    req.off("data", data);
+    req.off("end", end);
+    req.off("error", error);
+    req.off("close", close);
+    chunks.length = 0;
+    resolve(body);
+  }
+  function data(chunk: Buffer) {
+    chunks.push(chunk);
+    size += chunk.length;
+  }
+  function end() {
+    finish(Buffer.concat(chunks, size));
+  }
+  function error() {
+    refuse(400);
+    finish();
+  }
+  function close() {
+    finish();
+  }
+  req.bodyRead = {
+    remaining: limit,
+    overflow: () => {
+      refuse(413);
       finish();
-    });
-    req.once("close", () => finish());
-    req.on("readable", read);
-  });
+    },
+  };
+  req.once("end", end);
+  req.once("error", error);
+  req.once("close", close);
+  req.on("data", data);
 }
 
 /** TLS terminates at ACA ingress. Both receiver paths share the same bounds and drain. */
 function listener(a2a: CloudReceiver, gate: CloudComposition["gate"], signal: AbortSignal) {
   const pending = new Set<Promise<void>>();
   const closing = new WeakSet<Socket>();
-  function handle(req: IncomingMessage, res: ServerResponse, expectContinue = false) {
+  function handle(req: CloudRequest, res: ServerResponse, expectContinue = false) {
     const socket = req.socket;
     if (closing.has(socket)) return;
     const respond = (status: number, body = "", headers?: Readonly<Record<string, string>>) => {
@@ -144,6 +175,11 @@ function listener(a2a: CloudReceiver, gate: CloudComposition["gate"], signal: Ab
       });
       respond(status);
     };
+    if (
+      req.headers.expect !== undefined &&
+      (!expectContinue || req.headers.expect.trim().toLowerCase() !== "100-continue")
+    )
+      return refuse(417);
     if (signal.aborted) return refuse(503);
     if (req.method === "GET" && (req.url === "/livez" || req.url === "/readyz"))
       return respond(200, '{"ready":true}');
@@ -157,30 +193,44 @@ function listener(a2a: CloudReceiver, gate: CloudComposition["gate"], signal: Ab
       if (mediaType !== DOCUMENT_MEDIA_TYPE && mediaType !== LEGACY_MEDIA_TYPE) return refuse(415);
       receive = createDirectHttpReceiver(direct, mediaType);
     } else if (mediaType !== "application/json") return refuse(415);
+    const limit = isBuiltInA2aReceiver(receive) ? MAX_A2A_BODY : MAX_BODY;
     const length = Number(req.headers["content-length"] ?? 0);
-    if (!Number.isFinite(length) || length > MAX_BODY) return refuse(413);
-    // Track the body read and receiver as one task. Readable events run after this handler.
-    const task = readBody(req, refuse)
+    if (!Number.isFinite(length) || length > limit) return refuse(413);
+    let resolveBody!: (body?: Buffer) => void;
+    const received = new Promise<Buffer | undefined>((resolve) => {
+      resolveBody = resolve;
+    });
+    const task = received
       .then(async (body) => {
         if (body === undefined) return;
         if (signal.aborted) return refuse(503);
-        const result = await receive({ body, headers: req.headers, signal });
+        let result: Awaited<ReturnType<CloudReceiver>>;
+        try {
+          result = await receive({ body, headers: req.headers, signal });
+        } catch {
+          // TR-8 acknowledges only recorded decisions, regardless of the gate outcome.
+          return respond(503);
+        }
         if (
           !Number.isInteger(result.status) ||
           result.status < 200 ||
           result.status > 599 ||
-          // Built-in responses contain a small receipt and at most two copies of the bounded A2A ID.
-          (!isGateReceiver(receive) && Buffer.byteLength(result.body) > MAX_BODY)
+          Buffer.byteLength(result.body) > MAX_BODY
         )
           return respond(500);
         respond(result.status, result.body, result.headers);
       })
-      .catch(() => respond(503))
+      .catch(() => respond(500))
       .finally(() => pending.delete(task));
     pending.add(task);
+    readBody(req, limit, refuse, resolveBody);
     if (expectContinue) res.writeContinue();
   }
-  const server = createServer({ maxHeaderSize: 8192, requestTimeout: 15_000 }, handle);
+  const server = createServer(
+    { IncomingMessage: CloudRequest, maxHeaderSize: 8192, requestTimeout: 15_000 },
+    handle,
+  );
+  server.on("checkExpectation", handle);
   server.on("checkContinue", (req, res) => handle(req, res, true));
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 1000;
