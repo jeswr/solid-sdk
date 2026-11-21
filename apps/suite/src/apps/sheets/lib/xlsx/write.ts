@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ICellData, IStyleData, IWorkbookData, IWorksheetData } from "@univerjs/core";
 import { strToU8, zipSync } from "fflate";
+import { linkPlainText } from "../hyperlinks";
 import type { Snapshot } from "../model/snapshot";
 import {
   cellRef,
@@ -140,7 +141,7 @@ export function writeXlsx(snapshot: Snapshot): Uint8Array {
     else if (cell.f) formula = `<f>${xml(toExcelFormula(cell.f))}</f>`;
     let value = cell.v;
     // Univer rich text ends with "\r\n" and separates paragraphs with "\r".
-    if (cell.p?.body) value = cell.p.body.dataStream.replace(/\r\n$/, "").replace(/\r/g, "\n");
+    if (cell.p?.body) value = linkPlainText(cell.p.body.dataStream).replace(/\r/g, "\n");
     let type = "";
     let body = "";
     if (value != null) {
