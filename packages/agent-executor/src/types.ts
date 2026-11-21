@@ -53,6 +53,8 @@ export interface SendBinding {
     readonly maxBytes: number;
   };
   readonly send: {
+    /** Pure, bounded wire parser: exact human-visible text, never re-rendered from the proposal. */
+    preview(wire: Wire): Promise<string>;
     render(proposal: RenderableProposal, carriage: SendBinding["carriage"]): Promise<Wire>;
     /** Trusted validator must bind every intent term and account to the signed wire/destination. */
     validate(

@@ -18,6 +18,7 @@ import { ChannelParseError } from "../errors.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
 import type { RenderableProposal, Wire } from "../types.js";
 import { renderBodies } from "./bodies.js";
+import { preview } from "./preview.js";
 
 export interface EmailRenderOptions {
   readonly from: string;
@@ -146,5 +147,5 @@ export function emailRenderer(options: EmailRenderOptions) {
       return { ok: false, reason: "malformed" };
     }
   };
-  return { render, validate, assertWire, current };
+  return { render, preview, validate, assertWire, current };
 }

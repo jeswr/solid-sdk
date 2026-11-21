@@ -57,6 +57,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
   }
   return {
     render: renderer.render,
+    preview: renderer.preview,
     validate: renderer.validate,
     transmit(wire, io) {
       return sendAttempt(async (dispatched) => {

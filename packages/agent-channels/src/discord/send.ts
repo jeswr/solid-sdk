@@ -11,6 +11,7 @@ import { createOriginScopedFetch, type OriginFetchOptions } from "../origins.js"
 import { AGENT_FOOTER, DISCORD_FOOTER } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
+import { preview } from "./preview.js";
 import { readJson, snowflake } from "./shared.js";
 
 export interface DiscordSendOptions {
@@ -118,6 +119,7 @@ export function createDiscordSend(
   }
   return {
     render,
+    preview,
     async validate(wire, proposal) {
       try {
         const copy = snapshot(wire);

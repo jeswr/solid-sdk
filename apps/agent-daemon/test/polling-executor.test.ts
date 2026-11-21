@@ -59,7 +59,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
     proposal: {
       type: "action-proposal",
       id: `${root}agent/proposals/fixture.ttl`,
-      renderedPreview: "Fixture",
+      renderedPreview: bytes,
       wasGeneratedBy: "urn:activity:fixture",
       createdAt: at,
       validUntil: until,
@@ -97,6 +97,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
     carriage: { id: "fixture", structured: "native", footer: "none", maxBytes: 65536 },
     send: {
       render: async () => entry.wire,
+      preview: async (wire) => wire.bytes,
       validate: async () => ({ ok: true }),
       transmit: async (_wire, io) => {
         await io.tokens.send(io.account);

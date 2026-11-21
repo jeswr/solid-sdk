@@ -5,9 +5,11 @@ import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { createDirectReader } from "../direct.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
+import { signedPayloadJson } from "../preview.js";
 import { DIRECT } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { RenderableProposal, TokenProvider } from "../types.js";
+import { preview } from "./preview.js";
 import { accountId, assertGrant, assertWire, type DirectMailbox, envelope } from "./shared.js";
 
 /** All senders sharing a mailbox must observe its in-flight attempts before claiming absence. */
@@ -56,11 +58,16 @@ export function createDirectSend(
     const bytes = envelope(compactJws);
     const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
     const message = await verified(assertWire(wire));
-    if (canonicalJson(message) !== proposedJson)
+    // The preview decodes the raw payload; it must be the proposal the verifier returned.
+    if (
+      canonicalJson(message) !== proposedJson ||
+      signedPayloadJson(compactJws, DIRECT.maxBytes) !== proposedJson
+    )
       throw new ChannelParseError("signed payload differs from proposal");
     return { wire, message };
   }
   return {
+    preview,
     async render(proposal, carriage) {
       return (await renderVerified(proposal, carriage)).wire;
     },
