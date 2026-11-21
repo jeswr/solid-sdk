@@ -15,7 +15,12 @@ import { DataFactory, Store } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
-import { PERSONAL_DATA_DENIED, requireGenericPodAccess } from "./personal-data.js";
+import {
+  governingAuxiliaries,
+  PERSONAL_DATA_DENIED,
+  requireAuxiliaryMutationAccess,
+  requireGenericPodAccess,
+} from "./personal-data.js";
 import type { PodChild, SearchMatch } from "./pod.js";
 import {
   podReadMode,
@@ -229,13 +234,27 @@ export class PodOutput {
   }
 
   async write(url: string, body: Uint8Array, contentType: string, cond: PodConditions) {
-    const target = this.target(url, true);
-    return this.operation(() => this.pod.write(target, body, contentType, cond));
+    return this.mutate(url, (target) => this.pod.write(target, body, contentType, cond));
   }
 
   async delete(url: string, cond?: PodConditions): Promise<void> {
+    return this.mutate(url, (target) => this.pod.delete(target, cond));
+  }
+
+  private async mutate<T>(url: string, operation: (target: string) => Promise<T>): Promise<T> {
     const target = this.target(url, true);
-    return this.operation(() => this.pod.delete(target, cond));
+    if (this.personal) return this.operation(() => operation(target));
+    let auxiliaries: ReadonlySet<string>;
+    try {
+      // Discovery inspects protected metadata internally, without disclosing its contents.
+      auxiliaries = await withPodReadLimits(() =>
+        withPodDataAccess(this.pod, true, () => governingAuxiliaries(this.pod)),
+      );
+    } catch {
+      throw new Error(PERSONAL_DATA_DENIED);
+    }
+    requireAuxiliaryMutationAccess(target, auxiliaries);
+    return withPodDataAccess(this.pod, false, () => operation(target), auxiliaries);
   }
 
   /** A search name, snippet and URL are one authorized resource description. */
