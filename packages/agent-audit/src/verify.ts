@@ -73,6 +73,7 @@ export interface LedgerCheck {
   readonly firstBadSeq?: number;
   readonly problem?: string;
   readonly prunedThroughSeq?: number;
+  readonly unverifiablePrunedGateLinks?: number;
   readonly scope: string;
 }
 export const CHAIN_SCOPE =
@@ -83,6 +84,8 @@ export function verifyLedger(
   options: {
     /** Sequence/hash pairs supplied from the separately verified reference ledger. */
     gateEntries?: readonly AuditHead[];
+    /** Retention boundary reported by verification of those same reference entries. */
+    gatePrunedThroughSeq?: number;
     /** Heads retained independently of this ledger, for example in the gate ledger. */
     witnessedHeads?: readonly AuditHead[];
     /** Allow startup recovery to witness a durable suite anchor after a crash. */
@@ -97,11 +100,14 @@ export function verifyLedger(
     problem,
     firstBadSeq,
   });
+  let unverifiablePrunedGateLinks = 0;
   if (options.gateEntries) {
     const gate = new Map(options.gateEntries.map(({ seq, hash }) => [seq, hash]));
     for (const { seq, record } of entries) {
       const link = linkedGateHead(record);
-      if (link && gate.get(link.seq) !== link.hash) return fail("gate record missing", seq);
+      if (!link) continue;
+      if (link.seq <= (options.gatePrunedThroughSeq ?? 0)) unverifiablePrunedGateLinks++;
+      else if (gate.get(link.seq) !== link.hash) return fail("gate record missing", seq);
     }
   }
   if (options.witnessedHeads) {
@@ -130,7 +136,7 @@ export function verifyLedger(
       }
     }
   }
-  return result;
+  return unverifiablePrunedGateLinks ? { ...result, unverifiablePrunedGateLinks } : result;
 }
 
 interface ChainCheck {

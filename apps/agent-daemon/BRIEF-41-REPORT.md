@@ -686,3 +686,35 @@ Gate ledger access uses the agent-reference APIs. Legacy checkpoints decode with
 - Agent-model passed 188 tests. The Suite agent selection passed 484 tests across the main run and an isolated retry of the route tests. The focused Suite audit file passed all 30 tests.
 - Agent-model, agent-audit, the daemon and the Suite passed builds and typechecks. The Suite production build generated 168 pages and checked 562 chunks, with the existing guarded-fetch dependency warnings.
 - Root lint and the agent layer, RDF discipline and app duplication guards passed. Agent-reference source and trace files are byte-for-byte identical to the baseline.
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+## Phase 4 review fixes, round 3 (41s)
+
+| Finding | Change and regression |
+| --- | --- |
+| 1. Retained suite links after gate pruning | `packages/agent-audit/src/verify.ts:103` accepts links at or below the verified gate retention boundary and counts them as unverifiable-pruned. Startup and `awp audit` take that boundary from the existing reference ledger check. In-range hash mismatches and links above the committed gate head still fail closed. The verifier test at `packages/agent-audit/test/verify.test.ts:390` and both startup cases at `apps/agent-daemon/test/daemon.test.ts:2951` failed with `gate record missing` on `662d72a8f`. The final cases exercise pruning with the real reference file ledger and confirm startup reaches dispatch and the CLI reports the pruned link with `PASS`. |
+| 2. Signatures on witnessed anchors | `apps/agent-daemon/src/daemon.ts:207` validates every retained anchor with the same EdDSA verification used by `awp audit`, before recovering any missing witnesses. The forged-signature test at `apps/agent-daemon/test/daemon.test.ts:3044` resolved successfully on the baseline. It now rejects at startup before the Reader or dispatch runs. |
+| 3. Offline witnesses beyond the saved head | `apps/agent-daemon/src/gate.ts:735` checks the same saved prefix for startup and offline audit. Startup uses the reference rollback API. Offline audit reads the prefix without rewriting either file or opening the runtime lock. The regression at `apps/agent-daemon/test/gate-setup.test.ts:872` returned `PASS` on the baseline after restoring the pre-witness state checkpoint while leaving the fsynced witness in the ledger. It now reports a missing witness and verifies that both gate files are byte-for-byte intact. Reopening the gate rolls back that witness. |
+
+Finding 4 hit the ledger-only replay stop condition. The crash window before suite staging remains open. The missing evidence differs by outcome.
+
+- **Inbound admit or refuse after `receive`.** The suite records the digest of the raw channel delivery. The reference runtime receives the JWS and binding and records a canonical message digest for `message-in`. Its `rejection` can identify the reason, but it carries no raw channel digest. The inbound gate verdict and the final protocol result can also differ. See `apps/agent-daemon/src/gate.ts:149`, `:540` and `packages/agent-reference/src/runtime/agent.ts:4777`, `:4982`, `:5008`.
+- **Outbound go after `sendMessage`.** The ordinary compact release records the canonical message digest in `message-out`. The suite requires the digest of the exact compact JWS. The `wireDigest` field on the reference delivery-pointer path is a digest of the wire object. The usual compact release also precedes the adapter's renderability and mandate rechecks. See `apps/agent-daemon/src/gate.ts:164`, `apps/agent-daemon/src/outbound.ts:163` and `packages/agent-reference/src/runtime/agent.ts:9253`, `:9274`.
+- **Outbound stop or ask-principal after `sendMessage`.** A recorded denial or hold can establish the reference verdict, but carries no suite proposal digest or task context. The compact-carrier path can also return a refusal or reuse an existing hold without a new outcome row. See `apps/agent-daemon/src/gate.ts:164` and `packages/agent-reference/src/runtime/agent.ts:6100`, `:6152`.
+
+No replay change or passing regression is claimed for finding 4. The legacy-checkpoint finding was left alone as directed. Checkpoints written before Phase 4 cannot have pruned gate-decisions because that record kind was introduced in Phase 4.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Builds and typechecks on Node 24.22.3 | Agent-model, agent-audit and the daemon passed their package build scripts. Those three packages and the Suite passed typecheck. |
+| Daemon `pnpm exec vitest run --root apps/agent-daemon --maxWorkers=2` with the 41q offline filters | 292 passed and 4 filtered. The filters exclude cloud and production fixture files, loopback CSS and D-2 integration cases, and the packaged CLI and launchd subprocess cases. |
+| Reference library-only `pnpm exec tsc -p tsconfig.build.json && node scripts/copy-generated.mjs`, then focused daemon regressions | The build passed. All 7 selected daemon tests passed against the rebuilt reference library. |
+| Agent-audit `pnpm exec vitest run --root packages/agent-audit --maxWorkers=2` with the 41o audit file selection | 156 passed and one packaged subprocess case filtered. Statement, branch, function and line coverage each reached 100%. |
+| Agent-model `pnpm exec vitest run --root packages/agent-model --maxWorkers=2 src test/exports.test.ts` and Suite `pnpm exec vitest run --maxWorkers=2 --coverage.enabled=false test/agent-audit.test.ts` | Passed 188 and 30 tests, respectively. |
+| Direct Node invocations of `awp --help` and `audit --help` | Both passed. |
+| `pnpm exec biome check` on all changed TypeScript, `VITEST_MAX_WORKERS=2 pnpm run lint:root` and `git diff --check` | Passed. Root Biome emitted its six existing warnings in `scripts/vercel-production.mjs`. |
+
+Agent-reference source and committed traces match `662d72a8f` byte for byte. The worktree is uncommitted.

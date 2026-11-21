@@ -14,19 +14,15 @@ import {
 import { verifyLedger as verifyAuditLedger } from "@jeswr/agent-audit/verify";
 import { type Deps, login } from "@jeswr/agent-credentials";
 import type { ControlStore } from "@jeswr/agent-executor";
-import {
-  type IntroductionCard,
-  FileLedger as ReferenceLedger,
-  verifyLedger as verifyGateLedger,
-} from "@jeswr/agent-reference";
+import type { IntroductionCard } from "@jeswr/agent-reference";
 import { constants, existsSync } from "fs";
 import { open } from "fs/promises";
 import { join } from "path";
 import {
-  gateWitnesses,
   installGateMandate,
   readGate,
   readGateStatus,
+  readSavedGateEvidence,
   validAnchorSignature,
 } from "./gate.js";
 import { initGate, pinPeer } from "./gate-setup.js";
@@ -221,10 +217,13 @@ async function auditLocal(
   const { actor, party } = stored.identity;
   if (actor !== options.agentWebId || party !== options.ownerWebId)
     return fail("gate identity mismatch");
-  const gateEntries = new ReferenceLedger(join(directory, "ledger.jsonl")).entries();
-  if (!verifyGateLedger(gateEntries).ok) return fail("gate ledger integrity failure");
-  const witnessedHeads = gateWitnesses(gateEntries, stored.identity);
-  const check = verifyAuditLedger(entries, { gateEntries, witnessedHeads });
+  let evidence: Awaited<ReturnType<typeof readSavedGateEvidence>>;
+  try {
+    evidence = await readSavedGateEvidence(stored.dir, stored.identity);
+  } catch {
+    return fail("gate ledger integrity failure");
+  }
+  const check = verifyAuditLedger(entries, evidence);
   if (!check.ok) return fail(`${check.problem} at record ${check.firstBadSeq}`);
   for (const { seq, record } of entries) {
     if (record.type === "ledger-checkpoint") continue;
@@ -235,6 +234,8 @@ async function auditLocal(
     if (!(await validAnchorSignature(record.jws, stored.actorKey)))
       return fail(`invalid anchor signature at record ${seq}`);
   }
+  if (check.unverifiablePrunedGateLinks)
+    print(`unverifiable-pruned gate links: ${check.unverifiablePrunedGateLinks}`);
   print("PASS");
   return 0;
 }

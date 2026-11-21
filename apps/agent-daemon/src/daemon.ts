@@ -162,7 +162,12 @@ export function createDaemon(o: DaemonOptions): Daemon {
     Partial<
       Pick<
         Gate,
-        "recordParseRefusal" | "decisions" | "evidence" | "recoverAnchor" | "setReleaseAudit"
+        | "recordParseRefusal"
+        | "decisions"
+        | "evidence"
+        | "verifyAnchor"
+        | "recoverAnchor"
+        | "setReleaseAudit"
       >
     >;
   // Check/release, head capture and audit append must stay together relative to witnessing.
@@ -210,15 +215,18 @@ export function createDaemon(o: DaemonOptions): Daemon {
       if (!verified.ok)
         throw new Error(`Audit ledger ${verified.problem} at record ${verified.firstBadSeq}`);
       const witnessed = new Set(evidence.witnessedHeads.map(({ seq, hash }) => `${seq}:${hash}`));
-      let recovered = false;
-      for (const { record } of entries) {
-        if (record.type !== "record-anchor" || witnessed.has(`${record.seq}:${record.hash}`))
-          continue;
+      const orphans: Extract<AuditRecord, { type: "record-anchor" }>[] = [];
+      for (const { record, seq } of entries) {
+        if (record.type !== "record-anchor") continue;
+        if (!(await gate.verifyAnchor?.(record)))
+          throw new Error(`Audit ledger invalid anchor signature at record ${seq}`);
+        if (!witnessed.has(`${record.seq}:${record.hash}`)) orphans.push(record);
+      }
+      for (const record of orphans) {
         if (!gate.recoverAnchor) throw new Error("Gate cannot recover the retained audit anchor");
         await gate.recoverAnchor(record);
-        recovered = true;
       }
-      if (recovered) await o.audit.sync();
+      if (orphans.length) await o.audit.sync();
     }
     await reconcileGate(gate);
   }

@@ -31,10 +31,15 @@ import {
   verifyCompact,
   verifyLedger,
 } from "@jeswr/agent-reference";
-import { LEDGER_GENESIS, verifyLedgerAtHead } from "@jeswr/agent-reference/store/ledger";
+import {
+  LEDGER_GENESIS,
+  type LedgerHead,
+  verifyLedgerAtHead,
+} from "@jeswr/agent-reference/store/ledger";
+import { normaliseState } from "@jeswr/agent-reference/store/state";
 import { randomUUID } from "crypto";
 import { constants } from "fs";
-import { lstat, mkdir, open, readdir, rename, unlink } from "fs/promises";
+import { lstat, mkdir, open, readdir, readFile, rename, unlink } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
 import { readPrivate, syncDirectory, writePrivate } from "./local.js";
@@ -67,7 +72,12 @@ export type DaemonGatePort = InboundGatePort &
   (
     | { open(identity: GateIdentity): Promise<Gate> }
     | (Pick<Gate, "head" | "anchor" | "release"> &
-        Partial<Pick<Gate, "decisions" | "evidence" | "recoverAnchor" | "setReleaseAudit">>)
+        Partial<
+          Pick<
+            Gate,
+            "decisions" | "evidence" | "verifyAnchor" | "recoverAnchor" | "setReleaseAudit"
+          >
+        >)
   );
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
 export type ParseRefusal = {
@@ -289,6 +299,7 @@ type GateRuntime = Pick<
   | "receive"
   | "commitBindingEvent"
   | "admittedFacts"
+  | "publicKeys"
   | "recordHead"
   | "witnessRecordHead"
   | "close"
@@ -362,7 +373,7 @@ async function recoverDecision(
 
 type ReferenceEntries = Parameters<typeof verifyLedger>[0];
 const witnessSeq = z.number().int().positive();
-export function gateWitnesses(entries: ReferenceEntries, { actor, party }: Partial<GateIdentity>) {
+function gateWitnesses(entries: ReferenceEntries, { actor, party }: Partial<GateIdentity>) {
   return entries.flatMap(({ record }) => {
     if (record.type !== "record-anchor-receipt" || record.actor !== actor || record.party !== party)
       return [];
@@ -375,7 +386,10 @@ export function gateWitnesses(entries: ReferenceEntries, { actor, party }: Parti
   });
 }
 
-export async function validAnchorSignature(jws: string, { kid, alg, publicJwk }: SigningKey) {
+export async function validAnchorSignature(
+  jws: string,
+  { kid, alg, publicJwk }: Pick<SigningKey, "kid" | "alg" | "publicJwk">,
+) {
   const result = await verifyCompact(jws, {
     resolve: (id) => (id === kid ? { kid, alg, publicJwk } : undefined),
     typ: "awp-record-anchor+jws",
@@ -398,7 +412,7 @@ export function createGate(
   now: () => Date,
   admittedReceipts = new Set<string>(),
   outbound?: Awaited<ReturnType<typeof createOutboundGate>>,
-  durable?: { journal: string; actorKey: SigningKey },
+  durable?: { journal: string },
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
@@ -565,6 +579,16 @@ export function createGate(
     pending = result.catch(() => undefined);
     return result;
   }
+  async function verifyAnchor(record: Extract<AuditRecord, { type: "record-anchor" }>) {
+    const { actor, party } = rt.identity;
+    const key = rt.publicKeys().find(({ alg }) => alg === "EdDSA");
+    return (
+      !!key &&
+      record.agent === actor &&
+      record.owner === party &&
+      (await validAnchorSignature(record.jws, key))
+    );
+  }
   return {
     check: (input: CheckInput) => enqueue(() => checked(input)),
     recordParseRefusal: (input: ParseRefusalInput) => enqueue(() => checked(input)),
@@ -608,29 +632,22 @@ export function createGate(
       );
     },
     evidence() {
-      const entries = committedEntries();
-      return {
-        gateEntries: entries.map(({ seq, hash }) => ({ seq, hash })),
-        witnessedHeads: gateWitnesses(entries, rt.identity),
-      };
+      const entries = ledger.entries();
+      const head = entries.length ? rt.recordHead() : LEDGER_GENESIS;
+      return gateEvidence(entries, rt.identity, checkGateLedger(entries, head).prunedThroughSeq);
     },
+    verifyAnchor,
     recoverAnchor: (record: Extract<AuditRecord, { type: "record-anchor" }>) =>
       enqueue(async () => {
         const { actor, party } = rt.identity;
+        if (!party || !(await verifyAnchor(record)))
+          throw new Error("Cannot witness an invalid audit anchor");
         if (
           gateWitnesses(committedEntries(), rt.identity).some(
             ({ seq, hash }) => seq === record.seq && hash === record.hash,
           )
         )
           return;
-        if (
-          !party ||
-          !durable ||
-          record.agent !== actor ||
-          record.owner !== party ||
-          !(await validAnchorSignature(record.jws, durable.actorKey))
-        )
-          throw new Error("Cannot witness an invalid audit anchor");
         await rt.witnessRecordHead({ actor, party, seq: record.seq, hash: record.hash });
       }),
     head(): RecordHead {
@@ -695,6 +712,51 @@ export async function readGate(directory: string) {
   const stored = await readAgent(dirname(path), basename(path));
   if (stored.ownerCustody !== "separate") throw new Error("Unsafe gate owner custody");
   return stored;
+}
+
+function checkGateLedger(entries: ReferenceEntries, head: LedgerHead) {
+  const check = verifyLedgerAtHead(entries, head);
+  if (!check.ok) throw new Error("Inbound gate ledger failed verification");
+  return check;
+}
+
+function gateEvidence(
+  entries: ReferenceEntries,
+  identity: Partial<GateIdentity>,
+  gatePrunedThroughSeq: number | undefined,
+) {
+  return {
+    gateEntries: entries.map(({ seq, hash }) => ({ seq, hash })),
+    gatePrunedThroughSeq,
+    witnessedHeads: gateWitnesses(entries, identity),
+  };
+}
+
+function savedGateLedger(ledger: FileLedger, saved: LedgerHead | undefined) {
+  const rows = ledger.entries();
+  const head = saved ?? LEDGER_GENESIS;
+  const cutoff =
+    saved && ledger.head().seq > saved.seq ? rows.findIndex(({ seq }) => seq > saved.seq) : -1;
+  if (cutoff >= 0 && rows.slice(cutoff).some(({ seq }) => seq <= head.seq))
+    throw new Error("Uncommitted gate rows precede the saved head");
+  const entries = cutoff < 0 ? rows : rows.slice(0, cutoff);
+  return { entries, check: checkGateLedger(entries, head), hasSuffix: cutoff >= 0 };
+}
+
+/** Read the saved gate prefix without taking the runtime lock or rolling back the files. */
+export async function readSavedGateEvidence(directory: string, identity: Partial<GateIdentity>) {
+  const raw = await readFile(join(directory, "state.json"), "utf8").catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return undefined;
+    },
+  );
+  const saved = raw === undefined ? undefined : normaliseState(JSON.parse(raw)).ledgerAuditHead;
+  const { entries, check } = savedGateLedger(
+    new FileLedger(join(directory, "ledger.jsonl")),
+    saved,
+  );
+  return gateEvidence(entries, identity, check.prunedThroughSeq);
 }
 
 function pinnedPeers(data: TrustStoreData) {
@@ -780,7 +842,7 @@ async function openStoredGate(
       now,
       admittedReceipts,
       outboundGate,
-      { journal, actorKey: stored.actorKey },
+      { journal },
     );
   } catch (error) {
     runtime.close();
@@ -797,10 +859,8 @@ async function openRuntime(
   try {
     const ledger = new FileLedger(join(stored.dir, "ledger.jsonl"));
     const saved = store.load().ledgerAuditHead;
-    // Use the same saved-prefix recovery as the runtime before any daemon ledger reads.
-    if (saved && ledger.head().seq > saved.seq) ledger.recoverUncommittedSuffix(saved);
-    if (!verifyLedgerAtHead(ledger.entries(), saved ?? LEDGER_GENESIS).ok)
-      throw new Error("Inbound gate ledger failed verification");
+    // Verify the same saved prefix that the offline auditor uses before rolling back writes.
+    if (savedGateLedger(ledger, saved).hasSuffix && saved) ledger.recoverUncommittedSuffix(saved);
     const runtime = await AgentRuntime.create({
       identity: stored.identity,
       actorKeys: [stored.actorKey],

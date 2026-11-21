@@ -738,6 +738,27 @@ it("runs gate commands offline and takes the process lease only after confirmati
   expect(composition).not.toHaveBeenCalled();
 });
 
+function localAudit(path: string, ledger: AuditFileLedger, print: (line: string) => void) {
+  const host = daemon.createCliHost({
+    gate: { stateDirectory: root, agentWebId, ownerWebId },
+    daemon: async () => {
+      throw new Error("Local audit does not start the daemon");
+    },
+    local: daemon.createLocalState(root),
+    ledger,
+    launchCommand: ["/node", "run"],
+    accounts: async () => [],
+    openLoginUrl: vi.fn(),
+    credentials: { store: new CredentialStore({ dir: root }), transport: noTransport, now },
+  });
+  return () =>
+    daemon.runCli(["audit", "--ledger", path], host, {
+      print,
+      signal: new AbortController().signal,
+      confirm: vi.fn(),
+    });
+}
+
 it("audits linked decisions, verifies the anchor, and detects an altered or truncated ledger", async () => {
   const o = options();
   await daemon.initGate(o);
@@ -789,21 +810,8 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   } finally {
     await gate.close();
   }
-  const host = daemon.createCliHost({
-    gate: { stateDirectory: root, agentWebId, ownerWebId },
-    daemon: async () => {
-      throw new Error("Local audit does not start the daemon");
-    },
-    local: daemon.createLocalState(root),
-    ledger,
-    launchCommand: ["/node", "run"],
-    accounts: async () => [],
-    openLoginUrl: vi.fn(),
-    credentials: { store: new CredentialStore({ dir: root }), transport: noTransport, now },
-  });
   const print = vi.fn();
-  const io = { print, signal: new AbortController().signal, confirm: vi.fn() };
-  const audit = () => daemon.runCli(["audit", "--ledger", auditPath], host, io);
+  const audit = localAudit(auditPath, ledger, print);
   expect(await audit()).toBe(0);
   expect(print).toHaveBeenCalledWith("PASS");
   expect(print).toHaveBeenCalledWith(expect.stringContaining("unwitnessed tail"));
@@ -859,6 +867,57 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   await writeFile(auditPath, `${original.trimEnd().split("\n").slice(0, -1).join("\n")}\n`);
   expect(await audit()).toBe(1);
   expect(print).toHaveBeenCalledWith(expect.stringContaining("witnessed head"));
+});
+
+it("excludes a witness fsynced beyond the saved gate checkpoint from offline audit", async () => {
+  const o = options();
+  await daemon.initGate(o);
+  const gate = await daemon.openGate(o);
+  const statePath = join(o.directory, "state.json");
+  const gatePath = join(o.directory, "ledger.jsonl");
+  const auditPath = join(root, "events.jsonl");
+  const ledger = new AuditFileLedger(auditPath);
+  const identity = { agent: agentWebId, owner: ownerWebId };
+  const at = now().toISOString();
+  const { seq, hash } = ledger.append({ ...identity, type: "control", id: "urn:control:head" }, at);
+  let saved: Buffer;
+  try {
+    await gate.recordParseRefusal({
+      binding: "direct",
+      account: "fixture",
+      reason: "malformed",
+      digest: digestBytes("fixture"),
+    });
+    saved = await readFile(statePath);
+    const jws = await gate.anchor({ seq, hash });
+    ledger.append(
+      { ...identity, type: "record-anchor", id: "urn:anchor:unsaved", seq, hash, jws },
+      at,
+    );
+  } finally {
+    await gate.close();
+  }
+  const print = vi.fn();
+  const audit = localAudit(auditPath, ledger, print);
+  expect(await audit()).toBe(0);
+  // Recreate the crash between the reference ledger fsync and state save.
+  await writeFile(statePath, saved);
+  const suffix = await readFile(gatePath);
+  const paths = await readdir(o.directory);
+  print.mockClear();
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(
+    expect.stringContaining("anchor has no matching gate witness"),
+  );
+  expect(await readFile(gatePath)).toEqual(suffix);
+  expect(await readFile(statePath)).toEqual(saved);
+  expect(await readdir(o.directory)).toEqual(paths);
+  const reopened = await daemon.openGate(o);
+  try {
+    expect(reopened.evidence().witnessedHeads).toEqual([]);
+  } finally {
+    await reopened.close();
+  }
 });
 
 it("refuses Unicode identities that would persist an oversized witness", async () => {

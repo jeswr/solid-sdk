@@ -387,6 +387,31 @@ it("checks the gate link carried by a pruning checkpoint", () => {
   ).toMatchObject({ ok: false, problem: "gate record missing", firstBadSeq: 2 });
 });
 
+it("reports retained suite links through the gate checkpoint as unverifiable-pruned", () => {
+  const first = seal(1, AT, GENESIS, gateDecision);
+  const checkpoint = seal(2, AT, first.hash, {
+    type: "ledger-checkpoint",
+    lastPrunedSeq: first.seq,
+    lastPrunedHash: first.hash,
+    lastPrunedGate: { seq: 2, hash: digestOf("earlier pruned decision") },
+  });
+  const gateEvidence = { gateEntries: [{ seq: 4, hash: DIGEST }], gatePrunedThroughSeq: 3 };
+  expect(verifyLedger([first, checkpoint], gateEvidence)).toMatchObject({
+    ok: true,
+    unverifiablePrunedGateLinks: 2,
+  });
+  expect(verifyLedger(activityFixture(1), gateEvidence)).not.toHaveProperty(
+    "unverifiablePrunedGateLinks",
+  );
+  for (const gateSeq of [4, 5]) {
+    const entry = seal(1, AT, GENESIS, { ...gateDecision, gateSeq });
+    expect(verifyLedger([entry], gateEvidence)).toMatchObject({
+      ok: false,
+      problem: "gate record missing",
+    });
+  }
+});
+
 it("reports truncation before the latest witnessed head or its anchor", () => {
   const entries = activityFixture(3);
   const head = required(entries[2]);

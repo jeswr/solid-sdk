@@ -9,6 +9,7 @@ import {
   MemoryLedger,
   PodMirror,
 } from "@jeswr/agent-audit";
+import { seal } from "@jeswr/agent-audit/verify";
 import {
   type BridgeMessage,
   ChannelParseError,
@@ -57,6 +58,7 @@ import {
   FileStateStore,
   introduce,
   PILOT_PROFILE,
+  FileLedger as ReferenceLedger,
 } from "@jeswr/agent-reference";
 import type { JsonObject } from "@jeswr/agent-reference/core/types";
 import { evaluateRule, ruleSchema } from "@jeswr/agent-reference/derive/rules";
@@ -74,7 +76,7 @@ import {
   issue,
   publishVerificationMethod,
 } from "@jeswr/solid-vc";
-import { copyFile, mkdtemp, readFile, rm } from "fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -2941,6 +2943,136 @@ it("reconciles from the pruned gate decision watermark when no linked decisions 
         lastPrunedGate: { seq: linked.gateSeq, hash: linked.gateHash },
       }),
     );
+  }));
+
+it.each([
+  "retained decision",
+  "suite checkpoint",
+] as const)("starts after gate retention prunes the link in a %s", async (link) =>
+  withDurableGate(async (ref, directory) => {
+    const h = harness();
+    const at = new Date(AT).toISOString();
+    const gate = await openGate(ref);
+    const digest = digestBytes("synthetic delivery");
+    let head: ReturnType<typeof gate.head>;
+    try {
+      await gate.recordParseRefusal({
+        binding: "direct",
+        account: "fixture",
+        reason: "malformed",
+        digest,
+      });
+      head = gate.head();
+    } finally {
+      await gate.close();
+    }
+    const decision = h.ledger.append(
+      {
+        agent: AGENT_ID,
+        owner: OWNER,
+        id: "urn:decision:retention",
+        type: "gate-decision",
+        direction: "in",
+        outcome: "refuse",
+        reason: "malformed",
+        messageDigest: digest,
+        configuration: CONFIG_ED25519,
+        gateSeq: head.seq,
+        gateHash: head.hash,
+      },
+      at,
+    );
+    const retained =
+      link === "retained decision"
+        ? decision
+        : seal(2, at, decision.hash, {
+            type: "ledger-checkpoint",
+            lastPrunedSeq: decision.seq,
+            lastPrunedHash: decision.hash,
+            lastPrunedGate: head,
+          });
+    const path = join(directory, "events.jsonl");
+    await writeFile(path, `${JSON.stringify(retained)}\n`);
+    const audit = new FileLedger(path);
+    const ledger = new ReferenceLedger(join(ref.directory, "ledger.jsonl"), {
+      segmentMaxEntries: 1,
+      maxSegments: 1,
+    });
+    for (let i = 0; i < 3; i++) ledger.append({ type: "fixture" }, at);
+    expect(ledger.entries()[0]?.seq).toBeGreaterThan(head.seq);
+    const store = new FileStateStore(join(ref.directory, "state.json"));
+    try {
+      store.save({ ...store.load(), ledgerAuditHead: ledger.head() });
+    } finally {
+      store.close();
+    }
+    await createDaemon({
+      ...h.options,
+      accounts: [],
+      audit: {
+        append: async (record, time) => audit.append(record, time),
+        entries: () => audit.entries(),
+        sync: async () => undefined,
+      },
+      gate: createInboundGate(ref),
+    }).once();
+    expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(1);
+    const print = vi.fn();
+    const host = createCliHost({
+      gate: { stateDirectory: directory, agentWebId: AGENT_ID, ownerWebId: OWNER },
+      daemon: async () => {
+        throw new Error("Local audit does not start the daemon");
+      },
+      local: createLocalState(directory),
+      ledger: audit,
+      accounts: vi.fn(),
+      credentials: {} as never,
+      openLoginUrl: vi.fn(),
+      launchCommand: [],
+    });
+    expect(
+      await runCli(["audit", "--ledger", path], host, {
+        print,
+        confirm: vi.fn(),
+        signal: new AbortController().signal,
+      }),
+    ).toBe(0);
+    expect(print).toHaveBeenCalledWith("unverifiable-pruned gate links: 1");
+    expect(print).toHaveBeenCalledWith("PASS");
+  }));
+
+it("rejects a forged startup anchor even when the gate already witnessed its head", async () =>
+  withDurableGate(async (ref) => {
+    const h = harness();
+    const reader = vi.spyOn(h.options.gateway.reader, "extract");
+    const at = new Date(AT).toISOString();
+    const identity = { agent: AGENT_ID, owner: OWNER };
+    const { seq, hash } = h.ledger.append(
+      { ...identity, type: "control", id: "urn:control:head" },
+      at,
+    );
+    const gate = await openGate(ref);
+    try {
+      const jws = await gate.anchor({ seq, hash });
+      h.ledger.append(
+        {
+          ...identity,
+          type: "record-anchor",
+          id: "urn:anchor:forged",
+          seq,
+          hash,
+          jws: jws.replace(/\.[^.]+$/, `.${"a".repeat(86)}`),
+        },
+        at,
+      );
+    } finally {
+      await gate.close();
+    }
+    await expect(
+      createDaemon({ ...h.options, gate: createInboundGate(ref) }).once(),
+    ).rejects.toThrow("invalid anchor signature at record 2");
+    expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+    expect(reader).not.toHaveBeenCalled();
   }));
 
 it("witnesses the exact durable orphan anchor before dispatch, only once across restarts", async () =>
