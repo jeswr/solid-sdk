@@ -8,7 +8,7 @@ import type { JsonObject } from "../src/core/types.js";
 import { loadCase } from "../src/engine/load.js";
 import { runScenario } from "../src/engine/run.js";
 import type { Scenario } from "../src/engine/schema.js";
-import { type GateContext, GateMemory } from "../src/gates/common.js";
+import { type ContextItem, type GateContext, GateMemory } from "../src/gates/common.js";
 import { InboundGate } from "../src/gates/inbound.js";
 import { OutboundGate } from "../src/gates/outbound.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
@@ -23,7 +23,7 @@ const AT = "2026-11-13T09:00:00.000Z";
 const OP = "urn:test:claim-operation";
 const PURPOSE = "urn:test:purpose";
 const ISSUER = "urn:test:accepted-assessor";
-async function fixture(claims = ["assessment"]) {
+async function fixture(claims = ["assessment"], precedence = false) {
   let now = AT;
   const cast = new Cast(() => new Date(AT));
   await cast.add(
@@ -58,6 +58,9 @@ async function fixture(claims = ["assessment"]) {
           methods: ["recorded-by-authority"],
           maxAgeDays: 30,
           text: "Require the accepted assessor's recent record.",
+          ...(precedence && {
+            precedence: { sources: [ISSUER], freshness: "newer-first" },
+          }),
         },
         {
           id: "urn:test:letter-fitness",
@@ -111,6 +114,43 @@ async function fixture(claims = ["assessment"]) {
     },
   };
 }
+
+it.each([
+  1,
+  undefined,
+])("keeps the previous precedence trace winner across tasks (order %s)", async (order) => {
+  const { claim, inbound, memory, recorder } = await fixture(["assessment"], true);
+  function saved(id: string, asOf: string, value: string, admissionOrder?: number): ContextItem {
+    const statement = { ...claim, id, asOf, value };
+    return {
+      id,
+      label: id,
+      claimType: "assessment",
+      subject: "urn:test:subject",
+      source: ISSUER,
+      asOf,
+      admittedPurpose: PURPOSE,
+      kind: "statement",
+      accepted: true,
+      statement,
+      digest: digestOf(statement),
+      ...(admissionOrder !== undefined && { admissionOrder }),
+    };
+  }
+  const first = saved("urn:test:first", AT, "current", 2);
+  const second = saved("urn:test:second", AT, "current", order);
+  const old = saved("urn:test:old", "2026-11-12T09:00:00.000Z", "old", 3);
+  memory.contexts["urn:test:first-task"] = [first];
+  memory.contexts["urn:test:second-task"] = [second, old];
+  memory.restoreFacts();
+
+  inbound.resolvePrecedence(PURPOSE);
+  expect(
+    recorder.events().find(({ reason }) => reason === "superseded-by-better-source"),
+  ).toMatchObject({
+    caption: `${old.id} is retained but superseded by ${first.id} for this purpose.`,
+  });
+});
 
 async function messageAdmission(
   f: Awaited<ReturnType<typeof fixture>>,

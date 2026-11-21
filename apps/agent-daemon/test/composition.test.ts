@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it, vi } from "vitest";
 import { composeDaemon } from "../src/daemon.js";
-import { createMemoryState } from "../src/testing.js";
+import { createMemoryState, createTestMemory } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 
 const mocks = vi.hoisted(() => ({
@@ -61,9 +61,9 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
           transmit: vi.fn(),
         },
         gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
+        memory: createTestMemory(),
         proposerContext: {
           instructions: "fixture",
-          memoryRecall: vi.fn(),
           pod: {
             root: options.storageRoot,
             webId: options.ownerWebId,

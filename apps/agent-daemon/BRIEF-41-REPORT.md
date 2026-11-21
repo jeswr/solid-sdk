@@ -263,3 +263,198 @@ fixtures failed in the sandbox. Both offline subsets passed, and Graph Mail
 reached 100% coverage in its focused run. Biome and both project typechecks
 passed. The offline full workspace gate stopped at missing dependencies in
 `@jeswr/solid-webauthn-reauth`.
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+## Phase 2 (41g)
+
+The Proposer's `memory_recall` uses durable gate facts and owner-scoped PKG
+recall. The host supplies its purpose IRI and the owner memory's verified
+mandate loader. The daemon installs the gateway callback and provisions
+`memory/` and `memory/pending/` under the inherited workspace ACL.
+
+### Files changed
+
+- `packages/agent-reference/src/runtime/agent.ts` shares the existing task
+  admission filter between `admittedStatements()` and the new detached
+  `admittedFacts()` read. `test/admitted-facts.test.ts` covers the filter and
+  detached provenance.
+- `apps/agent-daemon/src/gate.ts` exposes the facts from the gate under its
+  existing lease. Optional trusted admission configuration supplies a named
+  reference task, reliance rules and operation handlers. Phase 1 initialized
+  the reference runtime with an empty handler list and no reliance rules.
+- `src/memory.ts`, `src/daemon.ts`, `src/types.ts` and `src/index.ts` implement
+  and expose bounded runtime recall. `src/workspace.ts` provisions both
+  containers. `src/testing.ts` composes the real agent-memory recall with a
+  memory pod and an in-memory approval queue for offline tests.
+- `package.json` and `pnpm-lock.yaml` add the existing agent-memory workspace
+  dependency. The daemon README, SKILL and this report document composition.
+  `packages/agent-model-gateway/README.md` shows the direct gateway callback.
+- Daemon `test/memory.test.ts`, `test/daemon.test.ts`, `test/workspace.test.ts`
+  and `test/exports.test.ts` cover the recall path. The composition, CSS,
+  polling-executor and gate fixtures and the D-2 demo use the new interfaces.
+
+### Red and green checks
+
+| Case | Before the change | After the change |
+| --- | --- | --- |
+| Reference facts | `TypeError: runtime.admittedFacts is not a function`. | The current task's admitted statement and provenance are returned as a detached copy. Rejected, stale and other-task entries are excluded. |
+| 1. Signed statement through the Proposer tool | `expected [] to match object { items: [...], withheld: +0 }` with a configured reference fixture. | The actual gateway tool returns the statement, source, time, method, digest, terms and purpose. |
+| 2. Bad signature, issuer without a source rule, plain observation | The signature case hit `reopened.facts is not a function`. The other two tool calls returned the bare Phase 1 `[]`. | The signature refusal never calls the Proposer, and the reopened gate has zero facts. The other two return an empty recall result, including for owner-flagged plain text. |
+| 3. Purpose and supersession | `Cannot find module '/src/memory.js'`. | A mocked superseded fact and a fact for a different purpose contribute to the withheld count. |
+| 4. Literal model input and bounds | `Cannot find module '/src/memory.js'`. | Literal wildcard, foreign IRI and 4096-character queries keep the owner request fixed. Case folding, newest-first order, ID ties and UTF-8 byte and item limits pass. |
+| 5. Owner memory | `Cannot find module '/src/memory.js'`. | A signed approval and real SHACL validation make the preference recallable with all four graphs. Pending content and provenance-only matches are excluded. |
+| 6. Restart | `TypeError: gate.facts is not a function` after the real gate admitted the signed message. | Closing and reopening the same gate directory recovers the same statement and provenance through recall. |
+| 7. Workspace privacy | `expected -1 to be greater than 1` because the memory create request was absent. | The owner-only ACL precedes both container creates and content writes. |
+| 8. Composition | `TS2578: Unused '@ts-expect-error' directive`. | The test project typechecks with the expected error on the old host field. |
+
+### Follow-up
+
+The initial tests covered restart with one fact, signature refusal, missing
+source authority and plain observations. The 41h review below covers post-admission
+refusal, missing purpose and terms, repeated statement IDs, real precedence and
+pre-existing ACLs. The model's only input is the substring. The trusted purpose
+and `limit: 50` are the only inputs to owner recall. The output defaults to 20
+items and 64 KiB of JSON.
+
+Pairing signed owner approvals with staged remember proposals and calling
+`approveRemember` is the owner-memory write-path follow-up already tracked
+in `sst-ans.31`.
+
+### Verification
+
+Checks used Node 24.22.3 and Vitest with `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| Reference library-only build | `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` passed. |
+| Reference tests | All four tests passed across `admitted-facts`, `oracle` and `oracle-snapshot`. Git status for `traces`, `outlines` and `scenario-runs.json` was empty. |
+| Daemon typechecks | Both the source and test projects passed. |
+| Daemon full Vitest | 225 passed and 20 failed. CSS and the D-2 demo hit `listen EPERM`. Fifteen cloud cases timed out during loopback setup. The host plist case hit `spawnSync python3 EPERM`. The packaged CLI and production fixtures received empty child stdout. |
+| Daemon offline Vitest | 225 passed with three cases filtered. The cloud, CSS and production fixture files were excluded. |
+| Direct offline packaging | The pruned workspace installed 177 cached packages with zero downloads. The packaged runtime-memory export, recall fixture and CLI help passed under plain Node. |
+| Biome and root guards | Biome exited successfully with existing warnings in the reference runtime. SDK and agent layers, RDF discipline, app duplication and `git diff --check` passed. |
+
+Changes are in the working tree.
+
+## Phase 2 review fixes (41h)
+
+| Finding | Regression before the fix | Guarantee after the fix |
+| --- | --- | --- |
+| M5 | An operation handler refused a signed invocation after its statement entered task context. The refused statement was recallable. | The daemon correlates each fact with its delivery and requires that delivery's confirmed, durable `admitted` verdict. Refused or unconfirmed deliveries and legacy facts without that link are excluded before and after reopening the gate. |
+| M2 / CORE-IN-11 | A signed invocation without a purpose or terms returned the statement. A scoped statement without terms lacked terms in provenance. | A fact admitted without a purpose is interaction-scoped and contributes to the withheld count for every host purpose. Every returned fact includes effective terms, including the default of interaction-only use, no onward sharing and deletion at the end of the interaction. |
+| M1 | Copying a pending TriG directly into `memory/` exposed it to recall. | Promotion saves the signed owner approval beside the TriG after SHACL validation and before deleting pending. Recall requires a valid, unexpired approve decision from the owner for the exact bytes and destination, plus the verified mandate scope. Pending and unsigned legacy resources are excluded. A changed owner key or changed resource bytes invalidates the stored evidence. |
+| M4 | After receiving versions A, B and A again under one statement ID, restart restored B and its purpose. | Accepted context revisions retain their admission order. Reopening the gate restores the last admitted revision and its provenance labels for that task. |
+| Precedence | A real precedence decision hid the superseded statement with `withheld: 0`. | A superseded fact with a confirmed admission contributes to `withheld` independently of the query. The tool returns only the current eligible fact. |
+| Workspace privacy | Both existing container ACLs retained another agent's grant. | Initialization writes an owner-only access and default ACL on both `memory/` and `memory/pending/`, replacing existing container ACLs before workspace content is written. Descendants inherit the default when they have no ACL of their own. |
+
+Each regression failed against the original code and passed with the fix. The
+daemon tests use signed invocations and reopen the same gate directory. The owner
+memory test also checks an incorrect verifier key, an expired approval and a
+UTF-8 BOM added to the approved TriG. The ACL test parses the ACLs on
+two pre-existing containers and checks their grants and inheritance targets.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Reference library build, admitted-facts and both oracle suites | Passed. Four tests across three files. The Git diff for traces, outlines and `scenario-runs.json` is empty. |
+| Agent memory | All 58 offline tests and both TypeScript projects passed. The full suite could not start its CSS fixture because the sandbox denied loopback listen. |
+| Daemon | Source and test typechecks passed. Full Vitest passed 231 and failed 20. CSS and the D-2 demo hit loopback `EPERM`. Fifteen cloud tests timed out during loopback setup. The plist test hit Python spawn `EPERM`, and the two packaged checks received empty child stdout. The offline run passed 231, with three cases skipped by the test-name filter. |
+| Biome and root guards | Biome passed with existing reference warnings. SDK layers, RDF discipline, app duplication, agent layers and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 2 (41i)
+
+| Finding | Before | After |
+| --- | --- | --- |
+| Interaction-only recall | A signed fact with a declared purpose and default terms appeared in recall, including after reopening. The check expected two withheld facts and got one. | Runtime recall counts facts with an absent or different admitted purpose and facts with interaction-only default terms as withheld. The signed gate test checks a purpose-less admission, a matching-purpose admission without supplier terms, and an eligible admission with supplier terms, both live and after reopening. The purpose-less fact retains its absent purpose. |
+| Refused revision | After a refusal, recall returned an empty list for a statement with a prior confirmed admission. Changed and identical statement bytes reproduced this live and after reopening. | The gate retains distinct delivery receipts for identical statement bytes and supplies its confirmed receipts to the fact reader before the reader selects the latest eligible revision. The test checks the admitted statement, terms, purpose and provenance. A prior receipt already overwritten by an older build cannot be recovered from its saved context. |
+| Precedence trace | Restoring two equivalent winning statements across tasks named the second task's statement in the supersession trace. | The first occurrence of each statement ID keeps its position from context iteration. Admission sequence selects among revisions of that ID when both revisions have a sequence. Both numbered and legacy-order fixtures keep the previous winner. |
+| Owner-memory SHACL | Recall returned an exact signed copy of a resource that promotion rejected under SHACL. | The two paths validate the full dataset using the same shapes, validator and proposal base IRI. Recall skips nonconforming resources and rechecks approval expiry after validation. The real SHACL regression proves the exact copy is recallable under the conforming shape and withheld under the rejecting shape. |
+
+The tracked confirmation-rename, directory-sync and cleanup failure remains a
+separate issue.
+
+| Check | Result |
+| --- | --- |
+| Reference build and Vitest | Library-only TypeScript build, generated asset copy and typecheck passed. All 18 tests passed across admitted-facts, claim-failures and both oracle files. |
+| Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five trace diffs contained only `generated.commit` changes. Both manifests differed only in row order. The worktree index was read-only, so `git checkout-index` restored the generated files after `git checkout` could not acquire its index lock. Git reports an empty diff for traces, outlines and `scenario-runs.json`. |
+| Agent memory | Both TypeScript projects and all 59 offline tests passed. The CSS suite could not bind loopback in the sandbox. |
+| Daemon | Both TypeScript projects passed. Full Vitest passed 233 tests and reported 20 failures in loopback and subprocess fixtures. CSS and the D-2 demo hit `listen EPERM`, 15 cloud tests timed out during loopback setup, Python plist validation hit `spawnSync EPERM`, and the two packaged-binary checks received empty child stdout. The offline Vitest run passed 233 with three cases skipped by the test-name filter. A direct production package installed 177 cached dependencies and its CLI help ran successfully. |
+| Biome and root guards | Biome passed with warnings. `pnpm run lint:root` and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 3 (41j)
+
+| Finding | Before | After |
+| --- | --- | --- |
+| Derived recall with interaction-only inputs | A signed, matching-purpose derived claim appeared in recall live and after restart. The count was one for the direct input alone. | Runtime recall applies one effective-terms check per fact. It follows inherited terms and the recorded input IDs and digests recursively. A withheld or unavailable input also withholds the derived fact. The same regression now returns zero items and a count of two. The supplier-terms control remains recallable. |
+| Refused precedence successor | The gate recorded a supersession before refusing the winner. Recall withheld the earlier confirmed fact live and after restart. An earlier admitted revision of the winner's ID also masked this problem in the partial fix. | The confirmed-receipt read checks the gate's current or held successor for the same precedence group. When that successor's delivery lacks a confirmed admission, recall returns the earlier fact without the supersession marker. The regressions cover both a new successor ID and a refused revision of a previously admitted ID. |
+
+The signed gate regressions failed before the fixes and passed both live and after
+reopening the same directory. Unit tests also cover nested inherited default
+terms and transitive withholding for superseded inputs, inputs admitted for a
+different purpose, and inputs replaced under the same ID. Gate recording,
+derivation, and mixed legacy revision ordering retain their existing behavior.
+
+| Check | Result |
+| --- | --- |
+| Reference | Library-only TypeScript build, generated asset copy and typecheck passed. All 18 tests passed across admitted-facts, claim-failures and both oracle files. |
+| Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five traces differed only at `generated.commit`. The trace index and scenario manifest differed only in row order. `git checkout-index` restored the generated artifacts, and the trace, outline and manifest paths are clean. |
+| Agent memory | Both TypeScript projects and 59 offline tests passed. The full run reached the sandbox's loopback `EPERM` in the CSS fixture. |
+| Daemon | Both TypeScript projects and the build passed. The offline Vitest run passed 239 tests, with three skipped by the name filter. Full Vitest passed 239 tests and reported the same 20 sandbox failures as 41i in loopback and subprocess fixtures. Direct production packaging installed 177 cached dependencies with zero downloads. Plain Node imported the packaged daemon and ran `awp gate --help`. The temporary package directory was removed. |
+| Biome and root guards | Biome passed with existing reference warnings. `pnpm run lint:root` and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 4 (41k)
+
+Workspace initialization uses the storage client's parsed HEAD links to find the
+WAC ACLs for `agent/`, `agent/memory/` and `agent/memory/pending/`. It writes
+owner-only access and inheritance grants to each advertised document. An absent,
+ambiguous or out-of-scope link stops initialization before type-index registration.
+The existing storage scope applies to the discovered URL.
+
+The HTTP regression seeds an extra third-party grant in all three advertised
+ACLs. Before the fix, the alternate ACL still contained that WebID after
+initialization. The two missing-link cases and the foreign-origin case also
+resolved successfully. With the fix, the advertised documents contain only the
+owner's grants and all three invalid-link cases reject before any write to the
+unusable ACL destination or the type index.
+
+| Check | Result |
+| --- | --- |
+| Daemon typecheck, build and offline Vitest | Passed. The offline run passed 243 tests with three cases skipped by the test-name filter. |
+| Full daemon Vitest | 243 passed and 20 failed, matching the sandbox failure set from 41i. CSS and the D-2 demo hit `listen EPERM`. Fifteen cloud cases timed out during loopback setup. The launchd case hit `spawnSync python3 EPERM`, and the CLI and production dependency checks received empty subprocess stdout. |
+| Reference | The library-only build passed, and all 18 admitted-facts, claim-failures and oracle tests passed. |
+| Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five traces differed only at `generated.commit`. The trace index and scenario manifest differed only in row order. All generated trace, outline and manifest files were restored. |
+| Production package | The frozen offline install reused 177 cached dependencies with zero downloads. Plain Node imported the packaged daemon and ran `awp gate --help`. The temporary package directory was removed. |
+| Biome and root guards | Biome on changed TypeScript files, `pnpm run lint:root` and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 5 (41l)
+
+Workspace initialization rejects ACL URLs already claimed by another
+container or reserved for workspace writes. The shared-link regression checks
+that the first ACL keeps its grants and startup stops before registration.
+
+When the private type index is missing, the daemon conditionally creates an
+empty document. It discovers the index's own `rel="acl"` link with the same
+checks used for containers, writes the owner-only ACL, then adds the
+registration using the index's ETag. An empty index left by a failed attempt
+must pass ACL discovery and protection on restart as well. The regressions
+verify the write order with a nonstandard ACL URL and check that unusable links
+leave the index empty across attempts.
+
+The in-memory pod fixture now advertises ACL links for documents and models
+the Solid backend's exact PUT behavior for named creates.
+
+| Check | Result |
+| --- | --- |
+| Daemon typecheck and Biome | Both TypeScript projects and Biome on the changed TypeScript files passed. `git diff --check` passed. |
+| Offline daemon Vitest | 256 passed. Four cases were skipped by name, and the cloud and CSS files were excluded. |
+| Full daemon Vitest | `npx vitest run --maxWorkers=2` passed 256 and reported the same 20 sandbox failures as 41k. CSS and D-2 hit `listen EPERM`, 15 cloud cases timed out in loopback setup, launchd hit `spawnSync python3 EPERM`, and the two packaging checks received empty subprocess stdout. |

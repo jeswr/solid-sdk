@@ -9,6 +9,7 @@ import {
 import { digestBytes } from "@jeswr/agent-model";
 import {
   AgentRuntime,
+  type AgentRuntimeOptions,
   CONFIG_ED25519,
   FileLedger,
   FileStateStore,
@@ -45,7 +46,15 @@ export type ParseRefusal = {
   reason: ChannelParseRefusalReason;
 } & ({ raw: string | Uint8Array } | { digest: string });
 type ParseRefusalInput = { binding: string; account: string } & ParseRefusal;
-type GateOptions = { directory: string; now?: () => Date };
+type GateOptions = {
+  directory: string;
+  now?: () => Date;
+  /** Trusted host configuration for operations that admit evidence into a named task. */
+  admission?: Pick<NonNullable<AgentRuntimeOptions["gates"]>, "reliance"> & {
+    taskId: string;
+    handlers: AgentRuntimeOptions["handlers"];
+  };
+};
 const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const time = z.iso.datetime();
@@ -55,6 +64,7 @@ const storedVerdict = z.discriminatedUnion("outcome", [
   z.strictObject({
     outcome: z.literal("admitted"),
     verified: z.literal(true).optional(),
+    admissionReceipt: z.uuid().optional(),
     messageId: z.string(),
     conversation: z.string(),
     ...finalFields,
@@ -104,14 +114,14 @@ function fileVerdicts(directory: string): VerdictStore {
       await rename(join(directory, staged), commit);
       try {
         await syncDirectory(directory);
+        // A surviving commit alone cannot prove that its directory sync succeeded.
+        await writePrivate(directory, `verdict-${hex}.confirmed`, digest);
       } catch (error) {
         await unlink(commit)
           .then(() => syncDirectory(directory))
           .catch(() => {});
         throw error;
       }
-      // A surviving commit alone cannot prove that its directory sync succeeded.
-      await writePrivate(directory, `verdict-${hex}.confirmed`, digest);
     },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
@@ -163,7 +173,7 @@ function inboundDecision(step: StepResult): Decision {
   }
 }
 
-type GateRuntime = Pick<AgentRuntime, "receive" | "commitBindingEvent" | "close">;
+type GateRuntime = Pick<AgentRuntime, "receive" | "commitBindingEvent" | "admittedFacts" | "close">;
 
 export function createGate(
   rt: GateRuntime,
@@ -171,6 +181,7 @@ export function createGate(
   ledger: { entries(): Parameters<typeof verifyLedger>[0] },
   peers: readonly { subject: string; thumbprint: string }[],
   now: () => Date,
+  admittedReceipts = new Set<string>(),
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
@@ -215,10 +226,13 @@ export function createGate(
         return { outcome: "unstructured", digest };
       }
       const key =
-        failure === "human-parity-mismatch" || (!failure && parityMismatch) ? accountKey : hex;
-      const write = (decision: Decision | { outcome: "checking" }) =>
-        verdicts.put(key, { ...decision, time: now().toISOString() });
-      await write({ outcome: "checking" });
+        failure === "human-parity-mismatch" ||
+        (!failure && parityMismatch) ||
+        (failure && previous?.outcome === "admitted")
+          ? accountKey
+          : hex;
+      await verdicts.put(key, { outcome: "checking", time: now().toISOString() });
+      const admissionReceipt = randomUUID();
       let decision: Decision;
       if (failure) {
         await event("binding-rejection", failure);
@@ -235,6 +249,7 @@ export function createGate(
             { format: "awp-jws-compact/0.1", jws },
             {
               binding,
+              admissionReceipt,
               checkEmailParity: () =>
                 parityMismatch
                   ? "The readable channel copy does not match the structured message."
@@ -243,7 +258,12 @@ export function createGate(
           ),
         );
       }
-      await write(decision);
+      await verdicts.put(key, {
+        ...decision,
+        time: now().toISOString(),
+        ...(decision.outcome === "admitted" && { admissionReceipt }),
+      });
+      if (decision.outcome === "admitted") admittedReceipts.add(admissionReceipt);
       return { ...decision, digest };
     } catch {
       try {
@@ -263,6 +283,15 @@ export function createGate(
   return {
     check: (input: CheckInput) => enqueue(input),
     recordParseRefusal: (input: ParseRefusalInput) => enqueue(input),
+    facts() {
+      if (closed) throw new Error("Inbound gate is closed");
+      return rt
+        .admittedFacts({
+          includeSuperseded: true,
+          isAdmittedReceipt: (receipt) => admittedReceipts.has(receipt),
+        })
+        .map(({ admittingDelivery: _delivery, ...fact }) => fact);
+    },
     async status() {
       await pending;
       return gateStatus(verdicts, ledger, peers);
@@ -324,13 +353,13 @@ export async function readGateStatus(directory: string) {
   );
 }
 
-export async function openGate({ directory, now = () => new Date() }: GateOptions): Promise<Gate> {
-  return openStoredGate(await readGate(directory), now);
+export async function openGate(options: GateOptions): Promise<Gate> {
+  return openStoredGate(await readGate(options.directory), options);
 }
 
 async function openStoredGate(
   stored: Awaited<ReturnType<typeof readGate>>,
-  now = () => new Date(),
+  { now = () => new Date(), admission }: GateOptions,
 ): Promise<Gate> {
   const trust = await TrustStore.load(stored.trust);
   const store = new FileStateStore(join(stored.dir, "state.json"));
@@ -345,12 +374,22 @@ async function openStoredGate(
       mandateJws: stored.mandateJws,
       representationJws: stored.representationJws,
       accepted: [CONFIG_ED25519],
-      handlers: [],
+      handlers: admission?.handlers ?? [],
+      ...(admission && { gates: { taskId: admission.taskId, reliance: admission.reliance } }),
       store,
       ledger,
       now,
     });
-    return createGate(runtime, fileVerdicts(stored.dir), ledger, pinnedPeers(stored.trust), now);
+    const verdicts = fileVerdicts(stored.dir);
+    const admittedReceipts = new Set<string>();
+    if (admission) {
+      for (const hex of await verdicts.digests()) {
+        const verdict = await verdicts.get(hex);
+        if (verdict?.outcome === "admitted" && verdict.admissionReceipt)
+          admittedReceipts.add(verdict.admissionReceipt);
+      }
+    }
+    return createGate(runtime, verdicts, ledger, pinnedPeers(stored.trust), now, admittedReceipts);
   } catch (error) {
     store.close();
     throw error;
@@ -358,16 +397,32 @@ async function openStoredGate(
 }
 
 /** The daemon opens the durable gate under its existing process lease. */
-export function createInboundGate(options: GateOptions): InboundGatePort {
+export function createInboundGate(options: GateOptions): InboundGatePort & Pick<Gate, "facts"> {
+  let active: Gate | undefined;
   return {
     async check() {
       throw new Error("Inbound gate requires an active daemon lease");
+    },
+    facts() {
+      if (!active) throw new Error("Inbound gate requires an active daemon lease");
+      return active.facts();
     },
     async open(identity) {
       const stored = await readGate(options.directory);
       if (stored.identity.actor !== identity.actor || stored.identity.party !== identity.party)
         throw new Error("Inbound gate identity does not match daemon configuration");
-      return openStoredGate(stored, options.now);
+      const gate = await openStoredGate(stored, options);
+      active = gate;
+      return {
+        ...gate,
+        async close() {
+          try {
+            await gate.close();
+          } finally {
+            if (active === gate) active = undefined;
+          }
+        },
+      };
     },
   };
 }

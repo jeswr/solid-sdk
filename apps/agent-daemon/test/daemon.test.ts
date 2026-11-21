@@ -42,8 +42,14 @@ import {
 } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
-import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
-import { Cast, craftSigned, mandateOf } from "@jeswr/agent-reference/scenarios/common";
+import { fakeFetch } from "@jeswr/agent-model-gateway/testing";
+import { AgentRuntime, CONFIG_ED25519, introduce, PILOT_PROFILE } from "@jeswr/agent-reference";
+import type { JsonObject } from "@jeswr/agent-reference/core/types";
+import { evaluateRule, ruleSchema } from "@jeswr/agent-reference/derive/rules";
+import { GateMemory } from "@jeswr/agent-reference/gates/common";
+import { testKey } from "@jeswr/agent-reference/reference/keys";
+import { Cast, craftSigned, mandateOf, signClaim } from "@jeswr/agent-reference/scenarios/common";
+import { addSourceRule, pinIssuer, saveTrust } from "@jeswr/agent-reference/setup";
 import { parseEmail } from "@jeswr/agentic-legacy-bridge";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
@@ -62,10 +68,16 @@ import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js"
 import * as teams from "../../../packages/agent-channels/test/fixtures/teams.js";
 import { createCliHost, runCli } from "../src/cli.js";
 import { createDaemon, pollInterval } from "../src/daemon.js";
-import { createInboundGate } from "../src/gate.js";
+import { createInboundGate, openGate, readGate } from "../src/gate.js";
 import { initGate } from "../src/gate-setup.js";
 import { createLocalState } from "../src/local.js";
-import { createMemoryPod, createMemoryState, createTestGate } from "../src/testing.js";
+import { createRuntimeMemory } from "../src/memory.js";
+import {
+  createMemoryPod,
+  createMemoryState,
+  createTestGate,
+  createTestMemory,
+} from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
 
@@ -227,6 +239,7 @@ function harness() {
         })),
       },
     },
+    memory: createTestMemory(),
     proposerContext: {
       pod: {
         root: ROOT,
@@ -236,7 +249,6 @@ function harness() {
         delete: vi.fn(),
         list: vi.fn(),
       },
-      memoryRecall: async () => [],
       instructions: "Synthetic fixture",
     },
     isFlagged: vi.fn(async () => false),
@@ -1128,7 +1140,7 @@ it.each([
   if (outcome === "admitted") {
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledWith(
       [expect.objectContaining({ gate: verdict })],
-      h.options.proposerContext,
+      { ...h.options.proposerContext, memoryRecall: expect.any(Function) },
     );
   }
   const resources = [...h.pod.resources.keys()];
@@ -1323,7 +1335,7 @@ it("drops a genuinely bad signature and admits the valid signed message down the
     );
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledExactlyOnceWith(
       [expect.objectContaining({ gate: verdict })],
-      h.options.proposerContext,
+      { ...h.options.proposerContext, memoryRecall: expect.any(Function) },
     );
     expect([...h.pod.resources.values()].filter(({ body }) => body === good)).toHaveLength(1);
     expect(h.ledger.entries().filter(({ record }) => record.type === "ingest")).toHaveLength(1);
@@ -1970,4 +1982,587 @@ it("holds its process lease through a failed watcher close and delayed executor 
   finish();
   await failed;
   expect(h.state.held()).toBe(false);
+});
+
+const memoryPurpose = "urn:test:personalisation";
+const memoryOperation = { id: "urn:test:provide-assessment", version: "1" };
+const memoryIssuer = "urn:test:assessor";
+const memoryAt = new Date(AT).toISOString();
+const assessment = {
+  id: "urn:test:assessment",
+  claimType: "assessment",
+  issuer: memoryIssuer,
+  subject: "urn:test:subject",
+  asOf: memoryAt,
+  method: "recorded-by-authority",
+  value: "Appointment confirmed",
+  terms: {
+    policy: {
+      id: "urn:test:assessment-terms",
+      permissions: [{ type: "permission", action: "use" }],
+    },
+  },
+};
+const recalledAssessment = {
+  kind: "admitted-fact",
+  id: assessment.id,
+  subject: assessment.subject,
+  statement: assessment,
+  provenance: {
+    source: memoryIssuer,
+    asOf: memoryAt,
+    method: assessment.method,
+    digest: digestOf(assessment),
+    terms: assessment.terms,
+    admittedPurpose: memoryPurpose,
+  },
+};
+const memoryAdmission = {
+  taskId: "urn:test:personalisation-task",
+  reliance: {
+    id: "urn:test:reliance",
+    rules: [
+      {
+        id: "urn:test:fitness",
+        claimType: "assessment",
+        methods: ["recorded-by-authority"],
+        maxAgeDays: 30,
+        text: "Require the accepted assessor's recent record.",
+      },
+    ],
+  },
+  handlers: [
+    {
+      description: {
+        ...memoryOperation,
+        label: "Receive assessment",
+        access: "public" as const,
+        pattern: "invoke" as const,
+        roles: ["responder"] as const,
+        models: [],
+        effects: [],
+        outcomes: [],
+      },
+      requiresRepresentation: false,
+      onInvoke: (_context: unknown, body: { input: { refuse?: unknown } }) =>
+        body.input.refuse
+          ? ({ type: "refuse", reason: "not-authorised" } as const)
+          : ({ type: "none" } as const),
+    },
+  ],
+};
+
+async function memoryGateFixture(
+  root: string,
+  variant: "valid" | "bad-signature" | "unknown-source" | "plain",
+  admission = memoryAdmission,
+) {
+  const directory = join(root, "gate");
+  const now = () => new Date(AT);
+  await initGate({
+    directory,
+    ownerDir: join(root, "owner"),
+    agentWebId: AGENT_ID,
+    ownerWebId: OWNER,
+    now,
+    confirm: async () => true,
+  });
+  const cast = new Cast(now);
+  const peer = await cast.add(
+    {
+      name: "peer",
+      actor: "https://peer.example/agent#id",
+      party: "https://peer.example/owner#id",
+    },
+    mandateOf("memory-fixture", []),
+    [],
+  );
+  const issuerKey = await testKey("daemon-memory:issuer");
+  const stored = await readGate(directory);
+  let trust = pinIssuer(introduce(stored.trust, peer.card), memoryIssuer, issuerKey);
+  if (variant !== "unknown-source") {
+    trust = addSourceRule(trust, {
+      id: "urn:test:source-rule",
+      version: "1",
+      source: memoryIssuer,
+      claimTypes: admission.reliance.rules.map(({ claimType }) => claimType),
+      subjects: "any",
+    });
+  }
+  saveTrust(root, "gate", trust);
+  const options = { directory, now, admission };
+  async function signedInvocation(
+    sequence: number,
+    statement: JsonObject,
+    purpose?: string,
+    refuse = false,
+  ) {
+    return (
+      await craftSigned(peer, {
+        profile: PILOT_PROFILE,
+        configuration: CONFIG_ED25519,
+        id: `urn:uuid:00000000-0000-4000-8000-0000000000${sequence}`,
+        conversation: `urn:uuid:00000000-0000-4000-8000-1000000000${sequence}`,
+        kind: "invoke",
+        from: { actor: peer.identity.actor },
+        to: { actor: AGENT_ID },
+        createdAt: memoryAt,
+        expiresAt: new Date(AT + 3_600_000).toISOString(),
+        body: {
+          operation: memoryOperation,
+          input: { refuse },
+          ...(purpose !== undefined && { purpose }),
+          basis: { kind: "public" },
+        },
+        evidence: [
+          {
+            role: "credential",
+            format: "jws-compact",
+            value: await signClaim(issuerKey, statement),
+          },
+        ],
+      })
+    ).jws;
+  }
+  const jws = await signedInvocation(61, assessment, memoryPurpose);
+  const [header, payload, proof] = jws.split(".") as [string, string, string];
+  const signature = Buffer.from(proof, "base64url");
+  signature[0] = (signature[0] as number) ^ 1;
+  const raw =
+    variant === "plain"
+      ? JSON.stringify(assessment)
+      : encodeEnvelope(
+          variant === "bad-signature"
+            ? `${header}.${payload}.${signature.toString("base64url")}`
+            : jws,
+        );
+  return { options, raw, signedInvocation };
+}
+
+it.each([
+  "valid",
+  "bad-signature",
+  "unknown-source",
+  "plain",
+] as const)("exposes only admitted evidence to the Proposer's memory_recall tool (%s)", async (variant) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-"));
+  try {
+    const { options, raw } = await memoryGateFixture(root, variant);
+    const h = harness();
+    const gate = createInboundGate(options);
+    const memory = createRuntimeMemory({
+      facts: () => gate.facts(),
+      owner: { recall: async () => [] },
+      purpose: memoryPurpose,
+    });
+    const usage = { input_tokens: 10, output_tokens: 10 };
+    const provider = fakeFetch([
+      Response.json({
+        status: "completed",
+        usage,
+        output: [
+          {
+            type: "function_call",
+            call_id: "memory-test",
+            name: "memory_recall",
+            arguments: JSON.stringify({ query: "assessment" }),
+          },
+        ],
+      }),
+      Response.json({ status: "completed", usage, output: [] }),
+    ]);
+    const { proposer } = createGateway({
+      provider: "openai",
+      model: "synthetic",
+      maxTokens: 100,
+      tokens: { read: async () => "synthetic-token" },
+      account: "synthetic",
+      fetch: provider.fetch,
+    });
+    h.ingest.parse.mockImplementation(
+      variant === "plain"
+        ? () => ({
+            ...h.message,
+            textBody: raw,
+            rawSha256: digestBytes(raw).slice(8),
+            rawByteLength: Buffer.byteLength(raw),
+            jsonLdBlocks: [],
+          })
+        : createDirectReader(
+            { inboxes: new Map(), accepted: new Map() },
+            new RecordingTokenProvider(),
+          ).ingest.parse,
+    );
+    h.ingest.list.mockResolvedValue({ items: [{ id: "fixture", raw }], next: "one" });
+    await createDaemon({
+      ...h.options,
+      memory,
+      gate,
+      gateway: { ...h.options.gateway, proposer },
+      isFlagged: async () => variant === "plain",
+    }).once();
+    expect(h.state.cursors.get("fixture")).toBe("one");
+    if (variant === "bad-signature") {
+      expect(provider.requests).toHaveLength(0);
+      const reopened = await openGate(options);
+      try {
+        expect(reopened.facts()).toEqual([]);
+      } finally {
+        await reopened.close();
+      }
+    } else {
+      expect(provider.requests).toHaveLength(2);
+      const body = JSON.parse(String(provider.requests[1]?.init?.body));
+      const output = body.input.find(
+        (item: { type?: string }) => item.type === "function_call_output",
+      );
+      expect(JSON.parse(output.output)).toMatchObject({
+        items: variant === "valid" ? [recalledAssessment] : [],
+        withheld: 0,
+      });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("recalls the same admitted fact after reopening its gate directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-restart-"));
+  try {
+    const { options, raw } = await memoryGateFixture(root, "valid");
+    const message = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    ).ingest.parse({ id: "fixture", raw });
+    const gate = await openGate(options);
+    try {
+      expect(await gate.check({ account: "fixture", binding: "direct", message })).toMatchObject({
+        outcome: "admitted",
+      });
+      expect(gate.facts()).toMatchObject([expect.objectContaining({ id: assessment.id })]);
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      const memory = createRuntimeMemory({
+        facts: () => reopened.facts(),
+        owner: { recall: async () => [] },
+        purpose: memoryPurpose,
+      });
+      expect(await memory.recall("assessment")).toMatchObject({
+        items: [recalledAssessment],
+        withheld: 0,
+      });
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  { revision: "changed", value: "Refused replacement" },
+  { revision: "identical", value: assessment.value },
+])("keeps the admitted revision after a refused $revision delivery", async ({ value }) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-refused-revision-"));
+  try {
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid");
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    const verifyRecall = async (gate: Awaited<ReturnType<typeof openGate>>) => {
+      const memory = createRuntimeMemory({
+        facts: gate.facts,
+        owner: { recall: async () => [] },
+        purpose: memoryPurpose,
+      });
+      expect.soft(await memory.recall("assessment")).toMatchObject({
+        items: [recalledAssessment],
+        withheld: 0,
+      });
+    };
+    const gate = await openGate(options);
+    try {
+      const deliver = (jws: string) =>
+        gate.check({
+          account: "fixture",
+          binding: "direct",
+          message: reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) }),
+        });
+      expect(await deliver(await signedInvocation(61, assessment, memoryPurpose))).toMatchObject({
+        outcome: "admitted",
+      });
+      await verifyRecall(gate);
+      expect(
+        await deliver(await signedInvocation(62, { ...assessment, value }, undefined, true)),
+      ).toMatchObject({ outcome: "refused", reason: "not-authorised" });
+      await verifyRecall(gate);
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      await verifyRecall(reopened);
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "refused",
+  "interaction-only",
+  "repeat",
+  "superseded",
+  "refused-successor",
+  "refused-successor-revision",
+] as const)("preserves the %s recall result across restart", async (variant) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-review-"));
+  try {
+    const refusedSuccessor =
+      variant === "refused-successor" || variant === "refused-successor-revision";
+    const admission = {
+      ...memoryAdmission,
+      reliance: {
+        ...memoryAdmission.reliance,
+        rules: memoryAdmission.reliance.rules.map((rule) => ({
+          ...rule,
+          ...((variant === "superseded" || refusedSuccessor) && {
+            precedence: { sources: [memoryIssuer], freshness: "newer-first" as const },
+          }),
+        })),
+      },
+    };
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid", admission);
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    const { terms: _terms, ...noTerms } = assessment;
+    const revision = { ...assessment, value: "Replacement assessment" };
+    const replacement = {
+      ...revision,
+      id: "urn:test:replacement",
+      asOf: memoryAt,
+    };
+    const older = { ...assessment, asOf: new Date(AT - 60_000).toISOString() };
+    const priorSuccessor = { ...replacement, subject: "urn:test:another-subject" };
+    const deliveries =
+      variant === "refused"
+        ? [await signedInvocation(61, assessment, memoryPurpose, true)]
+        : variant === "interaction-only"
+          ? [
+              await signedInvocation(61, assessment),
+              await signedInvocation(62, { ...noTerms, id: replacement.id }, memoryPurpose),
+              await signedInvocation(63, { ...assessment, id: "urn:test:scoped" }, memoryPurpose),
+            ]
+          : variant === "repeat"
+            ? [
+                await signedInvocation(61, assessment, memoryPurpose),
+                await signedInvocation(62, revision, memoryPurpose),
+                await signedInvocation(63, assessment, "urn:test:other-purpose"),
+              ]
+            : [
+                ...(variant === "refused-successor-revision"
+                  ? [await signedInvocation(60, priorSuccessor, memoryPurpose)]
+                  : []),
+                await signedInvocation(61, older, memoryPurpose),
+                await signedInvocation(62, replacement, memoryPurpose, refusedSuccessor),
+              ];
+    const gate = await openGate(options);
+    const recall = (active: typeof gate, purpose = memoryPurpose, query = "assessment") =>
+      createRuntimeMemory({
+        facts: active.facts,
+        owner: { recall: async () => [] },
+        purpose,
+      }).recall(query);
+    const verifyRecall = async (active: typeof gate, phase: string) => {
+      const result = await recall(active);
+      if (variant === "refused") {
+        expect(active.facts()).toEqual([]);
+        expect(result).toEqual({ items: [], withheld: 0 });
+      } else if (variant === "interaction-only") {
+        const unscoped = active.facts().find(({ id }) => id === assessment.id);
+        expect(unscoped).toBeDefined();
+        expect(unscoped?.admittedPurpose).toBeUndefined();
+        expect.soft(result).toMatchObject({
+          items: [{ id: "urn:test:scoped", provenance: { terms: assessment.terms } }],
+          withheld: 2,
+        });
+        expect(await recall(active, "urn:test:other-purpose")).toEqual({ items: [], withheld: 3 });
+        expect.soft(await recall(active, memoryPurpose, "no-match")).toEqual({
+          items: [],
+          withheld: 2,
+        });
+      } else if (variant === "repeat") {
+        expect(result).toEqual({ items: [], withheld: 1 });
+        expect(await recall(active, "urn:test:other-purpose")).toMatchObject({
+          items: [
+            {
+              ...recalledAssessment,
+              provenance: {
+                ...recalledAssessment.provenance,
+                admittedPurpose: "urn:test:other-purpose",
+              },
+            },
+          ],
+          withheld: 0,
+        });
+      } else if (refusedSuccessor) {
+        expect.soft(result, phase).toMatchObject({
+          items: [
+            ...(variant === "refused-successor-revision"
+              ? [{ id: priorSuccessor.id, statement: priorSuccessor }]
+              : []),
+            { id: older.id, statement: older, provenance: { supersededBy: undefined } },
+          ],
+          withheld: 0,
+        });
+      } else {
+        expect(result.items).toHaveLength(1);
+        expect(result).toMatchObject({ items: [{ id: replacement.id }], withheld: 1 });
+        expect(await recall(active, memoryPurpose, "no-match")).toEqual({ items: [], withheld: 1 });
+      }
+    };
+    try {
+      for (const [index, jws] of deliveries.entries()) {
+        const message = reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) });
+        expect(await gate.check({ account: "fixture", binding: "direct", message })).toMatchObject(
+          variant === "refused" || (refusedSuccessor && index === deliveries.length - 1)
+            ? { outcome: "refused", reason: "not-authorised" }
+            : { outcome: "admitted" },
+        );
+      }
+      if (variant === "refused") {
+        const state = JSON.parse(await readFile(join(options.directory, "state.json"), "utf8"));
+        expect(state.contextItems[memoryAdmission.taskId]).toContainEqual(
+          expect.objectContaining({ id: assessment.id, accepted: true }),
+        );
+      }
+      if (refusedSuccessor) {
+        const state = JSON.parse(await readFile(join(options.directory, "state.json"), "utf8"));
+        expect(state.precedenceHolds[older.id]).toMatchObject({ supersededBy: replacement.id });
+      }
+      await verifyRecall(gate, "live");
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      await verifyRecall(reopened, "after restart");
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "default",
+  "supplier",
+] as const)("enforces a derived fact's inherited %s terms live and after restart", async (terms) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-derived-"));
+  try {
+    const rule = ruleSchema.parse({
+      id: "urn:test:assessment-threshold",
+      template: "threshold",
+      params: { input: "assessment", operator: "gte", value: 1 },
+      output: "eligible",
+      inputsFrom: [memoryIssuer],
+    });
+    const [assessmentRule] = memoryAdmission.reliance.rules;
+    if (!assessmentRule) throw new Error("Missing assessment reliance rule");
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid", {
+      ...memoryAdmission,
+      reliance: {
+        ...memoryAdmission.reliance,
+        rules: [
+          assessmentRule,
+          { ...assessmentRule, claimType: rule.output, methods: ["derived"] },
+        ],
+      },
+    });
+    const input = { ...assessment, value: 2, ...(terms === "default" && { terms: undefined }) };
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    const create = AgentRuntime.create.bind(AgentRuntime);
+    // Install a trusted rule for the fixture's real reference admission. Recall after reopening
+    // reads the persisted proof and terms without needing to run the rule again.
+    const setup = vi
+      .spyOn(AgentRuntime, "create")
+      .mockImplementationOnce((config) =>
+        create({ ...config, gates: { ...config.gates, rules: [rule] } }),
+      );
+    const gate = await openGate(options).finally(() => setup.mockRestore());
+    const verifyRecall = async (active: typeof gate, id: string, phase: string) => {
+      expect(active.facts().find((fact) => fact.id === id)).toMatchObject({
+        admittedPurpose: memoryPurpose,
+        terms: { inherited: [{ target: input.id, terms: input.terms ?? null }] },
+      });
+      const memory = createRuntimeMemory({
+        facts: active.facts,
+        owner: { recall: async () => [] },
+        purpose: memoryPurpose,
+      });
+      expect.soft(await memory.recall("eligible"), phase).toMatchObject({
+        items: terms === "default" ? [] : [{ id }],
+        withheld: terms === "default" ? 2 : 0,
+      });
+    };
+    let derivedId: string;
+    try {
+      const deliver = (jws: string) =>
+        gate.check({
+          account: "fixture",
+          binding: "direct",
+          message: reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) }),
+        });
+      expect(await deliver(await signedInvocation(61, input, memoryPurpose))).toMatchObject({
+        outcome: "admitted",
+      });
+      const source = gate.facts().find((fact) => fact.id === input.id);
+      if (!source?.digest) throw new Error("Missing admitted input");
+      const task = options.admission.taskId;
+      const memory = new GateMemory();
+      memory.enter(task, { ...source, kind: "statement", accepted: true, digest: source.digest });
+      memory.restoreFacts();
+      const derived = evaluateRule({
+        rules: [rule],
+        rule: rule.id,
+        memory,
+        task,
+        subject: input.subject,
+        deriver: memoryIssuer,
+        at: memoryAt,
+        purpose: memoryPurpose,
+      });
+      if (!derived.ok || typeof derived.statement.id !== "string")
+        throw new Error("Missing derived statement");
+      derivedId = derived.statement.id;
+      expect(
+        await deliver(await signedInvocation(62, derived.statement, memoryPurpose)),
+      ).toMatchObject({
+        outcome: "admitted",
+      });
+      await verifyRecall(gate, derivedId, "live");
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      await verifyRecall(reopened, derivedId, "after restart");
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
