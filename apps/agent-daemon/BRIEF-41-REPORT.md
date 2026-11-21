@@ -141,3 +141,39 @@ The worktree remains uncommitted. The lane used the reference library-only
 build to preserve the committed artifacts. These fixes require no new tracker
 items. The explicit inbound admission signal resolves the earlier follow-up
 for adapters consuming the reference runtime's inbound result.
+
+## Review fixes (41c)
+
+| Finding | Change | Regression observed before the fix |
+| --- | --- | --- |
+| 1. Refused closing notice | `packages/agent-reference/src/runtime/agent.ts:5061` passes the proposed transition into admission. The handler saves it after admission at line 5422. A late peer notice also leaves the existing conversation untouched. | `packages/agent-reference/test/inbound-closing.test.ts:8` rejected the valid follow-up that a clean conversation admitted. The test also compares the complete conversation snapshot before and after the refusal. |
+| 2. Verdict durability | `apps/agent-daemon/src/gate.ts:72` keeps a durable checking marker through the final rename and directory sync. Verdict reads treat a retained marker as interrupted. The gate syncs the marker removal before returning the final verdict. | `apps/agent-daemon/test/gate-setup.test.ts:280` returned an admission when the test injected a failure at the post-rename sync. The test now verifies the final file was visible at the injected failure and checks both immediate and reopened retries. |
+| 3. Account parity | `apps/agent-daemon/src/gate.ts:178` stores parity refusals by raw digest and account hash. Cached admissions still apply the current account's parity result. Strict parser parity refusals use the same account key. | `apps/agent-daemon/test/gate-setup.test.ts:326` reopened the gate and observed that the first account's warning blocked the matching account. The regression also covers strict parser refusals and earlier shared verdict files. |
+| 4. Matrix parser refusal | `apps/agent-daemon/src/daemon.ts:165` records a typed parser refusal through the gate using the original raw bytes. The gate consults that verdict before treating an observation as unstructured. | `apps/agent-daemon/test/daemon.test.ts:1413` observed a Reader call after a new daemon run presented the same malformed event with a Signal bridge hint. |
+| 5. Plain HTML and cursors | `packages/agent-channels/src/email/mime.ts:147` scans HTML using legacy-compatible charset and transfer decoding. The scan skips unrelated bodies, keeps strict JSON-LD extraction, and uses strict MIME decoding for structured parity. `apps/agent-daemon/src/daemon.ts:170` fails the batch if the gate cannot record a parser refusal. | `packages/agent-channels/test/email.test.ts:410` threw during extraction of plain legacy HTML. The daemon tests at lines 1376 and 1549 observed that Latin-1 mail bypassed the Reader and that the cursor advanced without a recorded refusal. |
+
+Pre-41c shared parity refusals cannot identify the account that produced them.
+The gate rechecks a currently visible carrier. It returns `result-uncertain`
+when the earlier parity refusal is the only remaining evidence of a carrier.
+Embedded gates can implement `recordParseRefusal` to checkpoint parser refusals.
+A host without that method can continue to handle parsed messages. A typed
+parser refusal on that host holds the account cursor.
+
+Node 24.22.3 was used throughout. Each Vitest invocation used `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| Reference library-only build and typecheck | `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` and `pnpm run typecheck` passed. |
+| Reference closing, Introduction Card, settlement source admission and `test/oracle` | 8 passed. The separate trace suite passed all 15 tests. |
+| Daemon and channels `pnpm run build`, `pnpm run typecheck` and `pnpm run lint` | Passed. |
+| Daemon Vitest with the 41b offline filters | 201 passed, 3 filtered. The unfiltered run encountered the existing loopback, child-process and packaging fixture failures. |
+| Channels Vitest | 938 passed, one existing skip. Ten origin tests were blocked by `EPERM` on loopback bind. The 41b offline run excluding the origins file passed 897 tests with one skip. |
+| Channels MIME, golden-mail and Graph Mail send tests | 101 passed. Both changed MIME files reached 100% statements, branches, functions and lines. |
+| Offline production packaging and binary smoke checks | The pruned workspace installed 173 cached packages with zero downloads. The isolated app entry point imported successfully. Both workspace help commands and packaged `gate --help` passed. |
+| Root SDK and agent layers, RDF discipline, app duplication, codegen, lockfile transport and reference dependency policy | Passed. |
+| Root agent-layer fixture suites with the lane 41a filters | 399 passed, 4 subprocess fixtures filtered. |
+
+The reference manifest is 283 / 278 / 0 / 5. The manifest, traces, outlines and
+oracle fixtures match `0825ae9f3` byte-for-byte. `git diff --check` passed.
+The worktree is uncommitted. The lane used focused checks and the reference
+library-only build.

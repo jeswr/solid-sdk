@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { type BridgeMessage, DIRECT, readEnvelope } from "@jeswr/agent-channels";
+import { digestBytes } from "@jeswr/agent-model";
 import {
   AgentRuntime,
   CONFIG_ED25519,
@@ -12,10 +13,10 @@ import {
   type TrustStoreData,
   verifyLedger,
 } from "@jeswr/agent-reference";
-import { lstat, readdir, rename } from "fs/promises";
+import { lstat, readdir, unlink } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
-import { readPrivate, writePrivate } from "./local.js";
+import { readPrivate, syncDirectory, writePrivate } from "./local.js";
 
 export type GateOutcome = "admitted" | "unstructured" | "refused";
 export interface GateVerdict {
@@ -28,12 +29,20 @@ export interface GateVerdict {
 type GateIdentity = { actor: string; party: string };
 export interface InboundGatePort {
   check(input: { binding: string; account: string; message: BridgeMessage }): Promise<GateVerdict>;
+  /** Record a body-free refusal before the daemon can commit the cursor. */
+  recordParseRefusal?(input: ParseRefusalInput): Promise<GateVerdict>;
   /** Durable ports open only inside the daemon's process lease. */
   open?(identity: GateIdentity): Promise<Gate>;
 }
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
+type ParseRefusalInput = {
+  binding: string;
+  account: string;
+  raw: string | Uint8Array;
+  reason: "malformed" | "human-parity-mismatch";
+};
 type GateOptions = { directory: string; now?: () => Date };
-const filePattern = /^verdict-([a-f0-9]{64})\.json$/;
+const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const time = z.iso.datetime();
 const storedVerdict = z.discriminatedUnion("outcome", [
@@ -62,6 +71,11 @@ type VerdictStore = {
 function fileVerdicts(directory: string): VerdictStore {
   return {
     async get(hex) {
+      const pending = await readPrivate(join(directory, `verdict-${hex}.pending`));
+      if (pending !== undefined) {
+        const { time } = storedVerdict.parse(JSON.parse(pending));
+        return { outcome: "checking", time };
+      }
       const text = await readPrivate(join(directory, `verdict-${hex}.json`));
       if (text === undefined) return undefined;
       const verdict = storedVerdict.parse(JSON.parse(text));
@@ -77,11 +91,18 @@ function fileVerdicts(directory: string): VerdictStore {
         return;
       }
       const staged = `verdict-${hex}.pending`;
+      const marker = JSON.stringify({ outcome: "checking", time: verdict.time });
       const record = verdict.outcome === "admitted" ? { ...verdict, verified: true } : verdict;
-      await writePrivate(directory, staged, JSON.stringify(record));
-      // Publish only after the file and its staged directory entry are durable. If a crash
-      // loses this rename, the previously synced checking marker still refuses the retry.
-      await rename(join(directory, staged), join(directory, name));
+      // The side marker survives a failed final rename or directory sync, even after reopening.
+      await writePrivate(directory, staged, marker);
+      await writePrivate(directory, name, JSON.stringify(record));
+      await unlink(join(directory, staged));
+      try {
+        await syncDirectory(directory);
+      } catch (error) {
+        await writePrivate(directory, staged, marker);
+        throw error;
+      }
     },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
@@ -108,6 +129,11 @@ function collectCarriers(message: BridgeMessage) {
 
 function refused(reason: string): Extract<Decision, { outcome: "refused" }> {
   return { outcome: "refused", reason };
+}
+
+function refusalReason(previous: StoredVerdict | undefined) {
+  if (previous?.outcome === "checking") return "result-uncertain";
+  if (previous?.outcome === "refused") return previous.reason;
 }
 
 function inboundDecision(step: StepResult): Decision {
@@ -139,37 +165,37 @@ export function createGate(
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
-  async function check({ binding, message }: CheckInput): Promise<GateVerdict> {
-    const hex = message.rawSha256;
+  async function check(input: CheckInput | ParseRefusalInput): Promise<GateVerdict> {
+    const { binding, account } = input;
+    const message = "message" in input ? input.message : undefined;
+    const hex = "raw" in input ? digestBytes(input.raw).slice(8) : input.message.rawSha256;
     const digest = `sha-256:${hex}`;
     const validDigest = /^[a-f0-9]{64}$/.test(hex);
     const event = (type: string, reason: string) =>
       rt.commitBindingEvent({ type, binding, ...(validDigest ? { digest } : {}), reason });
-    const write = (decision: Decision | { outcome: "checking" }) =>
-      verdicts.put(hex, { ...decision, time: now().toISOString() });
     try {
-      if (!validDigest) {
-        await event("binding-rejection", "malformed");
-        return { ...refused("malformed"), digest };
+      if (!validDigest) throw new Error("Invalid raw digest");
+      const accountKey = `${hex}-${digestBytes(account).slice(8)}`;
+      const stored = await verdicts.get(hex);
+      // Pre-account verdicts cannot identify which footer produced the mismatch.
+      const legacyParity =
+        stored?.outcome === "refused" && stored.reason === "human-parity-mismatch";
+      const previous = legacyParity ? undefined : stored;
+      const priorRefusal = refusalReason(previous) ?? refusalReason(await verdicts.get(accountKey));
+      if (priorRefusal) {
+        await event("binding-rejection", priorRefusal);
+        return { ...refused(priorRefusal), digest };
       }
-      const previous = await verdicts.get(hex);
-      if (previous?.outcome === "checking") {
+      const carrier = message && collectCarriers(message);
+      const jws = carrier?.copies.values().next().value;
+      const failure = "reason" in input ? input.reason : carrier?.failure;
+      const parityMismatch =
+        jws !== undefined && message?.warnings.includes("human-parity-unverified");
+      if (legacyParity && jws === undefined && !failure) {
         await event("binding-rejection", "result-uncertain");
         return { ...refused("result-uncertain"), digest };
       }
-      if (previous?.outcome === "refused") {
-        await event("binding-rejection", previous.reason);
-        return { ...refused(previous.reason), digest };
-      }
-      const { copies, failure } = collectCarriers(message);
-      const jws = copies.values().next().value;
-      const parityMismatch = message.warnings.includes("human-parity-unverified");
-      if (!failure && jws !== undefined && previous?.outcome === "admitted") {
-        // Each account's parser compares the readable copy with that account's settings.
-        if (parityMismatch) {
-          await event("binding-rejection", "human-parity-mismatch");
-          return { ...refused("human-parity-mismatch"), digest };
-        }
+      if (!failure && !parityMismatch && jws !== undefined && previous?.outcome === "admitted") {
         await event("channel-observation", "cached-verdict");
         return {
           outcome: "admitted",
@@ -182,6 +208,10 @@ export function createGate(
         await event("channel-observation", "no-structured-content");
         return { outcome: "unstructured", digest };
       }
+      const key =
+        failure === "human-parity-mismatch" || (!failure && parityMismatch) ? accountKey : hex;
+      const write = (decision: Decision | { outcome: "checking" }) =>
+        verdicts.put(key, { ...decision, time: now().toISOString() });
       await write({ outcome: "checking" });
       let decision: Decision;
       if (failure) {
@@ -190,6 +220,9 @@ export function createGate(
       } else if (jws === undefined) {
         await event("channel-observation", "no-structured-content");
         decision = { outcome: "unstructured" };
+      } else if (parityMismatch && previous?.outcome === "admitted") {
+        await event("binding-rejection", "human-parity-mismatch");
+        decision = refused("human-parity-mismatch");
       } else {
         decision = inboundDecision(
           await rt.receive(
@@ -215,13 +248,15 @@ export function createGate(
       return { ...refused("indeterminate"), digest };
     }
   }
+  function enqueue(input: CheckInput | ParseRefusalInput): Promise<GateVerdict> {
+    if (closed) return Promise.reject(new Error("Inbound gate is closed"));
+    const result = pending.then(() => check(input));
+    pending = result.catch(() => undefined);
+    return result;
+  }
   return {
-    check(input: CheckInput): Promise<GateVerdict> {
-      if (closed) return Promise.reject(new Error("Inbound gate is closed"));
-      const result = pending.then(() => check(input));
-      pending = result.catch(() => undefined);
-      return result;
-    },
+    check: (input: CheckInput) => enqueue(input),
+    recordParseRefusal: (input: ParseRefusalInput) => enqueue(input),
     async status() {
       await pending;
       return gateStatus(verdicts, ledger, peers);
@@ -258,13 +293,18 @@ async function gateStatus(
   peers: readonly { subject: string; thumbprint: string }[],
 ) {
   const counts = { admitted: 0, unstructured: 0, refused: 0 };
-  const uncertainDigests: string[] = [];
+  const uncertainDigests = new Set<string>();
   for (const hex of await verdicts.digests()) {
     const verdict = await verdicts.get(hex);
-    if (verdict?.outcome === "checking") uncertainDigests.push(`sha-256:${hex}`);
+    if (verdict?.outcome === "checking") uncertainDigests.add(`sha-256:${hex.slice(0, 64)}`);
     else if (verdict) counts[verdict.outcome]++;
   }
-  return { peers, ledger: verifyLedger(ledger.entries()), verdicts: counts, uncertainDigests };
+  return {
+    peers,
+    ledger: verifyLedger(ledger.entries()),
+    verdicts: counts,
+    uncertainDigests: [...uncertainDigests],
+  };
 }
 
 /** Inspect retained public pins, verdict counts and the ledger without opening the runtime. */

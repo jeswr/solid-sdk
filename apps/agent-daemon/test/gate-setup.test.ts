@@ -277,7 +277,7 @@ async function signedInput(
   };
 }
 
-it("refuses retries after the final verdict directory sync fails", async () => {
+it.each([2, 3, 4])("refuses retries when verdict directory sync %i fails", async (failure) => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();
@@ -287,17 +287,21 @@ it("refuses retries after the final verdict directory sync fails", async () => {
   const gate = await daemon.openGate(o);
   const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
   let directorySyncs = 0;
+  let outcomeDuringSync: string | undefined;
+  const verdictPath = join(o.directory, `verdict-${input.message.rawSha256}.json`);
   const failSync = vi.fn(async () => {
+    outcomeDuringSync = JSON.parse(await fs.readFile(verdictPath, "utf8")).outcome;
     throw new Error("directory fsync failed");
   });
   vi.mocked(open).mockImplementation(async (path, flags, mode) => {
     const handle = await fs.open(path, flags, mode);
-    if (path === o.directory && ++directorySyncs === 2) handle.sync = failSync;
+    if (path === o.directory && ++directorySyncs === failure) handle.sync = failSync;
     return handle;
   });
   try {
     expect(await gate.check(input)).toMatchObject({ outcome: "refused", reason: "indeterminate" });
     expect(failSync).toHaveBeenCalledOnce();
+    expect(outcomeDuringSync).toBe(failure === 2 ? "checking" : "admitted");
     expect(await gate.check(input)).toMatchObject({
       outcome: "refused",
       reason: "result-uncertain",
@@ -311,6 +315,55 @@ it("refuses retries after the final verdict directory sync fails", async () => {
       outcome: "refused",
       reason: "result-uncertain",
     });
+  } finally {
+    await reopened.close();
+  }
+});
+
+it.each([
+  "warning",
+  "parser refusal",
+])("scopes a first account's parity %s across restarts", async (mode) => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  await daemon.pinPeer({ ...o, card: peer.card });
+  const { input, jws } = await signedInput(o, peer);
+  const mismatch = {
+    ...input,
+    binding: "email-mime",
+    account: "different-footer",
+    message: { ...input.message, warnings: ["human-parity-unverified"] },
+  };
+  const matching = { ...input, binding: "email-mime", account: "matching-footer" };
+  const gate = await daemon.openGate(o);
+  try {
+    const decision =
+      mode === "warning"
+        ? await gate.check(mismatch)
+        : await gate.recordParseRefusal({
+            binding: mismatch.binding,
+            account: mismatch.account,
+            raw: encodeEnvelope(jws),
+            reason: "human-parity-mismatch",
+          });
+    expect(decision).toMatchObject({
+      outcome: "refused",
+      reason: "human-parity-mismatch",
+    });
+    expect((await gate.status()).verdicts).toEqual({ admitted: 0, refused: 1, unstructured: 0 });
+  } finally {
+    await gate.close();
+  }
+  const reopened = await daemon.openGate(o);
+  try {
+    expect(await reopened.check(matching)).toMatchObject({ outcome: "admitted" });
+    expect(await reopened.check({ ...mismatch, message: input.message })).toMatchObject({
+      outcome: "refused",
+      reason: "human-parity-mismatch",
+    });
+    expect(await reopened.check(matching)).toMatchObject({ outcome: "admitted" });
   } finally {
     await reopened.close();
   }
@@ -338,6 +391,35 @@ it("holds a legacy cached admission that carries no positive admission evidence"
       outcome: "refused",
       reason: "result-uncertain",
     });
+  } finally {
+    await gate.close();
+  }
+});
+
+it("rechecks a signed carrier against an old shared parity refusal", async () => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  await daemon.pinPeer({ ...o, card: peer.card });
+  const { input } = await signedInput(o, peer);
+  await writeFile(
+    join(o.directory, `verdict-${input.message.rawSha256}.json`),
+    JSON.stringify({
+      outcome: "refused",
+      reason: "human-parity-mismatch",
+      time: now().toISOString(),
+    }),
+    { mode: 0o600 },
+  );
+  const gate = await daemon.openGate(o);
+  try {
+    const { jsonLdBlocks: _, ...unstructured } = input.message;
+    expect(await gate.check({ ...input, message: unstructured })).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
+    expect(await gate.check(input)).toMatchObject({ outcome: "admitted" });
   } finally {
     await gate.close();
   }

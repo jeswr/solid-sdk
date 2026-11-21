@@ -152,23 +152,26 @@ export function createDaemon(o: DaemonOptions): Daemon {
     )
       throw new Error("Ingest bound exceeded");
     if (batch.next === undefined) throw new Error("Missing ingest cursor");
-    const cache = new Map<InboundRawMessage, BridgeMessage | ChannelParseError>();
+    const cache = new Map<InboundRawMessage, BridgeMessage>();
     const parsed: { message: BridgeMessage; id: string; verdict: GateVerdict }[] = [];
     // importInbound prepares its ACL before pulling. Complete all checks before invoking it.
     for (const item of batch.items) {
+      const source = { binding: account.binding.id, account: account.id };
       let message: BridgeMessage;
       try {
         message = account.binding.ingest.parse(item);
       } catch (error) {
         if (!(error instanceof ChannelParseError)) throw new Error("Reader parse failed");
-        cache.set(item, error);
+        const verdict = await gate.recordParseRefusal?.({
+          ...source,
+          raw: item.raw,
+          reason: error.message === "human-parity-mismatch" ? "human-parity-mismatch" : "malformed",
+        });
+        if (verdict?.outcome !== "refused" || verdict.reason === "indeterminate")
+          throw new Error("Inbound gate could not record the parser refusal");
         continue;
       }
-      const verdict = await gate.check({
-        binding: account.binding.id,
-        account: account.id,
-        message,
-      });
+      const verdict = await gate.check({ ...source, message });
       if (verdict.outcome === "admitted" || verdict.outcome === "unstructured") {
         cache.set(item, message);
         parsed.push({ message, id: item.id, verdict });
@@ -195,7 +198,6 @@ export function createDaemon(o: DaemonOptions): Daemon {
         },
         parse(item) {
           const observed = cache.get(item);
-          if (observed instanceof ChannelParseError) throw observed;
           if (!observed) throw new Error("Missing checked message");
           return observed;
         },

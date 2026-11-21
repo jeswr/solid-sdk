@@ -10,7 +10,7 @@ import { checkedProposalResult, proposalResultKey } from "./proposal-results.js"
 import type { Checkpoints, ProcessLease, ProposalResults } from "./types.js";
 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === "ENOENT";
-async function syncDirectory(directory: string) {
+export async function syncDirectory(directory: string) {
   const file = await open(directory, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     await file.sync();

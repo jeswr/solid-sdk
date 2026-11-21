@@ -122,7 +122,11 @@ function mimeCarriers(root: MimeNode): string[] {
       const start = lower.indexOf("<script", cursor);
       if (start < 0) break;
       const end = scriptTagEnd(lower, start + 7);
-      if (end < 0) throw new ChannelParseError("incomplete structured-copy extraction");
+      if (end < 0) {
+        if (lower.includes("application/ld+json", start + 7))
+          throw new ChannelParseError("incomplete structured-copy extraction");
+        break;
+      }
       cursor = end + 1;
       if (!lower.slice(start + 7, end).includes("application/ld+json")) continue;
       const close = lower.indexOf("</script", cursor);

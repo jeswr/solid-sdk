@@ -4961,6 +4961,11 @@ export class AgentRuntime {
       msg.kind === "describe" ||
       msg.kind === "invoke" ||
       (msg.kind === "propose" && msg.body.round === 1);
+    const peerNotice =
+      msg.kind === "refuse" ||
+      msg.kind === "challenge" ||
+      msg.kind === "unsupported" ||
+      msg.kind === "indeterminate";
     let conv = this.state.conversations[msg.conversation];
     let created = false;
 
@@ -5001,6 +5006,8 @@ export class AgentRuntime {
         !isTerminal(conv.phase) &&
         Date.parse(this.now()) - Date.parse(conv.openedAt) > this.limits.conversationTtlMs
       ) {
+        if (peerNotice)
+          this.reject("conversation-closed", "conversation is expired", { conversation: conv.id });
         conv = this.apply(conv, { type: "expire", at: this.now() });
       }
     } else {
@@ -5051,6 +5058,7 @@ export class AgentRuntime {
       }
       this.reject(next.reason, next.detail, { conversation: conv.id });
     }
+    if (peerNotice) return this.onClosed(next.state, msg);
     conv = this.saveConversation(next.state);
     const declaredPurpose =
       msg.kind === "invoke"
@@ -5070,11 +5078,6 @@ export class AgentRuntime {
         return this.onPropose(conv, msg);
       case "accept":
         return this.onAccept(conv, msg);
-      case "refuse":
-      case "challenge":
-      case "unsupported":
-      case "indeterminate":
-        return this.onClosed(conv, msg);
       case "invoke":
         return this.onInvoke(conv, msg);
       case "deliver":
@@ -5416,6 +5419,7 @@ export class AgentRuntime {
         reason: admission.reason,
         detail: admission.detail,
       };
+    this.saveConversation(conv);
     if (msg.kind === "challenge") {
       this.setDomain(`_challenge:${conv.id}`, msg.body.needs as unknown as Json, conv.id);
       this.record({

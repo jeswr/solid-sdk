@@ -407,6 +407,24 @@ it("keeps plain email with binary attachments and a legacy text charset", () => 
   });
 });
 
+it.each([
+  ["iso-8859-1", "quoted-printable", "<p>Caf=E9</p>", "Café"],
+  ["iso8859-1", "8bit", "<p>Hello</p>", "Hello"],
+  ["windows-1252", "base64", "PHA+Q2Fm6TwvcD4=", "Café"],
+  ["x-unknown", "quoted-printable", "<p>Caf=C3=A9 =ZZ</p>", "Café =ZZ"],
+  [undefined, "x-unknown", '<p>Hello</p><script src="', "Hello"],
+])("keeps plain HTML with charset %s and transfer encoding %s", (charset, cte, html, text) => {
+  const raw = [
+    charset ? `Content-Type: text/html; charset=${charset}` : "Content-Type: text/html",
+    `Content-Transfer-Encoding: ${cte}`,
+    "",
+    html,
+  ].join("\r\n");
+  const observation = inspectEmail(raw, config);
+  expect(observation.parity).toBe("none");
+  expect(observation.message.textBody.trim()).toBe(text);
+});
+
 it("refuses an oversized MIME part when it is the only signed copy", () => {
   const carrier = envelope(signed().compactJws);
   const oversized = `${" ".repeat(65536)}${carrier}`;

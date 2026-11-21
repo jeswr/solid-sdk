@@ -12,6 +12,7 @@ import {
 } from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
 import { inspectEmail } from "@jeswr/agent-channels/email-mime";
+import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import {
   type ApprovalContext,
@@ -55,6 +56,7 @@ import { Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
+import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js";
 import { createCliHost, runCli } from "../src/cli.js";
 import { createDaemon, pollInterval } from "../src/daemon.js";
 import { createInboundGate } from "../src/gate.js";
@@ -1370,6 +1372,97 @@ it.each([false, true])("stores and triages plain email with owner flag %s", asyn
     await gate.close();
   }
 });
+
+it("imports Latin-1 HTML mail before committing its cursor", async () => {
+  const h = harness();
+  const { gate } = await createTestGate();
+  const raw = [
+    "From: peer@example.test",
+    "To: receiver@example.test",
+    "Content-Type: text/html; charset=iso-8859-1",
+    "Content-Transfer-Encoding: quoted-printable",
+    "",
+    "<p>Caf=E9</p>",
+  ].join("\r\n");
+  h.ingest.list.mockResolvedValue({ items: [{ id: "latin1", raw }], next: "one" });
+  h.ingest.parse.mockImplementation(
+    (item) =>
+      inspectEmail(item.raw, {
+        parseEmail,
+        recipient: "receiver@example.test",
+        ownAccounts: new Set(["receiver@example.test"]),
+      }).message,
+  );
+  const extract = vi.spyOn(h.options.gateway.reader, "extract");
+  try {
+    await createDaemon({ ...h.options, gate }).once();
+    expect(extract).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        textBody: " Café ",
+        gate: expect.objectContaining({ outcome: "unstructured" }),
+      }),
+      expect.anything(),
+    );
+    expect([...h.pod.resources.values()].filter(({ body }) => body === raw)).toHaveLength(1);
+    expect(h.state.cursors.get("fixture")).toBe("one");
+  } finally {
+    await gate.close();
+  }
+});
+
+it("durably refuses a Matrix parser failure before a bridge retry can hide the carrier", async () => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "daemon-matrix-gate-"));
+  const gateDirectory = join(directory, "gate");
+  const identity = { agentWebId: AGENT_ID, ownerWebId: OWNER };
+  const native = event("$malformed", {
+    msgtype: "m.text",
+    body: "Fixture",
+    "org.jeswr.agent.envelope": { malformed: true },
+  });
+  const item = { id: native.event_id, raw: JSON.stringify(native) };
+  const bridged = { ...item, native: JSON.stringify({ bridge: "signal", event: native }) };
+  expect(() => parseMatrixMessage(item)).toThrow(ChannelParseError);
+  expect(parseMatrixMessage(bridged).jsonLdBlocks).toBeUndefined();
+  h.ingest.list
+    .mockResolvedValueOnce({ items: [item], next: "one" })
+    .mockResolvedValueOnce({ items: [bridged], next: "two" });
+  h.ingest.parse.mockImplementation(parseMatrixMessage);
+  const extract = vi.spyOn(h.options.gateway.reader, "extract");
+  const options: DaemonOptions = {
+    ...h.options,
+    accounts: [
+      {
+        id: "fixture",
+        enabled: true,
+        category: "chat",
+        binding: { id: "matrix", ingest: h.ingest },
+      },
+    ],
+  };
+  try {
+    await initGate({
+      ...identity,
+      directory: gateDirectory,
+      ownerDir: join(directory, "owner"),
+      confirm: async () => true,
+    });
+    await createDaemon({
+      ...options,
+      gate: createInboundGate({ directory: gateDirectory }),
+    }).once();
+    expect(h.state.cursors.get("fixture")).toBe("one");
+    await createDaemon({
+      ...options,
+      gate: createInboundGate({ directory: gateDirectory }),
+    }).once();
+    expect(extract).not.toHaveBeenCalled();
+    expect([...h.pod.resources.values()].some(({ body }) => body === item.raw)).toBe(false);
+    expect(h.state.cursors.get("fixture")).toBe("two");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 it.each([
   20_000,
   DIRECT.maxBytes,
@@ -1453,14 +1546,14 @@ it("never commits a cursor or executes after an ACL, inbox, model, audit, or cur
     expect(h.state.held()).toBe(false);
   }
 });
-it("skips a malformed message but fails a binding that exceeds the ingest bound", async () => {
+it("holds the cursor when the gate cannot record a parser refusal or ingest exceeds the bound", async () => {
   const h = harness();
   h.ingest.parse.mockImplementationOnce(() => {
     throw new ChannelParseError("fixture");
   });
-  await createDaemon(h.options).once();
+  await expect(createDaemon(h.options).once()).rejects.toThrow("Inbound gate");
   expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
-  expect(h.state.cursors.get("fixture")).toBe("one");
+  expect(h.state.cursors.size).toBe(0);
   await expect(
     createDaemon({ ...h.options, limits: { maxItems: 1, maxBytes: 1 } }).once(),
   ).rejects.toThrow("bound");
