@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
 import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
 import {
   type BridgeMessage,
@@ -44,6 +45,7 @@ import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { Cast, craftSigned, mandateOf } from "@jeswr/agent-reference/scenarios/common";
+import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { parseEmail } from "@jeswr/agentic-legacy-bridge";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
@@ -1516,10 +1518,8 @@ it.each([
   const extract = vi.spyOn(h.options.gateway.reader, "extract");
   const put = h.options.checkpoints.put.bind(h.options.checkpoints);
   h.options.checkpoints.put = async (account, cursor) => {
-    const entries = (await readFile(join(gateDirectory, "ledger.jsonl"), "utf8"))
-      .trim()
-      .split("\n");
-    expect(entries.map((line) => JSON.parse(line).record)).toContainEqual(
+    const entries = readLedgerSegment(join(gateDirectory, "ledger.jsonl"));
+    expect(entries.map((entry) => entry.record)).toContainEqual(
       expect.objectContaining({
         type: "binding-rejection",
         binding: channel,
