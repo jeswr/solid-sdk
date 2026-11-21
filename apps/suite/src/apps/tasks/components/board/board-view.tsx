@@ -36,6 +36,7 @@ import { LabelChip } from "../label-chip";
 import { LabelFilterBar } from "../label-filter-bar";
 import { MoveMenuItems } from "../move-menu";
 import { ProjectDot } from "../project-dot";
+import { ProjectBreadcrumb } from "../project-nesting";
 import { TaskCheck, useCompleting } from "../task-check";
 import { SectionEnd, SectionHeader } from "../task-list";
 import { TaskProgress } from "../tree-controls";
@@ -289,6 +290,7 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
   return (
     <TaskListFocus className="tsk-content tsk-board-view">
       <header className="tsk-view-header">
+        {project && <ProjectBreadcrumb project={project} />}
         <h1>
           {project && <ProjectDot colour={project.tracker.color} />}
           {project ? (

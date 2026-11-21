@@ -12,6 +12,7 @@ export interface TasksPreferences {
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
   collapsedSections: string[];
+  collapsedProjects: string[];
   sidebar: { labelsOpen: boolean; projectsOpen: boolean };
   showCompletedInProject: boolean;
   weekStart: "monday" | "sunday" | "locale";
@@ -22,6 +23,7 @@ export const defaultPreferences: TasksPreferences = {
   viewMode: {},
   sort: {},
   collapsedSections: [],
+  collapsedProjects: [],
   sidebar: { labelsOpen: true, projectsOpen: true },
   showCompletedInProject: false,
   weekStart: "locale",
@@ -33,6 +35,7 @@ export type PreferenceAction =
   | { type: "sort"; viewId: string; value: SortMode }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
+  | { type: "collapseProject"; url: string }
   | { type: "sidebar"; group: "labelsOpen" | "projectsOpen" }
   | { type: "showCompleted"; value: boolean }
   | { type: "weekStart"; value: TasksPreferences["weekStart"] };
@@ -79,6 +82,13 @@ export function preferencesReducer(
           ? state.collapsedSections.filter((id) => id !== action.sectionId)
           : [...state.collapsedSections, action.sectionId],
       };
+    case "collapseProject":
+      return {
+        ...state,
+        collapsedProjects: state.collapsedProjects.includes(action.url)
+          ? state.collapsedProjects.filter((url) => url !== action.url)
+          : [...state.collapsedProjects, action.url],
+      };
     case "sidebar":
       return {
         ...state,
@@ -113,6 +123,9 @@ export function parsePreferences(raw: string | null): TasksPreferences {
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
       collapsedSections: Array.isArray(data.collapsedSections)
         ? data.collapsedSections.filter((id): id is string => typeof id === "string")
+        : [],
+      collapsedProjects: Array.isArray(data.collapsedProjects)
+        ? data.collapsedProjects.filter((url): url is string => typeof url === "string")
         : [],
       sidebar: {
         labelsOpen: typeof sidebar.labelsOpen === "boolean" ? sidebar.labelsOpen : true,
