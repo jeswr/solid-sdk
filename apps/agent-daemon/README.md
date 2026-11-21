@@ -287,10 +287,10 @@ the reference runtime opened under the daemon's lease. The optional `admission`
 configuration gives the runtime a trusted task ID, reliance rules and operation
 handlers for evidence-bearing messages. The reference trust store supplies issuer
 pins and source authority rules. Gate recall selects the latest eligible revision of
-each statement ID whose delivery has a confirmed final `admitted` verdict. A
-precedence successor also needs a confirmed `admitted` verdict to supersede an
-earlier fact in recall. This applies both live and after reopening the same gate
-directory with the same task configuration.
+each statement ID whose delivery has a confirmed `admitted` verdict and a committed
+decision. A successor can supersede an earlier fact only after its own admission
+commits. This applies both live and after reopening the same gate directory with the
+same task configuration.
 
 Construct `ownerMemory` with `createAgentMemory`, using the authenticated
 workspace storage and a mandate loader that verifies owner, revocation, signed
@@ -426,8 +426,8 @@ receiver.
 
 Cloud configuration requires `AGENT_ENVIRONMENT=dev`, `AGENT_A2A_ENABLED=true`, an
 absolute `AGENT_CREDENTIAL_DIR` and port `AGENT_A2A_PORT` (default 8080). Only this
-explicit entrypoint opens ingress. Both POST routes share a 64 KiB body limit and
-a limit of 64 in-flight receiver calls.
+explicit entrypoint opens ingress. Both POST routes share a 64 KiB request body
+limit and 64 slots that cover reading the body through the end of the receiver call.
 
 - `POST /a2a` accepts `application/json` with an A2A 1.0 JSON-RPC
   `SendMessage` request declaring the required message-format extension. The built-in
@@ -442,11 +442,15 @@ a limit of 64 in-flight receiver calls.
   such as `{"reason":"bad-signature"}`.
 
 The listener rejects unsupported media types with 415 and oversized bodies with
-413. At capacity or while the gate is unavailable it returns 503. The gate
-verifies against its pinned trust and records its decision. It refuses malformed
+413. At capacity or while the gate is unavailable it returns 503. For early
+refusals it stops reading and closes the connection after sending the response.
+The gate verifies against its pinned trust and records its decision. It refuses malformed
 or unsigned messages, unknown keys, failed proofs, replayed messages, and invalid
 audiences or validity windows. Both built-in receivers expose only the receipt
-or reason code. Any protocol message the reference runtime prepares stays in
+or reason code. Their response sizes are bounded by the fixed receipt format and,
+for A2A, two copies of the correlation ID from the bounded request. Both gate
+outcomes use HTTP 200. Custom A2A receivers retain a 64 KiB response limit.
+Any protocol message the reference runtime prepares stays in
 its internal outbox. Ingress has no send capability.
 
 The listener also exposes body-free `GET /livez` and `/readyz` process probes.

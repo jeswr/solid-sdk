@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { A2A_BINDING, a2aResponse } from "@jeswr/agent-reference/bindings/a2a";
 import { envelopeBytes, envelopeJson } from "@jeswr/agent-reference/bindings/bytes";
 import type { DOCUMENT_MEDIA_TYPE, LEGACY_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
@@ -6,6 +7,16 @@ import type { A2aRequest, CloudReceiver } from "./cloud.js";
 import { auditGateReason, type Gate, type GateVerdict } from "./gate.js";
 
 type CarriageGate = Pick<Gate, "receiveCarriage">;
+const gateReceivers = new WeakSet<CloudReceiver>();
+
+function gateReceiver(receive: CloudReceiver) {
+  gateReceivers.add(receive);
+  return receive;
+}
+
+export function isGateReceiver(receive: CloudReceiver) {
+  return gateReceivers.has(receive);
+}
 
 function receipt(verdict: GateVerdict) {
   return verdict.outcome === "admitted"
@@ -52,7 +63,7 @@ function a2aHeaders(headers: A2aRequest["headers"]) {
 
 /** Accept A2A carriage through the daemon's existing, leased inbound gate. */
 export function createGateReceiver(gate: CarriageGate): CloudReceiver {
-  return async ({ body, headers, signal }) => {
+  return gateReceiver(async ({ body, headers, signal }) => {
     signal.throwIfAborted();
     const id = requestId(body);
     if (id === undefined) return { status: 400, body: '{"reason":"malformed"}' };
@@ -79,14 +90,14 @@ export function createGateReceiver(gate: CarriageGate): CloudReceiver {
       headers: response.headers,
       body: typeof id === "string" ? json : JSON.stringify({ ...JSON.parse(json), id }),
     };
-  };
+  });
 }
 
 export function createDirectHttpReceiver(
   gate: CarriageGate,
   mediaType: typeof DOCUMENT_MEDIA_TYPE | typeof LEGACY_MEDIA_TYPE,
 ): CloudReceiver {
-  return async ({ body, signal }) => {
+  return gateReceiver(async ({ body, signal }) => {
     signal.throwIfAborted();
     const verdict = await gate.receiveCarriage(
       { binding: "direct-http", delivery: { bytes: body, mediaType } },
@@ -94,5 +105,5 @@ export function createDirectHttpReceiver(
     );
     // TR-8: either verdict uses the same successful transport status.
     return { status: 200, body: JSON.stringify(receipt(verdict)) };
-  };
+  });
 }

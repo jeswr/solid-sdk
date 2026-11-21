@@ -502,17 +502,18 @@ export function createGate(
       input.binding,
       "replayKey" in input ? input.replayKey : undefined,
     );
-    const verdict = await check(input, (verdict, completion) =>
+    const { admissionReceipt, ...verdict } = await check(input, (verdict, completion) =>
       writer.prepare(inboundAuditDecision(verdict), completion),
     );
     await writer.commit(inboundAuditDecision(verdict));
+    if (admissionReceipt) admittedReceipts.add(admissionReceipt);
     return verdict;
   }
 
   async function check(
     input: InboundInput,
     prepare: (verdict: GateVerdict, completion: DecisionCompletion) => Promise<void>,
-  ): Promise<GateVerdict> {
+  ): Promise<GateVerdict & { admissionReceipt?: string }> {
     const { binding } = input;
     const message = "message" in input ? input.message : undefined;
     const delivery = "delivery" in input ? input.delivery : undefined;
@@ -591,17 +592,11 @@ export function createGate(
           }),
         );
       }
-      await verdicts.put(
-        key,
-        {
-          ...decision,
-          time: now().toISOString(),
-          ...(decision.outcome === "admitted" && { admissionReceipt }),
-        },
-        (hash) => prepare({ ...decision, digest }, { type: "verdict", hex: key, digest: hash }),
+      const receipt = decision.outcome === "admitted" ? { admissionReceipt } : {};
+      await verdicts.put(key, { ...decision, ...receipt, time: now().toISOString() }, (hash) =>
+        prepare({ ...decision, digest }, { type: "verdict", hex: key, digest: hash }),
       );
-      if (decision.outcome === "admitted") admittedReceipts.add(admissionReceipt);
-      return { ...decision, digest };
+      return { ...decision, ...receipt, digest };
     } catch {
       try {
         await event("binding-rejection", "indeterminate");

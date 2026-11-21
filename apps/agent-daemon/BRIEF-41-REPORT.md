@@ -755,3 +755,27 @@ responses, replays, and the shared in-flight limit. The valid discovery
 messages cause the reference runtime to prepare replies locally. The tests
 check for zero transmissions and zero outbound gate calls. All tracked edits
 are in the daemon. Temporary test fixtures were removed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Review 41r19 fixes
+
+- Both HTTP routes reserve one of the 64 shared slots before reading the body.
+  A test fills the slots with unfinished uploads, gets a 503 before sending any
+  extra body bytes, and checks that disconnecting a sender frees a slot.
+- Early 415, 413 and 503 responses close the connection after the response is
+  sent. Chunked uploads on both routes test that a 415 consumes no body bytes
+  and a 413 consumes at most 64 KiB.
+- Admission and refusal both return HTTP 200 for a 64 KiB A2A request. The
+  built-in reply size is bounded by the receipt and the request's correlation ID.
+  The A2A test also checks that the gate receives the original JSON spacing,
+  key order and escapes.
+- Facts become visible only after the decision record commits. A forced commit
+  failure keeps the delivery's fact hidden during and after the write attempt.
+
+TypeScript and Biome passed. The regular Vitest run passed 294 tests. Loopback
+binds failed with `EPERM` in 25 cloud tests, the CSS composition test and the D-2
+integration test. The packaged CLI, production packaging and launchd subprocess
+tests also failed. A separate run over local socket pairs passed all 26 cloud
+tests using Node's HTTP parser. The full workspace gate stopped at the unrelated
+suite-native build because `@capacitor/core` was unavailable.

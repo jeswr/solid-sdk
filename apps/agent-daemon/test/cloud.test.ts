@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { A2A_BINDING, a2aRequest, a2aResponse, readA2a } from "@jeswr/agent-reference/bindings/a2a";
 import { type ByteMessage, envelopeJson } from "@jeswr/agent-reference/bindings/bytes";
@@ -7,7 +8,7 @@ import { MessageNode } from "@jeswr/agent-reference/model/message-nodes";
 import { carriageBytes, DOCUMENT_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
 import { writeMessagePacket } from "@jeswr/agent-reference/wire/message-packet";
 import { chmod, mkdtemp, readdir, rm, stat } from "fs/promises";
-import { createServer, type IncomingHttpHeaders, request } from "http";
+import { createServer, type IncomingHttpHeaders, IncomingMessage, request } from "http";
 import { connect } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -18,6 +19,8 @@ import {
   runCloud,
   runConfiguredCloud,
 } from "../src/cloud.js";
+import { createGateReceiver } from "../src/cloud-receivers.js";
+import type { Gate } from "../src/gate.js";
 import { createProcessLease } from "../src/local.js";
 import { createTestGate } from "../src/testing.js";
 
@@ -264,7 +267,11 @@ it.each([
       return JSON.parse(response.body);
     }
     const frame = a2aRequest(wire, id, "/a2a", "Discard this untrusted text.");
-    const response = await send(port, "/a2a", "POST", frame.body, {
+    const { params, jsonrpc } = JSON.parse(Buffer.from(frame.body).toString());
+    const requestBody = Buffer.from(
+      String.raw`{ "params" : ${JSON.stringify(params)}, "method" : "\u0053endMessage", "id" : ${JSON.stringify(id)}, "jsonrpc" : ${JSON.stringify(jsonrpc)} }`,
+    );
+    const response = await send(port, "/a2a", "POST", requestBody, {
       ...frame.headers,
       authorization: "Bearer synthetic",
     });
@@ -276,7 +283,7 @@ it.each([
           carriage: "a2a-request",
           frame: {
             ...frame,
-            body: Buffer.from(frame.body),
+            body: requestBody,
             headers: expect.objectContaining({
               "A2A-Version": frame.headers["A2A-Version"],
               "A2A-Extensions": frame.headers["A2A-Extensions"],
@@ -381,6 +388,185 @@ it("enforces the direct HTTP route, media types and byte bound before calling th
   });
   await runCloud(async () => host, new AbortController().signal, env);
 });
+it.each([
+  "default",
+  "explicit",
+])("uses HTTP 200 for admission and refusal at the A2A request byte limit (%s receiver)", async (receiver) => {
+  const { env, port } = await setup();
+  const limit = 64 * 1024;
+  const sample = a2aResponse(
+    { mediaType: "application/json", bytes: Buffer.from('{"outcome":"admitted"}') },
+    "",
+    "/a2a",
+  );
+  // The response repeats the correlation ID. Two-byte characters stay within the parser's
+  // string length limit while making the larger refusal cross the request byte limit.
+  const id = "é".repeat(Math.floor((limit - sample.body.byteLength) / 4));
+  const frame = a2aRequest(
+    carriageBytes({ format: "awp-jws-compact/0.1", jws: "a.b.c" }),
+    "message",
+    "/a2a",
+  );
+  const json = JSON.stringify({ ...JSON.parse(Buffer.from(frame.body).toString()), id });
+  const body = json.padEnd(json.length + limit - Buffer.byteLength(json));
+  expect(Buffer.byteLength(body)).toBe(limit);
+  const receiveCarriage = vi
+    .fn<Gate["receiveCarriage"]>()
+    .mockResolvedValueOnce({ outcome: "admitted", digest: "" })
+    .mockResolvedValueOnce({ outcome: "refused", reason: "replay-conflict", digest: "" });
+  const gate = { receiveCarriage };
+  const host = {
+    ...composition(),
+    a2a: receiver === "explicit" ? createGateReceiver(gate) : undefined,
+    gate,
+  };
+  host.daemon.run = vi.fn(async () => {
+    const admitted = await send(port, "/a2a", "POST", body, frame.headers);
+    const refused = await send(port, "/a2a", "POST", body, frame.headers);
+    expect([admitted.status, refused.status]).toEqual([200, 200]);
+    expect(Buffer.byteLength(admitted.body)).toBeLessThanOrEqual(limit);
+    expect(Buffer.byteLength(refused.body)).toBeGreaterThan(limit);
+    const reply = JSON.parse(refused.body);
+    expect(reply.id).toBe(id);
+    expect(Buffer.from(reply.result.message.parts[0].data.bytes, "base64").toString()).toBe(
+      '{"reason":"replay-conflict"}',
+    );
+    expect(receiveCarriage).toHaveBeenCalledTimes(2);
+  });
+  await runCloud(async () => host, new AbortController().signal, env);
+});
+
+it.each([
+  { path: "/a2a", mediaType: "text/plain", status: 415 },
+  { path: "/answerable", mediaType: undefined, status: 415 },
+  { path: "/a2a", mediaType: "application/json", status: 413 },
+  { path: "/answerable", mediaType: DOCUMENT_MEDIA_TYPE, status: 413 },
+])("closes $path after $status with an unfinished oversized chunked upload", async ({
+  path,
+  mediaType,
+  status,
+}) => {
+  const { env, port } = await setup();
+  const host = { ...composition(), gate: { receiveCarriage: vi.fn() } };
+  const read = IncomingMessage.prototype.read;
+  let consumed = 0;
+  const reads = vi.spyOn(IncomingMessage.prototype, "read").mockImplementation(function (
+    this: IncomingMessage,
+    size,
+  ) {
+    const chunk: unknown = read.call(this, size);
+    if (this.url === path && Buffer.isBuffer(chunk)) consumed += chunk.length;
+    return chunk;
+  });
+  host.daemon.run = vi.fn(async () => {
+    const socket = connect(port, "127.0.0.1");
+    const reply: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => reply.push(chunk));
+    const closed = new Promise<void>((resolve, reject) => {
+      socket.on("error", (error) => {
+        if (!reply.length) reject(error);
+      });
+      socket.once("close", () => resolve());
+      socket.setTimeout(2000, () => reject(new Error("Upload connection stayed open")));
+    });
+    try {
+      const headers = `POST ${path} HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n`;
+      const type = mediaType ? `Content-Type: ${mediaType}\r\n` : "";
+      const chunk = `2000\r\n${"x".repeat(8192)}\r\n`;
+      socket.write(`${headers}${type}\r\n${chunk.repeat(32)}`);
+      await closed;
+      const response = Buffer.concat(reply).toString();
+      expect(response).toMatch(new RegExp(`^HTTP/1\\.1 ${status} `));
+      expect(response).toMatch(/\r\nconnection: close\r\n/i);
+      expect(consumed).toBeLessThanOrEqual(status === 415 ? 0 : 64 * 1024);
+      expect(host.gate.receiveCarriage).not.toHaveBeenCalled();
+      expect(host.a2a).not.toHaveBeenCalled();
+    } finally {
+      socket.destroy();
+    }
+  });
+  try {
+    await runCloud(async () => host, new AbortController().signal, env);
+  } finally {
+    reads.mockRestore();
+  }
+});
+
+it("reserves shared slots for unfinished uploads and reclaims them on disconnect", async () => {
+  const { env, port } = await setup();
+  const host = { ...composition(), gate: { receiveCarriage: vi.fn() } };
+  const upload = (path: string, mediaType: string) =>
+    request({
+      hostname: "127.0.0.1",
+      port,
+      path,
+      method: "POST",
+      agent: false,
+      headers: {
+        "content-type": mediaType,
+        "transfer-encoding": "chunked",
+        expect: "100-continue",
+      },
+    });
+  host.daemon.run = vi.fn(async () => {
+    const uploads = Array.from({ length: 64 }, (_, index) =>
+      index % 2 === 0
+        ? upload("/a2a", "application/json")
+        : upload("/answerable", DOCUMENT_MEDIA_TYPE),
+    );
+    let extra: ReturnType<typeof upload> | undefined;
+    try {
+      await Promise.all(
+        uploads.map(
+          (req) =>
+            new Promise<void>((resolve, reject) => {
+              req.on("error", reject);
+              req.once("response", (res) => {
+                res.resume();
+                reject(new Error(`Slow upload received ${res.statusCode} before continuing`));
+              });
+              req.once("continue", () => {
+                req.write("{");
+                resolve();
+              });
+              req.flushHeaders();
+            }),
+        ),
+      );
+      const overflow = upload("/answerable", DOCUMENT_MEDIA_TYPE);
+      extra = overflow;
+      const response = await new Promise<{ status?: number; connection?: string }>(
+        (resolve, reject) => {
+          overflow.on("error", reject);
+          overflow.once("continue", () => reject(new Error("Overloaded listener invited a body")));
+          overflow.once("response", (res) => {
+            res.resume();
+            res.once("end", () =>
+              resolve({ status: res.statusCode, connection: res.headers.connection }),
+            );
+          });
+          overflow.flushHeaders();
+        },
+      );
+      expect(response).toEqual({ status: 503, connection: "close" });
+      expect(host.gate.receiveCarriage).not.toHaveBeenCalled();
+      expect(host.a2a).not.toHaveBeenCalled();
+      uploads[0]?.destroy();
+      await vi.waitFor(async () => {
+        const recovered = await send(port, "/a2a", "POST", "{}", {
+          "content-type": "application/json",
+        });
+        expect(recovered.status).toBe(401);
+      });
+      expect(host.a2a).toHaveBeenCalledOnce();
+    } finally {
+      for (const req of uploads) req.destroy();
+      extra?.destroy();
+    }
+  });
+  await runCloud(async () => host, new AbortController().signal, env);
+});
+
 it("aborts the listener and waits for daemon drain before closing credentials", async () => {
   const { env, port } = await setup();
   const controller = new AbortController();
@@ -539,7 +725,7 @@ it("shares the in-flight limit even for pipelined requests on one connection", a
         );
       }
       socket.write(
-        `POST /answerable HTTP/1.1\r\nHost: localhost\r\nContent-Type: ${DOCUMENT_MEDIA_TYPE}\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}`,
+        `POST /answerable HTTP/1.1\r\nHost: localhost\r\nContent-Type: ${DOCUMENT_MEDIA_TYPE}\r\nContent-Length: 2\r\n\r\n{}`,
       );
       await vi.waitFor(() => expect(host.a2a).toHaveBeenCalledTimes(64));
       finish?.();
