@@ -17,7 +17,8 @@
  * - DELETE of a non-empty container is 409; the root cannot be deleted;
  * - the `.acl` document of an existing resource is auxiliary: like CSS, it is
  *   not listed in `ldp:contains` and is deleted together with its subject;
- * - `Link` headers carry `rel="type"`, `rel="acl"` and the storage root type;
+ * - `Link` headers carry `rel="type"`, `rel="acl"`, the storage root type and
+ *   `solid:storageDescription` to the read-only `/.well-known/solid` resource;
  * - `X-Solid-Demo-Access-Control: none` explicitly reports the lack of enforcement.
  *
  * Listings are serialised with `n3.Writer` the way a server would emit them.
@@ -40,6 +41,7 @@ const XSD = "http://www.w3.org/2001/XMLSchema#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const IANA = "http://www.w3.org/ns/iana/media-types/";
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+const STORAGE_DESCRIPTION = "http://www.w3.org/ns/solid/terms#storageDescription";
 
 /** Find the envelope boundary without interpreting Turtle inside it. N3 validates the body. */
 function insertDataBody(source: string): string | null {
@@ -94,6 +96,17 @@ class ListedResource extends TermWrapper {
   set modified(value: Date) {
     RequiredAs.object(this, `${DCT}modified`, value, LiteralFrom.dateTime);
   }
+}
+
+/** No service or capability entries are required for a storage that advertises none. */
+function storageDescription(root: string): Promise<string> {
+  const dataset = new Store();
+  new ListedResource(root, dataset, DataFactory).types.add(PIM_STORAGE);
+  const writer = new Writer({ format: "text/turtle" });
+  writer.addQuads([...dataset]);
+  return new Promise((resolve, reject) => {
+    writer.end((error, result) => (error ? reject(error) : resolve(result)));
+  });
 }
 
 /** One stored resource (containers carry no body; their listing is generated). */
@@ -198,6 +211,7 @@ function etagList(value: string | null): string[] | undefined {
 export function createDemoPod(options: DemoPodOptions): DemoPod {
   const root = new URL(options.root).href;
   if (!root.endsWith("/")) throw new Error("Demo pod root must end with '/'");
+  const descriptionUrl = new URL("/.well-known/solid", root).href;
   const now = options.now ?? (() => Date.now());
   const latency = options.latency ?? 0;
   const resources = new Map<string, DemoResource>();
@@ -335,12 +349,15 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   };
 
   const linkHeader = (url: string): string => {
-    const links = [`<${LDP}Resource>; rel="type"`];
+    const links = [
+      `<${LDP}Resource>; rel="type"`,
+      `<${descriptionUrl}>; rel="${STORAGE_DESCRIPTION}"`,
+    ];
     if (isContainerUrl(url)) {
       links.push(`<${LDP}Container>; rel="type"`, `<${LDP}BasicContainer>; rel="type"`);
     }
     if (url === root) links.push(`<${PIM_STORAGE}>; rel="type"`);
-    if (!url.endsWith(".acl")) links.push(`<${url}.acl>; rel="acl"`);
+    if (url !== descriptionUrl && !url.endsWith(".acl")) links.push(`<${url}.acl>; rel="acl"`);
     return links.join(", ");
   };
 
@@ -547,6 +564,18 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     const method = (init.method ?? request?.method ?? "GET").toUpperCase();
     const headers = new Headers(init.headers ?? request?.headers);
     if (latency > 0) await new Promise((resolve) => setTimeout(resolve, latency));
+    // Server metadata is virtual, survives old snapshots and is never a container member.
+    // Like CSS, it lives at the origin even when the storage root has a path prefix.
+    if (url === descriptionUrl) {
+      if (method === "GET" || method === "HEAD") {
+        return respond(
+          200,
+          { "content-type": "text/turtle", link: linkHeader(url) },
+          method === "HEAD" ? undefined : await storageDescription(root),
+        );
+      }
+      return respond(method === "OPTIONS" ? 204 : 405, { allow: "GET, HEAD, OPTIONS" });
+    }
     if (!url.startsWith(root)) return respond(404);
     const effectiveInit: RequestInit =
       init.body === undefined && request && method !== "GET" && method !== "HEAD"
@@ -586,6 +615,6 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    has: (url) => resources.has(url) || containers.has(url),
+    has: (url) => url === descriptionUrl || resources.has(url) || containers.has(url),
   };
 }
