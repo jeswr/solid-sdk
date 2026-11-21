@@ -23,12 +23,22 @@ export function accountPreferences(accountId: string): Preferences {
     return defaultPreferences;
   }
 }
-/** Permission is never requested here. The provider separately checks the account's opt-in. */
-export async function showDesktopNotification(notification: SuiteNotification): Promise<void> {
+/** `renotify` is in the Notifications spec but missing from the DOM lib; others ignore it. */
+type DesktopNotificationOptions = NotificationOptions & { renotify?: boolean };
+/**
+ * Permission is never requested here. The provider separately checks the account's opt-in.
+ * `renotify` alerts again when replacing a notification with the same tag (Chromium is
+ * otherwise silent); it is only sent with a tag, since browsers reject it without one.
+ */
+export async function showDesktopNotification(
+  notification: SuiteNotification,
+  { renotify = false }: { renotify?: boolean } = {},
+): Promise<void> {
   if (desktopPermission() !== "granted") return;
-  const options: NotificationOptions = {
+  const options: DesktopNotificationOptions = {
     ...(notification.body ? { body: notification.body } : {}),
     tag: notification.id,
+    ...(renotify && notification.id ? { renotify: true } : {}),
     data: { href: notification.href },
   };
   if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {

@@ -266,3 +266,42 @@ WebID and storage root. Another account's values never hydrate or broadcast into
 store. Create a fresh factory per authenticated session and dispose the old one; this revokes
 retained setters and aborts/fences late operations. Pending durable values remain available only
 to that same WebID/storage session on restart. Construction and speculative renders do no I/O.
+
+## Notification summaries (`./digest`)
+
+`@jeswr/suite-sdk/digest` is pure TypeScript with no React or I/O. Adapt transport records to
+`DigestNotification` (stable id, kind/category, app, actor/target, title, epoch `time`, read,
+optional urgent/blocking). `classifyUrgency` identifies access requests, security/sign-in
+notices, direct mentions, blocking agent approvals and explicitly urgent sources.
+
+`buildDigest(records, { since, now })` includes `(since, now]`, deduplicates ids, groups by
+app + target/thread + category, orders urgent/unread/newest/id, and returns sections, agent
+counts and a deterministic headline. At most 50 groups and 100 ids per group are emitted;
+counts and `omitted` retain the full eligible population. An explicit async
+`summarise(digest): Promise<string>` option makes the call async and replaces only the headline.
+No model or remote service is called by default. Hook failures propagate.
+
+For delivery, pass `digestedIds` (an empty array for the first delivery) to replace the
+lower timestamp boundary with ID receipts. Late arrivals are then included even when their
+creation time precedes `since`, back to `since - lateWindow` (default `DEFAULT_LATE_WINDOW`,
+7 days; `Infinity` disables the floor); future and invalid times remain excluded. The returned
+`digestedIds` holds at most `DIGEST_RECEIPT_LIMIT` (500) receipts, least recently listed
+first: every record in the current listing is refreshed, so a still-listed item keeps its
+receipt however many newer ones arrive. When one listing exceeds the cap, the least urgent,
+read and oldest receipts are dropped first. Persist it per account. Only a record listed
+again after its receipt was evicted, inside the late window, can be included again.
+Each item carries `key`, equal to `digestGroupKey(record)`, so adapters can match live
+records to a card group. `unread` counts all unread eligible records,
+including omitted groups, so delivery adapters can suppress pop-ups for read history.
+
+`nextDigestTime(schedule, now, tz?)` returns the next Date strictly after now, or null for off.
+Schedules use `mode: 'off' | 'hourly' | 'daily' | 'twice-daily'`; daily supplies `time: 'HH:MM'`,
+twice daily supplies `times: [first, second]`. Optional `quietHours: { enabled, start, end }`
+defers slots until quiet hours end; equal start/end disables quiet hours. `tz` is an IANA
+zone (default UTC). Daily folds use the first occurrence; spring gaps shift by the gap's
+duration. Hourly schedules include both occurrences of a repeated hour. `isDue(lastDelivered: Date | null, schedule, now, tz?)` catches up missed slots;
+a null or future watermark is due immediately outside quiet hours. Callers own clocks, persistence,
+account isolation, browser wake-up and desktop delivery.
+
+`inQuietHours(quiet, now, tz = "UTC")` exposes the same quiet-hours predicate for delivery
+adapters; reuse it rather than duplicating midnight-wrap rules in applications.

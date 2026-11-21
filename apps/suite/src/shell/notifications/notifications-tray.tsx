@@ -7,6 +7,7 @@ import { groupNotifications } from "../lib/notifications-model";
 import { NotificationItem } from "./notification-item";
 import styles from "./notifications.module.css";
 import { useNotifications } from "./provider";
+import { SummaryCard } from "./summary-card";
 
 export function NotificationsTray({
   onOpenSync,
@@ -55,6 +56,7 @@ export function NotificationsTray({
         </Button>
       </header>
       <div className={styles.list} ref={list} tabIndex={-1} aria-busy={loading}>
+        <SummaryCard />
         {loading && !items.length ? (
           <LoadingSkeleton preset="list" label="Loading notifications" count={3} />
         ) : null}

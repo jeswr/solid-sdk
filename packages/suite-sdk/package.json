@@ -27,6 +27,10 @@
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"
+    },
+    "./digest": {
+      "types": "./dist/digest/index.d.ts",
+      "default": "./dist/digest/index.js"
     }
   },
   "files": [
