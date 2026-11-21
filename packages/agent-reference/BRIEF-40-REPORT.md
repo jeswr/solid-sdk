@@ -317,3 +317,37 @@ The requested Vitest run passed all 50 tests across four files, including the
 record corpus, in 681 seconds with `--maxWorkers=2`. Biome passed with one
 existing warning and seven existing informational diagnostics. `git diff --check`
 passed, and the trace, outline, and run-manifest diff was empty.
+
+## Review fixes (40f)
+
+- Ledger hashing and sealing reject non-finite numbers before JSON serialization
+  can collapse them to `null`. The JSONL reader rejects them during parsing. The
+  regressions cover an overflowing number substituted for a sealed `null`, both
+  seal modes, and file and memory appends with non-finite values.
+  [Ledger](src/store/ledger.ts) · [Regressions](test/ledger-file-format.test.ts)
+- JSONL parsing rejects rows with a missing or invalid sequence or hash before
+  recovery filters the retained prefix. The recovery regression compares the
+  active and archived bytes after refusal. The reader rejects blank and
+  whitespace-only rows while allowing a single final newline.
+  [Reader](src/store/ledger.ts) · [Regressions](test/ledger-file-format.test.ts)
+- Legacy credential replay verifies the retained chain and checks it against the
+  trusted head when available or required. An invalid seal leaves the credential
+  unavailable. The restart regression changes an inbound refusal to an admission
+  without updating its seal.
+  [Replay](src/runtime/agent.ts) · [Regression](test/runtime-graph-ingress.test.ts)
+
+All ten regression cases failed before the fix and passed afterward on Node
+24.22.3. The library-only build passed with
+`npx tsc -p tsconfig.build.json && node scripts/copy-generated.mjs`.
+The requested Vitest run with `--maxWorkers=2` passed all 100 tests across six
+files in 694 seconds, including the sampled corpus and credential replay. Biome
+passed on the changed TypeScript files with 27 existing warnings and 12 existing
+informational diagnostics. The package typecheck, RDF pipeline check, and
+`git diff --check` passed.
+
+The Addendum A check ran `mortgage-core` and `pay-an-invoice` in a temporary copy.
+Both runs reported 278 runs, zero disagreements, and five blocked paths. The five
+selected traces matched apart from `generated.commit`. The other traces and
+outlines matched byte-for-byte, and the manifest and index rows matched. The
+script removed its temporary copy, and the worktree output files retained their
+original bytes.

@@ -87,6 +87,22 @@ export interface EvidenceLedger {
   entries(): readonly LedgerEntry[];
 }
 
+function requireFiniteNumber(_key: string, value: unknown): unknown {
+  if (typeof value === "number" && !Number.isFinite(value))
+    throw new TypeError("Corrupt ledger: non-finite number");
+  return value;
+}
+
+function snapshotRecord(record: LedgerRecord): LedgerEntry["record"] {
+  return JSON.parse(JSON.stringify(record, requireFiniteNumber));
+}
+
+function ledgerDigest(value: unknown): string {
+  // JSON serialization would otherwise collapse non-finite numbers to null.
+  JSON.stringify(value, requireFiniteNumber);
+  return digestOf(value);
+}
+
 function seal(
   seq: number,
   at: string,
@@ -94,17 +110,24 @@ function seal(
   record: LedgerEntry["record"],
   committed = false,
 ): LedgerEntry {
-  if (!committed) return { seq, at, prev, record, hash: digestOf({ seq, at, prev, record }) };
-  const recordDigest = digestOf(record);
-  return { seq, at, prev, record, recordDigest, hash: digestOf({ seq, at, prev, recordDigest }) };
+  if (!committed) return { seq, at, prev, record, hash: ledgerDigest({ seq, at, prev, record }) };
+  const recordDigest = ledgerDigest(record);
+  return {
+    seq,
+    at,
+    prev,
+    record,
+    recordDigest,
+    hash: ledgerDigest({ seq, at, prev, recordDigest }),
+  };
 }
 
 function validSeal(entry: LedgerRangeEntry): boolean {
   const { seq, at, prev, record, recordDigest, hash } = entry;
   if (recordDigest !== undefined)
     return (
-      (record === null || digestOf(record) === recordDigest) &&
-      digestOf({ seq, at, prev, recordDigest }) === hash
+      (record === null || ledgerDigest(record) === recordDigest) &&
+      ledgerDigest({ seq, at, prev, recordDigest }) === hash
     );
   return record !== null && seal(seq, at, prev, record).hash === hash;
 }
@@ -124,13 +147,7 @@ export class MemoryLedger implements EvidenceLedger {
   }
 
   append<T extends LedgerRecord>(record: T, at: string): LedgerEntry {
-    const entry = seal(
-      this.tip.seq + 1,
-      at,
-      this.tip.hash,
-      JSON.parse(JSON.stringify(record)),
-      this.committed,
-    );
+    const entry = seal(this.tip.seq + 1, at, this.tip.hash, snapshotRecord(record), this.committed);
     this.list.push(entry);
     this.tip = { seq: entry.seq, hash: entry.hash };
     return entry;
@@ -168,9 +185,17 @@ function isLedgerRecord(value: unknown): value is LedgerEntry["record"] {
 }
 
 function readLegacyLine(line: string): LedgerEntry {
-  const entry: unknown = JSON.parse(line);
+  const entry: unknown = JSON.parse(line, requireFiniteNumber);
   if (!isRecordObject(entry) || !isLedgerRecord(entry.record))
     throw new TypeError("Stored ledger entries require a record");
+  if (
+    typeof entry.seq !== "number" ||
+    !Number.isSafeInteger(entry.seq) ||
+    entry.seq < 1 ||
+    typeof entry.hash !== "string" ||
+    !entry.hash
+  )
+    throw new TypeError("Corrupt ledger: JSONL row has an invalid sequence or hash");
   return entry as unknown as LedgerEntry;
 }
 
@@ -196,17 +221,20 @@ function readSegment(path: string) {
   const first = text.trimStart()[0];
   // Store RDF begins with a named subject (or a comment). Legacy JSON can begin with a scalar.
   const format: SegmentFormat | undefined =
-    first === "<" || first === "#" ? "nquads" : first ? "jsonl" : undefined;
+    first === "<" || first === "#" ? "nquads" : text ? "jsonl" : undefined;
   const rows: { entry: LedgerEntry; end: number }[] = [];
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop();
   let end = 0;
   let start = 0;
-  for (const line of text.split("\n")) {
+  for (const line of lines) {
     end += line.length + 1;
-    if (!line.trim()) continue;
     if (format === "jsonl") {
+      if (!line.trim()) throw new TypeError("Corrupt ledger: blank JSONL row");
       rows.push({ entry: readLegacyLine(line), end });
       continue;
     }
+    if (!line.trim()) continue;
     const match = ENTRY_BOUNDARY.exec(line);
     if (!match?.[1]) continue;
     if (end > text.length) throw new TypeError("Incomplete record block");
@@ -350,18 +378,13 @@ export class FileLedger implements EvidenceLedger {
   }
 
   private sealNext(record: LedgerEntry["record"], at: string): LedgerEntry {
-    return seal(
-      (this.last?.seq ?? 0) + 1,
-      at,
-      this.last?.hash ?? GENESIS,
-      JSON.parse(JSON.stringify(record)),
-      this.committed,
-    );
+    return seal((this.last?.seq ?? 0) + 1, at, this.last?.hash ?? GENESIS, record, this.committed);
   }
 
   append<T extends LedgerRecord>(record: T, at: string): LedgerEntry {
+    const snapshot = snapshotRecord(record);
     if (this.currentCount >= this.bounds.segmentMaxEntries) this.rotate(at);
-    const entry = this.sealNext(record as unknown as LedgerEntry["record"], at);
+    const entry = this.sealNext(snapshot, at);
     this.writeLine(entry);
     return entry;
   }
@@ -510,7 +533,11 @@ export function verifyLedgerRange(
     if (e.prev !== prev) return fail(e, i === 0 ? "anchor link" : "broken link");
     if (
       !validSeal(e) &&
-      !(e.record === null && e.recordDigest === undefined && witnessedApprovals?.has(digestOf(e)))
+      !(
+        e.record === null &&
+        e.recordDigest === undefined &&
+        witnessedApprovals?.has(ledgerDigest(e))
+      )
     )
       return fail(e, "hash mismatch");
     prev = e.hash;

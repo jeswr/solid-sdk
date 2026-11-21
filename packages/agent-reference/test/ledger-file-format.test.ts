@@ -10,6 +10,7 @@ import {
   FileLedger,
   LEDGER_GENESIS,
   type LedgerEntry,
+  MemoryLedger,
   readLedgerSegment,
   verifyLedgerAtHead,
   verifyLedgerRange,
@@ -98,6 +99,55 @@ it.each(["false", "null", "[]", '"entry"', "0"])("rejects %s as the first JSONL 
     );
   }));
 
+it("rejects an overflowing JSONL number in place of a sealed null", () =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: "jsonl" });
+    ledger.append({ type: "event", value: [null] }, now);
+    const saved = ledger.head();
+    const valid = readFileSync(path, "utf8");
+    writeFileSync(path, valid.replace("[null]", "[1e400]"));
+
+    expect(() => readLedgerSegment(path)).toThrow("non-finite number");
+    expect(() => verifyLedgerAtHead(ledger.entries(), saved)).toThrow("non-finite number");
+  }));
+
+it.each([false, true])("rejects non-finite hash inputs with commitments set to %s", (committed) => {
+  const ledger = new MemoryLedger();
+  if (committed) ledger.enableRangeCommitments();
+  const entry = ledger.append({ type: "event", value: [null] }, now);
+  const tampered = { ...entry, record: { ...entry.record, value: [Infinity] } };
+  expect(() => verifyLedgerAtHead([tampered], ledger.head())).toThrow("non-finite number");
+});
+
+it.each([NaN, Infinity, -Infinity])("refuses to seal a record containing %s", (value) =>
+  temp((path) => {
+    const file = new FileLedger(path, { segmentFormat: "jsonl", segmentMaxEntries: 1 });
+    const memory = new MemoryLedger();
+    file.append({ type: "event" }, now);
+    const bytes = readFileSync(path);
+    const saved = file.head();
+    const record = { type: "event", nested: { values: [value] } };
+    expect(() => file.append(record, now)).toThrow("non-finite number");
+    expect(() => memory.append(record, now)).toThrow("non-finite number");
+    expect(file.head()).toEqual(saved);
+    expect(file.segments()).toEqual([]);
+    expect(readFileSync(path)).toEqual(bytes);
+    expect(memory.head()).toEqual(LEDGER_GENESIS);
+  }));
+
+it.each(["\n", " \t\n"])("rejects a blank JSONL row between sealed entries (%j)", (blank) =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: "jsonl" });
+    ledger.append({ type: "event", value: 1 }, now);
+    ledger.append({ type: "event", value: 2 }, now);
+    const saved = ledger.head();
+    const valid = readFileSync(path, "utf8");
+    expect(verifyLedgerAtHead(ledger.entries(), saved).ok).toBe(true);
+    writeFileSync(path, valid.replace("\n", `\n${blank}`));
+
+    expect(() => verifyLedgerAtHead(ledger.entries(), saved)).toThrow("blank JSONL row");
+  }));
+
 it.each(["head", "range"])("rejects a missing row during %s verification", (mode) =>
   temp((path) => {
     const ledger = new FileLedger(path);
@@ -128,6 +178,23 @@ it.each(["before", "between"])("rejects a non-entry JSONL line %s retained entri
       "Stored ledger entries require a record",
     );
     expect(readFileSync(path, "utf8")).toBe(corrupted);
+  }));
+
+it("refuses recovery when a JSONL record is missing its sequence and hash", () =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: "jsonl", segmentMaxEntries: 1 });
+    ledger.append({ type: "event", value: 1 }, now);
+    ledger.append({ type: "event", value: 2 }, now);
+    const saved = ledger.head();
+    const archive = `${path}.seg-000001`;
+    const archived = readFileSync(archive);
+    appendFileSync(path, '{"record":{"type":"event"}}\n');
+    const corrupted = readFileSync(path);
+
+    expect(() => ledger.recoverUncommittedSuffix(saved)).toThrow("invalid sequence or hash");
+    expect(readFileSync(path)).toEqual(corrupted);
+    expect(readFileSync(archive)).toEqual(archived);
+    expect(ledger.head()).toEqual(saved);
   }));
 
 it("restores the JSONL final newline at the saved head before appending", () =>

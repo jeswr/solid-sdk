@@ -1118,8 +1118,15 @@ export class AgentRuntime {
    */
   private legacyCredentialDecisions() {
     const decisions = new Map<string, { digest: string; admitted: boolean }>();
+    const entries = this.auditEntries();
+    const head = this.trustedAuditHead();
+    const check =
+      head || this.ledger.requiresTrustedCheckpoint
+        ? verifyLedgerAtHead(entries, head)
+        : verifyLedger(entries);
+    if (!check.ok) return decisions;
     let message: { id: string; digest: string } | undefined;
-    for (const { record } of this.auditEntries()) {
+    for (const { record } of entries) {
       if (
         record.type === "message-in" &&
         typeof record.id === "string" &&
