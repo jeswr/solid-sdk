@@ -673,6 +673,62 @@ it.each([
   await runCloud(async () => host, new AbortController().signal, env);
 });
 
+it.each([
+  ["/a2a", "application/json"],
+  ["/answerable", DOCUMENT_MEDIA_TYPE],
+])("replies when the client half-closes right after a complete body on %s", async (path, type) => {
+  const { env, port } = await setup();
+  const host = {
+    ...composition(),
+    a2a: undefined,
+    gate: {
+      receiveCarriage: vi.fn<Gate["receiveCarriage"]>().mockImplementation(async () => {
+        // The gate takes a moment to commit, so the FIN is processed before the reply.
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return { outcome: "admitted", digest: "" };
+      }),
+    },
+  };
+  const wire = carriageBytes({ format: "awp-jws-compact/0.1", jws: "a.b.c" });
+  const frame = a2aRequest(wire, "half-close", "/a2a");
+  const payload = Buffer.from(path === "/a2a" ? frame.body : wire.bytes);
+  const a2aHeaders =
+    path === "/a2a"
+      ? `A2A-Version: ${frame.headers["A2A-Version"]}\r\nA2A-Extensions: ${frame.headers["A2A-Extensions"]}\r\n`
+      : "";
+  for (const framing of ["fixed-length", "chunked"]) {
+    host.daemon.run = vi.fn(async () => {
+      const [framingHeader, body] =
+        framing === "chunked"
+          ? [
+              "Transfer-Encoding: chunked",
+              `${payload.length.toString(16)}\r\n${payload}\r\n0\r\n\r\n`,
+            ]
+          : [`Content-Length: ${payload.length}`, payload.toString()];
+      const socket = connect(port, "127.0.0.1");
+      const reply: Buffer[] = [];
+      socket.on("data", (chunk: Buffer) => reply.push(chunk));
+      const closed = new Promise<void>((resolve, reject) => {
+        socket.once("close", resolve);
+        socket.once("error", reject);
+        socket.setTimeout(3000, () => reject(new Error("No reply after half-close")));
+      });
+      try {
+        // Send the whole request and the TCP FIN together.
+        socket.end(
+          `POST ${path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: ${type}\r\n${a2aHeaders}${framingHeader}\r\n\r\n${body}`,
+        );
+        await closed;
+        expect(Buffer.concat(reply).toString()).toMatch(/^HTTP\/1\.1 200 /);
+      } finally {
+        socket.destroy();
+      }
+    });
+    await runCloud(async () => host, new AbortController().signal, env);
+  }
+  expect(host.gate.receiveCarriage).toHaveBeenCalledTimes(2);
+});
+
 it("reserves shared slots for unfinished uploads and reclaims them on disconnect", async () => {
   const { env, port } = await setup();
   const host = { ...composition(), gate: { receiveCarriage: vi.fn() } };
