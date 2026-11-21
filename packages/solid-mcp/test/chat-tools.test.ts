@@ -63,6 +63,12 @@ function fakePod() {
       resources.set(url, { body, contentType: headers.get("content-type") ?? "text/turtle" });
       return new Response(null, { status: 201, headers: { etag: '"chat"' } });
     }
+    if (method === "DELETE") {
+      if (!resources.has(url)) return new Response(null, { status: 404 });
+      if (headers.get("if-match") !== '"chat"') return new Response(null, { status: 412 });
+      resources.delete(url);
+      return new Response(null, { status: 205 });
+    }
     const resource = resources.get(url);
     if (!resource) return new Response(null, { status: 404 });
     if (url.endsWith("/")) {
@@ -576,6 +582,35 @@ describe("MCP chat tools over the scoped fetch port", () => {
         {},
       ),
     ).rejects.toThrow(/read-only/);
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("deletes only conditionally, in pod scope and when writable (sst-5ax.39)", async () => {
+    const pod = fakePod();
+    const config = { fetch: pod.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const port = createChatPodPort(config);
+    const remove = port.delete?.bind(port);
+    if (!remove) throw new Error("chat port cannot delete");
+    const target = `${ROOT}private/chats/claude/thread-1/m-legacy.ttl`;
+    await port.write(target, new TextEncoder().encode(""), "text/turtle", {});
+    await expect(remove(target, { ifMatch: "" })).rejects.toThrow(/If-Match/);
+    await expect(remove(target, {} as { ifMatch: string })).rejects.toThrow(/If-Match/);
+    await expect(remove("https://evil.example/x", { ifMatch: '"chat"' })).rejects.toThrow(
+      /pod-scope/,
+    );
+    await expect(
+      createChatPodPort({ ...config, readOnly: true }).delete?.(target, { ifMatch: '"chat"' }),
+    ).rejects.toThrow(/read-only/);
+    await expect(remove(target, { ifMatch: '"stale"' })).rejects.toMatchObject({ status: 412 });
+    expect(pod.resources.has(target)).toBe(true);
+    await remove(target, { ifMatch: '"chat"' });
+    const sent = pod.requests.filter((r) => r.method === "DELETE");
+    expect(sent.map((r) => [r.url, r.headers.get("if-match")])).toEqual([
+      [target, '"stale"'],
+      [target, '"chat"'],
+    ]);
+    expect(pod.resources.has(target)).toBe(false);
+    await expect(remove(target, { ifMatch: '"chat"' })).rejects.toMatchObject({ status: 404 });
   });
 
   it("discovers relative nonstandard ACL links on absent and existing containers", async () => {

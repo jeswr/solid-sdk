@@ -556,7 +556,9 @@ unauthenticated POST preflight responses. No wildcard CORS or cookie credentials
 The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)`
 and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
 configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
-keeps write permission checks; callers must supply `readOnly: false` explicitly.
+keeps write permission checks; callers must supply `readOnly: false` explicitly. Its
+`delete` (used only by the owner-run chat redaction repair) requires a non-empty `If-Match`
+and the same write permission and pod scope.
 
 ## Packaging (prepared, not published)
 
