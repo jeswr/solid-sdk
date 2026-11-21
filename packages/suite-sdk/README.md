@@ -266,3 +266,72 @@ WebID and storage root. Another account's values never hydrate or broadcast into
 store. Create a fresh factory per authenticated session and dispose the old one; this revokes
 retained setters and aborts/fences late operations. Pending durable values remain available only
 to that same WebID/storage session on restart. Construction and speculative renders do no I/O.
+
+## Undo (`./undo`, UX-6)
+
+`createUndoStack({ limit = 50, now = Date.now, isRetryable = () => false })` creates
+framework-independent, in-memory history. Import `UndoEntry`, `UndoStack`, `UndoItem`,
+`UndoResult` and `UndoStackOptions` from `@jeswr/suite-sdk/undo`.
+
+- `push({ label, scope, undo, redo?, expiresAt? })` returns a unique ID and clears only
+  that scope's redo history. `undo(scope)` selects the latest live entry;
+  `undoById(id)` selects the exact entry offered by a toast; `redo(scope)` reapplies it.
+- All callbacks receive an `AbortSignal`. One callback runs at a time across the stack;
+  concurrent requests resolve `{ status: 'busy' }`. Results are `done`, `nothing`,
+  `busy`, `expired`, or `{ status: 'failed', error }`. Expiry uses milliseconds since
+  epoch; entries with `expiresAt <= now()` are dropped without running.
+- Failed operations are consumed unless `isRetryable(error)` returns true. Retryable
+  entries stay in their original position. A new push during undo prevents its redo
+  from becoming available. Undo-only entries are consumed on success.
+- At most `limit` entries, counting undo and redo history, are retained per scope;
+  oldest entries are dropped. `limit` must be a positive integer.
+- `entries(scope?)` returns pending undo entries oldest first, with `{ id, label,
+  scope, canRedo }`; `canRedo` indicates that the entry supplies a redo callback.
+  `subscribe(listener)` returns an unsubscribe function. The unfiltered snapshot is
+  stable between changes; `useUndoStack(stack)` from `@jeswr/suite-sdk` subscribes with
+  `useSyncExternalStore` and supplies an empty snapshot during server rendering.
+- `clear()` removes all history and aborts the running callback. Late settlements
+  cannot restore cleared entries. The callback must pass the signal into its I/O
+  and check it before changing local state. An ignored abort cannot cancel a write
+  already performed by a transport.
+
+### Adopting the undo stack
+
+In the suite shell, call `useUndo()` from `shell/undo/provider` and push the inverse
+**after a successful reversible change**. The shell supplies the current route's app
+scope, an Undo toast, Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Native undo in editable controls
+is preserved. The shell retires history and toast actions on account replacement or
+sign-out. Standalone clients own a stack per session and call `clear()` on teardown.
+
+For an ordinary Tasks completion, capture the open/closed state and completion
+timestamp before writing, then register both transitions through the app's adapter:
+
+```ts
+import { createUndoStack } from '@jeswr/suite-sdk/undo';
+
+const stack = createUndoStack(); // owned by the authenticated session
+async function completeTask(task: Task) {
+  const previous = { state: task.state, endedAt: task.endedAt };
+  const next = { state: 'closed' as const, endedAt: new Date() };
+  await writeCompletion(task.url, next);
+  stack.push({
+    label: `Completed ${task.title}`,
+    scope: 'tasks',
+    undo: (signal) => writeCompletion(task.url, previous, { signal }),
+    redo: (signal) => writeCompletion(task.url, next, { signal }),
+  });
+}
+```
+
+`writeCompletion` is the app's existing persistence adapter; it updates its local
+completion state and writes the same fields. In a shell component, use `push` from
+`useUndo()` in place of `stack.push` and omit `scope`. Capture values rather than
+closing over a mutable task, preserve unrelated fields, and supply redo only when
+repeating the operation is supported. Tasks' repeating completion also retains its
+`CompletionPlan.previous` snapshot and reserved `copyUrl`: undo restores due date,
+all-day and reminder fields and removes that completed occurrence. Preserve that
+existing `undoCompletion(stored, result)` behavior in the migration adapter; only
+provide redo if it can reuse the same occurrence identity. Delayed deletion entries
+should set `expiresAt`
+to the point when restoring the resource stops being possible. Tasks and Drive's
+existing flows are migrated separately.
