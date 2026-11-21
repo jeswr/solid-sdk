@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-import { type DatasetCore, parseRdfSync, type Quad } from "@jeswr/fetch-rdf";
+import { parseRdfSync, type Quad } from "@jeswr/fetch-rdf";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { closeSync, fstatSync, openSync, readSync } from "fs";
 import { type Store, Writer } from "n3";
@@ -17,42 +17,53 @@ type LocalStoreFormat = "application/n-quads" | "text/turtle";
 // In Unicode mode, astral code points are matched whole. A match is unpaired.
 const UNPAIRED_SURROGATE = /[\ud800-\udfff]/u;
 
-function assertNamedQuads(dataset: Iterable<Quad>): void {
-  for (const { subject, predicate, object, graph } of dataset) {
-    if (
-      subject.termType !== "NamedNode" ||
-      predicate.termType !== "NamedNode" ||
-      (object.termType !== "NamedNode" && object.termType !== "Literal") ||
-      (graph.termType !== "NamedNode" && graph.termType !== "DefaultGraph")
-    )
-      throw new TypeError("Store RDF requires named nodes");
-    for (const term of [subject, predicate, object, graph]) {
-      if (
-        UNPAIRED_SURROGATE.test(term.value) ||
-        (term.termType === "Literal" && UNPAIRED_SURROGATE.test(term.datatype.value))
-      )
-        throw new TypeError("Store RDF requires well-formed Unicode");
-    }
-  }
+function assertNamedQuad({ subject, predicate, object, graph }: Quad): void {
+  if (
+    subject.termType !== "NamedNode" ||
+    predicate.termType !== "NamedNode" ||
+    (object.termType !== "NamedNode" && object.termType !== "Literal") ||
+    (graph.termType !== "NamedNode" && graph.termType !== "DefaultGraph")
+  )
+    throw new TypeError("Store RDF requires named nodes");
+  if (
+    UNPAIRED_SURROGATE.test(subject.value) ||
+    UNPAIRED_SURROGATE.test(predicate.value) ||
+    UNPAIRED_SURROGATE.test(object.value) ||
+    UNPAIRED_SURROGATE.test(graph.value) ||
+    (object.termType === "Literal" && UNPAIRED_SURROGATE.test(object.datatype.value))
+  )
+    throw new TypeError("Store RDF requires well-formed Unicode");
 }
 
 /** Synchronous deterministic N-Quads. Sort the serialized UTF-8 lines bytewise. */
-export function writeNQuads(dataset: DatasetCore, maxBytes = STORE_QUAD_BYTES): string {
-  assertNamedQuads(dataset);
+export function writeNQuads(quads: Iterable<Quad>, maxBytes = STORE_QUAD_BYTES): string {
+  return serializeQuads(quads, maxBytes);
+}
+
+function serializeQuads(quads: Iterable<Quad>, maxBytes: number): string {
   const writer = new Writer({ format: "N-Quads" });
-  const lines: Buffer[] = [];
+  const lines: string[] = [];
   let bytes = 0;
-  for (const { subject, predicate, object, graph } of dataset) {
-    const line = Buffer.from(writer.quadToString(subject, predicate, object, graph));
-    bytes += line.length;
+  let ascii = true;
+  for (const quad of quads) {
+    assertNamedQuad(quad);
+    const { subject, predicate, object, graph } = quad;
+    const line = writer.quadToString(subject, predicate, object, graph);
+    const length = Buffer.byteLength(line);
+    bytes += length;
+    ascii &&= length === line.length;
     if (bytes > maxBytes) throw new RangeError("Store RDF exceeds its byte limit");
     lines.push(line);
   }
-  return Buffer.concat(lines.sort(Buffer.compare), bytes).toString("utf8");
+  // String sort is bytewise for ASCII. Use UTF-8 byte order for other terms.
+  if (ascii) return lines.sort().join("");
+  return Buffer.concat(lines.map((line) => Buffer.from(line)).sort(Buffer.compare), bytes).toString(
+    "utf8",
+  );
 }
 
-export function assertCanonicalSnapshotBlock(bytes: string, dataset: DatasetCore): void {
-  if (bytes !== writeNQuads(dataset, Infinity)) throw new TypeError("Noncanonical snapshot block");
+export function assertCanonicalSnapshotBlock(bytes: string, quads: Iterable<Quad>): void {
+  if (bytes !== serializeQuads(quads, Infinity)) throw new TypeError("Noncanonical snapshot block");
 }
 
 export function readNQuads(text: string): IndexedStore {
@@ -62,7 +73,7 @@ export function readNQuads(text: string): IndexedStore {
     maxBytes: STORE_QUAD_BYTES,
     maxTermLength: STORE_QUAD_BYTES,
   });
-  assertNamedQuads(parsed);
+  for (const quad of parsed) assertNamedQuad(quad);
   return new IndexedStore([...parsed]);
 }
 
@@ -128,7 +139,7 @@ export function readLocalStoreRdf(text: string, format: LocalStoreFormat): Store
     // N-Quads spells out each term. Keep headroom for implicit xsd:string datatypes.
     maxTotalTermLength: turtle ? LOCAL_TRUST_TERM_CHARS : 4 * bytes,
   });
-  assertNamedQuads(parsed);
+  for (const quad of parsed) assertNamedQuad(quad);
   return parsed;
 }
 

@@ -52,7 +52,7 @@ import type {
   OutcomeConclusion,
 } from "../core/types.js";
 import type { ContextItem } from "../gates/common.js";
-import { readStateSnapshot, SnapshotMemo } from "../model/store/state.js";
+import { readStateSnapshot, SnapshotMemo, SnapshotReader } from "../model/store/state.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
 import { decodeSnapshotEntry, readLocalStoreFile } from "../wire/store-quads.js";
 
@@ -441,6 +441,10 @@ export function writeFileDurable(path: string, content: string, flags: string): 
 
 /** Read one atomic snapshot without acquiring a writer lease. */
 export function readRuntimeStateFile(path: string): RuntimeState {
+  return loadRuntimeStateFile(path, readStateSnapshot);
+}
+
+function loadRuntimeStateFile(path: string, readRdf: (text: string) => RuntimeState): RuntimeState {
   let text: string;
   try {
     text = readLocalStoreFile(path, "application/n-quads");
@@ -449,14 +453,15 @@ export function readRuntimeStateFile(path: string): RuntimeState {
     throw error;
   }
   return text.trimStart().startsWith("{")
-    ? normaliseState(JSON.parse(text))
-    : readStateSnapshot(text);
+    ? normaliseState(decodeSnapshotEntry(text))
+    : readRdf(text);
 }
 
 export class FileStateStore implements StateStore {
   readonly lockPath: string;
   private readonly recoveryPath: string;
   private memo?: SnapshotMemo;
+  private reader?: SnapshotReader;
   private token: string | undefined;
 
   constructor(private readonly path: string) {
@@ -551,7 +556,9 @@ export class FileStateStore implements StateStore {
   }
 
   load(): RuntimeState {
-    return readRuntimeStateFile(this.path);
+    this.reader ??= new SnapshotReader();
+    const reader = this.reader;
+    return loadRuntimeStateFile(this.path, (text) => reader.read(text, !this.memo));
   }
 
   save(state: RuntimeState): void {
@@ -559,7 +566,7 @@ export class FileStateStore implements StateStore {
     const tmp = `${this.path}.tmp-${this.token}`;
     let bytes: string;
     try {
-      this.memo ??= new SnapshotMemo();
+      this.memo ??= this.reader?.takeWriteMemo() ?? new SnapshotMemo();
       bytes = this.memo.write(state);
       const expected = normaliseState(decodeSnapshotEntry(JSON.stringify(state)));
       assertSameSnapshot(expected, this.memo.decode(bytes));
@@ -578,6 +585,7 @@ export class FileStateStore implements StateStore {
   }
 
   close(): void {
+    this.reader = undefined;
     if (!this.token) return;
     const holder = readLock(this.lockPath);
     if (holder !== "missing" && holder?.token === this.token) {

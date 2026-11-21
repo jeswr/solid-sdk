@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-import type { Term } from "@jeswr/fetch-rdf";
+import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { isSafeAbsoluteIri, readLiteral } from "@jeswr/model-runtime";
 import { RequiredAs, TermFrom } from "@rdfjs/wrapper";
-import { DataFactory, Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import { digestBytes } from "../../core/canonical.js";
 import { assertJsonBounds, BoundsError } from "../../core/limits.js";
 import { isIsoInstant } from "../../core/schema.js";
@@ -197,7 +197,7 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
       return decodeSnapshotEntry(term.value) as Json;
     return term === undefined
       ? undefined
-      : readValue(term, this.dataset, scopedId(ownerId, predicate));
+      : readValue(term, this.dataset, () => scopedId(ownerId, predicate));
   }
 
   override setField(name: string, value: unknown): void {
@@ -300,23 +300,33 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
 }
 
 export function inGraph(source: Store, graph: string): IndexedStore {
+  return new IndexedStore(quadsInGraph(source, graph));
+}
+
+export function quadsInGraph(source: Store, graph: string): Quad[] {
   const name = DataFactory.namedNode(graph);
-  return new IndexedStore(
-    [...source].map(({ subject, predicate, object }) =>
-      DataFactory.quad(subject, predicate, object, name),
-    ),
+  return [...source].map(({ subject, predicate, object }) =>
+    DataFactory.quad(subject, predicate, object, name),
   );
 }
 
 export function graphContents(source: Store, graph: string): Store {
-  return new Store(
-    source
-      .getQuads(null, null, null, DataFactory.namedNode(graph))
-      .map(({ subject, predicate, object }) => DataFactory.quad(subject, predicate, object)),
+  return defaultGraphStore(source.getQuads(null, null, null, DataFactory.namedNode(graph)));
+}
+
+export function defaultGraphStore(quads: readonly Quad[]): Store {
+  return new IndexedStore(
+    quads.map(({ subject, predicate, object }) => DataFactory.quad(subject, predicate, object)),
   );
 }
 
 export function assertSameGraph(actual: Store, expected: Store): void {
-  if (actual.size !== expected.size || [...expected].some((quad) => !actual.has(quad)))
+  if (
+    actual.size !== expected.size ||
+    !expected.every(
+      ({ subject, predicate, object, graph }) =>
+        actual.countQuads(subject, predicate, object, graph) === 1,
+    )
+  )
     throw new TypeError("Unexpected or inconsistent store RDF");
 }

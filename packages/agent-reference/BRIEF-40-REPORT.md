@@ -1439,3 +1439,103 @@ captured in temporary files. The remaining 39 cases hit `listen EPERM` on
   - Releasing startup leases after factory failure or cancellation.
   - Synchronous receiver failures and response size bounds.
   - Shared in-flight limit for pipelined requests.
+
+## Daemon speed (40v)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The Node 24 CPU profile for the two recall tests on `171175102` attributed
+about 1.15 seconds to state reads and 0.88 seconds to saves. Rebuilding and
+parsing the canonical graph took about 0.51 seconds within reads. Per-entry
+verification took about 0.49 seconds within saves. N3 lookups and named-value
+decoding were prominent. Assembling and hashing the contents header took
+about 10 ms in the same profile.
+
+A cold load still decodes the RDF and rebuilds the canonical representation.
+When that representation matches the file, the one parse and byte comparison
+verify both the graph and its contents digest. Files with a different RDF
+layout still go through graph comparison, including the legacy Agreement
+timestamp handling. Repeat loads of a cached snapshot reread the bounded
+file with fatal UTF-8 decoding, match the header, and hash the body before
+returning a fresh copy of the state.
+
+The first save after a canonical load reuses entry encodings by their JSON
+text. Save verification parses the outgoing blocks, checks their canonical
+bytes, and reuses verification for unchanged blocks. It also uses the same
+entry quads for decoding, byte comparison, and checking cross-entry links.
+The writer serializes staged entry quads directly. Named-value reads check
+each list position once and compute value IDs only for collections and nulls.
+Writer-assigned IDs and per-entry reference limits still apply. Tests cover
+same-length corruption after a cached read and verify that changing one entry
+after reopening encodes only that entry.
+
+### Local timings
+
+Daemon timings are median Vitest test-body times from three Node 24.22.3
+runs with file parallelism disabled. Main is `ff5581b55`, including its
+versions of `fetch-rdf` and `solid-odrl`. Before is `171175102`. The 50-save runs
+used the populated state fixture, changed one nested value each save, and
+added 25 entries. Each save benchmark reports the median of four runs.
+The corpus row is one filtered Vitest test per revision with
+`AWP_STORE_RDF=1` set by the test.
+
+| Workload | Main locally | Before | After | After / main |
+| --- | ---: | ---: | ---: | ---: |
+| Recheck a released proposal after installing a deny-all mandate | 1,042 ms | 1,472 ms | 1,236 ms | 1.19× |
+| Recall refused successor across restart | 711 ms | 1,600 ms | 1,074 ms | 1.51× |
+| Recall refused successor revision across restart | 470 ms | 1,420 ms | 980 ms | 2.08× |
+| 50 durable saves | | 504 ms | 401 ms | |
+| 50 RDF-verified memory saves | | 291 ms | 255 ms | |
+| State corpus `cohort-count/baseline` | | 92.48 s | 72.59 s | |
+
+The revision recall case took 813 ms on main, 1,857 ms before, and
+1,464 ms after when run by itself. These are also medians of three runs.
+The isolated case is 1.80× main. It is 2.08× when it follows the other
+recall test in the combined run.
+
+### Verification
+
+The library compile and generated-file copy passed. The trace check passed
+across five scenario paths, with 278 manifest runs, zero disagreements, and
+five blocked paths. All 101 tests passed across the six store, ledger,
+named-value, capability, and state RDF files. The RDF pipeline check passed
+with 216 existing allowances. The populated v2 fixture encoded byte for byte
+as it did on `171175102` and decoded to the same state.
+
+Daemon typecheck passed. The full daemon run passed 297 of 339 tests,
+including the three performance cases at their existing timeouts. These 39
+cases could not listen on `127.0.0.1` in the sandbox and reported
+`listen EPERM`.
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A proposals with
+  executor-gated transfers and cumulative spending.
+- `test/css.test.ts` — the in-memory CSS pod and direct binding through signed
+  halt.
+- `test/cloud.test.ts` — 37 cases
+  - Private persistent state and explicit Key Vault model keys.
+  - Refusal of `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown` bindings.
+  - Required A2A receiver and binding.
+  - Bounded A2A and probes, preserved authorization bytes, and suppressed
+    provider errors.
+  - Signed admission on `/a2a` with compact input and on `/answerable` with
+    compact and document input.
+  - Empty 503 for decision commit failures on both routes.
+  - Direct HTTP route, media types, and request byte bound before the gate.
+  - HTTP 200 for admission and refusal at the A2A byte limit with the default
+    and explicit receivers.
+  - Closing unfinished oversized chunked uploads on both routes at 415,
+    413, and in both 417 cases per route.
+  - Reply and slot release when final bytes and EOF arrive together on both
+    routes with fixed-length and chunked bodies.
+  - Reply after the client half-closes on either route.
+  - Shared slots for unfinished uploads and reclamation on disconnect.
+  - Listener abort, daemon drain, and credential close order.
+  - Composition close on daemon and listener startup failures.
+  - File lease retention through inbound cancellation and drain.
+  - Startup lease release after factory failure or cancellation.
+  - Synchronous receiver failures and response size bounds.
+  - Shared in-flight limit for pipelined requests.
+
+Three other cases passed on rerun with subprocess output captured in regular
+temporary files. They cover packaged CLI help and JSON/CSV exports, launchd
+plist validation, and production dependency packaging.

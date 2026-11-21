@@ -442,8 +442,9 @@ it("checks the RDF graph when the decoded entry matches the original JSON", () =
   const write = writeNQuads;
   const encoder = vi.spyOn(storeQuads, "writeNQuads").mockImplementation((dataset, maxBytes) => {
     if (maxBytes !== Infinity) return write(dataset, maxBytes);
-    const [quad] = dataset;
-    dataset.add(
+    const quads = [...dataset];
+    const [quad] = quads;
+    quads.push(
       DataFactory.quad(
         quad!.subject,
         DataFactory.namedNode("urn:example:unexpected"),
@@ -451,7 +452,7 @@ it("checks the RDF graph when the decoded entry matches the original JSON", () =
         quad!.graph,
       ),
     );
-    return write(dataset, maxBytes);
+    return write(quads, maxBytes);
   });
   try {
     state.domain.updated = true;
@@ -538,6 +539,34 @@ it("does not encode an unchanged entry again", () => {
   }
 });
 
+it("reuses the canonical entry encodings for the first save after reopening", () => {
+  const state = emptyState();
+  state.domain = { first: true, second: ["repeated", "repeated"] };
+  store.save(state);
+  store.close();
+  store = new FileStateStore(path);
+  const reopened = store.load();
+  reopened.domain.first = false;
+
+  const counts: number[] = [];
+  const write = SnapshotMemo.prototype.write;
+  const spy = vi.spyOn(SnapshotMemo.prototype, "write").mockImplementation(function (
+    this: SnapshotMemo,
+    input,
+  ) {
+    const bytes = write.call(this, input);
+    counts.push(this.encodedEntries);
+    return bytes;
+  });
+  try {
+    store.save(reopened);
+    expect(counts).toEqual([1]);
+  } finally {
+    spy.mockRestore();
+  }
+  expect(readRuntimeStateFile(path)).toEqual(reopened);
+});
+
 it("refuses every entry-boundary truncation of a populated snapshot", () => {
   const state = completeFixture();
   store.save(state);
@@ -574,14 +603,18 @@ it("refuses an earlier RDF snapshot that has no contents digest", () => {
   expect(() => readRuntimeStateFile(path)).toThrow(/missing snapshot contents digest/i);
 });
 
-it("refuses a validly shaped alteration with the original head and entry count", () => {
+it("refuses a same-length alteration even after loading the original snapshot", () => {
   const state = emptyState();
   state.domain.entry = "original";
   store.save(state);
+  const loaded = store.load();
+  loaded.domain.entry = "local edit";
+  expect(store.load().domain.entry).toBe("original");
   const bytes = readFileSync(path, "utf8");
   const changed = bytes.replace('"original"', '"modified"');
   expect(changed).not.toBe(bytes);
   writeFileSync(path, changed);
+  expect(() => store.load()).toThrow(/snapshot contents digest mismatch/i);
   expect(() => readRuntimeStateFile(path)).toThrow(/snapshot contents digest mismatch/i);
 });
 

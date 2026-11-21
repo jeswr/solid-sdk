@@ -21,6 +21,7 @@ import { agreementSpec, operationRefSpec, participantRefSpec } from "../message-
 import { SCHEMA, scopedId, XSD } from "../named-values.js";
 import {
   assertSameGraph,
+  defaultGraphStore,
   exact,
   field,
   graphContents,
@@ -28,6 +29,7 @@ import {
   inGraph,
   instant,
   link,
+  quadsInGraph,
   readStoreText,
   StoreNode,
   storeInstant,
@@ -419,7 +421,13 @@ function layoutBlock(dataset: Store): LayoutBlock {
       if (!pending.length) return;
       assertBlockBoundary(bytes);
       const actual = readLocalStoreRdf(bytes, "application/n-quads");
-      if (actual.size !== pending.length || pending.some((quad) => !actual.has(quad)))
+      if (
+        actual.size !== pending.length ||
+        pending.some(
+          ({ subject, predicate, object, graph }) =>
+            actual.countQuads(subject, predicate, object, graph) !== 1,
+        )
+      )
         throw new TypeError("Invalid snapshot layout block");
       assertCanonicalSnapshotBlock(bytes, actual);
       pending = [];
@@ -470,7 +478,7 @@ function encodeEntry(section: Section, key: string, id: string, raw: Json, retai
   entry.types.add(AWP + (typed(section) ? "TypedStateEntry" : "StateEntry"));
   entry.put(ENTRY_KEY, storeText(key));
   writePayload(section, raw, id, local, policies);
-  const graph = inGraph(local, sectionIri(section));
+  const graph = quadsInGraph(local, sectionIri(section));
   const authored = retainQuads ? [...graph, ...policies] : undefined;
   return {
     bytes: writeNQuads(graph, Infinity),
@@ -480,7 +488,7 @@ function encodeEntry(section: Section, key: string, id: string, raw: Json, retai
         .getGraphs(null, null, null)
         .map((graph) => [
           graph.value,
-          writeNQuads(new IndexedStore(policies.getQuads(null, null, null, graph)), Infinity),
+          writeNQuads(policies.readQuads(null, null, null, graph), Infinity),
         ]),
     ),
   };
@@ -499,7 +507,8 @@ function verifyEntry(section: Section, key: string, row: EntryPayload): Verified
     row.bytes + [...row.policies.values()].join(""),
     "application/n-quads",
   );
-  const local = graphContents(dataset, sectionIri(section));
+  const quads = dataset.getQuads(null, null, null, namedNode(sectionIri(section)));
+  const local = defaultGraphStore(quads);
   const value = readPayload(
     section,
     new StoreNode(row.id, local, "StateEntry"),
@@ -508,7 +517,13 @@ function verifyEntry(section: Section, key: string, row: EntryPayload): Verified
   if (row.authored && JSON.stringify(value) === row.native) {
     // Exact JSON includes nested field order. The same input would produce the
     // same canonical graph, so verify the RDF bytes against the original quads.
-    if (dataset.size !== row.authored.length || row.authored.some((quad) => !dataset.has(quad)))
+    if (
+      dataset.size !== row.authored.length ||
+      row.authored.some(
+        ({ subject, predicate, object, graph }) =>
+          dataset.countQuads(subject, predicate, object, graph) !== 1,
+      )
+    )
       throw new TypeError(`Inconsistent snapshot entry in ${section}`);
   } else {
     // Typed wrappers can change property order. Recheck their canonical form.
@@ -522,16 +537,14 @@ function verifyEntry(section: Section, key: string, row: EntryPayload): Verified
   }
   // Canonical blocks contain one complete statement per line and no comments.
   // Their exact bytes are also the input to the snapshot contents digest.
-  for (const [graph, bytes] of [[sectionIri(section), row.bytes] as const, ...row.policies]) {
-    assertCanonicalSnapshotBlock(
-      bytes,
-      new IndexedStore(dataset.getQuads(null, null, null, namedNode(graph))),
-    );
+  assertCanonicalSnapshotBlock(row.bytes, quads);
+  for (const [graph, bytes] of row.policies) {
+    assertCanonicalSnapshotBlock(bytes, dataset.readQuads(null, null, null, namedNode(graph)));
   }
   row.authored = undefined;
   const subjects = new Set<string>();
   const links = new Set<string>();
-  for (const { subject, object } of local) {
+  for (const { subject, object } of quads) {
     subjects.add(subject.value);
     if (object.termType === "NamedNode") links.add(object.value);
   }
@@ -563,6 +576,10 @@ export class SnapshotMemo {
   encodedEntries = 0;
 
   constructor(private readonly retainQuads = true) {}
+
+  get outputHeader(): string {
+    return this.output ? this.root.bytes + this.output.contents.bytes : "";
+  }
 
   write(state: RuntimeState): string {
     if (
@@ -691,9 +708,25 @@ export function stateDataset(state: RuntimeState): Store {
 
 export class UnsupportedSnapshotVersion extends Error {}
 export function stateFromRdf(dataset: Store): RuntimeState {
+  return decodeSnapshot(dataset);
+}
+
+function decodeSnapshot(
+  dataset: Store,
+  text?: string,
+  onCanonical?: (memo: SnapshotMemo, digest: string, state: RuntimeState) => void,
+): RuntimeState {
   const digest = readSnapshotHeader(dataset);
   const decoded = decodeState(dataset);
-  const canonical = stateDataset(decoded);
+  const memo = new SnapshotMemo(onCanonical !== undefined);
+  const bytes = memo.write(decoded);
+  // The writer includes a fresh digest of the canonical body. Exact equality
+  // verifies both the digest and the full graph without parsing that body again.
+  if (bytes === text) {
+    onCanonical?.(memo, digest.value, decoded);
+    return decoded;
+  }
+  const canonical = readLocalStoreRdf(bytes, "application/n-quads");
   if (!canonical.has(DataFactory.quad(namedNode(ROOT), namedNode(CONTENTS_DIGEST), digest)))
     throw new TypeError("Snapshot contents digest mismatch");
   // Earlier v2 writers tagged Agreement timestamps with xsd:dateTime even when
@@ -793,12 +826,58 @@ function decodeState(dataset: Store): RuntimeState {
   return result as unknown as RuntimeState;
 }
 
-export function readStateSnapshot(text: string): RuntimeState {
+export function readStateSnapshot(
+  text: string,
+  onCanonical?: (memo: SnapshotMemo, digest: string, state: RuntimeState) => void,
+): RuntimeState {
   try {
-    return stateFromRdf(readLocalStoreRdf(text, "application/n-quads"));
+    return decodeSnapshot(readLocalStoreRdf(text, "application/n-quads"), text, onCanonical);
   } catch (cause) {
     if (cause instanceof UnsupportedSnapshotVersion) throw cause;
     const detail = cause instanceof Error ? `: ${cause.message}` : "";
     throw new Error(`state snapshot is malformed${detail}`, { cause });
+  }
+}
+
+function cloneCachedState(state: RuntimeState): RuntimeState | undefined {
+  try {
+    return structuredClone(state);
+  } catch {
+    // The JSON literal fallback can represent values deeper than structuredClone allows.
+    return undefined;
+  }
+}
+
+/** Reuse one verified canonical snapshot for callers that read the same file repeatedly. */
+export class SnapshotReader {
+  private last?: { header: string; digest: string; state: RuntimeState };
+  private writeMemo?: SnapshotMemo;
+
+  read(text: string, prepareWrite: boolean): RuntimeState {
+    const last = this.last;
+    if (
+      last &&
+      text.startsWith(last.header) &&
+      digestBytes(text.slice(last.header.length)) === last.digest
+    ) {
+      const copy = cloneCachedState(last.state);
+      if (copy) return copy;
+    }
+    this.last = undefined;
+    this.writeMemo = undefined;
+    // Keep the read cache small even though the file reader accepts larger snapshots.
+    if (text.length > 4 * 1024 * 1024) return readStateSnapshot(text);
+    return readStateSnapshot(text, (memo, digest, state) => {
+      const copy = cloneCachedState(state);
+      if (copy) this.last = { header: memo.outputHeader, digest, state: copy };
+      if (prepareWrite) this.writeMemo = memo;
+    });
+  }
+
+  /** Carry forward the entry encodings. The save path still verifies each new block. */
+  takeWriteMemo(): SnapshotMemo | undefined {
+    const memo = this.writeMemo;
+    this.writeMemo = undefined;
+    return memo;
   }
 }
