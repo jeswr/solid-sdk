@@ -42,12 +42,17 @@ export function writeNQuads(dataset: DatasetCore): string {
   return Buffer.concat(lines.sort(Buffer.compare), bytes).toString("utf8");
 }
 
-export function readNQuads(text: string): IndexedStore {
+export function readNQuads(text: string, maxBytes = STORE_QUAD_BYTES): IndexedStore {
   const parsed = parseRdfSync(text, {
     format: "application/n-quads",
-    maxBytes: STORE_QUAD_BYTES,
+    maxBytes,
     maxTermLength: STORE_QUAD_BYTES,
   });
   assertNamedQuads(parsed);
   return new IndexedStore([...parsed]);
+}
+
+/** Parse an entry from the memo’s own JSON.stringify output, matching legacy state semantics. */
+export function decodeSnapshotEntry(text: string): unknown {
+  return JSON.parse(text);
 }

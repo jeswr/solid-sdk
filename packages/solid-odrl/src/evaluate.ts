@@ -39,13 +39,14 @@ import type {
   DecisionRule,
   EvaluateOptions,
   EvaluationResult,
+  OdrlAction,
   OdrlConstraint,
   OdrlDuty,
   OdrlPolicy,
   OdrlRule,
   RequestContext,
 } from "./types.js";
-import { ACTION_IMPLIED_BY, type OdrlActionName, XSD } from "./vocab.js";
+import { ACTION_IMPLIED_BY, ACTION_IRI, type OdrlActionName, XSD } from "./vocab.js";
 
 /**
  * Evaluate a {@link RequestContext} against an {@link OdrlPolicy}. Pure +
@@ -53,8 +54,25 @@ import { ACTION_IMPLIED_BY, type OdrlActionName, XSD } from "./vocab.js";
  */
 export function evaluate(
   policy: OdrlPolicy,
-  request: RequestContext,
+  request: Omit<RequestContext, "action"> & { readonly action: OdrlAction },
   options: EvaluateOptions = {},
+): EvaluationResult {
+  if (!Object.hasOwn(ACTION_IRI, request.action))
+    return {
+      decision: "notApplicable",
+      reason: "The request action has no standard ODRL evaluation semantics",
+      matchedPermissions: [],
+      matchedProhibitions: [],
+      duties: [],
+      conflict: false,
+    };
+  return evaluateStandard(policy, request as RequestContext, options);
+}
+
+function evaluateStandard(
+  policy: OdrlPolicy,
+  request: RequestContext,
+  options: EvaluateOptions,
 ): EvaluationResult {
   const now = options.now ?? new Date();
 
@@ -250,7 +268,8 @@ function effectiveRule(rule: OdrlRule, policy: OdrlPolicy): OdrlRule {
 function toDecisionRule(rule: OdrlRule, type: "permission" | "prohibition"): DecisionRule {
   return {
     type,
-    action: rule.action,
+    // Only standard actions can reach the matched-rule trace.
+    action: rule.action as OdrlActionName,
     ...(rule.target !== undefined && { target: rule.target }),
     ...(rule.assignee !== undefined && { assignee: rule.assignee }),
     ...(rule.id !== undefined && { id: rule.id }),
@@ -294,9 +313,9 @@ function ruleMatchStatus(
 }
 
 /** Does the rule's action concept cover the requested action (odrl:use umbrella)? */
-function actionApplies(ruleAction: OdrlActionName, requested: OdrlActionName): boolean {
+function actionApplies(ruleAction: OdrlAction, requested: OdrlActionName): boolean {
   // The rule's action applies if it is the requested action, or the umbrella `use`.
-  return ACTION_IMPLIED_BY[requested].has(ruleAction);
+  return ACTION_IMPLIED_BY[requested].has(ruleAction as OdrlActionName);
 }
 
 /**

@@ -99,7 +99,7 @@ export const RESOURCE_REGISTER: readonly GovernedResource[] = [
   },
   {
     id: "trust-store",
-    paths: ["trust.json"],
+    paths: ["trust.ttl", "trust.json"],
     description: "Pinned peer verification material and scoped source-authority rules.",
     ownerRole: "owner",
     source: "reviewed introductions (`pin` after thumbprint comparison)",

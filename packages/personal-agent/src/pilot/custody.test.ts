@@ -5,12 +5,12 @@
  *  - Separate custody is refused inside the service directory and never overwrites a key.
  *  - A startup failure AFTER the single-writer lock (and role construction) releases the lock.
  */
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { main, openAgent } from "./cli.js";
-import { readOwnerKey } from "./setup.js";
+import { readOwnerKey, readTrustFile, writeTrustFile } from "./setup.js";
 import { FileStateStore } from "./store/state.js";
 
 const NOW = "2026-10-19T08:00:00Z";
@@ -103,10 +103,9 @@ describe("owner custody and startup", () => {
 
   it("a startup failure after the lock (and role construction) releases the lock", async () => {
     const { root } = await initAlice();
-    const trustPath = join(root, "alice", "trust.json");
-    const trust = JSON.parse(readFileSync(trustPath, "utf8"));
-    trust.keys = [...trust.keys, trust.keys[0]]; // valid JSON; TrustStore.load refuses it
-    writeFileSync(trustPath, JSON.stringify(trust));
+    const dir = join(root, "alice");
+    const trust = await readTrustFile(dir);
+    await writeTrustFile(dir, { ...trust, keys: [...trust.keys, trust.keys[0]!] });
     await expect(openAgent(root, "alice", () => new Date(NOW))).rejects.toThrow(/pinned twice/);
     const lock = new FileStateStore(join(root, "alice", "state.json")); // throws if still locked
     lock.close();

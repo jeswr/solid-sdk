@@ -1,6 +1,7 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-odrl
 
@@ -119,7 +120,14 @@ are attributed correctly. Records preserve the `isPartOf` constraint and collect
 ## Key API
 
 - Express: `policyToRdf`, `policyToTurtle`, `policyToJsonLd`, `serialize`.
-- Parse: `parsePolicy`, `policyFromRdf`.
+  Rule and duty actions accept an ODRL short name or an absolute profile IRI.
+  Writers retain profile IRIs verbatim and reject invalid actions with
+  `OdrlSerializationError`. Standard evaluation applies only the standard action hierarchy.
+- Parse with `parsePolicy` or `policyFromRdf`. By default, readers map standard
+  action IRIs to short names and skip rules and duties with unrecognized actions.
+  Pass `PolicyReadOptions.allowedActionIris` to admit specific extension actions
+  by exact IRI match. For example, with `const options = { allowedActionIris: ["urn:example:pay"] }`,
+  call `policyFromRdf(dataset, options)` or `parsePolicy(turtle, undefined, undefined, options)`.
 - Evaluate: `evaluate`, `constraintSatisfied`, `matchingPermissions`.
 - Delegation: `evaluateDelegated`, `delegationProvenance`.
 - Adapters: `requestContextFromA2AIntent`, `requestContextFromWac`.

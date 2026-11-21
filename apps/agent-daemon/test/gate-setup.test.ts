@@ -7,7 +7,7 @@ import { createDirectReader } from "@jeswr/agent-channels/direct";
 import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
-import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
+import { CONFIG_ED25519, PILOT_PROFILE, readAgent } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
@@ -110,12 +110,12 @@ it("rejects a nested key subject that names the daemon's own actor", async () =>
   expect((await readGateStatus(o.directory)).peers).toEqual([]);
 });
 
-it("atomically replaces trust.json and preserves the previously opened pins", async () => {
+it("atomically replaces trust.ttl and preserves the previously opened pins", async () => {
   const o = options();
   const { peer, gate } = await createTestGate();
   await gate.close();
   await daemon.initGate(o);
-  const path = join(o.directory, "trust.json");
+  const path = join(o.directory, "trust.ttl");
   const previous = await open(path, "r");
   try {
     const before = await readFile(path, "utf8");
@@ -123,9 +123,30 @@ it("atomically replaces trust.json and preserves the previously opened pins", as
     expect(await previous.readFile("utf8")).toBe(before);
     expect(await readFile(path, "utf8")).toContain(peer.actorKey.kid);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect((await readGateStatus(o.directory)).peers.map(({ thumbprint }) => thumbprint)).toContain(
+      peer.actorKey.kid,
+    );
   } finally {
     await previous.close();
   }
+});
+
+it.each(["legacy", "both"])("persists confirmed pins with %s trust files", async (format) => {
+  const o = options();
+  const { peer, gate } = await createTestGate();
+  await gate.close();
+  await daemon.initGate(o);
+  const before = await readAgent(root, "gate");
+  const json = join(o.directory, "trust.json");
+  const turtle = join(o.directory, "trust.ttl");
+  const oldJson = JSON.stringify(before.trust);
+  await writeFile(json, oldJson);
+  if (format === "legacy") await unlink(turtle);
+  expect(await daemon.pinPeer({ ...o, card: peer.card })).toBe(true);
+  const reopened = await readAgent(root, "gate");
+  expect(reopened.trust.keys.map(({ kid }) => kid)).toContain(peer.actorKey.kid);
+  if (format === "both") expect(await readFile(json, "utf8")).toBe(oldJson);
+  else expect((await stat(json)).mode & 0o777).toBe(0o600);
 });
 
 it("allows another pin after the new lease fails to sync", async () => {

@@ -19,17 +19,16 @@ const objectModels = new Set([
 const jsonNames = new Set(["Json", "JsonObject"]);
 const checkedAreas = /^(gates|mechanisms|derive|runtime)\//;
 
-// Exact write scopes for lock records, the v1 state snapshot, and legacy JSONL.
+// Exact write scopes for lock records and legacy JSONL.
 const storeJsonWrites = new Map([
   ["src/store/state.ts/FileStateStore.acquire", 1],
   ["src/store/state.ts/FileStateStore.recoverIfStale", 1],
-  ["src/store/state.ts/FileStateStore.save", 1],
   ["src/store/ledger.ts/writeLegacyLine", 1],
   ["src/store/ledger.ts/writeLegacyRecovery", 1],
 ]);
 const storeJsonReaders = new Set([
   "src/store/state.ts/readLock",
-  "src/store/state.ts/FileStateStore.load",
+  "src/store/state.ts/readRuntimeStateFile",
   "src/store/state.ts/MemoryStateStore.load",
   "src/store/ledger.ts/readLegacyLine",
 ]);

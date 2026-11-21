@@ -73,6 +73,40 @@ export interface InvokeBodyChallengeEntity {
   ): Promise<InvokeBodyChallengeData | undefined>;
 }
 
+export interface MandateRevocationData {
+  "at": Date;
+  "digest": string;
+  "mandateId": string;
+  "version": number;
+}
+
+export interface MandateRevocationWrapper extends EntityWrapper {
+  "at"?: Date;
+  "digest"?: string;
+  "mandateId"?: string;
+  "version"?: number;
+}
+
+export interface MandateRevocationEntity {
+  readonly name: "MandateRevocation";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => MandateRevocationWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: MandateRevocationData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): MandateRevocationData | undefined;
+  serialize(resourceUrl: string, data: MandateRevocationData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<MandateRevocationData | undefined>;
+}
+
 export interface MessageAuthorshipData {
   "onBehalfOf": string;
   "method": "model-output";
@@ -101,6 +135,38 @@ export interface MessageAuthorshipEntity {
     body: string,
     contentType?: string | null,
   ): Promise<MessageAuthorshipData | undefined>;
+}
+
+export interface PaymentReservationData {
+  "amountMinor": number;
+  "digest": string;
+  "period": string;
+}
+
+export interface PaymentReservationWrapper extends EntityWrapper {
+  "amountMinor"?: number;
+  "digest"?: string;
+  "period"?: string;
+}
+
+export interface PaymentReservationEntity {
+  readonly name: "PaymentReservation";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => PaymentReservationWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: PaymentReservationData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): PaymentReservationData | undefined;
+  serialize(resourceUrl: string, data: PaymentReservationData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<PaymentReservationData | undefined>;
 }
 
 export interface RecordEntryData {
@@ -143,6 +209,40 @@ export interface RecordEntryEntity {
     body: string,
     contentType?: string | null,
   ): Promise<RecordEntryData | undefined>;
+}
+
+export interface TrustPinData {
+  "purpose": string;
+  "expiresAt": Date;
+  "kid": string;
+  "party": string;
+}
+
+export interface TrustPinWrapper extends EntityWrapper {
+  "purpose"?: string;
+  "expiresAt"?: Date;
+  "kid"?: string;
+  "party"?: string;
+}
+
+export interface TrustPinEntity {
+  readonly name: "TrustPin";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => TrustPinWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: TrustPinData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): TrustPinData | undefined;
+  serialize(resourceUrl: string, data: TrustPinData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<TrustPinData | undefined>;
 }
 
 export interface WithheldRecordEntryData {
@@ -195,8 +295,11 @@ export interface GeneratedModel {
   readonly entities: {
   readonly GrantRecord: GrantRecordEntity;
   readonly InvokeBodyChallenge: InvokeBodyChallengeEntity;
+  readonly MandateRevocation: MandateRevocationEntity;
   readonly MessageAuthorship: MessageAuthorshipEntity;
+  readonly PaymentReservation: PaymentReservationEntity;
   readonly RecordEntry: RecordEntryEntity;
+  readonly TrustPin: TrustPinEntity;
   readonly WithheldRecordEntry: WithheldRecordEntryEntity;
   };
 }

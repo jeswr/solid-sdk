@@ -312,3 +312,30 @@ The store ontology and SHACL shapes are published in `vocab/answerable-stores.tt
 and `vocab/answerable-stores.shacl.ttl`. The separately pinned
 `vocab/context/store-v1.jsonld` context is for display. The engine keeps the scenario
 ledger in memory and builds record graphs only when a consumer requests them.
+
+## Durable runtime state and trust
+
+`FileStateStore` keeps the configured filename and writes version 2 N-Quads.
+The default graph declares the snapshot and its sections. Each section graph
+retains native entry order, with ODRL item policies in graphs named by policy IRI.
+On the next successful save, a version 1 JSON snapshot becomes version 2.
+An older reader fails when it tries to parse the version 2 file as JSON.
+An empty, malformed, or incomplete RDF snapshot prevents startup.
+
+File saves compare each entry's JSON text with the previous save and reuse its
+N-Quads block when unchanged. Positions can change independently of payloads.
+The file and containing directory are synced around the atomic replacement.
+Snapshots allow 96 MiB of N-Quads, with the durable named-value limits used by
+the ledger applied to each entry. `AWP_STORE_RDF=1` enables save-time round-trip
+assertions in the memory store for tests.
+
+Provisioned trust is written to `trust.ttl`. `readTrustFile` chooses Turtle when
+present and uses legacy `trust.json` otherwise. A malformed Turtle file stops
+startup even when JSON exists alongside it. `writeTrustFile` atomically updates
+the selected format in mode 0600. The daemon uses it under its peer-pin lease.
+The existing trust verifier checks the resulting keys and delegations.
+`saveAgent` and `saveTrust` return promises so callers can wait for durable writes.
+
+The mandate store projection reuses the loaded credential and preserves ODRL
+rule order and native supplements. The RDF vocabulary uses `awp:pay` for the
+pilot payment action pending an ODRL profile decision.

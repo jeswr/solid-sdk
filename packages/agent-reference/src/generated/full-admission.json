@@ -1610,13 +1610,13 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#40734e511cf714b29f10362e014e25365eecc18731d8fd6db749c6d890ee91ab-n12",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#638688a26820d2699432266cf83558a3a899fd109865301f4d1373ed540a1009-n25",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#f5e8106884bc9c33e8bd163f71a3f1a7026faeb4b8b0634424456e37fc1e196e-n13",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#261d9879947c54bbf92cf2c99a43cc07c11e8c24893d4c35cadff0b1c0421b1f-n7",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
@@ -1652,13 +1652,13 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#938df8c51209fd31c14c47f211482109fc1431bdb1dde967d5d977c2414cde7f-n18",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#67f0f8c29e5ed5b3e7ee2a36c23c0c333782eb7c8f23e2099f575e3d132f5a56-n27",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#50fcfda0e3e018573425e2924108ca63080682a5c5521b113ccac794e87b4142-n23",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#6071bef393b8dc4dc59b235bef6b98d6eb9f0fcbfd58a7e6ec0276a8f14c845d-n33",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
@@ -1730,13 +1730,13 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cb880c778fe1928c2a58166175249cdd7a60fd080df668553b98098df286f3db-n16",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ea9628c7f4a291e1d63731e83eaaa42275052621d8116670f241b528e112f5e5-n48",
     "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cb880c778fe1928c2a58166175249cdd7a60fd080df668553b98098df286f3db-n16",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ea9628c7f4a291e1d63731e83eaaa42275052621d8116670f241b528e112f5e5-n48",
     "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
   },
   {
@@ -1748,13 +1748,13 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c006d80314a781bd8418cb978499487617e3e73be688df34fb3ff5d113719cc8-n14",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#833fbd7781d3bcbf743de217ff6c8f3886559e40d6687bf0b5d05783f82f9755-n43",
     "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c006d80314a781bd8418cb978499487617e3e73be688df34fb3ff5d113719cc8-n14",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#833fbd7781d3bcbf743de217ff6c8f3886559e40d6687bf0b5d05783f82f9755-n43",
     "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
   },
   {
@@ -1766,20 +1766,554 @@
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a1387b9f3b4565f277349fa1105811d8834d804a3b7e0763cc132cda02eb8e87-n20",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a6d8eea43a198940b7a1a87adf5cb5a8e1593c72f8e9f17a21a71eca32153b46-n16",
     "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8cb39d86a1b3475245cc5c1578310521490a1ba27552f183c59c27bcfa6c8386-n17",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7d931a88d6c9b5697a7dad8477af8bdaaa0802a80c1bd7c6c7a6a7ea9fb75746-n8",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
   },
   {
     "code": "unsupported-constraint",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp/shapes/v1#726d28a1bfd61f3994f40385270505849825166c69664fbb8578b1ee7566f7cc-n2",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#da7ecfe6dbfee83ecc8aa1c6492c5c00d8a15909fbdb85020143f3e7b7cb1ae9-n26",
     "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#42177df570cddd745a713c3cc0bad17fbefd532c10956bf056a4e919917e457f-StateSection-stateEntry",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#b7708a652a5afd43a9ff2f1b081f53109129f5fdd3a8579183a19f0a077112e8-StateEntry-entryValue",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cb091e97c84c63ae9242946ee39f589111c1f604b6651246b15054d02be67956-n34",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#286d447bac0826443d9a1b0d61fbd9705bff0cdd96ea6b8be0d1c21529af1c85-n14",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#5689891d0e5cdff30bc2902fe6c06a3ffcf390ec2de5e6abfe8a2c7f4d29233f-TypedStateSection-stateEntry",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a33b76c42772ed56af7a6fa8815d1a7e9337f128c415838ca2502e56ebf0d093-TrustStore-pinnedKey",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cbe0acb9ad6c319d98f793cb8b029920b654155ec3a07533954cc608899dbd46-TrustStore-sourceAuthorityRule",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#03d6e26b2d02a0e58ca597975c5a15f6234eac3f3ea432055e09816f9a54ffbe-TrustStore-trustController",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#59fc2b41666c51f29f50ab82d87775ab18f277821b4b9c8fb673c437a338174e-TrustStore-recordKeyDelegation",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#3f527299c0d1d80124e1161b14f8304b806aadfb74aba2be1db1ac7b5f70c4db-PinnedKey-endpoint",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#3f527299c0d1d80124e1161b14f8304b806aadfb74aba2be1db1ac7b5f70c4db-PinnedKey-endpoint",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#1ef1aaff31de8eebd6b9b47a0bd7c6e88c47cd0417be1c715df36ee1288b0b78-PinnedKey-publicKey",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7f6ade8a885132077f4c127182ef81d954d822ff4607e49d035775549e377f28-SourceAuthorityRule-claimType",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7f6ade8a885132077f4c127182ef81d954d822ff4607e49d035775549e377f28-SourceAuthorityRule-claimType",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0a2c7545bcdb9df80912a3dffa81399a05e0e01bbd863c09fdd45406f153956b-SourceAuthorityRule-framework",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#f24eb2bdf1d3eaf25ea2de1da35ab317f06b702cdd0ff09fb3275b5b8e26f7fc-n22",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2d9c212c7e417c98c71ae5324f753613520179d91eb75631ce9062e43e466f6a-n4",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#b0589d7e9aaca8eeb87dd0b8bfed26916392c85e83f9fbed9f0723c3f10dfccb-PinnedRecordKey-publicKey",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#fa1bb84b552c258fd166996eb54123ccc2fd2b4b82801febf159950de8a40faa-RecordKeyDelegation-recordPublicKey",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#97952013f3cac82f685b2cea80d08f34e21093ebbdb2b7e011db2cfc3f83a4c0-TrustHold-trustMessage",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#97952013f3cac82f685b2cea80d08f34e21093ebbdb2b7e011db2cfc3f83a4c0-TrustHold-trustMessage",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c9d44689802a312e2b1e1154288985049dc72801c71c869151c4756cb9d8fd82-TrustHold-trustWire",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c9d44689802a312e2b1e1154288985049dc72801c71c869151c4756cb9d8fd82-TrustHold-trustWire",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#38fb1d606fb10254fffe0118c45417478788ad5dc339274f7284a2f887ae122d-OwnListEntry-trustTasks",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#38fb1d606fb10254fffe0118c45417478788ad5dc339274f7284a2f887ae122d-OwnListEntry-trustTasks",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2d7b4e66eb680a72d54359bf8b6896f2be125fbad555824df0254acdec64e284-RegisterEntry-authorizedFor",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2d7b4e66eb680a72d54359bf8b6896f2be125fbad555824df0254acdec64e284-RegisterEntry-authorizedFor",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#314daf5f6631feec6d862d5b95a9f6fd26bf85b21663e2d6b9049de51183734e-RegisterEntry-claimType",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#314daf5f6631feec6d862d5b95a9f6fd26bf85b21663e2d6b9049de51183734e-RegisterEntry-claimType",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#82e74fe6e0d7037ad01840fb8a3b4350a98959810458c3b44a71b5027c95cd4b-Register-registerEntry",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#8f1e955d43877bf5fcee83c709f422f6668f4fe4531322c85ac2ae25b0280247-TrustRoot-trustRegister",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#75a94124552faa33199ec7ce486033379857c3eb4853737c1e93089201a4c763-MemoryScope-memoryItem",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#14d5fa9c1d8dc4201267e50173bc6ebb2b5b67a0fa029e4789a19719d15be5ed-MemoryItem-wasAttributedTo",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#f08fad2f6310b3c5eb3348527df760043b9c9bab5c3d76b069ad18d125fd4a5d-n11",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#6086e245882490cfd146a4cff0af020638ce2769bc8fbbcd6346968926f3190c-n31",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#f47d04c7caf1b13f96ad6631409fe1e0fc4670d8a69eecfaf76ca94754b71792-MemoryItem-subject",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#9a3a73a503a7334eb98db0ca574371ecf0e1b9761239ac0b45526aebc780c9df-n2",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#e33c98d583b6b01e96ddd38882512650a6a557b1572b380a43a4d9578d5401a9-n51",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#28502a1958f5f7ae9677bb31ec59ec01774aca2a899337f75845f849b719cd92-MemoryItem-method",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#dfe83b1e764f4b1b4a0b97df2c854a0faf731d1b6966032b62ec15c6173c5874-n53",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2587b8fd66dfd542931b3059c57c0e05f188913a7841b2fe22a8545b551d8855-n28",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#170adb760432b2a71fa17002f05419aef500b2e2e985aa19f79d4d26f63ee299-MemoryItem-identifiers",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#170adb760432b2a71fa17002f05419aef500b2e2e985aa19f79d4d26f63ee299-MemoryItem-identifiers",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a17e081be1aee62f484622271abddee768bf6fff6b2aedaf606a4709590473ad-MemoryItem-disputedWith",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a17e081be1aee62f484622271abddee768bf6fff6b2aedaf606a4709590473ad-MemoryItem-disputedWith",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7a527c3a8a7a14fe80911353e79f5fbc13c12d2840af58818a028ede42120abf-MemoryItem-admittingDelivery",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7a527c3a8a7a14fe80911353e79f5fbc13c12d2840af58818a028ede42120abf-MemoryItem-admittingDelivery",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#74fabd981f9b8b31edaf5d61370cfced36393eaa557e4828162ac35b8144aae5-MemoryItem-original",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#aa8fe73936e2c849007e7376712d2f4be6835a4cc04dc1ddd0f1f7fef79db4cb-MemoryItem-statement",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#aa8fe73936e2c849007e7376712d2f4be6835a4cc04dc1ddd0f1f7fef79db4cb-MemoryItem-statement",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#33d1039c1e454095cda0f1281ea053c068e4fa6c5b99b2808ac5eae40c820f4f-MemoryItem-terms",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#732cc31be3ab2609c44df8014e18077795a5cbee672f2057699a8f332e8b006d-ItemTerms-deleteWithinDays",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d11905b467e17af221d95463f4a7634fd0037431b25f8b05f4d79c197d70c83d-n50",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#5a8e7eb839127a78afc7cbd7cfdf206d8d4f510347a8d4f3b447a17963ad0cb6-n49",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c5bd890cf4f059b388e9739da563185e1c5cb2c8954386c8f88c2ed68bd8671d-ItemTerms-recipientMustBe",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#c5bd890cf4f059b388e9739da563185e1c5cb2c8954386c8f88c2ed68bd8671d-ItemTerms-recipientMustBe",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#40e14a0d3afab8e338913a169fb9871b905278bccd990ca878db71cf3d88bc8c-ItemTerms-inheritedTerms",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#40e14a0d3afab8e338913a169fb9871b905278bccd990ca878db71cf3d88bc8c-ItemTerms-inheritedTerms",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d6ca1e41db2dd347110b7d56c405691850db063014fe8d2d7dad00d291483e60-InheritedItemTerms-terms",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#86462e68c82a8b3b4fe873fa8a336461b2e6a209f0d812d9f7d79ec21eff9e73-OriginalStatement-statement",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#86462e68c82a8b3b4fe873fa8a336461b2e6a209f0d812d9f7d79ec21eff9e73-OriginalStatement-statement",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#b754a2895c7131a9cab242c6a2d4738d20a5b811e6199144591efc9c7e2afd5c-OriginalStatement-evidence",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#433c936950052e9301c038041cd65cbfefa96f45780fba6a5a6a30160a61541c-RelianceHold-memoryTask",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#a6cf99985159e43d8509cad01941b9bddf76251d511a141d16b819fe33d8750b-n23",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#d8c37ef6b3ea6a2701c5b85e0935985b8c2277fcaefbc8e858a8a3d94d36c3c3-n18",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0379e8462ae94c72ebff859a2c0c36a156194d4059b99e2b2e328f6c0f2b9513-RelianceHold-statement",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0379e8462ae94c72ebff859a2c0c36a156194d4059b99e2b2e328f6c0f2b9513-RelianceHold-statement",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ca250b35f5ddfd5d48f62de91a5948387761f014952a01ed49ed0ad4e8223a3a-KnownIdentifiers-identifiers",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#ca250b35f5ddfd5d48f62de91a5948387761f014952a01ed49ed0ad4e8223a3a-KnownIdentifiers-identifiers",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7b72a21d9d2eaf1e53e1a90362320c7c66d50c0c5f8662e4a6347e6eefe3d881-StoredMandate-standingRules",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#198d463206f89b5c982efab9a8766c924c922e0ad91b76453154cd4208404aec-StoredMandate-dutyRules",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#04d2cf829ee1f9182298938b362cde2cdc58789f811d4d056a4183d8cd3748f4-StandingRule-standingWhen",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#04d2cf829ee1f9182298938b362cde2cdc58789f811d4d056a4183d8cd3748f4-StandingRule-standingWhen",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0925fcbc9b708afef95b5eaa661f17bf213c3616f19cdbcd142228b188be2deb-StandingRule-standingAllows",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#0925fcbc9b708afef95b5eaa661f17bf213c3616f19cdbcd142228b188be2deb-StandingRule-standingAllows",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#df7a8d593fb80271b18802f114b7e9b48c3dba383d229c64ac10981570c85d72-StandingRule-standingDuties",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#df7a8d593fb80271b18802f114b7e9b48c3dba383d229c64ac10981570c85d72-StandingRule-standingDuties",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#73dd58882ae9622ad8147fcffaa41cdc7418a6bdd6fa61bff30a2705c4c80501-DutyRule-dutyItems",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#73dd58882ae9622ad8147fcffaa41cdc7418a6bdd6fa61bff30a2705c4c80501-DutyRule-dutyItems",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#25cfc9221a5f0fa155a5e4da7e4954a439221359b31774865c34cd2033eca7e0-DutyRule-dutyParties",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#25cfc9221a5f0fa155a5e4da7e4954a439221359b31774865c34cd2033eca7e0-DutyRule-dutyParties",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2b4d39dcee34fc076ef91a37bd5272f897ccc6862f24cfc521f485e313307ec9-DutyRule-dutyWithinSeconds",
+    "message": "http://www.w3.org/ns/shacl#or: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#7cdd0ef6345b88d683fe15743e5ff99a5b0436464593bab7d8dca7df22076dc0-n38",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#3de4aec6b7ec278779b688e6b18c979a00475e6c03090ac4674b23d1417337eb-n44",
+    "message": "http://www.w3.org/ns/shacl#nodeKind: no runtime projection"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#deb9c13363f78ed31d7177d118eb16675902a90b5d9deeb21e63be8193e25cb9-ApprovalGrant-approvalPayment",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#deb9c13363f78ed31d7177d118eb16675902a90b5d9deeb21e63be8193e25cb9-ApprovalGrant-approvalPayment",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2b437a9bb3433132f940aabf0e4c213a557805bcc15ab0176b8333ac04fc87a2-ApprovalGrant-recordApprovalBinding",
+    "message": "http://www.w3.org/ns/shacl#node: inline or unprojected sh:node reference"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#2b437a9bb3433132f940aabf0e4c213a557805bcc15ab0176b8333ac04fc87a2-ApprovalGrant-recordApprovalBinding",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
+  },
+  {
+    "code": "unsupported-constraint",
+    "severity": "error",
+    "subject": "https://w3id.org/jeswr/awp/shapes/v1#cd96b8f320619a0a15ed1b4e7a9e1e9d7b293c70dd2ee78ff5ada2c570921ee3-OrganisationApprovals-approvalItems",
+    "message": "http://www.w3.org/ns/shacl#node: sh:node requires a projected composite link"
   },
   {
     "code": "missing-shape",
@@ -2030,12 +2564,6 @@
   {
     "code": "missing-shape",
     "severity": "error",
-    "subject": "https://w3id.org/jeswr/awp#EvidenceItem",
-    "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
-  },
-  {
-    "code": "missing-shape",
-    "severity": "error",
     "subject": "https://w3id.org/jeswr/awp#EvidenceRole",
     "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
   },
@@ -2106,6 +2634,12 @@
     "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
   },
   {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#memoryItem",
+    "message": "property in https://w3id.org/jeswr/awp#MemoryScopeShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
     "code": "missing-shape",
     "severity": "error",
     "subject": "https://w3id.org/jeswr/awp#Message",
@@ -2140,6 +2674,12 @@
     "severity": "error",
     "subject": "https://w3id.org/jeswr/awp#OperationRef",
     "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#approvalItems",
+    "message": "property in https://w3id.org/jeswr/awp#OrganisationApprovalsShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
   },
   {
     "code": "missing-shape",
@@ -2220,6 +2760,12 @@
     "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
   },
   {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#registerEntry",
+    "message": "property in https://w3id.org/jeswr/awp#RegisterShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
     "code": "missing-shape",
     "severity": "error",
     "subject": "https://w3id.org/jeswr/awp#RepresentationStatement",
@@ -2244,10 +2790,64 @@
     "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
   },
   {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#stateEntry",
+    "message": "property in https://w3id.org/jeswr/awp#StateSectionShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
     "code": "missing-shape",
     "severity": "error",
     "subject": "https://w3id.org/jeswr/awp#StatementSubject",
     "message": "instance-data class has no SHACL NodeShape (sh:targetClass)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#dutyRules",
+    "message": "property in https://w3id.org/jeswr/awp#StoredMandateShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#standingRules",
+    "message": "property in https://w3id.org/jeswr/awp#StoredMandateShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#trustRegister",
+    "message": "property in https://w3id.org/jeswr/awp#TrustRootShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#pinnedKey",
+    "message": "property in https://w3id.org/jeswr/awp#TrustStoreShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#recordKeyDelegation",
+    "message": "property in https://w3id.org/jeswr/awp#TrustStoreShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#sourceAuthorityRule",
+    "message": "property in https://w3id.org/jeswr/awp#TrustStoreShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#trustController",
+    "message": "property in https://w3id.org/jeswr/awp#TrustStoreShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
+  },
+  {
+    "code": "missing-cardinality",
+    "severity": "warning",
+    "subject": "https://w3id.org/jeswr/awp#stateEntry",
+    "message": "property in https://w3id.org/jeswr/awp#TypedStateSectionShape states neither sh:minCount nor sh:maxCount (unbounded set — advisory)"
   },
   {
     "code": "missing-shape",
