@@ -9,7 +9,7 @@ import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
-import { mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "fs/promises";
+import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -20,7 +20,7 @@ import { createTestGate } from "../src/testing.js";
 
 vi.mock("fs/promises", async (original) => {
   const fs = await original<typeof import("fs/promises")>();
-  return { ...fs, open: vi.fn(fs.open) };
+  return { ...fs, open: vi.fn(fs.open), unlink: vi.fn(fs.unlink) };
 });
 
 let root: string;
@@ -29,6 +29,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.mocked(open).mockReset();
+  vi.mocked(unlink).mockReset();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -370,9 +371,13 @@ it.each([
 });
 
 it.each([
-  false,
-  true,
-])("never caches an admission if verdict sync fails (commit published: %s)", async (published) => {
+  { published: false, unlinkFails: false },
+  { published: true, unlinkFails: false },
+  { published: true, unlinkFails: true },
+])("holds a verdict after sync failure (commit published: $published, unlink fails: $unlinkFails)", async ({
+  published,
+  unlinkFails,
+}) => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();
@@ -382,6 +387,13 @@ it.each([
   const gate = await daemon.openGate(o);
   const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
   const base = `verdict-${input.message.rawSha256}`;
+  const commit = join(o.directory, `${base}.commit`);
+  if (unlinkFails) {
+    vi.mocked(unlink).mockImplementation(async (path) => {
+      if (path === commit) throw new Error("commit cleanup failed");
+      await fs.unlink(path);
+    });
+  }
   let failed = false;
   vi.mocked(open).mockImplementation(async (path, flags, mode) => {
     if (failed && flags === "wx") throw new Error("cannot create another temporary file");
@@ -401,6 +413,10 @@ it.each([
   try {
     expect(await gate.check(input)).toMatchObject({ outcome: "refused", reason: "indeterminate" });
     expect(failed).toBe(true);
+    if (unlinkFails) {
+      expect(unlink).toHaveBeenCalledWith(commit);
+      expect((await stat(commit)).isFile()).toBe(true);
+    }
     expect(await gate.check(input)).toMatchObject({
       outcome: "refused",
       reason: "result-uncertain",

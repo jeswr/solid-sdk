@@ -82,7 +82,10 @@ function fileVerdicts(directory: string): VerdictStore {
       if (verdict.outcome === "checking") return verdict;
       const { transaction, ...decision } = verdict;
       const commit = await readPrivate(join(directory, `verdict-${hex}.commit`));
-      if (transaction && commit === digestBytes(text)) return decision;
+      if (transaction && commit === digestBytes(text)) {
+        const confirmed = await readPrivate(join(directory, `verdict-${hex}.confirmed`));
+        if (confirmed === commit) return decision;
+      }
       return { outcome: "checking", time: verdict.time };
     },
     async put(hex, verdict) {
@@ -92,8 +95,9 @@ function fileVerdicts(directory: string): VerdictStore {
         return;
       }
       const record = JSON.stringify({ ...verdict, transaction: randomUUID() });
+      const digest = digestBytes(record);
       const staged = `verdict-${hex}.prepared`;
-      await writePrivate(directory, staged, digestBytes(record));
+      await writePrivate(directory, staged, digest);
       await writePrivate(directory, name, record);
       // Publish proof only after both writes have completed their directory syncs.
       const commit = join(directory, `verdict-${hex}.commit`);
@@ -106,6 +110,8 @@ function fileVerdicts(directory: string): VerdictStore {
           .catch(() => {});
         throw error;
       }
+      // A surviving commit alone cannot prove that its directory sync succeeded.
+      await writePrivate(directory, `verdict-${hex}.confirmed`, digest);
     },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();

@@ -255,9 +255,10 @@ then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows valid
 `/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
 Requests use immutable Graph IDs. Cursors bind the account and preserve pending
 IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
-tombstones are skipped. A MIME 404 skips a deleted item. An oversized MIME item
-returns a `bounds-exceeded` refusal and paging continues. The refusal carries the
-message ID and a digest of the MIME bytes, or a digest derived from the binding,
+tombstones are skipped. Any non-2xx MIME fetch preserves the cursor for retry.
+A successful fetch of oversized MIME returns a `bounds-exceeded` refusal and
+paging continues. The refusal carries the message ID and a digest of the MIME
+bytes, or a digest derived from the binding,
 account and ID when the transport withholds the bytes. HTTP 410 or a 4xx response
 with error code `syncStateNotFound` on a saved delta state restarts the initial
 inbox sync. Other errors preserve the previous cursor for retry. Pages cap at 512

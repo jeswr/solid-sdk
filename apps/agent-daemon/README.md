@@ -166,9 +166,9 @@ match the configured WebIDs when the daemon starts.
 - `awp gate status` displays pinned subjects and thumbprints, ledger integrity,
   verdict counts and interrupted digests. Ask the sender for a new message
   when a check for that digest was interrupted. Identical raw-byte retries
-  reuse their finalized verdicts when the commit record matches. Earlier verdicts
-  without commit records appear as interrupted digests. The reference runtime
-  checks replays across carriers.
+  reuse their finalized verdicts when the verdict, commit record and post-sync
+  confirmation match. Earlier verdicts without a confirmation appear as
+  interrupted digests. The reference runtime checks replays across carriers.
 
 Refused content stays outside the inbox, models and suite audit. The reference
 ledger records the decision locally. Plain human mail and chat remain available

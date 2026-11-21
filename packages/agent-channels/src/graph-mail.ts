@@ -156,15 +156,11 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
               tokens,
               "read",
             );
-            if (response.status === 404) {
-              state.pending.shift();
-              continue;
-            }
             raw = await mimeBody(response);
           } catch (error) {
             let digest: string;
             if (error instanceof GraphMimeSizeRefusedError) digest = error.digest;
-            else if (error instanceof ResponseSizeRefusedError) {
+            else if (error instanceof ResponseSizeRefusedError && error.responseOk) {
               // When the transport withholds the bytes, identify the refusal by account and item.
               digest = digestOf(["graph-mail", ref.id, id]);
             } else throw error;

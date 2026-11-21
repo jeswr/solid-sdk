@@ -244,3 +244,22 @@ Checks used Node 24.22.3 and Vitest with `--maxWorkers=2`.
 The reference manifest is 283 / 278 / 0 / 5. The manifest, traces, outlines and
 oracle fixtures match `0825ae9f3` byte-for-byte. `git diff --check` passed. The
 worktree is uncommitted.
+
+## Review fixes (41f)
+
+- Graph Mail preserves the saved cursor on non-2xx MIME fetches. The regression
+  reproduced checkpoint advancement on oversized 503s with both declared and
+  streamed bodies, through both guard layers. The retry now returns the unread
+  item. Teams already propagates collection transport failures.
+- The gate requires a digest-matched confirmation written after the commit
+  directory sync. The regression reproduced cached admission when sync and
+  cleanup both failed. Immediate and reopened retries now return
+  `result-uncertain`. Earlier verdict formats remain readable as interrupted
+  when they lack confirmation.
+
+The requested Vitest runs passed 942 channel tests and 216 daemon tests.
+Ten channel loopback fixtures and 20 daemon loopback, subprocess and packaging
+fixtures failed in the sandbox. Both offline subsets passed, and Graph Mail
+reached 100% coverage in its focused run. Biome and both project typechecks
+passed. The offline full workspace gate stopped at missing dependencies in
+`@jeswr/solid-webauthn-reauth`.

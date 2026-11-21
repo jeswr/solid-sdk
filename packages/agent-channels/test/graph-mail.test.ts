@@ -182,7 +182,29 @@ it.each(
 });
 
 it.each(
+  sizeRefusals.filter(({ kind }) => kind !== "MIME cap"),
+)("retries unread mail after an oversized HTTP 503 ($kind, nested guard: $nestedGuard)", async ({
+  kind,
+  nestedGuard,
+}) => {
+  const cap = 1024 * 1024;
+  const failed =
+    kind === "declared transport cap"
+      ? new Response(null, { status: 503, headers: { "content-length": String(cap + 1) } })
+      : new Response("x".repeat(cap + 1), { status: 503 });
+  const saved = cursor({ pending: ["unread"], resume: link("resumed") });
+  const r = reader([failed, mime()], nestedGuard);
+
+  await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow("size cap");
+  const retry = await r.binding.ingest.list(account, saved, bounds);
+  expect(retry.items.map(({ id }) => id)).toEqual(["unread"]);
+  expect(retry.refusals).toBeUndefined();
+  expect(JSON.parse(retry.next)).toMatchObject({ pending: [], url: link("resumed") });
+});
+
+it.each(
   [
+    "HTTP 404",
     "HTTP 429",
     "HTTP 503",
     "transport",
@@ -335,12 +357,8 @@ it("resolves each account's inbox separately and retries failed resolution witho
   }
 });
 
-it("resets only expired delta state, skips deleted MIME and leaves failed cursors retryable", async () => {
-  const r = reader([
-    new Response(null, { status: 410 }),
-    fixtures.last,
-    new Response(null, { status: 404 }),
-  ]);
+it("resets only expired delta state and leaves failed cursors retryable", async () => {
+  const r = reader([new Response(null, { status: 410 }), fixtures.empty]);
   expect((await r.binding.ingest.list(account, cursor(), bounds)).items).toEqual([]);
   expect(r.requests[2]?.url.href).toBe(DELTA_INITIAL);
   for (const status of [400, 401, 403, 404, 429, 500]) {

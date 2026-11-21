@@ -48,7 +48,7 @@ export class SendNotDispatchedError extends Error {
 
 /** Definitive response-size refusal, without transport details or an unsafe cause. */
 export class ResponseSizeRefusedError extends Error {
-  constructor() {
+  constructor(readonly responseOk: boolean) {
     super("binding response body exceeds size cap");
     this.name = "ResponseSizeRefusedError";
   }
