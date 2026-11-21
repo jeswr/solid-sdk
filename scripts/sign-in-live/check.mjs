@@ -104,12 +104,12 @@ export function classifyAuthorizeEnd(final, redirectUri, loginPage) {
   ) {
     return { ok: false, detail: `error page: ${excerpt(final.body)}` };
   }
-  if (!loginPage?.marker) {
+  if (!loginPage?.marker || !loginPage?.at) {
     return { ok: false, detail: `no loginPage expectation configured; ended at ${final.where}` };
   }
   const title = pageTitle(final.body);
   const seen = `${final.where}${title ? ` ("${title}")` : ""}`;
-  if (loginPage.at && !new RegExp(loginPage.at).test(final.where)) {
+  if (!new RegExp(loginPage.at).test(final.where)) {
     return { ok: false, detail: `ended at ${seen}, not the login page (${loginPage.at})` };
   }
   if (!new RegExp(loginPage.marker, "i").test(final.body)) {
@@ -122,6 +122,27 @@ export function classifyAuthorizeEnd(final, redirectUri, loginPage) {
 }
 
 const PRIVATE_JWK_MEMBERS = ["d", "p", "q", "dp", "dq", "qi", "k"];
+
+const SIGNING_CURVES = { EC: ["P-256", "P-384", "P-521"], OKP: ["Ed25519", "Ed448"] };
+
+/** A complete public key that may verify signatures (RFC 7517 §4.2-4.3, RFC 7518 §6, RFC 8037). */
+function isPublicVerificationKey(key) {
+  if (!key || typeof key !== "object") return false;
+  if (key.use !== undefined && key.use !== "sig") return false;
+  if (key.key_ops !== undefined && !(Array.isArray(key.key_ops) && key.key_ops.includes("verify")))
+    return false;
+  const str = (value) => typeof value === "string" && value.length > 0;
+  switch (key.kty) {
+    case "RSA":
+      return str(key.n) && str(key.e);
+    case "EC":
+      return SIGNING_CURVES.EC.includes(key.crv) && str(key.x) && str(key.y);
+    case "OKP":
+      return SIGNING_CURVES.OKP.includes(key.crv) && str(key.x);
+    default:
+      return false;
+  }
+}
 
 /** Check a JWKS response body: JSON, public keys only, and at least one usable signing key. */
 export function checkJwks(body) {
@@ -136,13 +157,7 @@ export function checkJwks(body) {
   if (keys.some((key) => PRIVATE_JWK_MEMBERS.some((member) => key && member in key))) {
     return { ok: false, detail: "publishes private or symmetric key material" };
   }
-  const signing = keys.filter(
-    (key) =>
-      ["RSA", "EC", "OKP"].includes(key?.kty) &&
-      (key.use === undefined || key.use === "sig") &&
-      (key.kty !== "RSA" || (typeof key.n === "string" && typeof key.e === "string")) &&
-      (key.kty === "RSA" || (typeof key.crv === "string" && typeof key.x === "string")),
-  );
+  const signing = keys.filter(isPublicVerificationKey);
   if (!signing.length) return { ok: false, detail: "no public signing keys" };
   return { ok: true, detail: `${signing.length} signing key(s)` };
 }
