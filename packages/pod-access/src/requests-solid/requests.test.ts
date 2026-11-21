@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
@@ -326,8 +327,12 @@ describe("decision state machine", () => {
       );
     expect(pod.log.slice(before).some(({ method }) => method === "PUT")).toBe(false);
     expect(await entry(pod)).toMatchObject({ status: "approving" });
-    // Retrying without choices finishes the pinned approval.
-    const result = await decide({ id: ID }, { approve: true }, options(pod));
+    // Retrying with the recorded expiry finishes the pinned approval.
+    const result = await decide(
+      { id: ID },
+      { approve: true, expiresAt: new Date("2028-01-01Z") },
+      options(pod),
+    );
     expect(result.status).toBe("approved");
     expect(pod.has(`${POD}contacts/new.ttl.acl`)).toBe(false);
     expect(pod.etag(result.receiptUrl)).toBe('"v1"');

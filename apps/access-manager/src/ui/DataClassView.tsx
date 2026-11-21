@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The data-class view: resources grouped by type-index registration ("Contacts
@@ -57,7 +58,7 @@ export function DataClassView({
               <ul className="class-access">
                 {summary.map((s) => (
                   <li key={s.agent}>
-                    <AgentLabel agent={s.agent} fetchFn={session.fetch} /> — {s.modes.join(", ")}
+                    <AgentLabel agent={s.agent} /> — {s.modes.join(", ")}
                   </li>
                 ))}
               </ul>

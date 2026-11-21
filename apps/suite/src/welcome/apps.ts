@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { AppSlug } from "@jeswr/suite-ui";
 import { appRegistry } from "../shell/registry";
 
@@ -32,7 +33,7 @@ export interface CompanionApp {
   name: string;
   description: string;
   href: string;
-  statusLabel: "Ready to try" | "For developers";
+  statusLabel: "Ready to try" | "For developers" | "Now in Permissions";
 }
 
 function companion(id: string, name: string, description: string, pages = false): CompanionApp {
@@ -62,7 +63,14 @@ export const companionApps: readonly CompanionApp[] = [
   companion("mobile", "Mobile apps", "Use the suite on a phone or tablet."),
   companion("pod-migrator", "Pod migrator", "Move data between pods.", true),
   companion("mcp-server", "MCP server", "Connect an assistant to your pod."),
-  companion("access-manager", "Access manager", "Manage access to your pod.", true),
+  // The standalone Access Manager moved into Permissions; its old entry point redirects there.
+  {
+    id: "access-manager",
+    name: "Access manager",
+    description: "Now part of Permissions: answer access requests and review their history.",
+    href: "/permissions",
+    statusLabel: "Now in Permissions",
+  },
   companion("pod-manager", "Pod manager", "Manage pod storage and accounts."),
   companion("issues", "Issues", "Track issues using your pod."),
   companion("coeliac", "Coeliac", "Explore a pod app for coeliac health."),

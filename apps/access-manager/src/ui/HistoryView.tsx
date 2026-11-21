@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // History / receipts: the DPV consent-record audit trail — what was granted,
 // to whom, for what purpose, when, and revoked-when — plus revocation of the
 // still-active grants (retracts the pinned WAC + flips the records).
 
+import { DPV } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "../auth/SessionContext.js";
 import {
@@ -14,7 +16,6 @@ import {
   revokeGrant,
 } from "../lib/history.js";
 import { classLabel } from "../lib/type-index.js";
-import { DPV } from "../lib/vocab.js";
 import { AgentLabel, resourceLabel, SavingIndicator, useOptimistic } from "./bits.jsx";
 
 function statusLabel(iri: string | undefined): string {
@@ -38,8 +39,8 @@ export function HistoryView({
   const [loading, setLoading] = useState(false);
   const { state, error, run } = useOptimistic();
 
-  const grantsContainer = storageRoot ? `${storageRoot}access-manager/grants/` : null;
-  const receiptsContainer = storageRoot ? `${storageRoot}access-manager/receipts/` : null;
+  const grantsContainer = storageRoot ? `${storageRoot}settings/access-records/` : null;
+  const receiptsContainer = storageRoot ? `${storageRoot}settings/access-records/` : null;
 
   const reload = useCallback(() => {
     if (!grantsContainer || !receiptsContainer) return;
@@ -90,6 +91,11 @@ export function HistoryView({
         <SavingIndicator state={state} error={error} />
       </div>
 
+      <p>
+        Approvals made with the older version are listed under Dashboard access only. Use Dashboard
+        to remove that access.
+      </p>
+
       <h3>Active grants</h3>
       {grants.filter((g) => g.revokedAt === undefined).length === 0 ? (
         <p className="empty">No active grants made through this app.</p>
@@ -99,7 +105,7 @@ export function HistoryView({
             .filter((g) => g.revokedAt === undefined)
             .map((g) => (
               <li key={g.url} className="grant">
-                {g.agent ? <AgentLabel agent={g.agent} fetchFn={session.fetch} /> : "Unknown agent"}
+                {g.agent ? <AgentLabel agent={g.agent} /> : "Unknown agent"}
                 <span> — {g.modes.join(", ") || "?"} on </span>
                 <span>{g.targets.length} resource(s)</span>
                 {g.purpose ? <span> for {classLabel(g.purpose)}</span> : null}
@@ -138,9 +144,7 @@ export function HistoryView({
             {receipts.map((r) => (
               <tr key={r.url} className={`receipt ${statusLabel(r.status).toLowerCase()}`}>
                 <td>{statusLabel(r.status)}</td>
-                <td>
-                  {r.recipient ? <AgentLabel agent={r.recipient} fetchFn={session.fetch} /> : "—"}
-                </td>
+                <td>{r.recipient ? <AgentLabel agent={r.recipient} /> : "—"}</td>
                 <td>{r.purpose ? classLabel(r.purpose) : "—"}</td>
                 <td title={r.targets.map((t) => resourceLabel(t, storageRoot)).join("\n")}>
                   {r.targets.length}

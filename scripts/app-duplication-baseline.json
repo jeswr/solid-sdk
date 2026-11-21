@@ -554,8 +554,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 153,
-          "endLine": 174,
+          "startLine": 77,
+          "endLine": 98,
           "tokens": 120
         },
         {
@@ -1303,8 +1303,8 @@
         },
         {
           "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 102,
-          "endLine": 127,
+          "startLine": 104,
+          "endLine": 129,
           "tokens": 132
         }
       ]
@@ -2354,8 +2354,8 @@
         },
         {
           "file": "packages/solid-chat-interop/src/chat-writer.ts",
-          "startLine": 73,
-          "endLine": 89,
+          "startLine": 87,
+          "endLine": 103,
           "tokens": 125
         }
       ]
@@ -2411,14 +2411,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 97,
-          "endLine": 115,
-          "tokens": 132
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 157,
-          "endLine": 189,
+          "startLine": 81,
+          "endLine": 113,
           "tokens": 224
         },
         {
@@ -2620,8 +2614,8 @@
       "locations": [
         {
           "file": "apps/coeliac/src/lib/pod/type-index.ts",
-          "startLine": 40,
-          "endLine": 54,
+          "startLine": 42,
+          "endLine": 56,
           "tokens": 122
         },
         {
@@ -2684,8 +2678,8 @@
       "locations": [
         {
           "file": "apps/suite/src/apps/chat/components/chat-app.tsx",
-          "startLine": 249,
-          "endLine": 294,
+          "startLine": 285,
+          "endLine": 330,
           "tokens": 207
         },
         {
@@ -2929,8 +2923,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 172,
-          "endLine": 191,
+          "startLine": 96,
+          "endLine": 115,
           "tokens": 120
         },
         {
@@ -4902,14 +4896,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 98,
-          "endLine": 118,
-          "tokens": 122
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 158,
-          "endLine": 185,
+          "startLine": 82,
+          "endLine": 109,
           "tokens": 168
         },
         {
@@ -6033,14 +6021,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 98,
-          "endLine": 115,
-          "tokens": 121
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 158,
-          "endLine": 189,
+          "startLine": 82,
+          "endLine": 113,
           "tokens": 213
         },
         {
@@ -8473,72 +8455,19 @@
       ]
     },
     "ce287b8debef1eb49870ec334a714be468ffd2d496117d0bb6af94087658957d": {
-      "tokens": 176,
+      "tokens": 122,
       "locations": [
         {
           "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 112,
-          "endLine": 146,
-          "tokens": 176
+          "startLine": 114,
+          "endLine": 137,
+          "tokens": 122
         },
         {
           "file": "apps/suite/src/apps/music/components/music-app.tsx",
-          "startLine": 136,
-          "endLine": 170,
-          "tokens": 176
-        }
-      ]
-    },
-    "cf76bee2f2502668d8a8516bcb8a51326feb0dd4697a2752bebb4003dec87851": {
-      "tokens": 399,
-      "locations": [
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 94,
-          "endLine": 114,
-          "tokens": 123
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 161,
-          "endLine": 188,
-          "tokens": 169
-        },
-        {
-          "file": "apps/pod-chat/src/message.ts",
-          "startLine": 112,
-          "endLine": 131,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 45,
-          "endLine": 68,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 147,
-          "endLine": 167,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/money/lib/model/rdf.ts",
-          "startLine": 119,
-          "endLine": 172,
-          "tokens": 399
-        },
-        {
-          "file": "packages/pod-connectors/src/mail/vocab.ts",
-          "startLine": 37,
-          "endLine": 55,
-          "tokens": 123
-        },
-        {
-          "file": "packages/pod-connectors/src/mail/vocab.ts",
-          "startLine": 90,
-          "endLine": 108,
-          "tokens": 123
+          "startLine": 141,
+          "endLine": 164,
+          "tokens": 122
         }
       ]
     },
@@ -8820,55 +8749,49 @@
       ]
     },
     "d68947880ee1128ddb8789aa0fb56a23d32d6f48f7d92c62feb19f0f80ce3c07": {
-      "tokens": 399,
+      "tokens": 417,
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 100,
-          "endLine": 118,
-          "tokens": 123
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 160,
-          "endLine": 185,
-          "tokens": 169
+          "startLine": 84,
+          "endLine": 112,
+          "tokens": 187
         },
         {
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 111,
-          "endLine": 128,
-          "tokens": 123
+          "endLine": 131,
+          "tokens": 141
         },
         {
           "file": "apps/suite/src/apps/mail/lib/model/message.ts",
           "startLine": 44,
-          "endLine": 65,
-          "tokens": 123
+          "endLine": 68,
+          "tokens": 141
         },
         {
           "file": "apps/suite/src/apps/mail/lib/model/message.ts",
           "startLine": 146,
-          "endLine": 164,
-          "tokens": 123
+          "endLine": 167,
+          "tokens": 141
         },
         {
           "file": "apps/suite/src/apps/money/lib/model/rdf.ts",
           "startLine": 118,
-          "endLine": 169,
-          "tokens": 399
+          "endLine": 172,
+          "tokens": 417
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 36,
-          "endLine": 52,
-          "tokens": 123
+          "endLine": 55,
+          "tokens": 141
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 89,
-          "endLine": 105,
-          "tokens": 123
+          "endLine": 108,
+          "tokens": 141
         }
       ]
     },
@@ -9027,14 +8950,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 98,
-          "endLine": 116,
-          "tokens": 123
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 158,
-          "endLine": 190,
+          "startLine": 82,
+          "endLine": 114,
           "tokens": 215
         },
         {
@@ -9873,53 +9790,6 @@
         }
       ]
     },
-    "f134ff5c7df8152a057f5a0195ed732ee8f9a51aba720fdf13e3dfaeeed09cb4": {
-      "tokens": 409,
-      "locations": [
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 160,
-          "endLine": 186,
-          "tokens": 179
-        },
-        {
-          "file": "apps/pod-chat/src/message.ts",
-          "startLine": 111,
-          "endLine": 129,
-          "tokens": 133
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 44,
-          "endLine": 66,
-          "tokens": 133
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 146,
-          "endLine": 165,
-          "tokens": 133
-        },
-        {
-          "file": "apps/suite/src/apps/money/lib/model/rdf.ts",
-          "startLine": 118,
-          "endLine": 170,
-          "tokens": 409
-        },
-        {
-          "file": "packages/pod-connectors/src/mail/vocab.ts",
-          "startLine": 36,
-          "endLine": 53,
-          "tokens": 133
-        },
-        {
-          "file": "packages/pod-connectors/src/mail/vocab.ts",
-          "startLine": 89,
-          "endLine": 106,
-          "tokens": 133
-        }
-      ]
-    },
     "f16ce7698856d79829b8627483b9cf711e49f5aae55c1ee042cf674ae660205c": {
       "tokens": 123,
       "locations": [
@@ -10430,14 +10300,8 @@
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 94,
-          "endLine": 114,
-          "tokens": 121
-        },
-        {
-          "file": "apps/access-manager/src/lib/records.ts",
-          "startLine": 154,
-          "endLine": 188,
+          "startLine": 78,
+          "endLine": 112,
           "tokens": 213
         },
         {

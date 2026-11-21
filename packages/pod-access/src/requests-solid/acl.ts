@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Port of access-manager's own/nearest-ancestor ACL, create-only materialisation,
 // set-semantics grants and bounded If-Match retry logic.
@@ -6,23 +7,26 @@ import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { addGrant, planAddGrant } from "../roles/client.js";
 import { isRoleError } from "../roles/errors.js";
-import { detectModel, isMixedModel, mismatchedModel } from "../roles/http.js";
-import { put, read, scoped, transport } from "./http.js";
+import {
+  detectModel,
+  isMixedModel,
+  isUnsupportedAcpPolicy,
+  mismatchedModel,
+  walkResources,
+} from "../roles/http.js";
+import { acpRecords } from "./acp-records.js";
+import { UnsupportedAccessModelError } from "./errors.js";
+import { put, read, requireStrongEtag, scoped, transport } from "./http.js";
 import type { RequestMode } from "./inbox.js";
 import { set, turtle, values } from "./rdf.js";
 import { ACCM, ACL, LDP } from "./vocab.js";
 
-export class UnsupportedAccessModelError extends Error {
-  constructor(readonly model: "acp" | "unknown") {
-    super(`Cannot materialise access requests on an ${model} access model`);
-    this.name = "UnsupportedAccessModelError";
-  }
-}
+export { UnsupportedAccessModelError } from "./errors.js";
 
 const ACP_ACCESS_CONTROL = "http://www.w3.org/ns/solid/acp#accessControl";
 
 /**
- * The target's access model. An explicit ACP `accessControl` link means ACP. ACP servers (ESS)
+ * The target's verified access model, including ACP advertised with either access relation. ACP servers (ESS)
  * also advertise their access control resources with `rel="acl"`, so an `acl` link alone proves
  * nothing: the advertised document is read, with the roles layer's detection (its content and
  * type links, walking to the nearest existing, non-empty ancestor), to tell WAC from ACP. No access
@@ -41,9 +45,10 @@ export async function accessModel(options: {
   const response = await fetchFn(target, { method: "HEAD" });
   if (!response.ok) throw new Error(`Access model discovery failed (${response.status})`);
   const links = response.headers.get("link") ?? "";
-  if (link(links, ACP_ACCESS_CONTROL, target)) return "acp";
-  if (link(links, "acl", target) === undefined) return "unknown";
-  return (await detect(target, storage, fetchFn))?.model ?? "unknown";
+  if (!link(links, ACP_ACCESS_CONTROL, target) && link(links, "acl", target) === undefined)
+    return "unknown";
+  const model = (await detect(target, storage, fetchFn))?.model ?? "unknown";
+  return link(links, ACP_ACCESS_CONTROL, target) && model === "wac" ? "unknown" : model;
 }
 
 function container(storage: string): string {
@@ -71,34 +76,44 @@ function link(header: string, relation: string, base: string): string | undefine
   )?.target;
 }
 
-/**
- * The ACL that `resource` advertises, refused (UnsupportedAccessModelError) before anything reads
- * or writes it unless the document really is WAC: an ACP server advertises its ACRs with the
- * same `acl` relation, and no relation at all leaves the model unknown.
- */
-async function aclUrl(resource: string, storage: string, fetchFn: typeof fetch): Promise<string> {
+/** The advertised document, with model agreement and writable ACP addressing checked first. */
+async function accessDocument(
+  resource: string,
+  storage: string,
+  fetchFn: typeof fetch,
+  expected?: "wac" | "acp",
+): Promise<{ url: string; model: "wac" | "acp" }> {
   const response = await fetchFn(resource, { method: "HEAD" });
   if (!response.ok) throw new Error(`Access model discovery failed (${response.status})`);
   const header = response.headers.get("link") ?? "";
-  if (link(header, ACP_ACCESS_CONTROL, resource)) throw new UnsupportedAccessModelError("acp");
-  const target = link(header, "acl", resource);
+  const target = link(header, ACP_ACCESS_CONTROL, resource) ?? link(header, "acl", resource);
   if (target === undefined) throw new UnsupportedAccessModelError("unknown");
   const url = scoped(storage, new URL(target, resource).href);
   const detected = await detect(resource, storage, fetchFn);
-  if (detected === undefined) throw new UnsupportedAccessModelError("unknown");
-  if (detected.model !== "wac") throw new UnsupportedAccessModelError(detected.model);
-  // Both Link parsers must agree on which document governs the folder.
+  if (
+    detected === undefined ||
+    detected.model === "unknown" ||
+    (link(header, ACP_ACCESS_CONTROL, resource) !== undefined && detected.model === "wac")
+  )
+    throw new UnsupportedAccessModelError("unknown");
+  if (expected !== undefined && detected.model !== expected)
+    throw new UnsupportedAccessModelError(detected.model === "acp" ? "acp" : "unknown");
+  // Both Link parsers must agree on which document governs the resource.
   if (detected.ownUrl !== url) throw new Error("The advertised ACL is ambiguous");
-  return url;
+  // The roles writer deliberately refuses query-addressed ESS ACRs. Never partially approve one.
+  if (detected.model === "acp" && new URL(url).search) throw new UnsupportedAccessModelError("acp");
+  return { url, model: detected.model };
 }
 
 /**
- * A sharing-layer refusal for a resource that is not WAC, or whose access documents mix models, as
- * the error callers expect.
+ * Report a changed/mixed model or unrepresentable ACP policy through the request error contract.
  */
 function modelRefusal(error: unknown): unknown {
-  if (mismatchedModel(error) === "acp") return new UnsupportedAccessModelError("acp");
-  return isMixedModel(error) ? new UnsupportedAccessModelError("unknown") : error;
+  const mismatch = mismatchedModel(error);
+  if (mismatch !== undefined || isMixedModel(error))
+    return new UnsupportedAccessModelError(mismatch === "acp" ? "acp" : "unknown");
+  if (isUnsupportedAcpPolicy(error)) return new UnsupportedAccessModelError("acp");
+  return error;
 }
 
 function authSubject(auth: Authorization) {
@@ -107,7 +122,7 @@ function authSubject(auth: Authorization) {
     : DataFactory.namedNode(auth.value);
 }
 
-/** The modes each sharing role grants on a WAC resource or folder. */
+/** The modes each sharing role grants on a WAC or ACP resource or folder. */
 export const ROLE_MODES: Readonly<Record<"viewer" | "editor", readonly RequestMode[]>> =
   Object.freeze({
     viewer: Object.freeze(["read"] as const),
@@ -130,8 +145,9 @@ export function roleFor(modes: readonly RequestMode[]): "viewer" | "editor" {
 /**
  * Grant `agent` the role matching `modes` on `target` through the `./roles` layer (SDK-APP-04):
  * additive (never downgrades), conditional on every write, materialising a missing own ACL with
- * the owner's access kept. The roles layer is pinned to WAC, so a target that turns out to be ACP
- * is refused before any write and reported as UnsupportedAccessModelError. Other refusals (for
+ * the owner's access kept. Pin the roles layer to the detected target model (or the caller's
+ * earlier detection), so a changed model is refused before writing. Unsupported ACP dialects
+ * and mixed/unknown models report UnsupportedAccessModelError. Other refusals (for
  * example `owner-lockout`) are rethrown unchanged for the caller to show; they are never retried.
  */
 export async function applyGrant(
@@ -141,8 +157,10 @@ export async function applyGrant(
   agent: string,
   modes: readonly RequestMode[],
   fetchFn: typeof fetch,
+  expected?: "wac" | "acp",
 ): Promise<void> {
-  const result = await addGrant(...grantArgs(target, storage, owner, agent, modes, fetchFn));
+  const args = await grantArgs(target, storage, owner, agent, modes, fetchFn, expected);
+  const result = await addGrant(...args);
   const failure = result.failed[0];
   if (failure) throw modelRefusal(failure.error);
 }
@@ -155,23 +173,27 @@ export async function checkGrant(
   agent: string,
   modes: readonly RequestMode[],
   fetchFn: typeof fetch,
+  expected?: "wac" | "acp",
 ): Promise<void> {
+  const args = await grantArgs(target, storage, owner, agent, modes, fetchFn, expected);
   try {
-    await planAddGrant(...grantArgs(target, storage, owner, agent, modes, fetchFn));
+    await planAddGrant(...args);
   } catch (error) {
     throw modelRefusal(error);
   }
 }
 
-function grantArgs(
+async function grantArgs(
   target: string,
   storage: string,
   owner: string,
   agent: string,
   modes: readonly RequestMode[],
   fetchFn: typeof fetch,
-): Parameters<typeof addGrant> {
+  expected?: "wac" | "acp",
+): Promise<Parameters<typeof addGrant>> {
   scoped(storage, target);
+  const { model } = await accessDocument(target, storage, fetchFn, expected);
   return [
     [target],
     { agent: { type: "webid", id: agent }, role: roleFor(modes), inherited: false, source: target },
@@ -179,8 +201,7 @@ function grantArgs(
       fetch: fetchFn,
       webId: owner,
       root: storage,
-      // Pinned: the roles layer refuses a resource that is not WAC before writing anything.
-      model: "wac",
+      model,
       kind: target.endsWith("/") ? "folder" : "resource",
     },
   ];
@@ -189,13 +210,14 @@ function grantArgs(
 /** On a records folder ACL: the folder was made private but not yet shown to be empty. */
 const UNVERIFIED = `${ACCM.ns}unverifiedRecords`;
 /**
- * On a sealed records folder ACL: a random key that names the decision records inside. Only the
+ * On a sealed records folder ACL/ACR: a random key that names the decision records inside. Only the
  * owner (Control) can read an ACL, so nobody else can know a record's URL, and nothing written
  * before the folder was sealed can sit at one.
  */
 const RECORDS_KEY = `${ACCM.ns}recordsKey`;
 
 /**
+ * Verify/seal CSS ACP through raw ACR discovery, or WAC through its own ACL as below.
  * Make sure a records container is readable and writable by the owner alone before anything is
  * written into, or trusted from, it. An existing ACL must name no one but the owner, and give the
  * owner Read, Write and Control over the folder and everything in it; otherwise the decision
@@ -214,19 +236,61 @@ export async function ensureOwnerOnlyContainer(
   storage: string,
   owner: string,
   fetchFn: typeof fetch,
+  expected?: "wac" | "acp",
 ): Promise<string> {
+  return (await ownerOnlyContainer(container, storage, owner, fetchFn, expected, false)) as string;
+}
+
+/** The same privacy/sealing checks, optionally stopping before every write. */
+async function ownerOnlyContainer(
+  container: string,
+  storage: string,
+  owner: string,
+  fetchFn: typeof fetch,
+  expected: "wac" | "acp" | undefined,
+  readOnly: boolean,
+): Promise<string | undefined> {
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
+  const settings = (url: string) => ({
+    unverified: UNVERIFIED,
+    recordsKey: RECORDS_KEY,
+    assertEmpty: (refusal: string) => assertEmpty(container, url, fetchFn, refusal),
+    notPrivate: NOT_PRIVATE,
+    missingKey: MISSING_KEY,
+    readOnly,
+  });
   if (head.status === 404) {
-    // Nothing is created on storage that is not WAC.
-    await aclUrl(storage, storage, fetchFn);
+    const storageDocument = await accessDocument(storage, storage, fetchFn, expected);
+    // Preview and decide both check the nearest existing parent, including its model.
+    // Missing intermediate folders contribute no own rules; unreadable ones still refuse.
+    let parent = storageDocument;
+    for await (const { resource, head } of walkResources(new URL("..", container).href, {
+      fetch: fetchFn,
+      root: storage,
+      requireAncestorAccess: true,
+    })) {
+      if (!head.ok) throw new Error(`Access model discovery failed (${head.status})`);
+      if (resource !== storage) parent = await accessDocument(resource, storage, fetchFn, expected);
+      break;
+    }
+    if (readOnly) {
+      return parent.model === "acp"
+        ? acpRecords(container, storage, owner, fetchFn, parent.url, {
+            ...settings(parent.url),
+            absent: true,
+          })
+        : undefined;
+    }
     await put(container, "", fetchFn, null, true);
   } else if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
-  const url = await aclUrl(container, storage, fetchFn);
+  const { url, model } = await accessDocument(container, storage, fetchFn, expected);
+  if (model === "acp") return acpRecords(container, storage, owner, fetchFn, url, settings(url));
   for (let attempt = 0; attempt < 3; attempt++) {
     const existing = await read(url, fetchFn);
     if (!existing) {
       await assertEmpty(container, url, fetchFn, NOT_PRIVATE);
+      if (readOnly) return undefined;
       // Created or lost a create race: either way, re-read and verify on the next pass.
       await put(url, await ownerOnlyAcl(url, container, owner), fetchFn, null, true);
       continue;
@@ -263,14 +327,10 @@ export async function ensureOwnerOnlyContainer(
     // derived from it (a key found next to the unverified mark was not written by us). A private
     // folder with no key lost it or was sealed by older code: its records can no longer be found,
     // so refuse rather than silently orphan them.
-    await assertEmpty(
-      container,
-      url,
-      fetchFn,
-      unverified
-        ? NOT_PRIVATE
-        : "The access records folder has records this version can't read; move them out of settings/access-records/ first",
-    );
+    await assertEmpty(container, url, fetchFn, unverified ? NOT_PRIVATE : MISSING_KEY);
+    requireStrongEtag(existing.etag);
+    await turtle(existing.dataset);
+    if (readOnly) return undefined;
     const sealed = crypto.randomUUID();
     set(existing.dataset, url, UNVERIFIED, undefined);
     set(existing.dataset, url, RECORDS_KEY, sealed);
@@ -289,13 +349,26 @@ export async function recordsKey(
   storage: string,
   owner: string,
   fetchFn: typeof fetch,
+  expected?: "wac" | "acp",
+  readOnly = false,
 ): Promise<string | undefined> {
+  if (readOnly) return ownerOnlyContainer(container, storage, owner, fetchFn, expected, true);
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
   if (head.status === 404) return undefined;
   if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
-  if (!(await read(await aclUrl(container, storage, fetchFn), fetchFn))) return undefined;
-  return ensureOwnerOnlyContainer(container, storage, owner, fetchFn);
+  const { url, model } = await accessDocument(container, storage, fetchFn, expected);
+  if (model === "acp")
+    return acpRecords(container, storage, owner, fetchFn, url, {
+      unverified: UNVERIFIED,
+      recordsKey: RECORDS_KEY,
+      assertEmpty: (refusal) => assertEmpty(container, url, fetchFn, refusal),
+      notPrivate: NOT_PRIVATE,
+      missingKey: MISSING_KEY,
+      peek: true,
+    });
+  if (!(await read(url, fetchFn))) return undefined;
+  return ensureOwnerOnlyContainer(container, storage, owner, fetchFn, expected);
 }
 
 async function ownerOnlyAcl(url: string, container: string, owner: string): Promise<string> {
@@ -309,6 +382,9 @@ async function ownerOnlyAcl(url: string, container: string, owner: string): Prom
   set(dataset, url, UNVERIFIED, "true");
   return turtle(dataset);
 }
+
+const MISSING_KEY =
+  "The access records folder has records this version can't read; move them out of settings/access-records/ first";
 
 const NOT_PRIVATE =
   "The access records folder already has files but isn't private; review and clear it first";

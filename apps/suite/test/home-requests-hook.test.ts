@@ -9,12 +9,14 @@ const mocks = vi.hoisted(() => ({
   session: undefined as unknown as PodSession,
   list: vi.fn(),
   decide: vi.fn(),
+  preview: vi.fn(),
 }));
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => mocks.session }));
 vi.mock("@jeswr/pod-access/requests-solid", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   listRequests: mocks.list,
   decide: mocks.decide,
+  previewDecision: mocks.preview,
 }));
 
 import type { AccessRequestEntry } from "@jeswr/pod-access/requests-solid";
@@ -155,6 +157,43 @@ it("decides through the SDK in one call and re-lists whatever the outcome", asyn
     await expect(binding.decide(readable, { approve: false })).rejects.toThrow("refused");
   });
   expect(mocks.list).toHaveBeenCalledTimes(3);
+});
+
+it("previews read-only with the session's options and pins a decision to that preview", async () => {
+  await mount(h(Probe));
+  const readable = binding.pending[0] as Exclude<AccessRequestEntry, { status: "unreadable" }>;
+  const preview = { requestId: readable.id, targets: [] };
+  mocks.preview.mockResolvedValueOnce(preview);
+  const controller = new AbortController();
+  await expect(binding.preview(readable, { approve: true }, controller.signal)).resolves.toBe(
+    preview,
+  );
+  expect(mocks.preview).toHaveBeenCalledWith(
+    readable,
+    { approve: true },
+    {
+      fetch: mocks.session.fetch,
+      webId: `${ROOT}profile#me`,
+      storage: ROOT,
+      signal: controller.signal,
+    },
+  );
+  await binding.preview(readable, { approve: false });
+  expect(mocks.preview.mock.calls[1]?.[2]).not.toHaveProperty("signal");
+  mocks.decide.mockResolvedValueOnce({ status: "approved", receiptUrl: `${ROOT}r` });
+  await act(async () => {
+    await binding.decide(readable, { approve: true }, preview as never);
+  });
+  expect(mocks.decide).toHaveBeenCalledWith(
+    readable,
+    { approve: true },
+    {
+      fetch: mocks.session.fetch,
+      webId: `${ROOT}profile#me`,
+      storage: ROOT,
+      expected: preview,
+    },
+  );
 });
 
 it("drops a decided request from Pending at once, while the re-list runs and after it fails", async () => {

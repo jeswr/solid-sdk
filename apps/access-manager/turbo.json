@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "env": ["APP_ORIGIN", "CLIENT_BASE_PATH", "VITE_CLIENT_ID"],
+      "env": ["APP_ORIGIN", "CLIENT_BASE_PATH", "VITE_CLIENT_ID", "VITE_SUITE_URL"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     }
   }

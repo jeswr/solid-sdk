@@ -15,6 +15,18 @@ body {
   color: var(--foreground);
 }
 
+/* The redirect notice: Access Manager now lives in Solid Suite Permissions. */
+.moved-notice {
+  max-width: 32rem;
+  margin: 10vh auto;
+  padding: 1rem;
+  text-align: center;
+}
+.moved-notice a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
 .login-screen {
   max-width: 28rem;
   margin: 10vh auto;
