@@ -407,3 +407,29 @@ derivation, and mixed legacy revision ordering retain their existing behavior.
 | Agent memory | Both TypeScript projects and 59 offline tests passed. The full run reached the sandbox's loopback `EPERM` in the CSS fixture. |
 | Daemon | Both TypeScript projects and the build passed. The offline Vitest run passed 239 tests, with three skipped by the name filter. Full Vitest passed 239 tests and reported the same 20 sandbox failures as 41i in loopback and subprocess fixtures. Direct production packaging installed 177 cached dependencies with zero downloads. Plain Node imported the packaged daemon and ran `awp gate --help`. The temporary package directory was removed. |
 | Biome and root guards | Biome passed with existing reference warnings. `pnpm run lint:root` and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 4 (41k)
+
+Workspace initialization uses the storage client's parsed HEAD links to find the
+WAC ACLs for `agent/`, `agent/memory/` and `agent/memory/pending/`. It writes
+owner-only access and inheritance grants to each advertised document. An absent,
+ambiguous or out-of-scope link stops initialization before type-index registration.
+The existing storage scope applies to the discovered URL.
+
+The HTTP regression seeds an extra third-party grant in all three advertised
+ACLs. Before the fix, the alternate ACL still contained that WebID after
+initialization. The two missing-link cases and the foreign-origin case also
+resolved successfully. With the fix, the advertised documents contain only the
+owner's grants and all three invalid-link cases reject before any write to the
+unusable ACL destination or the type index.
+
+| Check | Result |
+| --- | --- |
+| Daemon typecheck, build and offline Vitest | Passed. The offline run passed 243 tests with three cases skipped by the test-name filter. |
+| Full daemon Vitest | 243 passed and 20 failed, matching the sandbox failure set from 41i. CSS and the D-2 demo hit `listen EPERM`. Fifteen cloud cases timed out during loopback setup. The launchd case hit `spawnSync python3 EPERM`, and the CLI and production dependency checks received empty subprocess stdout. |
+| Reference | The library-only build passed, and all 18 admitted-facts, claim-failures and oracle tests passed. |
+| Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five traces differed only at `generated.commit`. The trace index and scenario manifest differed only in row order. All generated trace, outline and manifest files were restored. |
+| Production package | The frozen offline install reused 177 cached dependencies with zero downloads. Plain Node imported the packaged daemon and ran `awp gate --help`. The temporary package directory was removed. |
+| Biome and root guards | Biome on changed TypeScript files, `pnpm run lint:root` and `git diff --check` passed. |

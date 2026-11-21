@@ -178,11 +178,10 @@ export class PodWorkspace {
     );
     return { store, etag: response.etag, missing: false };
   }
-  private async container(url: string) {
+  private async container(url: string): Promise<ReadResult | undefined> {
     this.assertScope(url);
     try {
-      await this.storage.head(url);
-      return;
+      return await this.storage.head(url);
     } catch (error) {
       if (!(error instanceof StorageError) || error.status !== 404)
         throw this.failure("Container unavailable", error);
@@ -193,17 +192,36 @@ export class PodWorkspace {
       if (!(error instanceof StorageError) || error.code !== "conflict")
         throw this.failure("Container creation failed", error);
       try {
-        await this.storage.head(url);
+        return await this.storage.head(url);
       } catch (cause) {
         throw this.failure("Container creation failed", cause);
       }
     }
   }
 
+  private async ownerOnlyContainer(url: string): Promise<void> {
+    let container = await this.container(url);
+    if (!container) {
+      try {
+        container = await this.storage.head(url);
+      } catch (error) {
+        throw this.failure("Container ACL discovery failed", error);
+      }
+    }
+    const acls = container.links.get("acl");
+    if (acls?.length !== 1 || !acls[0])
+      throw new Error('Container must advertise a unique WAC ACL link (rel="acl")');
+    const target = new URL(acls[0].target);
+    if (target.origin !== new URL(url).origin)
+      throw new Error("Container ACL link points to another origin");
+    if (target.pathname.endsWith("/") || target.href === url.slice(0, -1))
+      throw new Error("Container ACL link must point to an ACL document");
+    await this.put(target.href, await buildOwnerOnlyAclTurtle(url, this.ownerWebId));
+  }
+
   async initialize(): Promise<void> {
-    await this.container(this.url(""));
     // The first nonempty write locks the workspace, before any inbox or audit content.
-    await this.put(this.url(".acl"), await buildOwnerOnlyAclTurtle(this.url(""), this.ownerWebId));
+    await this.ownerOnlyContainer(this.url(""));
     for (const path of [
       "control/",
       "approvals/",
@@ -214,11 +232,8 @@ export class PodWorkspace {
       "audit/",
     ])
       await this.container(this.url(path));
-    for (const path of ["memory/", "memory/pending/"]) {
-      const url = this.url(path);
-      await this.container(url);
-      await this.put(`${url}.acl`, await buildOwnerOnlyAclTurtle(url, this.ownerWebId));
-    }
+    for (const path of ["memory/", "memory/pending/"])
+      await this.ownerOnlyContainer(this.url(path));
     await this.register();
   }
   async inbox(binding: string, account: string): Promise<string> {

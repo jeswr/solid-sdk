@@ -114,6 +114,11 @@ export function createMemoryState() {
 /** SDK memory storage plus a fetch adapter for SDKs that still accept a transport. */
 export function createMemoryPod(root = "https://pod.example/") {
   const memory = createMemoryStorage({ protocol: "solid", root });
+  const aclLinks = new Map<string, string | null>();
+  const aclLink = (url: string) => {
+    const target = aclLinks.get(url);
+    return target === undefined ? (url.endsWith("/") ? ".acl" : null) : target;
+  };
   const resources = new Map<string, { body: string; type: string; etag: string }>();
   const requests: { url: string; method: string; body: string; headers: Headers }[] = [];
   const record = (url: string, method: string, body = "", headers = new Headers()) =>
@@ -130,7 +135,15 @@ export function createMemoryPod(root = "https://pod.example/") {
     ...memory,
     async head(url, options) {
       record(url, "HEAD");
-      return memory.head(url, options);
+      const result = await memory.head(url, options);
+      const target = aclLink(url);
+      if (target === null) return result;
+      return {
+        ...result,
+        links: new Map(result.links).set("acl", [
+          { target: new URL(target, url).href, params: {} },
+        ]),
+      };
     },
     async read(url, options) {
       record(url, "GET");
@@ -193,11 +206,12 @@ export function createMemoryPod(root = "https://pod.example/") {
         return new Response(null, { status: 204 });
       }
       const current = await (method === "HEAD" ? storage.head(url) : storage.read(url));
+      const target = aclLink(url);
       return new Response(method === "HEAD" ? null : await current.text(), {
         headers: {
           "content-type": current.contentType ?? "text/turtle",
           etag: current.etag ?? "",
-          ...(url.endsWith("/") ? { link: '<.acl>; rel="acl"' } : {}),
+          ...(target === null ? {} : { link: `<${target}>; rel="acl"` }),
         },
       });
     } catch (error) {
@@ -205,5 +219,5 @@ export function createMemoryPod(root = "https://pod.example/") {
       return new Response(null, { status: error.status });
     }
   };
-  return { io, storage, requests, resources };
+  return { io, storage, requests, resources, aclLinks };
 }

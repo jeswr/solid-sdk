@@ -4,7 +4,7 @@ import { exampleRecords } from "@jeswr/agent-model/testing";
 import { buildOwnerOnlyAclTurtle } from "@jeswr/agentic-legacy-bridge";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import { StorageError } from "@jeswr/storage-client";
+import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
@@ -212,9 +212,21 @@ it("provisions memory and pending under the owner-only ACL before content", asyn
   expect(creations[acl]?.body).not.toContain("AgentClass");
 });
 
-it("replaces permissive ACLs on both existing memory containers", async () => {
+it.each([".acl", "../access-policy"])("replaces permissive ACLs advertised as %s", async (link) => {
   const pod = createMemoryPod(root);
-  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  const { storage } = await createPodClient({
+    storage: root,
+    async fetch(input, init) {
+      const request = new Request(input, init);
+      const response = await pod.io(request);
+      if (request.url === root) {
+        response.headers.append("link", '<http://www.w3.org/ns/pim/space#Storage>; rel="type"');
+        response.headers.set("updates-via", "wss://pod.example/socket");
+      }
+      return response;
+    },
+  });
+  const workspace = new PodWorkspace({ ...pod, storage, root, ownerWebId, privateTypeIndex });
   const other = "https://other.example/profile#agent";
   const agent = await pod.storage.create(root, null, { name: "agent", kind: "container" });
   const memory = await pod.storage.create(agent.url, null, { name: "memory", kind: "container" });
@@ -222,11 +234,12 @@ it("replaces permissive ACLs on both existing memory containers", async () => {
     name: "pending",
     kind: "container",
   });
-  const containers = [memory.url, pending.url];
+  const containers = [agent.url, memory.url, pending.url];
   for (const url of containers) {
+    pod.aclLinks.set(url, link);
     const acl = await buildOwnerOnlyAclTurtle(url, ownerWebId);
     const extra = await buildOwnerOnlyAclTurtle(url, other);
-    await pod.storage.write(`${url}.acl`, acl + extra, {
+    await pod.storage.write(new URL(link, url).href, acl + extra, {
       contentType: "text/turtle",
       ifMatch: "*",
     });
@@ -234,11 +247,12 @@ it("replaces permissive ACLs on both existing memory containers", async () => {
   await workspace.initialize();
   const wac = "http://www.w3.org/ns/auth/acl#";
   for (const url of containers) {
-    const aclUrl = `${url}.acl`;
+    const aclUrl = new URL(link, url).href;
     const body = await (await pod.storage.read(aclUrl)).text();
     const acl = new Store(await parseRdf(body, "text/turtle", { baseIRI: aclUrl }));
     const agents = acl.getQuads(null, DataFactory.namedNode(`${wac}agent`), null, null);
     expect(agents.map(({ object }) => object.value)).toEqual([ownerWebId]);
+    if (link !== ".acl") expect(pod.resources.has(`${url}.acl`)).toBe(false);
     const authorization = agents[0]?.subject;
     for (const predicate of ["accessTo", "default"])
       expect(
@@ -253,4 +267,21 @@ it("replaces permissive ACLs on both existing memory containers", async () => {
     expect(acl.getQuads(null, DataFactory.namedNode(`${wac}agentClass`), null, null)).toEqual([]);
     expect(acl.getQuads(null, DataFactory.namedNode(`${wac}agentGroup`), null, null)).toEqual([]);
   }
+});
+
+it.each([
+  ["", null, /WAC ACL link/],
+  ["memory/", null, /WAC ACL link/],
+  ["memory/pending/", "https://other.example/policy", /another origin/],
+] as const)("refuses invalid ACL discovery for %s (%s)", async (path, link, error) => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  const url = workspace.url(path);
+  pod.aclLinks.set(url, link);
+
+  await expect(workspace.initialize()).rejects.toThrow(error);
+  const writes = pod.requests.filter(({ method }) => method === "PUT").map(({ url }) => url);
+  expect(writes).not.toContain(`${url}.acl`);
+  expect(writes).not.toContain(privateTypeIndex);
+  if (link !== null) expect(writes).not.toContain(link);
 });

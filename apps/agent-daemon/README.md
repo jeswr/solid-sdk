@@ -38,6 +38,10 @@ and cannot be detected from the daemon's side; recover it by reconciling the out
 Only a taken name reported as Solid's remapped
 412 permits proposal replay or index-create retry; a real 409 remains a write failure.
 After a container-create conflict, a fresh HEAD must confirm the container exists.
+The workspace root and both memory containers must advertise a unique WAC ACL
+document within the configured storage root via `Link: <...>; rel="acl"` on HEAD.
+The daemon replaces those documents with owner-only grants before writing content.
+Missing, ambiguous or out-of-scope links stop initialization.
 Read bounds and existing CLI error messages are retained.
 `createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
 that state, with request records and resource snapshots for offline assertions.
