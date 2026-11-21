@@ -48,6 +48,8 @@ export interface Mandate {
   readonly limits: readonly Limit[];
   /** ISO 4217 code that spend limits are counted in. Signed; absent means spend limits fail closed. */
   readonly currency?: string;
+  /** Signed DPV personal-data category IRIs. Absent uses preferences; empty disables recall. */
+  readonly memoryScope?: readonly string[];
 }
 /** A loader must verify provenance before returning any mandate. Undefined means refuse-all. */
 export interface MandateVerifier {

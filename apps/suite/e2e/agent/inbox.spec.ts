@@ -38,6 +38,10 @@ test("archive signs one Archive control outside control/ and holds after reload"
   await expect(page.getByRole("button", { name: "Calendar invitation", exact: true })).toHaveCount(
     0,
   );
+  // The row hides optimistically; wait for the signed write before reloading.
+  await expect
+    .poll(async () => (await daemon.client.list(daemon.client.paths.archive)).length)
+    .toBe(1);
   await page.reload();
   await expect(page.getByRole("button", { name: "Project catch-up", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Calendar invitation", exact: true })).toHaveCount(

@@ -17,6 +17,9 @@ transport the package-issued dataset losslessly as TriG (`application/trig`). Ap
 the same transport. Proofs occupy named graphs and proofValue is a sec:multibase literal,
 matching the standard Data Integrity context. Parsing is structural, so always run
 `createVcMandateVerifier`.
+Reduce authority with `removePermission` (exported from `./issue`), never by hand-editing
+policy sets in an app: turning off ask-first must add a same-scope prohibition, and turning
+off an automatic rule must demote every automatic rule for that action.
 The WebID key resolver and status resolver are mandatory injected seams. Never substitute
 a verification method prefix heuristic or use a key supplied inside the document.
 
