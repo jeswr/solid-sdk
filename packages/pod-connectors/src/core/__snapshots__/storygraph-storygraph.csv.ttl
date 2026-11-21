@@ -1,0 +1,9 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/storygraph/documents/storygraph-library.ttl#book-isbn-9780441013593> <http://purl.org/dc/terms/title> "Synthetic Stars";
+    a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/Book>;
+    <https://schema.org/actionStatus> "read";
+    <https://schema.org/author> "Synthetic Author";
+    <https://schema.org/isbn> "9780441013593";
+    <https://schema.org/name> "Synthetic Stars";
+    <https://schema.org/ratingValue> "3.5"^^<http://www.w3.org/2001/XMLSchema#double>;
+    <https://schema.org/reviewBody> "Good, \U0001f30d".

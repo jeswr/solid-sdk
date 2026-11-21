@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Goodreads → Documents (Tier-C file import).
  *
@@ -13,9 +14,11 @@
  * Parsed natively (no dependency).
  */
 import { DataFactory, Store } from "n3";
+import { bookFragment, isbn13 } from "../core/books.js";
+import { parseDateOnly } from "../core/export-fields.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { csvRows } from "../core/file-stream.js";
-import { recordFragment, sourceItemUrl } from "../core/slug.js";
+import { sourceItemUrl } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { Book, CLASSES } from "../core/vocab.js";
 import { vocabMap } from "./vocab-map.js";
@@ -52,16 +55,20 @@ export const goodreadsFileAdapter: FileImportAdapter = {
       const title = row.Title?.trim();
       if (!title) continue;
       const bookId = row["Book Id"]?.trim();
-      const frag = recordFragment(title, bookId || `${title}|${row.Author ?? ""}`);
+      const author = row.Author?.trim();
+      // Normalised ISBN-13 when valid, so the same book shares its identity with StoryGraph.
+      const normalisedIsbn = isbn13(row.ISBN13) ?? isbn13(row.ISBN);
+      // Without an ISBN the Goodreads Book Id keeps same-titled editions apart.
+      const sourceId = bookId && /^\d{1,20}$/.test(bookId) ? `goodreads:${bookId}` : undefined;
+      const frag = bookFragment(title, author, normalisedIsbn, sourceId);
       const book = new Book(`${doc}#book-${frag}`, store, DataFactory).mark();
       book.name = title;
       if (bookId) {
         book.identifier = bookId;
         book.sourceUrl = sourceItemUrl("https://www.goodreads.com/book/show/", bookId);
       }
-      const author = row.Author?.trim();
       if (author) book.author = author;
-      const isbn = cleanIsbn(row.ISBN13) || cleanIsbn(row.ISBN);
+      const isbn = normalisedIsbn ?? (cleanIsbn(row.ISBN13) || cleanIsbn(row.ISBN));
       if (isbn) book.isbn = isbn;
       const rating = Number.parseInt(row["My Rating"] ?? "", 10);
       if (Number.isFinite(rating) && rating > 0) book.ratingValue = rating;
@@ -92,11 +99,5 @@ export function cleanIsbn(raw: string | undefined): string | undefined {
   return /^[0-9Xx]{10,13}$/.test(inner) ? inner : undefined;
 }
 
-/** Goodreads dates are `YYYY/MM/DD`. */
-export function parseDateOnly(raw: string | undefined): Date | undefined {
-  if (!raw) return undefined;
-  const m = raw.trim().match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
-  if (!m) return undefined;
-  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  return Number.isNaN(d.getTime()) ? undefined : d;
-}
+/** Goodreads dates are `YYYY/MM/DD`; the shared strict parser also keeps 1970..2100 only. */
+export { parseDateOnly };

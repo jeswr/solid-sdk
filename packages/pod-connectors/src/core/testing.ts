@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 /**
  * Test doubles for the integrations framework (imported by vitest only).
@@ -257,6 +258,44 @@ export function memoryFile(name: string, content: string, type = "text/plain"): 
     type,
     size: bytes.byteLength,
     text: async () => content,
+  };
+}
+
+/**
+ * A native-File-like upload backed by bytes (or UTF-8 text): `stream()` yields
+ * `chunkSize`-byte pieces and `slice()` reopens ranges, as ZIP readers need. `text()`
+ * rejects, so tests prove the adapter streams instead of buffering the whole upload.
+ */
+export function streamedBytesFile(
+  name: string,
+  content: string | Uint8Array,
+  chunkSize = 7,
+  type = "",
+): ImportFile {
+  const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+  const open = (start: number, end: number) => () => {
+    let offset = start;
+    return new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (offset >= end) controller.close();
+          else {
+            const next = Math.min(end, offset + chunkSize);
+            controller.enqueue(bytes.slice(offset, next));
+            offset = next;
+          }
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  };
+  return {
+    name,
+    type,
+    size: bytes.byteLength,
+    text: () => Promise.reject(new Error("Whole-file buffering is forbidden in this test")),
+    stream: open(0, bytes.byteLength),
+    slice: (start, end) => ({ stream: open(start, end) }),
   };
 }
 

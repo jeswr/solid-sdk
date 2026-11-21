@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Deterministic, URI-safe fragment ids for imported records.
  *
@@ -38,6 +39,24 @@ export function fnv1a(input: string): string {
 export function recordFragment(label: string, key: string = label): string {
   const base = slugify(label);
   const hash = fnv1a(key);
+  return base ? `${base}-${hash}` : hash;
+}
+
+/**
+ * SHA-256 of a string's UTF-8 bytes as hex, truncated to 128 bits (32 hex digits): a
+ * discriminator for keys an attacker controls, where a 32-bit hash collides on demand.
+ */
+export async function sha256Hex32(input: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest).subarray(0, 16), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/** {@link recordFragment} with a 128-bit SHA-256 discriminator instead of 32-bit FNV-1a. */
+export async function strongRecordFragment(label: string, key: string = label): Promise<string> {
+  const base = slugify(label);
+  const hash = await sha256Hex32(key);
   return base ? `${base}-${hash}` : hash;
 }
 
