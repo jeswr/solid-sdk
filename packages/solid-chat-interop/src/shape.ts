@@ -1,9 +1,12 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
- * Access to the canonical chat-message SHACL shape (`shapes/message.shacl.ttl`).
+ * Access to the published canonical chat-message SHACL shape (`shapes/message.shacl.ttl`).
  *
- * The shape lives in a single `.ttl` file at the package root (the human- and
+ * Generated scalar accessors use codegen/chat.shapes.ttl; the published shape
+ * also retains the qualified task-state warning that closed admission cannot model.
+ * The published shape lives in a single `.ttl` file at the package root (the human- and
  * tool-readable artifact `rdf-engine.validate` consumes directly, and the artifact
  * the codegen framework's shape-driven message components — `jeswr-message-list`,
  * `jeswr-shacl-view` / `-form` — render from). This module reads it as a string so

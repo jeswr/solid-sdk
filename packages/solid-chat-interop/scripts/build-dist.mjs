@@ -13,7 +13,9 @@ const require = createRequire(import.meta.url);
 rmSync(new URL("../dist", import.meta.url), { recursive: true, force: true });
 
 // Keep the existing module paths, including the Node-only shape entry. Only the
-// private vocabulary package is bundled; all published dependencies stay external.
+// private vocabulary package and generated-model runtime are bundled. Public
+// declaration-only wrapper views keep the emitted .d.ts independent of both.
+// esbuild follows src/generated/model.js, so no unbundled generated JS is needed.
 await build({
   absWorkingDir: root,
   entryPoints: readdirSync(new URL("../src", import.meta.url))
