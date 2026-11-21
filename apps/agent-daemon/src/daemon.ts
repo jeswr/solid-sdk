@@ -7,13 +7,7 @@ import {
   type InboundRawMessage,
 } from "@jeswr/agent-channels";
 import { ProposalRefusedError, proposalApprovalTerms } from "@jeswr/agent-executor";
-import {
-  type ActionProposal,
-  canonicalJson,
-  digestBytes,
-  digestOf,
-  podRecordSchema,
-} from "@jeswr/agent-model";
+import { canonicalJson, digestBytes, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { CONFIG_ED25519 } from "@jeswr/agent-reference";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
@@ -21,7 +15,13 @@ import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
-import { auditGateReason, type Gate, type GateVerdict, type ParseRefusal } from "./gate.js";
+import {
+  type Gate,
+  type GateVerdict,
+  inboundAuditDecision,
+  outboundAuditDecision,
+  type ParseRefusal,
+} from "./gate.js";
 import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
@@ -158,7 +158,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       );
   }
   type SessionGate = Pick<Gate, "check" | "head" | "anchor" | "release"> &
-    Partial<Pick<Gate, "recordParseRefusal">>;
+    Partial<Pick<Gate, "recordParseRefusal" | "decisions" | "setReleaseAudit">>;
   // Check/release, head capture and audit append must stay together relative to witnessing.
   let gateWork: Promise<unknown> = Promise.resolve();
   function inGateOrder<T>(work: () => Promise<T>): Promise<T> {
@@ -166,58 +166,39 @@ export function createDaemon(o: DaemonOptions): Daemon {
     gateWork = next.catch(() => undefined);
     return next;
   }
-  async function gateDecision(
-    gate: SessionGate,
-    direction: "in" | "out",
-    outcome: Extract<AuditRecord, { type: "gate-decision" }>["outcome"],
-    reason: string,
-    messageDigest: string,
-    task?: TaskContext,
+  type GateDecision = Extract<AuditRecord, { type: "gate-decision" }>;
+  function gateDecision(
+    fields: Pick<
+      GateDecision,
+      | "direction"
+      | "outcome"
+      | "reason"
+      | "messageDigest"
+      | "gateSeq"
+      | "gateHash"
+      | "taskId"
+      | "conversation"
+    >,
   ) {
-    const head = gate.head();
-    await append({
+    const { gateSeq, gateHash } = fields;
+    return append({
+      ...fields,
       type: "gate-decision",
-      id: `urn:sha256:${digestOf({ direction, head }).slice(8)}`,
-      direction,
-      outcome,
-      reason: auditGateReason(reason),
-      messageDigest,
+      id: `urn:sha256:${digestOf({ gateSeq, gateHash }).slice(8)}`,
       configuration: CONFIG_ED25519,
-      gateSeq: head.seq,
-      gateHash: head.hash,
       ...identity,
-      ...task,
     });
   }
-  async function recordInbound(gate: SessionGate, verdict: GateVerdict) {
-    const outcome = { admitted: "admit", refused: "refuse", unstructured: "unstructured" } as const;
-    const reason = {
-      admitted: "admit",
-      refused: "indeterminate",
-      unstructured: "no-structured-content",
-    };
-    await gateDecision(
-      gate,
-      "in",
-      outcome[verdict.outcome],
-      verdict.reason ?? reason[verdict.outcome],
-      verdict.digest,
-    );
+  async function reconcileGate(gate: SessionGate) {
+    if (!gate.decisions) return;
+    const linked = o.audit.entries().findLast(({ record }) => record.type === "gate-decision");
+    const after = linked?.record.type === "gate-decision" ? linked.record.gateSeq : 0;
+    for (const decision of gate.decisions(after)) await gateDecision(decision);
   }
-  function releaseProposal(gate: SessionGate, proposal: ActionProposal, task: TaskContext) {
-    return inGateOrder(async () => {
-      const result = await gate.release(proposal);
-      const reason = result.ok ? "go" : result.reason;
-      await gateDecision(
-        gate,
-        "out",
-        result.ok ? "go" : reason === "ask-principal" ? "ask-principal" : "stop",
-        reason,
-        result.ok ? digestBytes(result.renderable.compactJws) : digestOf(proposal),
-        task,
-      );
-      return result;
-    });
+  async function recordGate(gate: SessionGate, fields: ReturnType<typeof inboundAuditDecision>) {
+    if (gate.decisions) return reconcileGate(gate);
+    const head = gate.head();
+    await gateDecision({ ...fields, gateSeq: head.seq, gateHash: head.hash });
   }
   function anchorAudit(gate: SessionGate) {
     return inGateOrder(async () => {
@@ -231,19 +212,38 @@ export function createDaemon(o: DaemonOptions): Daemon {
           return;
         }
         const { seq, hash } = head;
-        const jws = await gate.anchor({ seq, hash });
+        let mirrorFailure: { error: unknown } | undefined;
+        let published = false;
         try {
-          await append({
-            type: "record-anchor",
-            id: `urn:sha256:${digestOf({ seq, hash, event: "record-anchor" }).slice(8)}`,
-            seq,
-            hash,
-            jws,
-            ...identity,
+          await gate.anchor({ seq, hash }, async (jws) => {
+            const record = {
+              type: "record-anchor",
+              id: `urn:sha256:${digestOf({ seq, hash, event: "record-anchor" }).slice(8)}`,
+              seq,
+              hash,
+              jws,
+              ...identity,
+            } as const;
+            try {
+              await append(record);
+            } catch (error) {
+              // A failed mirror can follow a successful local append. The gate can
+              // witness that durable row while the daemon reports the mirror failure.
+              if (
+                !o.audit
+                  .entries()
+                  .some((entry) => canonicalJson(entry.record) === canonicalJson(record))
+              )
+                throw error;
+              mirrorFailure = { error };
+            }
+            published = true;
           });
+          if (!published) throw new Error("Gate did not publish its audit anchor");
+          if (mirrorFailure) throw mirrorFailure.error;
           return;
         } catch (error) {
-          // The shared writer may have accepted an executor record during signing.
+          // An executor write can win the race. No witness is persisted for a stale head.
           if (!(error instanceof AuditHeadChangedError) || o.audit.entries().at(-1)?.hash === hash)
             throw error;
         }
@@ -262,17 +262,21 @@ export function createDaemon(o: DaemonOptions): Daemon {
     const cache = new Map<InboundRawMessage, BridgeMessage>();
     const parsed: { message: BridgeMessage; id: string; verdict: GateVerdict }[] = [];
     const source = { binding: account.binding.id, account: account.id };
-    async function recordRefusal(refusal: ParseRefusal) {
+    const batchKey = { ...source, cursor: cursor ?? null };
+    await inGateOrder(() => reconcileGate(gate));
+    async function recordRefusal(refusal: ParseRefusal, item: string | number) {
       await inGateOrder(async () => {
-        const verdict = await gate.recordParseRefusal?.({ ...source, ...refusal });
-        if (verdict?.outcome === "refused") await recordInbound(gate, verdict);
+        const digest = "raw" in refusal ? digestBytes(refusal.raw) : refusal.digest;
+        const replayKey = digestOf({ ...batchKey, item, digest, reason: refusal.reason });
+        const verdict = await gate.recordParseRefusal?.({ ...source, ...refusal, replayKey });
+        if (verdict?.outcome === "refused") await recordGate(gate, inboundAuditDecision(verdict));
         if (verdict?.outcome !== "refused" || verdict.reason === "indeterminate")
           throw new Error("Inbound gate could not record the parser refusal");
       });
     }
     // importInbound prepares its ACL before pulling. Complete all checks before invoking it.
-    for (const { digest, reason } of batch.refusals ?? []) {
-      await recordRefusal({ digest, reason });
+    for (const [index, { digest, reason }] of (batch.refusals ?? []).entries()) {
+      await recordRefusal({ digest, reason }, index);
     }
     for (const item of batch.items) {
       let message: BridgeMessage;
@@ -280,12 +284,13 @@ export function createDaemon(o: DaemonOptions): Daemon {
         message = account.binding.ingest.parse(item);
       } catch (error) {
         if (!(error instanceof ChannelParseError)) throw new Error("Reader parse failed");
-        await recordRefusal({ raw: item.raw, reason: error.reason });
+        await recordRefusal({ raw: item.raw, reason: error.reason }, item.id);
         continue;
       }
       const verdict = await inGateOrder(async () => {
-        const checked = await gate.check({ ...source, message });
-        await recordInbound(gate, checked);
+        const replayKey = digestOf({ ...batchKey, item: item.id, digest: message.rawSha256 });
+        const checked = await gate.check({ ...source, message, replayKey });
+        await recordGate(gate, inboundAuditDecision(checked));
         return checked;
       });
       if (verdict.outcome === "admitted" || verdict.outcome === "unstructured") {
@@ -417,22 +422,43 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const refused = [...(result.refused ?? [])];
       for (const proposal of result.proposals) {
         let entry: Awaited<ReturnType<DaemonOptions["project"]>>;
-        let signed: ReturnType<typeof releaseProposal> | undefined;
+        let signed: ReturnType<Gate["release"]> | undefined;
+        let audited: ReturnType<Gate["release"]> | undefined;
+        const taskFields = { taskId: task.taskId, conversation: task.conversation };
+        const recordRelease = (result: Awaited<ReturnType<Gate["release"]>>) =>
+          recordGate(gate, { ...outboundAuditDecision(proposal, result), ...taskFields }).then(
+            () => result,
+          );
+        gate.setReleaseAudit?.({
+          proposalDigest: digestOf(proposal),
+          task: taskFields,
+          record(result) {
+            if (audited) throw new Error("Outbox gate release mismatch");
+            audited = recordRelease(result);
+            return audited;
+          },
+        });
         const sign = () => {
-          signed ??= releaseProposal(gate, proposal, task);
+          signed ??= inGateOrder(async () => {
+            const result = await gate.release(proposal);
+            return audited ?? recordRelease(result);
+          });
           return signed;
         };
         try {
           entry = await o.project(proposal, sign);
-          const released = await signed;
+          const released = (await signed) ?? (await audited);
           if (!released?.ok || entry.renderable.compactJws !== released.renderable.compactJws)
             throw new Error("Outbox gate release mismatch");
         } catch (error) {
           // Surface a failed audit even if a projector converts it to a typed refusal.
           await signed;
+          await audited;
           if (!(error instanceof ProposalRefusedError)) throw error;
           refused.push({ id: proposal.id, reason: error.reason });
           continue;
+        } finally {
+          gate.setReleaseAudit?.(undefined);
         }
         if (entry.proposal.id !== proposal.id) throw new Error("Outbox proposal mismatch");
         if (entry.proposal.intent.termsDigest !== digestOf(proposalApprovalTerms(entry)))
@@ -548,6 +574,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const gate = gateSession ?? o.gate;
       if (!("head" in gate && "anchor" in gate && "release" in gate))
         throw new Error("Missing gate record capability");
+      await inGateOrder(() => reconcileGate(gate));
       await o.workspace.initialize();
       recordingGate = gate;
       await o.workspace.introduce(o.agentWebId);

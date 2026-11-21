@@ -219,7 +219,8 @@ const project: DaemonOptions["project"] = async (proposal, sign) => {
 // Supply gate and project to createDaemon or composeDaemon.
 ```
 
-Pass the daemon's `sign` callback to the projector. The callback writes the linked
+The projector can use the daemon's `sign` callback or be configured with
+`sign: gate.release`. Both pass through the leased gate and write the linked
 decision before returning the release for rendering. Persist and return the exact
 entry the executor reads. The projector replaces the model draft preview with a
 description drawn solely from signed message fields and binds the resulting
@@ -239,15 +240,20 @@ the gate seals the message and records those verdicts in agent-audit. The
 
 ### Verify the linked audit ledgers
 
-Every completed check and release records its outcome, digest and reference ledger
-head before downstream model calls or outbox projection. The heartbeat and shutdown
-seal each changed suite head with an EdDSA receipt signed by the gate.
+Every completed check and release leaves a body-free decision in the reference
+ledger. Startup and account processing reconcile missing suite decisions from
+these rows before any new model calls or sends. A retry of a decision uses the
+same audit ID, derived from the reference sequence and hash.
+The heartbeat and shutdown seal each changed suite head with an EdDSA receipt.
+The suite writes the local anchor before the gate persists its witness. Startup
+rejects WebIDs that would put a signed receipt over the 4 KiB limit.
 
 Run `awp audit --ledger <events.jsonl>` against the local audit file with the paired
 gate configured. The offline command checks both chains, looks up decision links,
-verifies retained anchor signatures and compares the suite history with heads
-witnessed in the gate ledger. Tail detection extends through the latest retained
-witness.
+verifies retained anchor signatures and checks for each witness's audit head and
+anchor, including evidence covered by a retention checkpoint. It reports a
+missing witnessed head or anchor as a breach. Truncation of the unwitnessed tail
+after the latest witness cannot be detected.
 
 ## Runtime memory
 

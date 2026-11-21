@@ -218,3 +218,33 @@ it("keeps an anchor adjacent at a rotation boundary and resumes normal retention
   expect(ledger.segments()).toHaveLength(1);
   expect(verifyLedger(ledger.entries()).ok).toBe(true);
 });
+
+it("reuses an identical decision after reopening without rotating the ledger", () => {
+  const path = file();
+  const bounds = { segmentMaxEntries: 2 };
+  const ledger = new FileLedger(path, bounds);
+  const head = ledger.append(record, AT);
+  const decision = {
+    ...record,
+    id: "urn:gate-decision:1",
+    type: "gate-decision",
+    direction: "out",
+    outcome: "stop",
+    reason: "unsupported-operation",
+    configuration: "urn:configuration:signed-ed25519",
+    messageDigest: head.hash,
+    gateSeq: head.seq,
+    gateHash: head.hash,
+  } as const;
+  const original = ledger.append(decision, AT);
+  const reopened = new FileLedger(path, bounds);
+  expect(reopened.append(decision, "2026-10-27T12:00:00.000Z")).toEqual(original);
+  expect(reopened.segments()).toEqual([]);
+  expect(() => reopened.append({ ...decision, reason: "prohibited" }, AT)).toThrow(
+    "Audit replay conflict",
+  );
+  // An older file could contain duplicates written before the replay check.
+  const duplicate = seal(3, AT, original.hash, decision);
+  appendFileSync(path, `${JSON.stringify(duplicate)}\n`);
+  expect(() => new FileLedger(path).append(decision, AT)).toThrow("Audit replay conflict");
+});

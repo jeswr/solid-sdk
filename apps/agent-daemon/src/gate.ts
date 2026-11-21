@@ -1,6 +1,11 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
 import {
+  type AuditRecord,
+  GATE_DECISION_REASONS,
+  MAX_RECORD_ANCHOR_BYTES,
+} from "@jeswr/agent-audit";
+import {
   type BridgeMessage,
   type ChannelParseRefusalReason,
   DIRECT,
@@ -18,11 +23,11 @@ import {
   FileStateStore,
   readAgent,
   type StepResult,
+  signCompact,
   TrustStore,
   type TrustStoreData,
   verifyLedger,
 } from "@jeswr/agent-reference";
-import { REASON_CODES } from "@jeswr/agent-reference/core/types";
 import { randomUUID } from "crypto";
 import { constants } from "fs";
 import { lstat, open, readdir, rename, unlink } from "fs/promises";
@@ -43,19 +48,28 @@ export interface GateVerdict {
 }
 type GateIdentity = { actor: string; party: string };
 export interface InboundGatePort {
-  check(input: { binding: string; account: string; message: BridgeMessage }): Promise<GateVerdict>;
+  check(input: {
+    binding: string;
+    account: string;
+    message: BridgeMessage;
+    replayKey?: string;
+  }): Promise<GateVerdict>;
   /** Record a body-free refusal before the daemon can commit the cursor. */
   recordParseRefusal?(input: ParseRefusalInput): Promise<GateVerdict>;
   /** Durable ports open only inside the daemon's process lease. */
   open?(identity: GateIdentity): Promise<Gate>;
 }
 export type DaemonGatePort = InboundGatePort &
-  ({ open(identity: GateIdentity): Promise<Gate> } | Pick<Gate, "head" | "anchor" | "release">);
+  (
+    | { open(identity: GateIdentity): Promise<Gate> }
+    | (Pick<Gate, "head" | "anchor" | "release"> &
+        Partial<Pick<Gate, "decisions" | "setReleaseAudit">>)
+  );
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
 export type ParseRefusal = {
   reason: ChannelParseRefusalReason;
 } & ({ raw: string | Uint8Array } | { digest: string });
-type ParseRefusalInput = { binding: string; account: string } & ParseRefusal;
+type ParseRefusalInput = { binding: string; account: string; replayKey?: string } & ParseRefusal;
 type GateOptions = {
   directory: string;
   now?: () => Date;
@@ -68,16 +82,58 @@ type GateOptions = {
 };
 const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
-const referenceReasons = new Set<string>([
-  ...REASON_CODES,
-  "ask-principal",
-  "indeterminate",
-  "proposal-conflict",
-  "admit",
-  "go",
-]);
-export function auditGateReason(reason: string): string {
-  return referenceReasons.has(reason) ? reason : "indeterminate";
+const gateReason = z.enum(GATE_DECISION_REASONS);
+export function auditGateReason(reason: string): (typeof GATE_DECISION_REASONS)[number] {
+  return gateReason.safeParse(reason).data ?? "indeterminate";
+}
+type AuditDecision = Extract<AuditRecord, { type: "gate-decision" }>;
+type ProjectionTask = Pick<AuditDecision, "taskId" | "conversation">;
+type DecisionFields = Pick<AuditDecision, "direction" | "outcome" | "reason" | "messageDigest"> &
+  ProjectionTask;
+const decisionDigest = z
+  .string()
+  .length(72)
+  .regex(/^sha-256:[a-f0-9]{64}$/);
+const decisionFields = z.object({
+  direction: z.enum(["in", "out"]),
+  outcome: z.enum(["admit", "refuse", "unstructured", "go", "stop", "ask-principal"]),
+  reason: gateReason,
+  messageDigest: decisionDigest,
+  taskId: z.string().optional(),
+  conversation: z.string().optional(),
+});
+type ReleaseAudit = {
+  proposalDigest: string;
+  task: ProjectionTask;
+  record(result: ProposalRelease): Promise<ProposalRelease>;
+};
+type PublishAnchor = (jws: string) => Promise<void>;
+
+export function inboundAuditDecision(verdict: GateVerdict): DecisionFields {
+  const outcome = { admitted: "admit", refused: "refuse", unstructured: "unstructured" } as const;
+  const defaultReason = {
+    admitted: "admit",
+    refused: "indeterminate",
+    unstructured: "no-structured-content",
+  };
+  return {
+    direction: "in",
+    outcome: outcome[verdict.outcome],
+    reason: auditGateReason(verdict.reason ?? defaultReason[verdict.outcome]),
+    messageDigest: verdict.digest,
+  };
+}
+
+export function outboundAuditDecision(
+  proposal: ActionProposal,
+  result: ProposalRelease,
+): DecisionFields {
+  return {
+    direction: "out",
+    outcome: result.ok ? "go" : result.reason === "ask-principal" ? "ask-principal" : "stop",
+    reason: result.ok ? "go" : auditGateReason(result.reason),
+    messageDigest: result.ok ? digestBytes(result.renderable.compactJws) : digestOf(proposal),
+  };
 }
 const time = z.iso.datetime();
 const finalFields = { time, transaction: z.uuid().optional() };
@@ -206,6 +262,12 @@ type GateRuntime = Pick<
   | "close"
 >;
 type RecordHead = ReturnType<GateRuntime["recordHead"]>;
+const decisionType = "suite-gate-decision";
+
+function assertAnchorSize(jws: string): void {
+  // Compact JWS is ASCII, so each character is one byte.
+  if (jws.length > MAX_RECORD_ANCHOR_BYTES) throw new Error("Record anchor exceeds size bound");
+}
 
 export function createGate(
   rt: GateRuntime,
@@ -218,6 +280,32 @@ export function createGate(
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
+  let releaseAudit: ReleaseAudit | undefined;
+  const recorded = new Map<string, string>();
+  for (const { record } of ledger.entries()) {
+    if (record.type === decisionType && typeof record.replayKey === "string")
+      recorded.set(record.replayKey, digestOf(decisionFields.parse(record)));
+  }
+
+  async function recordDecision(binding: string, fields: DecisionFields, replayKey?: string) {
+    const key = replayKey === undefined ? undefined : decisionDigest.parse(replayKey);
+    const fingerprint = digestOf(fields);
+    if (key && recorded.get(key) === fingerprint) return;
+    await rt.commitBindingEvent({
+      type: decisionType,
+      binding,
+      ...fields,
+      ...(key && { replayKey: key }),
+    });
+    if (key) recorded.set(key, fingerprint);
+  }
+
+  async function checked(input: CheckInput | ParseRefusalInput) {
+    const verdict = await check(input);
+    await recordDecision(input.binding, inboundAuditDecision(verdict), input.replayKey);
+    return verdict;
+  }
+
   async function check(input: CheckInput | ParseRefusalInput): Promise<GateVerdict> {
     const { binding, account } = input;
     const message = "message" in input ? input.message : undefined;
@@ -314,31 +402,57 @@ export function createGate(
     return result;
   }
   return {
-    check: (input: CheckInput) => enqueue(() => check(input)),
-    recordParseRefusal: (input: ParseRefusalInput) => enqueue(() => check(input)),
-    release: (proposal: ActionProposal) =>
-      enqueue<ProposalRelease>(async () => {
+    check: (input: CheckInput) => enqueue(() => checked(input)),
+    recordParseRefusal: (input: ParseRefusalInput) => enqueue(() => checked(input)),
+    release(proposal: ActionProposal) {
+      const audit = releaseAudit;
+      return enqueue<ProposalRelease>(async () => {
+        if (audit && audit.proposalDigest !== digestOf(proposal))
+          throw new Error("Outbox gate release mismatch");
         const result = (await outbound?.release(proposal)) ?? {
           ok: false,
           reason: "unsupported-operation",
         };
-        // Local stops and cached decisions also need a head for this invocation.
-        await rt.commitBindingEvent({
-          type: "channel-observation",
-          binding: "suite-outbound",
-          digest: result.ok ? digestBytes(result.renderable.compactJws) : digestOf(proposal),
-          reason: result.ok ? "go" : auditGateReason(result.reason),
-        });
+        await recordDecision(
+          "suite-outbound",
+          { ...outboundAuditDecision(proposal, result), ...audit?.task },
+          digestOf({ proposal: proposal.id, direction: "out" }),
+        );
+        await audit?.record(result);
         return result;
-      }),
+      });
+    },
+    setReleaseAudit(audit: ReleaseAudit | undefined) {
+      releaseAudit = audit;
+    },
+    decisions(after: number) {
+      const entries = ledger.entries();
+      const last = entries.at(-1);
+      if (last && rt.recordHead().hash !== last.hash)
+        throw new Error("Gate ledger changed while reading decisions");
+      return entries.flatMap(({ seq, hash, record }) =>
+        seq > after && record.type === decisionType
+          ? [{ ...decisionFields.parse(record), gateSeq: seq, gateHash: hash }]
+          : [],
+      );
+    },
     head(): RecordHead {
       return rt.recordHead();
     },
-    anchor: (head: RecordHead) =>
+    anchor: (head: RecordHead, publish?: PublishAnchor) =>
       enqueue(async () => {
         const { actor, party } = rt.identity;
         if (!party) throw new Error("record signing key unavailable");
-        return (await rt.witnessRecordHead({ actor, party, seq: head.seq, hash: head.hash })).jws;
+        return (
+          await rt.witnessRecordHead(
+            { actor, party, seq: head.seq, hash: head.hash },
+            [],
+            async (jws) => {
+              assertAnchorSize(jws);
+              await publish?.(jws);
+            },
+          )
+        ).jws;
       }),
     verifyOwn: (compactJws: string, expected: ProposalContext | undefined) =>
       enqueue(() => {
@@ -424,6 +538,21 @@ async function openStoredGate(
   options: GateOptions,
 ): Promise<Gate> {
   const { now = () => new Date(), admission, outbound } = options;
+  const { actor, party } = stored.identity;
+  if (!party || stored.actorKey.alg !== "EdDSA") throw new Error("record signing key unavailable");
+  // Prove that the largest safe-integer sequence and ISO timestamp fit for these exact identities.
+  assertAnchorSize(
+    await signCompact(stored.actorKey, "awp-record-anchor+jws", {
+      type: "RecordAnchorReceipt",
+      actor,
+      party,
+      subject: actor,
+      subjectParty: party,
+      seq: Number.MAX_SAFE_INTEGER,
+      hash: digestBytes("anchor size check"),
+      at: "+275760-09-13T00:00:00.000Z",
+    }),
+  );
   const { runtime, ledger } = await openRuntime(stored, options);
   try {
     const verdicts = fileVerdicts(stored.dir);
@@ -524,7 +653,9 @@ export async function installGateMandate(options: {
 /** The daemon opens the durable gate under its existing process lease. */
 export function createInboundGate(
   options: GateOptions,
-): InboundGatePort & Required<Pick<InboundGatePort, "open">> & Pick<Gate, "facts" | "verifyOwn"> {
+): InboundGatePort &
+  Required<Pick<InboundGatePort, "open">> &
+  Pick<Gate, "facts" | "verifyOwn" | "release"> {
   let active: Gate | undefined;
   return {
     async check() {
@@ -533,6 +664,10 @@ export function createInboundGate(
     facts() {
       if (!active) throw new Error("Inbound gate requires an active daemon lease");
       return active.facts();
+    },
+    async release(proposal) {
+      if (!active) throw new Error("Outbound gate requires an active daemon lease");
+      return active.release(proposal);
     },
     async verifyOwn(compactJws, expected) {
       if (!active) throw new Error("Outbound gate requires an active daemon lease");

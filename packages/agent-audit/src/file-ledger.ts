@@ -14,7 +14,7 @@ import {
 } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join } from "path";
-import type { EvidenceLedger } from "./ledger.js";
+import { type EvidenceLedger, gateDecisionReplay } from "./ledger.js";
 import { GENESIS, type LedgerEntry, type LedgerRecord, seal } from "./records.js";
 import { verifyLedger } from "./verify.js";
 
@@ -87,10 +87,12 @@ export class FileLedger implements EvidenceLedger {
   }
   append(record: LedgerRecord, at: string): LedgerEntry {
     // Validate before rotation: rejected input must never prune evidence.
-    this.next(record, at);
+    const candidate = this.next(record, at);
     const onDisk = this.entries();
     if (!verifyLedger(onDisk).ok || onDisk.at(-1)?.hash !== this.last?.hash)
       throw new Error("Ledger changed outside this writer");
+    const existing = gateDecisionReplay(onDisk, candidate.record);
+    if (existing) return existing;
     // Retention can append checkpoints. Keep a signed anchor adjacent to its predecessor;
     // let the following ordinary append handle rotation and pruning.
     if (this.last?.record.type === "record-anchor" && record.type === "record-anchor")

@@ -496,3 +496,39 @@ it("round-trips a gate decision and anchor through their PROV Turtle goldens", a
     "gate record missing",
   );
 });
+
+it("retries a gate decision after mirror failure and rejects an ID collision", async () => {
+  const l = new MemoryLedger();
+  const pod = createMemoryAuditPod();
+  let fail = true;
+  const writer = new AuditWriter(
+    l,
+    new PodMirror(async (url, init) => {
+      if (fail) throw new Error("mirror offline");
+      return pod.fetch(url, init);
+    }, ROOT),
+  );
+  const decision = {
+    ...record,
+    type: "gate-decision",
+    direction: "in",
+    outcome: "refuse",
+    reason: "bad-signature",
+    configuration: "urn:configuration:signed-ed25519",
+    messageDigest: `sha-256:${"a".repeat(64)}`,
+    gateSeq: 42,
+    gateHash: `sha-256:${"b".repeat(64)}`,
+  } as const;
+  expect(() =>
+    writer.append({ ...decision, reason: "private-prompt-text" } as never, AT),
+  ).toThrow();
+  await expect(writer.append(decision, AT)).rejects.toThrow();
+  const first = required(l.entries()[0]);
+  fail = false;
+  await expect(writer.append(decision, AT)).resolves.toEqual(first);
+  await expect(writer.append({ ...decision, reason: "malformed" }, AT)).rejects.toThrow(
+    "Audit replay conflict",
+  );
+  expect(l.entries()).toEqual([first]);
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual([first]);
+});

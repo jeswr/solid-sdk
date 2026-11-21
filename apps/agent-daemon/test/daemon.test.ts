@@ -1168,6 +1168,7 @@ it.each([
     account: "fixture",
     binding: "direct",
     message: h.message,
+    replayKey: expect.stringMatching(/^sha-256:[a-f0-9]{64}$/),
   });
   expect(reader).toHaveBeenCalledTimes(outcome === "refused" ? 0 : 1);
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(outcome === "admitted" ? 1 : 0);
@@ -1317,7 +1318,7 @@ it.each([
     expect(h.ledger.entries().some(({ record }) => record.type === "ingest")).toBe(false);
     const gateDecisions = h.ledger
       .entries()
-      .filter(({ record }) => record.type === "gate-decision");
+      .filter(({ record }) => record.type === "gate-decision" && record.outcome === "refuse");
     expect(gateDecisions).toHaveLength(1);
     expect(gateDecisions[0]?.record).toMatchObject({
       direction: "in",
@@ -2709,10 +2710,10 @@ it("seals a moved audit head at heartbeat and shutdown, retrying if another writ
   const first = h.ledger.append({ ...control, id: "urn:control:heartbeat" }, at);
   const port = testRecordPort(AGENT_ID, OWNER);
   const anchor = vi.fn(port.anchor);
-  anchor.mockImplementationOnce(async (head) => {
+  anchor.mockImplementationOnce(async (head, publish) => {
     expect(head).toEqual({ seq: first.seq, hash: first.hash });
     h.ledger.append({ ...control, id: "urn:control:concurrent" }, at);
-    return port.anchor(head);
+    return port.anchor(head, publish);
   });
   h.executor.runOutboxOnce.mockImplementationOnce(async () => {
     expect(h.ledger.entries().at(-1)?.record).toMatchObject({
@@ -2732,4 +2733,118 @@ it("seals a moved audit head at heartbeat and shutdown, retrying if another writ
   expect(anchor).toHaveBeenCalledTimes(3);
   await daemon.once();
   expect(anchor).toHaveBeenCalledTimes(3);
+});
+
+it.each([
+  "local append",
+  "mirror",
+] as const)("recovers a refused check after %s failure and reopening the daemon", async (failure) => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "brief-41-recovery-"));
+  const ref = {
+    directory: join(directory, "gate"),
+    ownerDir: join(directory, "owner"),
+    agentWebId: AGENT_ID,
+    ownerWebId: OWNER,
+    now: () => new Date(AT),
+  };
+  try {
+    await initGate({ ...ref, confirm: async () => true });
+    const { append } = h.options.audit;
+    let interrupted = false;
+    h.options.audit.append = async (record, at) => {
+      if (record.type === "gate-decision" && !interrupted) {
+        interrupted = true;
+        if (failure === "mirror") await append(record, at);
+        throw new Error("Interrupted after gate commit");
+      }
+      return append(record, at);
+    };
+    const start = (accounts = h.options.accounts) =>
+      createDaemon({ ...h.options, accounts, gate: createInboundGate(ref) }).once();
+    await expect(start()).rejects.toThrow("Interrupted after gate commit");
+    expect(h.state.cursors.size).toBe(0);
+    const decisions = () =>
+      h.ledger.entries().filter(({ record }) => record.type === "gate-decision");
+    expect(decisions()).toHaveLength(failure === "mirror" ? 1 : 0);
+    if (failure === "local append") {
+      // An empty account list proves startup recovery runs independently of redelivery.
+      await start([]);
+      expect(decisions()).toHaveLength(1);
+    }
+    await start();
+    expect(decisions()).toHaveLength(1);
+    const decision = decisions()[0]?.record;
+    if (decision?.type !== "gate-decision") throw new Error("Missing linked decision");
+    const { gateSeq, gateHash } = decision;
+    expect(decision).toMatchObject({
+      id: `urn:sha256:${digestOf({ gateSeq, gateHash }).slice(8)}`,
+      direction: "in",
+      outcome: "refuse",
+      messageDigest: `sha-256:${h.message.rawSha256}`,
+    });
+    expect(h.state.cursors.get("fixture")).toBe("one");
+    expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "healthy",
+  "interrupted",
+] as const)("audits a release through the factory signer with a %s audit writer", async (mode) => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "brief-41-factory-release-"));
+  const ref = {
+    directory: join(directory, "gate"),
+    ownerDir: join(directory, "owner"),
+    agentWebId: AGENT_ID,
+    ownerWebId: OWNER,
+    now: () => new Date(AT),
+  };
+  try {
+    await initGate({ ...ref, confirm: async () => true });
+    const gate = createInboundGate(ref);
+    h.ingest.parse.mockReturnValue({ ...h.message, jsonLdBlocks: [] });
+    const project: DaemonOptions["project"] = async (proposal) => {
+      // This is the signer captured by createOutboxProjector in the Phase 3 composition.
+      const release = await gate.release(proposal);
+      expect(release).toEqual({ ok: false, reason: "unsupported-operation" });
+      expect(h.ledger.entries().at(-1)?.record).toMatchObject({
+        type: "gate-decision",
+        direction: "out",
+        outcome: "stop",
+        reason: "unsupported-operation",
+      });
+      throw new ProposalRefusedError("unsupported-operation");
+    };
+    const options = { ...h.options, gate, project, isFlagged: async () => true };
+    if (mode === "interrupted") {
+      const { append } = h.options.audit;
+      let interrupted = false;
+      h.options.audit.append = async (record, at) => {
+        if (record.type === "gate-decision" && record.direction === "out" && !interrupted) {
+          interrupted = true;
+          throw new Error("Release audit unavailable");
+        }
+        return append(record, at);
+      };
+      await expect(createDaemon(options).once()).rejects.toThrow("Release audit unavailable");
+      expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+      expect(h.state.cursors.size).toBe(0);
+      await createDaemon({ ...options, accounts: [], gate: createInboundGate(ref) }).once();
+      const decisions = h.ledger
+        .entries()
+        .filter(({ record }) => record.type === "gate-decision" && record.direction === "out");
+      expect(decisions.map(({ record }) => record)).toMatchObject([
+        { outcome: "stop", reason: "unsupported-operation", taskId: expect.any(String) },
+      ]);
+    } else {
+      await createDaemon(options).once();
+    }
+    expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

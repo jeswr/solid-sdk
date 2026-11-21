@@ -52,7 +52,8 @@ export interface DaemonOptions {
   /** Read trusted owner selections, never flags supplied by channel content. */
   readonly isFlagged: (account: string, thread: string) => Promise<boolean>;
   /**
-   * Render and idempotently project the daemon's audited release before pod publication.
+   * Render and idempotently project the audited release before pod publication.
+   * Use the supplied signer or the configured inbound gate factory's release.
    * Return the exact executor entry with intent.termsDigest set to proposalTermsDigest(entry).
    * The daemon durably caches that finalized proposal before publishing it or its audit evidence.
    */

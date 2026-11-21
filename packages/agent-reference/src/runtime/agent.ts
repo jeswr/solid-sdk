@@ -3427,6 +3427,7 @@ export class AgentRuntime {
       interval?: { conversation: string; from: LedgerHead };
     },
     legacyApprovals: readonly LedgerEntry[] = [],
+    beforePersist?: (jws: string) => void | Promise<void>,
   ): Promise<{ jws: string }> {
     return this.exclusive(async () => {
       const key = this.keysByAlg.get("EdDSA");
@@ -3445,7 +3446,6 @@ export class AgentRuntime {
       });
       const at = this.now();
       const redactions = approvalRedactions.length ? { approvalRedactions } : {};
-      this.record({ type: "record-anchor-receipt", ...head, ...redactions });
       const receipt = {
         type: "RecordAnchorReceipt",
         actor: this.identity.actor,
@@ -3458,8 +3458,11 @@ export class AgentRuntime {
         ...redactions,
         at,
       };
+      const jws = await signCompact(key, "awp-record-anchor+jws", receipt);
+      await beforePersist?.(jws);
+      this.record({ type: "record-anchor-receipt", ...head, ...redactions });
       this.persist();
-      return { jws: await signCompact(key, "awp-record-anchor+jws", receipt) };
+      return { jws };
     });
   }
 

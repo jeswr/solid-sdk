@@ -12,10 +12,10 @@ export function testRecordPort(agent: string, owner: string): Pick<Gate, "head" 
       seq++;
       return { seq, hash: digestOf({ agent, seq }) };
     },
-    async anchor(head) {
+    async anchor(head, publish) {
       keys ??= generateSigningKey();
       const { key } = await keys;
-      return signCompact(key, "awp-record-anchor+jws", {
+      const jws = await signCompact(key, "awp-record-anchor+jws", {
         type: "RecordAnchorReceipt",
         actor: agent,
         party: owner,
@@ -24,6 +24,8 @@ export function testRecordPort(agent: string, owner: string): Pick<Gate, "head" 
         ...head,
         at: "2026-11-01T12:00:00.000Z",
       });
+      await publish?.(jws);
+      return jws;
     },
   };
 }

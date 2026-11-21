@@ -11,7 +11,10 @@ import {
   taskStatsCsv,
   taskStatsJson,
 } from "@jeswr/agent-audit";
-import { CHAIN_SCOPE, verifyLedger as verifyAuditLedger } from "@jeswr/agent-audit/verify";
+import {
+  MAX_RECORD_ANCHOR_BYTES,
+  verifyLedger as verifyAuditLedger,
+} from "@jeswr/agent-audit/verify";
 import { type Deps, login } from "@jeswr/agent-credentials";
 import type { ControlStore } from "@jeswr/agent-executor";
 import {
@@ -205,6 +208,7 @@ async function auditLocal(
   const path = args[1];
   if (args.length !== 2 || !path || path.startsWith("--") || !options)
     return fail("local audit requires a ledger path and configured gate");
+  print("Truncation of the unwitnessed tail after the latest witness cannot be detected.");
   let entries: readonly LedgerEntry[];
   try {
     entries = readLedger(path);
@@ -245,11 +249,10 @@ async function auditLocal(
       resolve: (id) => (id === kid ? { kid, alg, publicJwk } : undefined),
       typ: "awp-record-anchor+jws",
       allowedAlgs: ["EdDSA"],
-      limits: { ...DEFAULT_LIMITS, maxEnvelopeBytes: 4096 },
+      limits: { ...DEFAULT_LIMITS, maxEnvelopeBytes: MAX_RECORD_ANCHOR_BYTES },
     });
     if (result.outcome !== "valid") return fail(`invalid anchor signature at record ${seq}`);
   }
-  print(CHAIN_SCOPE);
   print("PASS");
   return 0;
 }

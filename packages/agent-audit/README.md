@@ -53,9 +53,13 @@ Use `hashRecipient(handle, accountId, salt)` with a secret random salt of at lea
 HMAC-SHA-256 (`sha256:<hex>`), matching agent-mandate's recipient vocabulary.
 
 A `gate-decision` links the message or action digest and reference outcome to a
-specific reference-ledger sequence and hash. A `record-anchor` contains a bounded
-EdDSA receipt over the immediately preceding suite entry. Retain the paired gate
-ledger to check decision links and history through the latest witnessed head.
+specific reference-ledger sequence and hash. Its reason must be in
+`GATE_DECISION_REASONS`. Appending an identical retained decision with the same ID
+reuses the original entry. Reusing the ID with different content fails.
+A `record-anchor` contains an EdDSA receipt of up to 4 KiB over the immediately
+preceding suite entry. Retain the paired gate ledger to check for missing
+witnessed heads and anchors. The unwitnessed tail after the latest witness can
+be truncated without detection.
 
 For a complete proposal audit, write these linked events in order:
 
@@ -178,9 +182,9 @@ result types and scope strings (`CHAIN_SCOPE`, `AUDIT_SCOPE`, `HEAD_MISSING`).
 
 Supply verified reference ledger points as `verifyLedger(entries, { gateEntries })`
 to check decision links. Independently retained heads can also be passed as
-`witnessedHeads` to detect a missing or changed witnessed prefix. The daemon's
-offline audit command checks retained anchor JWS signatures using the configured
-gate public key.
+`witnessedHeads` to check for a matching head and anchor for every witness.
+A retention checkpoint can cover pruned evidence. The daemon's offline audit
+command checks retained anchor JWS signatures using the configured gate public key.
 It also exports `writeEntryGraph`, `writeHeadGraph` and `AuditProjectionNode`:
 callers supply wrapper-backed nodes to write the same entry, decision and head
 projections as the daemon, without importing parsers, storage or Node modules.

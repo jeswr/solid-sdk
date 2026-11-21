@@ -83,6 +83,101 @@ const recordSchema = z.strictObject({
 });
 const identityFields = { id: iri, agent: iri, owner: iri };
 const linkedDigest = digestSchema.length(72);
+/** Body-free reference and daemon verdict codes admitted to gate decisions. */
+export const GATE_DECISION_REASONS = Object.freeze([
+  // integrity / authentication (local rejections, not replied to)
+  "malformed",
+  "bounds-exceeded",
+  "unsigned-not-allowed",
+  "unknown-key",
+  "bad-signature",
+  "disallowed-header",
+  "configuration-mismatch",
+  "sender-key-mismatch",
+  "wrong-audience",
+  "expired",
+  "not-yet-valid",
+  "lifetime-too-long",
+  "replay-conflict",
+  "capacity",
+  // binding
+  "no-structured-content",
+  "conflicting-structured-copies",
+  "human-parity-mismatch",
+  // interaction
+  "unsupported-profile",
+  "unsupported-configuration",
+  "unsupported-operation",
+  "unsupported-kind",
+  "unsupported-term",
+  "protocol-violation",
+  "terms-digest-mismatch",
+  "round-limit",
+  "conversation-closed",
+  // representation / authority / authorisation
+  "representation-missing",
+  "representation-invalid",
+  "representation-expired",
+  "representation-out-of-scope",
+  "source-not-authoritative",
+  "evidence-invalid",
+  "not-authorised",
+  "mandate-invalid",
+  "assurance-insufficient",
+  "approval-required",
+  "approval-denied",
+  "approval-mismatch",
+  "missing-context",
+  "indeterminate-policy",
+  "grant-invalid",
+  "grant-expired",
+  "grant-revoked",
+  "insufficient-scope",
+  "purpose-not-permitted",
+  "no-agreement",
+  "amount-differs",
+  "payee-differs",
+  "receipt-mismatch",
+  "context-not-clear",
+  "terms-not-acceptable",
+  "structured-form-required",
+  "method-not-accepted",
+  "source-unknown",
+  "lookup-failed",
+  "status-withdrawn",
+  "mandate-withdrawn",
+  "prohibited",
+  "confidence-too-low",
+  "superseded-by-better-source",
+  "partial-result",
+  "completeness-not-established",
+  "rule-not-accepted",
+  "deriver-not-accepted",
+  "form-not-available",
+  "rule-unbounded",
+  "limit-exceeded",
+  "budget-exceeded",
+  "stopped-by-principal",
+  "record-unavailable",
+  "derivation-not-verified",
+  "result-uncertain",
+  "evidence-missing",
+  // domain
+  "invalid-terms",
+  "no-acceptable-slot",
+  "fee-not-acceptable",
+  "excessive-scope",
+  "stale-data",
+  "credentials-required",
+  "execution-failed",
+  // Suite gate
+  "admit",
+  "go",
+  "ask-principal",
+  "indeterminate",
+  "proposal-conflict",
+] as const);
+export const MAX_RECORD_ANCHOR_BYTES = 4096;
 const gateDecisionSchema = z
   .strictObject({
     ...identityFields,
@@ -90,10 +185,7 @@ const gateDecisionSchema = z
     direction: z.enum(["in", "out"]),
     messageDigest: linkedDigest,
     outcome: z.enum(["admit", "refuse", "unstructured", "go", "stop", "ask-principal"]),
-    reason: z
-      .string()
-      .regex(/^[a-z][a-z0-9-]{0,63}$/)
-      .refine((value) => !/\s/.test(value)),
+    reason: z.enum(GATE_DECISION_REASONS),
     configuration: iri,
     gateSeq: count.min(1),
     gateHash: linkedDigest,
@@ -141,7 +233,7 @@ const recordAnchorSchema = z
     hash: linkedDigest,
     jws: z
       .string()
-      .max(4096)
+      .max(MAX_RECORD_ANCHOR_BYTES)
       .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{86}$/)
       .refine((value) => !/\s/.test(value)),
   })

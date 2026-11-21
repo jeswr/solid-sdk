@@ -325,6 +325,7 @@ it.each([
   ["wrong direction for outcome", { ...gateDecision, direction: "out" }],
   ["invalid configuration", { ...gateDecision, configuration: "prompt text" }],
   ["long reason", { ...gateDecision, reason: "x".repeat(65) }],
+  ["arbitrary lowercase reason", { ...gateDecision, reason: "private-prompt-text" }],
   ["free-form reason", { ...gateDecision, reason: "private prompt" }],
   ["body", { ...gateDecision, body: "private message" }],
   ["handle", { ...gateDecision, accountId: "private-handle" }],
@@ -368,29 +369,52 @@ it("reports a gate decision that has no matching sequence and hash in the gate l
   );
 });
 
-it("checks independently witnessed heads through the retained prefix and detects truncation", () => {
+it("reports truncation before the latest witnessed head or its anchor", () => {
   const entries = activityFixture(3);
-  const first = required(entries[0]);
-  const second = required(entries[1]);
-  const last = required(entries[2]);
-  expect(verifyLedger(entries, { witnessedHeads: [last] }).ok).toBe(true);
-  expect(verifyLedger(entries.slice(0, -1), { witnessedHeads: [last] })).toMatchObject({
+  const head = required(entries[2]);
+  const anchored = seal(4, AT, head.hash, {
+    ...anchor,
+    seq: head.seq,
+    hash: head.hash,
+    jws: witnessFixture(RECORD, { seq: head.seq, hash: head.hash }),
+  });
+  expect(verifyLedger([...entries, anchored], { witnessedHeads: [head] }).ok).toBe(true);
+  expect(verifyLedger(entries, { witnessedHeads: [head] })).toMatchObject({
     ok: false,
-    firstBadSeq: last.seq,
+    firstBadSeq: anchored.seq,
+    problem: "witness anchor missing",
+  });
+  expect(verifyLedger(entries.slice(0, -1), { witnessedHeads: [head] })).toMatchObject({
+    ok: false,
+    firstBadSeq: head.seq,
     problem: "witnessed head missing or changed",
   });
-  const checkpoint = seal(4, AT, last.hash, {
+});
+
+it("accepts a latest witness and its anchor pruned by a valid checkpoint", () => {
+  const first = required(activityFixture(1)[0]);
+  const anchored = seal(2, AT, first.hash, {
+    ...anchor,
+    hash: first.hash,
+    jws: witnessFixture(RECORD, { seq: first.seq, hash: first.hash }),
+  });
+  const checkpoint = seal(3, AT, anchored.hash, {
     type: "ledger-checkpoint",
-    lastPrunedSeq: second.seq,
-    lastPrunedHash: second.hash,
+    lastPrunedSeq: anchored.seq,
+    lastPrunedHash: anchored.hash,
   });
-  const retained = [last, checkpoint];
-  expect(verifyLedger(retained, { witnessedHeads: entries }).ok).toBe(true);
-  expect(verifyLedger(retained, { witnessedHeads: [first] })).toMatchObject({
-    ok: false,
-    firstBadSeq: first.seq,
-    problem: "witnessed head missing or changed",
+  expect(verifyLedger([checkpoint], { witnessedHeads: [first] }).ok).toBe(true);
+  const headOnly = seal(3, AT, anchored.hash, {
+    type: "ledger-checkpoint",
+    lastPrunedSeq: first.seq,
+    lastPrunedHash: first.hash,
   });
+  expect(verifyLedger([anchored, headOnly], { witnessedHeads: [first] }).ok).toBe(true);
+  expect(
+    verifyLedger([anchored, headOnly], {
+      witnessedHeads: [{ seq: first.seq, hash: DIGEST }],
+    }),
+  ).toMatchObject({ ok: false, problem: "witnessed head missing or changed" });
 });
 
 it("requires an anchor to name its immediate predecessor at write and verification", () => {

@@ -18,12 +18,14 @@ export {
   digestSchema,
   ENTRY_KINDS,
   entrySchema,
+  GATE_DECISION_REASONS,
   GENESIS,
   instantSchema,
   type LedgerEntry,
   type LedgerRecord,
   ledgerRecordSchema,
   MAX_AUDIT_SEQ,
+  MAX_RECORD_ANCHOR_BYTES,
   recipientHashSchema,
   seal,
   taskIdSchema,
@@ -98,16 +100,19 @@ export function verifyLedger(
     }
   }
   if (options.witnessedHeads) {
-    const hashes = new Map(entries.map(({ seq, hash }) => [seq, hash]));
-    if (result.prunedThroughSeq !== undefined)
-      hashes.set(result.prunedThroughSeq, (entries[0] as LedgerEntry).prev);
-    const latest = options.witnessedHeads.reduce((max, head) => Math.max(max, head.seq), 0);
-    for (const witness of options.witnessedHeads) {
-      // Legitimate retention can discard older witnessed points, but the latest witness must
-      // still be covered. An asserted checkpoint alone cannot jump past every trusted head.
-      if (witness.seq < (result.prunedThroughSeq ?? 0) && witness.seq < latest) continue;
-      if (hashes.get(witness.seq) !== witness.hash)
-        return fail("witnessed head missing or changed", witness.seq);
+    const bySeq = new Map(entries.map((entry) => [entry.seq, entry]));
+    const pruned = result.prunedThroughSeq ?? 0;
+    for (const { seq, hash } of options.witnessedHeads) {
+      if (seq >= pruned) {
+        const retainedHash = seq === pruned ? entries[0]?.prev : bySeq.get(seq)?.hash;
+        if (retainedHash !== hash) return fail("witnessed head missing or changed", seq);
+      }
+      // An anchor must immediately follow the head it seals. A checkpoint can cover
+      // both rows, or cover just the witnessed head with the anchor still retained.
+      if (seq + 1 <= pruned) continue;
+      // The chain check binds an anchor to the predecessor at this position.
+      if (bySeq.get(seq + 1)?.record.type !== "record-anchor")
+        return fail("witness anchor missing", seq + 1);
     }
   }
   return result;

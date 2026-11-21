@@ -239,11 +239,19 @@ it("records an indeterminate check for a malformed verdict in the gate ledger", 
       }),
     ).toMatchObject({ outcome: "refused", reason: "indeterminate" });
     const lines = (await readFile(join(o.directory, "ledger.jsonl"), "utf8")).trimEnd().split("\n");
+    expect(lines.map((line) => JSON.parse(line).record)).toContainEqual(
+      expect.objectContaining({
+        type: "binding-rejection",
+        binding: "matrix",
+        reason: "indeterminate",
+        digest: `sha-256:${message.rawSha256}`,
+      }),
+    );
     expect(JSON.parse(lines.at(-1) as string).record).toMatchObject({
-      type: "binding-rejection",
-      binding: "matrix",
+      type: "suite-gate-decision",
+      outcome: "refuse",
       reason: "indeterminate",
-      digest: `sha-256:${message.rawSha256}`,
+      messageDigest: `sha-256:${message.rawSha256}`,
     });
   } finally {
     await gate.close();
@@ -790,6 +798,7 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   const audit = () => daemon.runCli(["audit", "--ledger", auditPath], host, io);
   expect(await audit()).toBe(0);
   expect(print).toHaveBeenCalledWith("PASS");
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("unwitnessed tail"));
   const original = await readFile(auditPath, "utf8");
   const [first, anchor] = ledger.entries();
   if (!first || anchor?.record.type !== "record-anchor") throw new Error("Fixture anchor missing");
@@ -808,6 +817,11 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   expect(await audit()).toBe(1);
   expect(print).toHaveBeenCalledWith(expect.stringContaining("invalid anchor signature"));
 
+  print.mockClear();
+  await writeFile(auditPath, `${JSON.stringify(first)}\n`);
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("witness anchor missing"));
+
   const reopened = await daemon.openGate(o);
   try {
     await reopened.anchor({ seq: terminal.seq, hash: terminal.hash });
@@ -818,4 +832,31 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   await writeFile(auditPath, `${original.trimEnd().split("\n").slice(0, -1).join("\n")}\n`);
   expect(await audit()).toBe(1);
   expect(print).toHaveBeenCalledWith(expect.stringContaining("witnessed head"));
+});
+
+it("refuses Unicode identities that would persist an oversized witness", async () => {
+  const agentWebId = `https://agent.example/${"界".repeat(420)}#id`;
+  const ownerWebId = `https://owner.example/${"界".repeat(420)}#id`;
+  const o = { ...options(), agentWebId, ownerWebId };
+  await daemon.initGate(o);
+  await expect(daemon.openGate(o)).rejects.toThrow("Record anchor exceeds size bound");
+  expect((await readGateStatus(o.directory)).ledger.entries).toBe(0);
+});
+
+it("rejects an oversized signed anchor before the runtime persists its witness", async () => {
+  const { gate, ledger } = await createTestGate(now, {
+    actor: `https://agent.example/${"界".repeat(420)}#id`,
+    party: `https://owner.example/${"界".repeat(420)}#id`,
+  });
+  try {
+    const before = ledger.entries();
+    const publish = vi.fn();
+    await expect(gate.anchor({ seq: 1, hash: digestBytes("fixture") }, publish)).rejects.toThrow(
+      "Record anchor exceeds size bound",
+    );
+    expect(publish).not.toHaveBeenCalled();
+    expect(ledger.entries()).toEqual(before);
+  } finally {
+    await gate.close();
+  }
 });
