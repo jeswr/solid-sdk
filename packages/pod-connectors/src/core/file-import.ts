@@ -119,6 +119,8 @@ export interface FileImportAdapter {
 
 export interface FileImportOutcome extends Pick<ImportOutcome, "skipped"> {
   readonly unsupported?: readonly string[];
+  /** Fixed diagnostics for bounded or partial file imports. */
+  readonly warnings?: readonly string[];
 }
 
 export interface RunFileImportOptions extends ConnectorStateOptions {
@@ -195,7 +197,8 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       session.written.length === 0 &&
       !removed &&
       !outcome?.skipped &&
-      !outcome?.unsupported?.length
+      !outcome?.unsupported?.length &&
+      !outcome?.warnings?.length
     ) {
       throw new IntegrationSyncError(
         id,
@@ -218,6 +221,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       skipped: skipped || undefined,
       state,
       unsupported: outcome?.unsupported,
+      warnings: outcome?.warnings,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the

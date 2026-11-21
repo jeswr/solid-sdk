@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
 import { NS } from "@jeswr/suite-vocab";
@@ -20,6 +21,7 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   spotify: schema("MusicRecording", "MusicPlaylist", "ListenAction"),
   github: [...schema("SoftwareSourceCode"), `${NS.FOAF}OnlineAccount`],
   strava: schema("ExerciseAction", "TravelAction"),
+  "activity-files": schema("ExerciseAction", "TravelAction"),
   reddit: [...schema("SocialMediaPosting"), `${NS.FOAF}Group`],
   discord: [`${NS.FOAF}OnlineAccount`, `${NS.FOAF}Group`],
   twitch: schema("WatchAction"),

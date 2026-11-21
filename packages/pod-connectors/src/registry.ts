@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The integrations registry — every app in docs/integrations-catalog.md, all
- * 32 visible, each with its honest status:
+ * 34 visible, each with its honest status:
  *
  * - Tier A + client id (+ proxy where the platform demands one) → **live**
  * - Tier A unconfigured → **demo** (full UX against recorded fixtures)
@@ -142,6 +142,13 @@ export const TIER_B: readonly CatalogEntry[] = TIER_B_ADAPTERS.map((a) => ({
 
 /** Tier C — no user-grade API; the platform's official export file instead. */
 export const TIER_C: readonly CatalogEntry[] = [
+  C(
+    "activity-files",
+    "Activity files",
+    ["health", "mobility"],
+    "Workouts and tracks from exported activity files.",
+    "GPX / FIT / TCX / ZIP",
+  ),
   C("netflix", "Netflix", ["media"], "Your viewing history into Media.", "Viewing-activity CSV"),
   C(
     "amazon-orders",
@@ -208,7 +215,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 32 catalog entries, A → B → C, in display order. */
+/** All 34 catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
 }
