@@ -31,6 +31,8 @@ import {
   verifyCompact,
   verifyLedger,
 } from "@jeswr/agent-reference";
+import type { A2A_BINDING } from "@jeswr/agent-reference/bindings/a2a";
+import type { ByteMessage, HttpExchange } from "@jeswr/agent-reference/bindings/bytes";
 import {
   LEDGER_GENESIS,
   type LedgerHead,
@@ -80,6 +82,13 @@ export type DaemonGatePort = InboundGatePort &
         >)
   );
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
+type CarriageInput =
+  | {
+      binding: typeof A2A_BINDING;
+      delivery: { carriage: "a2a-request"; frame: HttpExchange };
+    }
+  | { binding: "direct-http"; delivery: ByteMessage };
+type InboundInput = CheckInput | ParseRefusalInput | CarriageInput;
 export type ParseRefusal = {
   reason: ChannelParseRefusalReason;
 } & ({ raw: string | Uint8Array } | { digest: string });
@@ -264,6 +273,33 @@ function collectCarriers(message: BridgeMessage) {
     }
   }
   return { copies, failure: copies.size > 1 ? "conflicting-structured-copies" : undefined };
+}
+
+function inboundAddress(input: InboundInput) {
+  if ("delivery" in input) {
+    const { binding, delivery } = input;
+    if ("frame" in delivery) {
+      const { body, method, path, headers } = delivery.frame;
+      return {
+        digest: digestBytes(body),
+        scope: digestOf([
+          binding,
+          method,
+          path,
+          headers["A2A-Version"] ?? null,
+          headers["A2A-Extensions"] ?? null,
+        ]),
+      };
+    }
+    return { digest: digestBytes(delivery.bytes), scope: digestOf([binding, delivery.mediaType]) };
+  }
+  const digest =
+    "message" in input
+      ? `sha-256:${input.message.rawSha256}`
+      : "raw" in input
+        ? digestBytes(input.raw)
+        : input.digest;
+  return { digest, scope: digestBytes(input.account) };
 }
 
 function refused(reason: string): Extract<Decision, { outcome: "refused" }> {
@@ -461,36 +497,44 @@ export function createGate(
     return { prepare, commit };
   }
 
-  async function checked(input: CheckInput | ParseRefusalInput) {
-    const writer = decisionWriter(input.binding, input.replayKey);
-    const verdict = await check(input, (verdict, completion) =>
+  async function checked(input: InboundInput) {
+    const writer = decisionWriter(
+      input.binding,
+      "replayKey" in input ? input.replayKey : undefined,
+    );
+    const { admissionReceipt, ...verdict } = await check(input, (verdict, completion) =>
       writer.prepare(inboundAuditDecision(verdict), completion),
     );
     await writer.commit(inboundAuditDecision(verdict));
+    if (admissionReceipt) admittedReceipts.add(admissionReceipt);
     return verdict;
   }
 
   async function check(
-    input: CheckInput | ParseRefusalInput,
+    input: InboundInput,
     prepare: (verdict: GateVerdict, completion: DecisionCompletion) => Promise<void>,
-  ): Promise<GateVerdict> {
-    const { binding, account } = input;
+  ): Promise<GateVerdict & { admissionReceipt?: string }> {
+    const { binding } = input;
     const message = "message" in input ? input.message : undefined;
-    const digest =
-      "message" in input
-        ? `sha-256:${input.message.rawSha256}`
-        : "raw" in input
-          ? digestBytes(input.raw)
-          : input.digest;
+    const delivery = "delivery" in input ? input.delivery : undefined;
+    const { digest, scope } = inboundAddress(input);
     const validDigest = /^sha-256:[a-f0-9]{64}$/.test(digest);
     const hex = digest.slice(8);
     const event = (type: string, reason: string) =>
       rt.commitBindingEvent({ type, binding, ...(validDigest ? { digest } : {}), reason });
     try {
       if (!validDigest) throw new Error("Invalid raw digest");
-      const accountKey = `${hex}-${digestBytes(account).slice(8)}`;
-      const previous = await verdicts.get(hex);
-      const priorRefusal = refusalReason(previous) ?? refusalReason(await verdicts.get(accountKey));
+      // The same bytes can be refused under different carriage metadata. Do not
+      // reuse a polling verdict or an HTTP verdict for a different media type or extension.
+      const accountKey = `${hex}-${scope.slice(8)}`;
+      const previous = await verdicts.get(delivery ? accountKey : hex);
+      const priorRefusal =
+        // A polling retry can reuse its completed import verdict. An HTTP retry
+        // cannot turn a prior admission into a fresh one.
+        (delivery && previous?.outcome === "admitted"
+          ? "replay-conflict"
+          : refusalReason(previous)) ??
+        (!delivery ? refusalReason(await verdicts.get(accountKey)) : undefined);
       if (priorRefusal) {
         await prepare({ ...refused(priorRefusal), digest }, undefined);
         await event("binding-rejection", priorRefusal);
@@ -512,12 +556,13 @@ export function createGate(
         await event("channel-observation", "cached-verdict");
         return verdict;
       }
-      if (!failure && jws === undefined && previous) {
+      if (!failure && !delivery && jws === undefined && previous) {
         await prepare({ outcome: "unstructured", digest }, undefined);
         await event("channel-observation", "no-structured-content");
         return { outcome: "unstructured", digest };
       }
       const key =
+        delivery ||
         failure === "human-parity-mismatch" ||
         (!failure && parityMismatch) ||
         (failure && previous?.outcome === "admitted")
@@ -529,7 +574,7 @@ export function createGate(
       if (failure) {
         await event("binding-rejection", failure);
         decision = refused(failure);
-      } else if (jws === undefined) {
+      } else if (!delivery && jws === undefined) {
         await event("channel-observation", "no-structured-content");
         decision = { outcome: "unstructured" };
       } else if (parityMismatch && previous?.outcome === "admitted") {
@@ -537,30 +582,21 @@ export function createGate(
         decision = refused("human-parity-mismatch");
       } else {
         decision = inboundDecision(
-          await rt.receive(
-            { format: "awp-jws-compact/0.1", jws },
-            {
-              binding,
-              admissionReceipt,
-              checkEmailParity: () =>
-                parityMismatch
-                  ? "The readable channel copy does not match the structured message."
-                  : undefined,
-            },
-          ),
+          await rt.receive(delivery ?? { format: "awp-jws-compact/0.1", jws }, {
+            binding,
+            admissionReceipt,
+            checkEmailParity: () =>
+              parityMismatch
+                ? "The readable channel copy does not match the structured message."
+                : undefined,
+          }),
         );
       }
-      await verdicts.put(
-        key,
-        {
-          ...decision,
-          time: now().toISOString(),
-          ...(decision.outcome === "admitted" && { admissionReceipt }),
-        },
-        (hash) => prepare({ ...decision, digest }, { type: "verdict", hex: key, digest: hash }),
+      const receipt = decision.outcome === "admitted" ? { admissionReceipt } : {};
+      await verdicts.put(key, { ...decision, ...receipt, time: now().toISOString() }, (hash) =>
+        prepare({ ...decision, digest }, { type: "verdict", hex: key, digest: hash }),
       );
-      if (decision.outcome === "admitted") admittedReceipts.add(admissionReceipt);
-      return { ...decision, digest };
+      return { ...decision, ...receipt, digest };
     } catch {
       try {
         await event("binding-rejection", "indeterminate");
@@ -592,6 +628,11 @@ export function createGate(
   return {
     check: (input: CheckInput) => enqueue(() => checked(input)),
     recordParseRefusal: (input: ParseRefusalInput) => enqueue(() => checked(input)),
+    receiveCarriage: (input: CarriageInput, signal: AbortSignal) =>
+      enqueue(() => {
+        signal.throwIfAborted();
+        return checked(input);
+      }),
     release(proposal: ActionProposal) {
       const audit = releaseAudit;
       return enqueue<ProposalRelease>(async () => {
@@ -926,11 +967,15 @@ export function createInboundGate(
   options: GateOptions,
 ): InboundGatePort &
   Required<Pick<InboundGatePort, "open">> &
-  Pick<Gate, "facts" | "verifyOwn" | "release"> {
+  Pick<Gate, "facts" | "receiveCarriage" | "verifyOwn" | "release"> {
   let active: Gate | undefined;
   return {
     async check() {
       throw new Error("Inbound gate requires an active daemon lease");
+    },
+    async receiveCarriage(input, signal) {
+      if (!active) throw new Error("Inbound gate requires an active daemon lease");
+      return active.receiveCarriage(input, signal);
     },
     facts() {
       if (!active) throw new Error("Inbound gate requires an active daemon lease");

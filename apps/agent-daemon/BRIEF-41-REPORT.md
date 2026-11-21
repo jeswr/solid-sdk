@@ -718,3 +718,109 @@ No replay change or passing regression is claimed for finding 4. The legacy-chec
 | `pnpm exec biome check` on all changed TypeScript, `VITEST_MAX_WORKERS=2 pnpm run lint:root` and `git diff --check` | Passed. Root Biome emitted its six existing warnings in `scripts/vercel-production.mjs`. |
 
 Agent-reference source and committed traces match `662d72a8f` byte for byte. The worktree is uncommitted.
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+## Phase 5, daemon (41v)
+
+- `src/cloud-receivers.ts:54` supplies `createGateReceiver(gate)` for A2A. It passes
+  the original body bytes and HTTP header values to the leased gate as
+  `a2a-request` carriage. The response uses `a2aResponse` to carry a receipt or
+  a reason code. A request with invalid JSON-RPC framing returns `malformed`.
+- `src/cloud.ts:80` adds `POST /answerable` for gate-backed cloud compositions
+  under the existing dev opt-in. It accepts the two reference media types and
+  shares the 64 KiB body and 64 in-flight request bounds with A2A. Under TR-8,
+  admission and refusal both return HTTP 200 after transport receipt.
+- `src/gate.ts:510` routes both transports through the gate's serialized check
+  and durable decision path. Verdict keys cover the carriage metadata used by
+  the reference runtime. HTTP replays return `replay-conflict`. The receivers
+  hold only the inbound capability and leave runtime replies in its internal
+  outbox.
+- `README.md:420` documents trusted composition, accepted requests and refusal
+  responses. The existing custom A2A composition still works.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Daemon dependency builds and `pnpm --filter @jeswr/app-agent-daemon run build` | Passed on Node 24.22.3. Agent-reference used `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs`. |
+| `pnpm --filter @jeswr/app-agent-daemon run typecheck` | Passed for the source and tests. |
+| Focused daemon Vitest with `--maxWorkers=2` | 289 passed across 16 offline files. Two existing packaged CLI and launchd subprocess checks were filtered after failures in this sandbox. A direct Node invocation of `awp --help` passed. The production packaging and CSS loopback fixtures were outside this selection. |
+| `pnpm exec vitest run --root apps/agent-daemon --maxWorkers=2 test/cloud.test.ts` | The dev configuration test passed. At the loopback setup, 18 tests hit `listen EPERM`. A temporary in-process HTTP harness passed all 19 tests and reproduced five ingress failures against the baseline listener. The built receivers also passed replay checks against the real synthetic gate without sockets. |
+| `pnpm exec biome check apps/agent-daemon`, `node scripts/check-agent-layers.mjs`, `pnpm run check:rdf-discipline`, `git diff --check` | Passed. The RDF guard found zero daemon violations. |
+
+The loopback cases cover compact A2A and direct HTTP, signed document direct
+HTTP, exact bounded bytes and A2A headers, tampered proofs with reason-only
+responses, replays, and the shared in-flight limit. The valid discovery
+messages cause the reference runtime to prepare replies locally. The tests
+check for zero transmissions and zero outbound gate calls. All tracked edits
+are in the daemon. Temporary test fixtures were removed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Review 41r19 fixes
+
+- Both HTTP routes reserve one of the 64 shared slots before reading the body.
+  A test fills the slots with unfinished uploads, gets a 503 before sending any
+  extra body bytes, and checks that disconnecting a sender frees a slot.
+- Early 415, 413 and 503 responses close the connection after the response is
+  sent. Chunked uploads on both routes test that a 415 consumes no body bytes
+  and a 413 consumes at most 64 KiB.
+- Admission and refusal both return HTTP 200 for a 64 KiB A2A request. The
+  built-in reply size is bounded by the receipt and the request's correlation ID.
+  The A2A test also checks that the gate receives the original JSON spacing,
+  key order and escapes.
+- Facts become visible only after the decision record commits. A forced commit
+  failure keeps the delivery's fact hidden during and after the write attempt.
+
+TypeScript and Biome passed. The regular Vitest run passed 294 tests. Loopback
+binds failed with `EPERM` in 25 cloud tests, the CSS composition test and the D-2
+integration test. The packaged CLI, production packaging and launchd subprocess
+tests also failed. A separate run over local socket pairs passed all 26 cloud
+tests using Node's HTTP parser. The full workspace gate stopped at the unrelated
+suite-native build because `@capacitor/core` was unavailable.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Review round 2 fixes
+
+- Both entrances assemble exact body bytes from the request's `data` and `end`
+  events. The listener reserves a slot before attaching the reader and checks
+  each parser chunk against the remaining budget before buffering or emitting it.
+  Four fixed-length and chunked cases send each request in one write, check its
+  reply and then fill all 64 slots again. All four reproduced the missing reply
+  on `0265962e6` over socket pairs with Node's buffered HTTP parser path.
+- Unsupported `Expect` values, including mixed values containing
+  `100-continue`, receive 417 and `Connection: close` on both routes. Tests
+  verify zero body bytes read and full slot capacity after the refusals.
+- The built-in A2A receiver accepts 65,024 bytes and reserves 512 bytes of the
+  reference client's 64 KiB limit for the reply envelope and receipt. The
+  serialized correlation ID can take up to half the request budget because
+  the reply carries it twice. The boundary tests read admission and refusal
+  with `readA2a`. The direct HTTP cases use the reference bounded JSON reader
+  for both outcomes at 64 KiB.
+- Under TR-8 a committed admission or refusal receives HTTP 200. Tests force a
+  real decision-record commit failure for each outcome on each route and
+  verify identical empty HTTP 503 replies with matching headers apart from the
+  generated Date. The existing fact visibility regression still passes.
+
+### Verification
+
+- Source and test TypeScript checks, Biome and the agent layer guard passed
+  on Node 24.22.3.
+- The regular Vitest run passed 294 tests. Loopback setup returned `EPERM`
+  in 35 cloud tests, the CSS composition test and the D-2 integration test.
+  The packaged CLI, launchd and production packaging subprocess tests also
+  failed in the sandbox. The socket-pair rerun passed 329 tests, including all
+  36 cloud tests using Node's HTTP parser, with those five fixtures excluded.
+- The full workspace gate stopped on unrelated builds missing
+  `oauth4webapi` and `@capacitor/core`.
+
+## Review round 3 fix
+
+Round 3 found one issue: a client that half-closes (sends its TCP FIN) right after a complete
+body got no reply, because Node aborts the request on the FIN while the gate is still committing,
+so a decision could be recorded that the client never hears about. The listener now sets Node's
+`httpAllowHalfOpen`, so the reply still goes out. A test sends the whole request and the FIN in
+one write, with a gate that takes 200 ms, on both routes and both framings; it fails without the
+fix.

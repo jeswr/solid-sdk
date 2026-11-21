@@ -287,10 +287,10 @@ the reference runtime opened under the daemon's lease. The optional `admission`
 configuration gives the runtime a trusted task ID, reliance rules and operation
 handlers for evidence-bearing messages. The reference trust store supplies issuer
 pins and source authority rules. Gate recall selects the latest eligible revision of
-each statement ID whose delivery has a confirmed final `admitted` verdict. A
-precedence successor also needs a confirmed `admitted` verdict to supersede an
-earlier fact in recall. This applies both live and after reopening the same gate
-directory with the same task configuration.
+each statement ID whose delivery has a confirmed `admitted` verdict and a committed
+decision. A successor can supersede an earlier fact only after its own admission
+commits. This applies both live and after reopening the same gate directory with the
+same task configuration.
 
 Construct `ownerMemory` with `createAgentMemory`, using the authenticated
 workspace storage and a mandate loader that verifies owner, revocation, signed
@@ -404,8 +404,10 @@ trusted composition to `/app/host/compose.mjs` and run Node with
 `--import /app/host/compose.mjs /app/bin/awp-cloud.mjs`. That preload imports
 `configureCloud` from `/app/dist/index.js` and registers an async factory. The
 factory receives `{ store, local, lease, apiKey }` and returns
-`{ daemon, bindings, a2a, close }`. Construct the normal daemon with those local
-state capabilities and the supplied process lease; retain all A-012 authority,
+`{ daemon, bindings, gate, close }` for gate-backed ingress. Construct the normal
+daemon with those local state capabilities and the supplied process lease. Pass
+the same `createInboundGate(...)` handle to the daemon and cloud composition.
+The daemon opens it inside the lease. Retain all A-012 authority,
 executor, outbox, audit and shutdown obligations described above. The cloud owner
 acquires the file lease before composing the host and retains it through daemon
 and inbound handler drain. `close` releases the pod session before that file lease
@@ -415,20 +417,52 @@ from the credential mount.
 `bindings` must enumerate **all** ingest and executor binding IDs. The cloud host
 allows only explicit network-capable binding IDs; iMessage, linked-device Signal
 and WhatsApp, MCP subprocesses and unknown bindings are refused. The host must
-include `a2a` and a trusted `a2a({ body, headers, signal })` receiver returning
-`{ status, body }`. The HTTP boundary forwards the exact bounded bytes and peer
-authorization headers; the receiver must authenticate the peer, verify envelopes
-and persist inbound data before acknowledging. It cannot grant authority or send.
-It must honor cancellation. The existing A2A channel module is still a scaffold;
-this task supplies the cloud hosting boundary, not a replacement protocol or a
-default verifier. An absent composition/receiver fails startup.
+include `a2a`. With a gate supplied, the listener uses `createGateReceiver(gate)`
+for `CloudComposition.a2a` by default. A trusted preload can supply its own
+receive-only `a2a({ body, headers, signal })` adapter. It must honor cancellation
+and verify the peer and signed envelope before durable admission. A composition with only
+that receiver serves A2A and probes. Startup requires a gate or a trusted A2A
+receiver.
 
 Cloud configuration requires `AGENT_ENVIRONMENT=dev`, `AGENT_A2A_ENABLED=true`, an
 absolute `AGENT_CREDENTIAL_DIR` and port `AGENT_A2A_PORT` (default 8080). Only this
-explicit entrypoint opens ingress: `POST /a2a`, with JSON and a 64 KiB body limit,
-plus body-free `GET /livez` and `/readyz` process probes. Probes mean the trusted
-composition and ingress are available; pod authority and provider availability
-still fail closed independently inside the executor. Local `awp` behavior is unchanged.
+explicit entrypoint opens ingress. Both POST routes share 64 slots. Each slot is
+reserved before reading the request body and held through the receiver call.
+
+- `POST /a2a` accepts `application/json` with an A2A 1.0 JSON-RPC
+  `SendMessage` request declaring the required message-format extension. The built-in
+  receiver passes the bytes and headers to the gate as A2A request carriage. The
+  gate checks the signed data part and discards untrusted text and file parts.
+  Invalid JSON-RPC request framing returns 400 with a `malformed` reason. For
+  recognized requests, the A2A response carries the JSON receipt or refusal code.
+  The built-in receiver accepts up to 65,024 request bytes, reserving 512 bytes
+  of the reference client's 64 KiB limit for the response envelope and receipt,
+  including the longest refusal reason. It allows up to 16,384 UTF-16 code units
+  and 32,512 serialized UTF-8 bytes per string correlation ID, including JSON
+  quotes and escapes, because the response carries two copies of the ID.
+- `POST /answerable` requires the composed gate and accepts a signed message as
+  the body with `application/vnd.answerable.document+json` or
+  `application/vnd.answerable.signed+json`, up to 64 KiB. The JSON body is
+  `{"outcome":"admitted"}` or a reason code such as `{"reason":"bad-signature"}`.
+
+The listener rejects unsupported media types with 415, oversized bodies with
+413 and unsupported `Expect` values with 417. At capacity or during shutdown
+it returns 503 before processing the request. For early refusals it stops reading
+and closes the connection after sending the response.
+Under TR-8 both built-in entrances return HTTP 200 once the gate records its
+decision, for admission and refusal alike. Once the listener reads a complete
+body, an empty HTTP 503 means the daemon could not record a decision. Either
+outcome's commit failure produces the same status, empty body and headers.
+The gate verifies against its pinned trust and records its decision. It refuses malformed
+or unsigned messages, unknown keys, failed proofs, replayed messages, and invalid
+audiences or validity windows. Both built-in receivers expose only the receipt
+or reason code. Custom A2A receivers have a 64 KiB limit in each direction.
+Any protocol message the reference runtime prepares stays in
+its internal outbox. Ingress has no send capability.
+
+The listener also exposes body-free `GET /livez` and `/readyz` process probes.
+Probes report ingress availability. The executor checks pod authority and provider
+availability independently.
 
 Mount a dedicated Azure Files SMB share at `/var/lib/jeswr-agent`, owned by UID/GID
 65532 with `dir_mode=0700,file_mode=0600`. Existing credential-store checks remain
