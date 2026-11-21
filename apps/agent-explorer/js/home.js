@@ -78,6 +78,7 @@
     h += '<p class="start-links"><a class="btn primary" href="' + AX.buildHash('explore', {}) + '">Step through a real run</a>';
     if (AX.tour) h += '<button type="button" class="btn" id="home-tour">Take the guided tour</button>';
     h += '<a class="btn" id="home-app" href="app/" hidden>Try the app</a>';
+    h += '<a class="btn" href="paper/">Read the paper</a>';
     h += '</p>';
     h += '</div>';
     root.innerHTML = h;

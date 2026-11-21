@@ -1,0 +1,140 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- Template for paper/index.html: scripts/build-paper.mjs puts the paper body in the article element. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Letting Software Agents Act for Us · Answerable</title>
+<meta name="description" content="Pre-publication draft of Letting Software Agents Act for Us, a paper on what personal AI agents need to be both capable and trustworthy: seven questions every action raises, and a design where the model only proposes and two gates decide.">
+<meta property="og:title" content="Letting Software Agents Act for Us">
+<meta property="og:description" content="Pre-publication draft. Seven questions every agent action raises, and a design where the model only proposes and two gates of ordinary rules decide.">
+<meta property="og:type" content="article">
+<script>
+  // A bare /paper URL would resolve figure-1.svg against the site root; add the slash.
+  if (/\/paper$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+  // Share the explorer's theme choice (stored by js/app.js under ax-theme).
+  try { var t = localStorage.getItem('ax-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<style>
+:root {
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #eceff3; --line: #d8dce3;
+  --ink: #141820; --ink-2: #485060; --ink-3: #6b7383;
+  --accent: #2552c2; --accent-soft: #e3eafb;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+  --r: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1015; --surface: #151920; --surface-2: #1c212a; --line: #2a313c;
+    --ink: #e6e9ee; --ink-2: #b3bac6; --ink-3: #8a93a1;
+    --accent: #7fa3ff; --accent-soft: #1d2a4a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1015; --surface: #151920; --surface-2: #1c212a; --line: #2a313c;
+  --ink: #e6e9ee; --ink-2: #b3bac6; --ink-3: #8a93a1;
+  --accent: #7fa3ff; --accent-soft: #1d2a4a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); }
+a { color: var(--accent); }
+[id] { scroll-margin-top: 64px; }
+.topbar { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar-inner { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+.brand { white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-weight: 650; }
+.brand small { color: var(--ink-3); font-weight: 500; }
+.brand .brand-a { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+.brand .brand-b { stroke: var(--accent); stroke-width: 1.8; }
+.topbar nav { margin-left: auto; display: flex; gap: 14px; font-size: 14px; white-space: nowrap; }
+.topbar nav a { color: var(--ink-2); text-decoration: none; }
+.topbar nav a:hover { color: var(--accent); }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 80px; }
+.paper-head .eyebrow { display: inline-block; margin: 0 0 12px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+.paper-head h1 { margin: 0 0 10px; font: 700 clamp(28px, 5vw, 40px)/1.15 var(--font); letter-spacing: -0.01em; }
+.paper-head .byline { margin: 0; font-size: 17px; }
+.paper-head .status { margin: 6px 0 0; color: var(--ink-3); font-size: 14px; }
+.paper-head .links { margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 14px; text-decoration: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.paper-video { margin: 28px 0 8px; }
+.video-slot { aspect-ratio: 16 / 9; display: grid; place-content: center; gap: 4px; text-align: center; padding: 16px; border: 1px dashed var(--line); border-radius: var(--r); background: var(--surface-2); color: var(--ink-3); }
+.video-slot strong { color: var(--ink-2); font-size: 15px; }
+.video-slot span { font-size: 14px; max-width: 42ch; }
+.paper-video video { display: block; width: 100%; border-radius: var(--r); background: #000; }
+article { font: 18px/1.62 var(--serif); }
+article h2 { margin: 2.2em 0 0.5em; font: 650 23px/1.25 var(--font); }
+article p { margin: 0 0 1em; }
+article ul, article ol { padding-left: 1.4em; margin: 0 0 1em; }
+article li { margin: 0.25em 0; }
+article blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--line); color: var(--ink-2); }
+.paper-figure { margin: 1.6em 0; }
+.paper-figure img { display: block; width: 100%; height: auto; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+.paper-figure figcaption, .caption { font: 14px/1.5 var(--font); color: var(--ink-2); }
+.paper-figure figcaption { margin-top: 8px; }
+.table-wrap { margin: 0.6em 0 1.6em; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+article table { border-collapse: collapse; width: 100%; font: 14px/1.45 var(--font); }
+article th, article td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+article thead th { background: var(--surface-2); font-weight: 600; }
+article tbody tr:last-child td { border-bottom: 0; }
+article td.mark { text-align: center; color: var(--accent); }
+a.cite { text-decoration: none; }
+a.cite:hover { text-decoration: underline; }
+#references + ol { font: 14px/1.5 var(--font); color: var(--ink-2); }
+#references + ol li:target { background: var(--accent-soft); border-radius: 4px; }
+.paper-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 14px; }
+@media (max-width: 560px) {
+  .topbar nav a.wide { display: none; }
+  article { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2.5" y="5" width="7" height="14" rx="2" class="brand-a"/><rect x="14.5" y="5" width="7" height="14" rx="2" class="brand-a"/><path d="M9.5 12h5" class="brand-b"/></svg>
+      <span>Answerable <small>paper</small></span>
+    </a>
+    <nav aria-label="Site">
+      <a href="../#/explore">Runs</a>
+      <a class="wide" href="../#/specs">Specs</a>
+      <a href="#references">References</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <header class="paper-head">
+    <p class="eyebrow">Pre-publication draft</p>
+    <h1>Letting Software Agents Act for Us</h1>
+    <p class="byline">Jesse Wright</p>
+    <p class="status">Draft of 13 November 2026, prepared for Communications of the ACM. Not yet peer reviewed; the text will change.</p>
+    <p class="links"><a class="btn primary" href="../#/explore">Step through the runs</a><a class="btn" href="../">About Answerable</a></p>
+  </header>
+
+  <!-- VIDEO SLOT: replace the .video-slot div with
+       <video controls preload="metadata" playsinline poster="video-poster.jpg" src="video.mp4">
+         <track kind="captions" srclang="en" label="English" src="video.vtt" default></video>
+       once the narrated video matches this version of the paper. -->
+  <section class="paper-video" id="video" aria-label="Video">
+    <div class="video-slot">
+      <strong>Video coming soon</strong>
+      <span>A narrated walkthrough of this paper will appear here once it has been updated to match this version.</span>
+    </div>
+  </section>
+
+  <article>
+{{BODY}}
+  </article>
+
+  <footer class="paper-foot">
+    <p>This is a draft shared before submission. Everyone in the mortgage story is fictional. The runs it describes can be replayed in the <a href="../#/explore">explorer</a>.</p>
+  </footer>
+</main>
+</body>
+</html>
