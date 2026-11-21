@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
@@ -121,10 +122,10 @@ describe("ACP advertised with rel=acl (ESS style)", () => {
     }
   });
 
-  it("the sharing layer, pinned to WAC, refuses an ACP target before writing", async () => {
+  it("an explicit WAC pin refuses an ACP target before writing", async () => {
     const acp = acpPod(".acr");
     for (const step of [checkGrant, applyGrant]) {
-      const error = await step(ALICE, POD, OWNER, REQUESTER, ["read"], acp.fetch).catch(
+      const error = await step(ALICE, POD, OWNER, REQUESTER, ["read"], acp.fetch, "wac").catch(
         (thrown: unknown) => thrown,
       );
       expect(error).toBeInstanceOf(UnsupportedAccessModelError);
