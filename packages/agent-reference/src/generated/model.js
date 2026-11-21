@@ -153,6 +153,14 @@ const manifest = {
           }
         },
         {
+          "name": "instantLexical",
+          "predicate": "https://w3id.org/jeswr/awp#instantLexical",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "mandateId",
           "predicate": "https://w3id.org/jeswr/awp#recordIdentifier",
           "kind": "iri",
@@ -374,6 +382,14 @@ const manifest = {
           "guards": {
             "requiredFailClosed": true
           }
+        },
+        {
+          "name": "instantLexical",
+          "predicate": "https://w3id.org/jeswr/awp#instantLexical",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
         },
         {
           "name": "kid",

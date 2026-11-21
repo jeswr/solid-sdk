@@ -76,6 +76,7 @@ export interface InvokeBodyChallengeEntity {
 export interface MandateRevocationData {
   "at": Date;
   "digest": string;
+  "instantLexical"?: string;
   "mandateId": string;
   "version": number;
 }
@@ -83,6 +84,7 @@ export interface MandateRevocationData {
 export interface MandateRevocationWrapper extends EntityWrapper {
   "at"?: Date;
   "digest"?: string;
+  "instantLexical"?: string;
   "mandateId"?: string;
   "version"?: number;
 }
@@ -214,6 +216,7 @@ export interface RecordEntryEntity {
 export interface TrustPinData {
   "purpose": string;
   "expiresAt": Date;
+  "instantLexical"?: string;
   "kid": string;
   "party": string;
 }
@@ -221,6 +224,7 @@ export interface TrustPinData {
 export interface TrustPinWrapper extends EntityWrapper {
   "purpose"?: string;
   "expiresAt"?: Date;
+  "instantLexical"?: string;
   "kid"?: string;
   "party"?: string;
 }

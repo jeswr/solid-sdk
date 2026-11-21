@@ -70,7 +70,9 @@ follow the repository's affected and full gate requirements before finishing.
 
 Use a standard `OdrlActionName` or an absolute profile IRI in rules and duties.
 Use the short name for every action in the standard table, including the
-actions backed by ACL IRIs. The writers refuse the full standard action IRI.
+actions backed by ACL IRIs. Policy and decision-record writers refuse the full
+standard action IRI. This includes `decisionRecord`, `decisionRecordJsonLd`, and
+`recordEvaluation` when they write active duties.
 The writers preserve profile IRIs lexically and reject unknown short names and
 IRIs that require escaping. Readers map standard IRIs back to their existing names
 and skip rules and duties with unrecognized actions by default. To read a profile

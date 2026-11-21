@@ -8,6 +8,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { expect, it } from "vitest";
 import type { GateContext } from "../src/gates/common.js";
+import { signApproval } from "../src/mechanisms/mandate.js";
 import { TrustStore } from "../src/mechanisms/trust.js";
 import { CONFIG_ED25519 } from "../src/profile/configurations.js";
 import { testKey } from "../src/reference/keys.js";
@@ -443,6 +444,72 @@ it("loads the spend reservations from an atomic file snapshot after closing the 
     expect(f.effects()).toBe(4);
     expect(Object.values(store.load().paymentTotals)).toEqual([200000]);
     rt.close();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it("persists a signed minute-precision owner approval without changing the gate decision", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "agent-minute-approval-"));
+  const file = join(directory, "state.json");
+  const validUntil = "2026-11-13T10:00Z";
+  const run = async (durable: boolean) => {
+    const f = await fixture("use", true, {
+      personDecisions: [{ action: "use", decider: "principal" }],
+    });
+    let runtime = f.rt;
+    const store = durable ? new FileStateStore(file) : f.store;
+    try {
+      const held = await f.pay(runtime, "minute-approval");
+      expect(held.pendingApproval).toBeDefined();
+      const pending = required(runtime.pendingApprovals()[0]);
+      if (durable) {
+        runtime.close();
+        store.save(f.store.load());
+        f.replaceStore(store);
+        runtime = await f.make();
+      }
+      const payer = f.cast.get("payer");
+      const approval = {
+        type: "OwnerApproval" as const,
+        id: "urn:approval:minute-precision",
+        issuer: payer.identity.party,
+        actor: payer.identity.actor,
+        actionDigest: pending.actionDigest,
+        conversation: pending.conversation,
+        issuedAt: "2026-11-13T09:00Z",
+        validUntil,
+        decision: "approve" as const,
+      };
+      const jws = await signApproval(payer.ownerKey, approval);
+      const result = await runtime.submitApproval(jws);
+      expect(f.effects()).toBe(1);
+      const decision = required(f.recorder.events().findLast((event) => event.kind === "decision"));
+      expect(decision.outcome).toBe("go");
+      const restored = required(store.load().approvals[pending.actionDigest]);
+      expect(restored).toMatchObject({ id: approval.id, decision: "approve", validUntil, jws });
+      if (durable) {
+        const bytes = JSON.stringify(restored);
+        runtime.close();
+        const reopened = new FileStateStore(file);
+        try {
+          expect(JSON.stringify(reopened.load().approvals[pending.actionDigest])).toBe(bytes);
+        } finally {
+          reopened.close();
+        }
+      }
+      return {
+        disposition: result.disposition,
+        outcome: decision.outcome,
+        reason: decision.reason,
+      };
+    } finally {
+      runtime.close();
+      store.close();
+    }
+  };
+  try {
+    expect(await run(true)).toEqual(await run(false));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

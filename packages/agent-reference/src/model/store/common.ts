@@ -49,6 +49,18 @@ export function storeIdentifier(value: string) {
     : storeText(value);
 }
 
+export function storeInstant(value: unknown, lexical: boolean) {
+  if (typeof value !== "string") throw new TypeError("Expected a date-time string");
+  const term = DataFactory.literal(value, DataFactory.namedNode(XSD + "dateTime"));
+  try {
+    readLiteral(term);
+    return term;
+  } catch (error) {
+    if (!lexical || !isIsoInstant(value)) throw error;
+    return storeText(value);
+  }
+}
+
 function containsUnpairedSurrogate(value: Json): boolean {
   if (typeof value === "string") return hasUnpairedSurrogate(value);
   if (value === null || typeof value !== "object") return false;
@@ -70,12 +82,17 @@ function needsJsonLiteral(value: Json): boolean {
 export interface StoreField extends Field {
   readonly digest?: string;
   readonly lexical?: boolean;
+  /** Keep the protocol's named-value layout when no lexical escape is needed. */
+  readonly protocolOpen?: boolean;
 }
 
 type Fields = Readonly<Record<string, StoreField>>;
 const specifications = new Map<string, Fields>();
 export function field(kind: Field["kind"], term: string, optional = false): StoreField {
   return { kind, term: term.includes(":") ? term : AWP + term, optional };
+}
+export function instant(term: string, optional = false): StoreField {
+  return { ...field("time", term, optional), lexical: true };
 }
 export function exact(term: string, digest: string, optional = false): StoreField {
   return { ...field("text", term, optional), digest: AWP + digest };
@@ -196,20 +213,15 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
           (!value || typeof value !== "object" || Array.isArray(value))
         )
           throw new TypeError("Expected an open object");
+        if (descriptor.protocolOpen && !containsUnpairedSurrogate(value as Json)) {
+          super.setField(name, value);
+          return;
+        }
         this.putValue(descriptor.term, value as Json);
         return;
       }
       if (descriptor.kind === "time") {
-        if (typeof value !== "string") throw new TypeError("Expected a date-time string");
-        const term = DataFactory.literal(value, DataFactory.namedNode(XSD + "dateTime"));
-        try {
-          readLiteral(term);
-        } catch (error) {
-          if (!descriptor.lexical || !isIsoInstant(value)) throw error;
-          this.put(descriptor.term, storeText(value));
-          return;
-        }
-        this.put(descriptor.term, term);
+        this.put(descriptor.term, storeInstant(value, descriptor.lexical === true));
         return;
       }
       if (descriptor.kind === "iri" && descriptor.lexical) {
@@ -236,6 +248,11 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
       descriptor?.kind === "open" ||
       descriptor?.kind === "value"
     ) {
+      if (descriptor.protocolOpen) {
+        const term = this.term(descriptor.term);
+        if (term?.termType !== "Literal" || term.datatype.value !== RDF_JSON)
+          return super.getField(name);
+      }
       const value = this.valueAt(descriptor.term);
       if (value === undefined && descriptor.optional) return undefined;
       if (value === undefined) throw new TypeError(`Missing ${this.modelName}.${name}`);
@@ -260,6 +277,8 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
           (descriptor.kind === "iri" ||
             (descriptor.kind === "time" && term.datatype.value !== XSD + "dateTime"))));
     const value = fallback ? readStoreText(term) : super.getField(name);
+    if (fallback && descriptor?.kind === "time" && !isIsoInstant(value as string))
+      throw new TypeError("Invalid store timestamp");
     if (
       descriptor?.digest &&
       value !== undefined &&

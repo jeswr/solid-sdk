@@ -53,13 +53,9 @@ import type {
   OutcomeConclusion,
 } from "../core/types.js";
 import type { ContextItem } from "../gates/common.js";
-import {
-  decodeSnapshotForRoundTrip,
-  readStateSnapshot,
-  SnapshotMemo,
-} from "../model/store/state.js";
+import { readStateSnapshot, SnapshotMemo } from "../model/store/state.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
-import { decodeSnapshotEntry } from "../wire/store-quads.js";
+import { decodeSnapshotEntry, readLocalStoreFile } from "../wire/store-quads.js";
 
 export interface SeenEntry {
   readonly digest: string;
@@ -353,7 +349,7 @@ export class MemoryStateStore implements StateStore {
       this.save = (state) => {
         save.call(this, state);
         const expected = this.load();
-        const actual = decodeSnapshotForRoundTrip(memo.write(expected));
+        const actual = memo.decode(memo.write(expected));
         assertSameSnapshot(expected, actual);
       };
     }
@@ -447,7 +443,7 @@ export function writeFileDurable(path: string, content: string, flags: string): 
 /** Read one atomic snapshot without acquiring a writer lease. */
 export function readRuntimeStateFile(path: string): RuntimeState {
   if (!existsSync(path)) return emptyState();
-  const text = readFileSync(path, "utf8");
+  const text = readLocalStoreFile(path, "application/n-quads");
   return text.trimStart().startsWith("{")
     ? normaliseState(JSON.parse(text))
     : readStateSnapshot(text);
@@ -564,6 +560,7 @@ export class FileStateStore implements StateStore {
       const expected = normaliseState(decodeSnapshotEntry(JSON.stringify(state)));
       assertSameSnapshot(expected, this.memo.decode(bytes));
     } catch (cause) {
+      this.memo = undefined;
       const detail = cause instanceof Error ? `: ${cause.message}` : "";
       throw new Error(`cannot save state snapshot${detail}`, { cause });
     }

@@ -7,13 +7,14 @@ import { AWP, ODRL, PROV } from "../../profile/vocabulary.js";
 import { makeNode } from "../core-node.js";
 import { evidenceItemSpec } from "../evidence-item.js";
 import { scopedId } from "../named-values.js";
-import { enumeration, exact, field, link, RDFS, StoreNode, storeModel } from "./common.js";
+import { enumeration, exact, field, instant, link, RDFS, StoreNode, storeModel } from "./common.js";
 import { type NativePolicy, policyDataset, policyFromStore } from "./policy.js";
 
 const policyLink = ODRL + "hasPolicy";
 const termsLink = AWP + "terms";
 const grantLink = AWP + "dataUseGrant";
 const inheritedLink = AWP + "inheritedTerms";
+const MAX_TERMS_DEPTH = 32;
 const { namedNode } = DataFactory;
 
 storeModel(
@@ -40,7 +41,7 @@ const factFields = {
   compactProofDigest: field("text", "compactProofDigest", true),
   subject: field("value", "subject", true),
   method: field("value", "method", true),
-  asOf: field("time", "asOf", true),
+  asOf: instant("asOf", true),
   identifiers: field("strings", "identifiers", true),
   admittedPurpose: field("iri", "admittedPurpose", true),
   supersededBy: field("iri", "supersededBy", true),
@@ -112,6 +113,7 @@ function readTerms(
   ancestors = new Set<string>(),
 ): ItemTerms {
   if (ancestors.has(id)) throw new TypeError("Cyclic inherited item terms");
+  checkTermsDepth(ancestors.size + 1);
   const branch = new Set(ancestors).add(id);
   const node = new StoreNode<Omit<ItemTerms, "policy" | "inherited">>(id, local, "ItemTerms");
   const policyId = named(node, policyLink);
@@ -134,7 +136,19 @@ function readTerms(
     }),
   } as ItemTerms;
 }
-function writeTerms(id: string, local: Store, terms: ItemTerms, write: PolicyWriter): void {
+function checkTermsDepth(depth: number): void {
+  if (depth > MAX_TERMS_DEPTH)
+    throw new TypeError(`Inherited item terms exceed the maximum depth of ${MAX_TERMS_DEPTH}`);
+}
+
+function writeTerms(
+  id: string,
+  local: Store,
+  terms: ItemTerms,
+  write: PolicyWriter,
+  depth = 1,
+): void {
+  checkTermsDepth(depth);
   const { policy, inherited, ...fields } = terms;
   const node = makeNode("ItemTerms", fields, id, local) as StoreNode;
   node.put(policyLink, namedNode(write(policy)));
@@ -147,7 +161,7 @@ function writeTerms(id: string, local: Store, terms: ItemTerms, write: PolicyWri
         if (terms) {
           const termsId = scopedId(child, "terms");
           reference.put(termsLink, namedNode(termsId));
-          writeTerms(termsId, local, terms, write);
+          writeTerms(termsId, local, terms, write, depth + 1);
         }
         return child;
       }) as Json,

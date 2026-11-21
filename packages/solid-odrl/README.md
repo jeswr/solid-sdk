@@ -122,7 +122,9 @@ are attributed correctly. Records preserve the `isPartOf` constraint and collect
 - Express: `policyToRdf`, `policyToTurtle`, `policyToJsonLd`, `serialize`.
   Rule and duty actions accept an ODRL short name or an absolute profile IRI.
   Actions in the standard action table must use their short names, including
-  `append` and `control`. The writers reject the corresponding full IRIs.
+  `append` and `control`. The policy writers and the decision-record writers
+  (`decisionRecord`, `decisionRecordJsonLd`, and `recordEvaluation`) reject the
+  corresponding full IRIs.
   Writers retain profile IRIs verbatim and reject invalid actions with
   `OdrlSerializationError`. Standard evaluation applies only the standard action hierarchy.
 - Parse with `parsePolicy` or `policyFromRdf`. By default, readers map standard

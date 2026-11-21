@@ -19,7 +19,7 @@ import {
 } from "../src/decision-record.js";
 import { evaluate } from "../src/evaluate.js";
 import { serialize } from "../src/serialize.js";
-import type { EvaluationResult, OdrlPolicy, RequestContext } from "../src/types.js";
+import type { EvaluationResult, OdrlAction, OdrlPolicy, RequestContext } from "../src/types.js";
 import {
   ACTION_IRI,
   LEFT_OPERAND_IRI,
@@ -59,6 +59,26 @@ const AGENT = "https://bob.example/profile/card#me";
 const TARGET = "https://alice.example/data/records.ttl";
 const PURPOSE = "https://w3id.org/dpv#ResearchAndDevelopment";
 const AT = new Date("2026-07-04T10:00:00Z");
+
+it.each([
+  ["decisionRecord", decisionRecord],
+  ["decisionRecordJsonLd", decisionRecordJsonLd],
+] as const)("%s requires a short name for a standard action on an active duty", (_name, write) => {
+  const request: RequestContext = { agent: AGENT, action: "read", target: TARGET };
+  const inputFor = (action: OdrlAction): DecisionRecordInput => {
+    const policy: OdrlPolicy = {
+      id: POLICY_ID,
+      permissions: [{ type: "permission", action: "read", duties: [{ action }] }],
+    };
+    const result = evaluate(policy, request, { now: AT });
+    expect(result.duties.map((duty) => duty.action)).toEqual([action]);
+    return { id: REC, policy, request, result, evaluatedAt: AT };
+  };
+  expect(() => write(inputFor("append"))).not.toThrow();
+  expect(() => write(inputFor(ACTION_IRI.append as OdrlAction))).toThrow(
+    /short action name "append"/,
+  );
+});
 
 /** Materialise a triple as `s p o` for easy `toContain` assertions. */
 function triples(quads: readonly Quad[]): string[] {

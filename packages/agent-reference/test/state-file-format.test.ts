@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "fs";
+import { DataFactory } from "n3";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { scopedId } from "../src/model/named-values.js";
+import { graphContents, inGraph, StoreNode } from "../src/model/store/common.js";
 import { SnapshotMemo } from "../src/model/store/state.js";
 import { AWP } from "../src/profile/vocabulary.js";
 import {
@@ -14,6 +16,8 @@ import {
   normaliseState,
   type RuntimeState,
 } from "../src/store/state.js";
+import * as storeQuads from "../src/wire/store-quads.js";
+import { readLocalStoreRdf, writeNQuads } from "../src/wire/store-quads.js";
 
 let dir: string;
 let path: string;
@@ -130,21 +134,123 @@ it("keeps an unpaired surrogate distinct from the replacement character in entry
   expect(store.load().domain).toEqual(state.domain);
 });
 
-it("migrates inherited item terms deeper than the named-value limit", () => {
+it("preserves lexical instants throughout the typed state sections", () => {
+  const state = completeFixture();
+  const at = "2026-11-13T10:00Z";
+  const offset = "2026-11-13T11:00+01:00";
+  for (const pin of state.trustPins) pin.expiresAt = at;
+  for (const hold of Object.values(state.trustHolds)) hold.expiresAt = offset;
+  for (const approval of Object.values(state.approvals)) approval.validUntil = at;
+  for (const approvals of Object.values(state.organisationApprovals)) {
+    for (const approval of approvals) Object.assign(approval, { issuedAt: at, validUntil: offset });
+  }
+  state.revokedMandates = state.revokedMandates.map((revocation) => ({
+    ...revocation,
+    at: offset,
+  }));
+  for (const agreement of Object.values(state.agreements))
+    Object.assign(agreement, { formedAt: at });
+  for (const items of Object.values(state.contextItems)) {
+    for (const item of items) Object.assign(item, { asOf: at });
+  }
+  for (const hold of Object.values(state.precedenceHolds)) Object.assign(hold, { asOf: offset });
+  store.save(state);
+  const bytes = readFileSync(path, "utf8");
+  expect(bytes).not.toContain(`"${at}"^^`);
+  expect(bytes).not.toContain(`"${offset}"^^`);
+  expect(store.load()).toEqual(state);
+});
+
+it("preserves lone surrogates in an agreement's operation version", () => {
+  const state = completeFixture();
+  const [key, agreement] = Object.entries(state.agreements)[0]!;
+  const version = "v\ud800\ufffd\udc00😀";
+  state.agreements[key] = { ...agreement, operation: { ...agreement.operation, version } };
+  store.save(state);
+  const bytes = readFileSync(path, "utf8");
+  expect(bytes).toContain("\\\\ud800");
+  expect(store.load().agreements[key]?.operation.version).toBe(version);
+  expect(store.load().agreements).toEqual(state.agreements);
+});
+
+it("reopens earlier v2 Agreement timestamps with a legacy date-time datatype", () => {
+  const state = completeFixture();
+  const [key, agreement] = Object.entries(state.agreements)[0]!;
+  const formedAt = "2026-11-13T10:00Z";
+  state.agreements[key] = { ...agreement, formedAt };
+  store.save(state);
+  const { namedNode, literal } = DataFactory;
+  const dataset = readLocalStoreRdf(readFileSync(path, "utf8"), "application/n-quads");
+  const [quad] = dataset.getQuads(namedNode(agreement.id), namedNode(AWP + "formedAt"), null, null);
+  expect(quad?.object).toEqual(literal(formedAt));
+  dataset.removeQuad(quad!);
+  dataset.addQuad(
+    quad!.subject,
+    quad!.predicate,
+    literal(formedAt, namedNode("http://www.w3.org/2001/XMLSchema#dateTime")),
+    quad!.graph,
+  );
+  writeFileSync(path, writeNQuads(dataset));
+  expect(store.load()).toEqual(state);
+});
+
+it("accepts 32 levels of inherited item terms and refuses a 33rd before replacing the file", () => {
   const state = completeFixture();
   const [key, fact] = Object.entries(state.precedenceHolds)[0]!;
-  const terms = Array.from({ length: 33 }).reduce<NonNullable<typeof fact.terms>>(
+  const terms = Array.from({ length: 31 }).reduce<NonNullable<typeof fact.terms>>(
     (child) => ({
       policy: child.policy,
       inherited: [{ target: "urn:example:asset", terms: child }],
     }),
-    fact.terms!,
+    { policy: fact.terms!.policy },
   );
   state.precedenceHolds[key] = { ...fact, terms };
   writeFileSync(path, JSON.stringify(state));
   const expected = store.load();
   store.save(expected);
   expect(store.load()).toEqual(expected);
+  const before = readFileSync(path);
+  state.precedenceHolds[key] = {
+    ...fact,
+    terms: { policy: terms.policy, inherited: [{ target: "urn:example:asset", terms }] },
+  };
+  expect(() => store.save(state)).toThrow(/inherited item terms exceed.*32/i);
+  expect(readFileSync(path)).toEqual(before);
+
+  // Extend the RDF directly to exercise the reader independently of the writer cap.
+  const graph = "urn:awp:state:precedenceHolds";
+  const dataset = readLocalStoreRdf(before.toString(), "application/n-quads");
+  const local = graphContents(dataset, graph);
+  const { namedNode } = DataFactory;
+  const leaf = local
+    .getSubjects(
+      namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+      namedNode(AWP + "ItemTerms"),
+      null,
+    )
+    .map((id) => new StoreNode(id, local, "ItemTerms"))
+    .find((node) => node.term(AWP + "inheritedTerms") === undefined)!;
+  const child = new StoreNode("urn:example:33rd-terms", local, "ItemTerms");
+  child.types.add(AWP + "ItemTerms");
+  child.put(
+    "http://www.w3.org/ns/odrl/2/hasPolicy",
+    leaf.term("http://www.w3.org/ns/odrl/2/hasPolicy")!,
+  );
+  const ref = new StoreNode("urn:example:33rd-reference", local, "InheritedItemTerms");
+  ref.types.add(AWP + "InheritedItemTerms");
+  ref.setField("target", "urn:example:asset");
+  ref.put(AWP + "terms", namedNode(child.id));
+  leaf.putValue(AWP + "inheritedTerms", [ref.id]);
+  dataset.deleteMatches(undefined, undefined, undefined, namedNode(graph));
+  dataset.addQuads([...inGraph(local, graph)]);
+  writeFileSync(path, writeNQuads(dataset));
+  expect(() => store.load()).toThrow(/inherited item terms exceed.*32/i);
+});
+
+it("rejects a local snapshot beyond the byte budget before buffering it", () => {
+  writeFileSync(path, JSON.stringify(emptyState()));
+  truncateSync(path, 256 * 1024 * 1024 + 1);
+  expect(() => store.load()).toThrow(/268435456-byte limit/);
 });
 
 it.each([
@@ -183,6 +289,35 @@ it("reports an encoding error while retaining the previous snapshot", () => {
   } finally {
     memo.mockRestore();
   }
+});
+
+it("checks the RDF graph when the decoded entry matches the original JSON", () => {
+  const state = emptyState();
+  store.save(state);
+  const before = readFileSync(path);
+  const write = writeNQuads;
+  const encoder = vi.spyOn(storeQuads, "writeNQuads").mockImplementation((dataset, maxBytes) => {
+    if (maxBytes !== Infinity) return write(dataset, maxBytes);
+    const [quad] = dataset;
+    dataset.add(
+      DataFactory.quad(
+        quad!.subject,
+        DataFactory.namedNode("urn:example:unexpected"),
+        DataFactory.literal("extra quad"),
+        quad!.graph,
+      ),
+    );
+    return write(dataset, maxBytes);
+  });
+  try {
+    state.domain.updated = true;
+    expect(() => store.save(state)).toThrow(/inconsistent snapshot entry in domain/i);
+    expect(readFileSync(path)).toEqual(before);
+  } finally {
+    encoder.mockRestore();
+  }
+  store.save(state);
+  expect(store.load()).toEqual(state);
 });
 
 it("checks the full section graph when a new entry can change the meaning of a saved link", () => {

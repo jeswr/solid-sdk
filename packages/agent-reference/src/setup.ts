@@ -51,7 +51,7 @@ import type { PinnedKey, SourceAuthorityRule, TrustStoreData } from "./mechanism
 import { trustFromRdf, trustTurtleGraph } from "./model/store/trust.js";
 import { AWP, PROV, SCHEMA } from "./profile/vocabulary.js";
 import { fsyncDir } from "./store/state.js";
-import { readLocalStoreRdf } from "./wire/store-quads.js";
+import { readLocalStoreFile, readLocalStoreRdf } from "./wire/store-quads.js";
 
 export interface IntroductionCard {
   readonly type: "AwpIntroductionCard";
@@ -481,9 +481,12 @@ function hasTrustFile(path: string): boolean {
 /** Read the authoritative trust file. A present Turtle file always wins, including on error. */
 export async function readTrustFile(dir: string): Promise<TrustStoreData> {
   const turtle = join(dir, "trust.ttl");
-  if (!hasTrustFile(turtle)) return JSON.parse(readFileSync(join(dir, "trust.json"), "utf8"));
+  if (!hasTrustFile(turtle))
+    return JSON.parse(readLocalStoreFile(join(dir, "trust.json"), "text/turtle"));
   try {
-    return trustFromRdf(readLocalStoreRdf(readFileSync(turtle, "utf8"), "text/turtle"));
+    return trustFromRdf(
+      readLocalStoreRdf(readLocalStoreFile(turtle, "text/turtle"), "text/turtle"),
+    );
   } catch (cause) {
     throw new Error("trust store Turtle is malformed", { cause });
   }

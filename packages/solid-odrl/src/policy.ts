@@ -365,6 +365,7 @@ function writeRule(
   }
 }
 
+/** Options for observing rule and duty nodes while {@link policyToRdf} writes a policy. */
 export interface PolicyWriteOptions {
   /** Observe each input rule and duty's IRI or document-local blank node label. */
   readonly onRuleNode?: (rule: OdrlRule | OdrlDuty, value: string, isBlank: boolean) => void;

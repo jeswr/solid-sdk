@@ -1143,3 +1143,74 @@ after save verification began reusing validated entry blocks.
 The full workspace gate was blocked in the disposable copy by missing
 `@capacitor/core` for suite-native. Retrying with a full offline install
 stopped on the uncached, lockfile-pinned federation-registry tarball.
+
+## Phase 2 re-review fixes (40p)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+Baseline `c5ac74729`, which merges `origin/main` over reviewed commit
+`ec26b4526`. Tests used Node 24.22.3, pnpm 10.4.1, and two Vitest workers.
+
+| Finding | Fix and regression |
+| --- | --- |
+| N1 | Typed snapshots preserve the original instant for owner and organisation approvals, trust holds and pins, mandate revocations, admitted and held memory facts, and agreements. Generated pin and revocation nodes retain a queryable date-time alongside the source spelling when needed. A signed minute-precision owner approval survives a durable save and reopen with the exact timestamp and JWS, and the gate returns the same decision as the memory store. Coverage includes an explicit offset and earlier v2 Agreement timestamps. |
+| N2 | The local Agreement model reuses the protocol graph and applies the store's RDF JSON escape where necessary. An operation version containing lone high and low surrogates, a replacement character, and an astral character round-trips exactly. |
+| N3 | Snapshot reads and writes are bounded at 256 MiB and one million quads. Trust reads are capped at 64 MiB, with additional Turtle limits of 128 Mi characters of expanded term text and 250,000 quads. Those limits leave room for accumulated conversations and signed records and contain Turtle prefix amplification. Inherited terms accept 32 levels. Reads and saves report a clear error at the 33rd level. Regressions exercise both paths, an oversized sparse file, and prefix expansion in a small Turtle document. |
+| N4 | The solid-odrl README and skill describe standard action IRI rejection in the RDF and JSON-LD decision-record writers. Both writer regressions accept the short `append` action and reject its standard ACL IRI on an active duty. The package regenerated and verified the API report after documenting `PolicyWriteOptions`. |
+
+The signed-approval, typed-instant, Agreement surrogate, inherited-depth, and
+Turtle expansion regressions failed on the merged review baseline. The
+decision-record writers already rejected the IRI on that head. Their tests
+protect the behavior introduced in 40o and both failed against `776a9d253`,
+before the standard-IRI rejection was introduced.
+
+### Save timings
+
+The diagnostic memory store had been parsing and materializing the entire
+snapshot at every save. Both stores now verify changed layout and payload
+blocks and reuse verified blocks when their bytes are unchanged. If the
+decoded entry has identical JSON, including nested order, the reader checks the
+parsed quads against the original graph. A changed native projection still
+requires canonical re-encoding. Cross-entry links and subject collisions still
+go through the full reader. An injected extra quad with unchanged JSON is
+rejected before rename, and a retry after an encoder error succeeds.
+
+The save benchmark used the populated state fixture, updated one nested value
+per save and appended 25 entries over 50 saves. Each mode ran four times and
+the table reports the median. The encode-and-fsync control used the same
+encoder and durable write steps with the verification bypassed solely for
+measurement. CLI and corpus rows use Vitest's test-body duration from isolated
+runs.
+
+| Workload | Review baseline | Final |
+| --- | ---: | ---: |
+| 50 saves, encode-and-fsync control | 441 ms | 408 ms |
+| 50 saves, durable file store with verification | 1,229 ms | 787 ms |
+| 50 saves, memory store with `AWP_STORE_RDF=1` | 5,928 ms | 662 ms |
+| State corpus, `cohort-count/baseline` | 118.50 s | 79.31 s |
+| Personal-agent, `src/pilot/cli.test.ts` | 11.67 s | 10.39 s |
+
+The baseline verification increased the durable benchmark to 2.78 times its
+encode-and-fsync control. Final durable saves were 36% faster than the review
+baseline. The measured corpus case was 33% faster, and the CLI passed within its
+existing 20-second timeout. The corpus measurement covers one case.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Agent-reference Phase 2 and restart regressions | 284 passed in 24 files, including the generated-model drift test. The final codec rerun passed all 46 tests, and a populated snapshot from the earlier v2 encoder reopened with identical state. |
+| Agent daemon restarts | 138 passed in gate setup, daemon, and outbound. |
+| Personal-agent restarts | All 46 targeted cases passed across the combined run and the isolated mortgage rerun. One mortgage case timed out in the concurrent run. All three mortgage cases passed in isolation within their existing timeouts. |
+| Solid ODRL | 943 passed in 14 files. API report generation and verification passed. |
+| RDF engine | 224 passed in 11 files with coverage enabled. The ordinary run hit `spawnSync EPERM` in the WASM-copy CLI test. The rerun used file-backed stdout for that subprocess. |
+| Other direct solid-odrl consumers | Agent authz verifier 141, agent mandate 858, pkg-memory 809, pod-access 1,183, access-manager 181, and issues 720 passed. The two app suites used an offline install in a disposable workspace. |
+| Typecheck and lint | Agent-reference, agent-daemon, solid-odrl, rdf-engine, and all direct consumers passed typecheck. Changed-file Biome, both changed package lints, and root lint passed. |
+| RDF pipeline and traces | The guard reported zero failures and 216 existing allowances. Default and RDF-verified memory modes reproduced all five selected live paths and preserved the traces, outlines, and manifest rows. Both runs reported 278 runs, zero disagreements and five blocked paths. |
+
+Agent-reference was compiled with `tsc -p tsconfig.build.json` and
+`scripts/copy-generated.mjs`. Temporary package copies were removed.
+
+The full personal-agent run reported 520 passed, 77 failed, four skipped, and
+two unhandled loopback errors. Its failing test names matched the 40n sandbox
+run, which hit loopback and subprocess restrictions and dependent timeouts.

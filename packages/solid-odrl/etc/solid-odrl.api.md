@@ -370,7 +370,7 @@ export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<str
 // @public
 export type PolicyType = "Set" | "Offer" | "Agreement";
 
-// @public (undocumented)
+// @public
 export interface PolicyWriteOptions {
     readonly onRuleNode?: (rule: OdrlRule | OdrlDuty, value: string, isBlank: boolean) => void;
 }

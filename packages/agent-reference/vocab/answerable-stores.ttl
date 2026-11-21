@@ -623,6 +623,10 @@ awp:effectiveUntil a rdf:Property; rdfs:label "effective until";
     rdfs:comment "Records the effective until in a durable store projection.";
     rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
 
+awp:instantLexical a rdf:Property; rdfs:label "instant lexical form";
+    rdfs:comment "Preserves the original spelling of an instant beside its generated date-time projection.";
+    rdfs:domain rdfs:Resource; rdfs:range xsd:string .
+
 awp:stateMandateVersion a rdf:Property; rdfs:label "state mandate version";
     rdfs:comment "Records the state mandate version in a durable store projection.";
     rdfs:domain awp:MandateRevocation; rdfs:range xsd:integer .
@@ -938,7 +942,7 @@ awp:approvalSigner a rdf:Property; rdfs:label "approval signer";
 
 awp:issuedAt a rdf:Property; rdfs:label "issued at";
     rdfs:comment "Records the issued at in a durable store projection.";
-    rdfs:domain awp:ApprovalGrant; rdfs:range xsd:dateTime .
+    rdfs:domain awp:ApprovalGrant; rdfs:range rdfs:Literal .
 
 awp:approvalItems a rdf:Property; rdfs:label "approval items";
     rdfs:comment "Records the approval items in a durable store projection.";

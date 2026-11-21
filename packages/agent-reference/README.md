@@ -332,12 +332,20 @@ An empty, malformed, or incomplete RDF snapshot prevents startup.
 
 File saves compare each entry's JSON text with the previous save and reuse its
 N-Quads block when unchanged. Positions can change independently of payloads.
-The save verifies the outgoing RDF with the snapshot reader and compares the
-decoded state before the atomic replacement. The file and containing directory
-are synced around the replacement. Snapshots use RDF JSON literals for open
-values that exceed the named-value projection limits or contain unpaired
-surrogates. Local snapshot read budgets scale with the file size so existing
-admitted data can migrate without applying the ledger's limits.
+The save verifies the outgoing RDF and compares the decoded state before the
+atomic replacement. Unchanged blocks reuse their validation. The file and
+containing directory are synced around the replacement. Snapshots preserve
+runtime-admitted timestamp spellings and escape unpaired surrogates in RDF JSON
+literals. Open values can also use RDF JSON when they exceed the named-value
+projection limits. Inherited item terms can nest up to 32 levels.
+
+Local snapshot files are capped at 256 MiB and one million quads. Trust files
+are capped at 64 MiB. These budgets provide room for the expanded RDF of many
+accumulated conversations and signed records, and for a provisioned trust
+directory much larger than the pilot fixtures can exercise. Turtle trust parsing
+also caps expansion at 128 Mi characters of RDF term text and 250,000 quads,
+since a prefix or shorthand can repeat terms without repeating their bytes on
+disk.
 `AWP_STORE_RDF=1` enables save-time round-trip assertions in the memory store
 for tests.
 

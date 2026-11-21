@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
-import { readNQuads, writeNQuads } from "../src/wire/store-quads.js";
+import { readLocalStoreRdf, readNQuads, writeNQuads } from "../src/wire/store-quads.js";
 
 it("writes a bytewise-sorted, deterministic N-Quads set", () => {
   const { namedNode, literal } = DataFactory;
@@ -33,4 +33,19 @@ it("refuses a literal that UTF-8 cannot represent losslessly", () => {
     DataFactory.literal("\udc00"),
   );
   expect(() => writeNQuads(graph)).toThrow("well-formed Unicode");
+});
+
+it("bounds prefix expansion in local Turtle stores", () => {
+  const prefix = `@prefix long: <urn:${"a".repeat(128 * 1024)}:> .\n`;
+  expect(readLocalStoreRdf(`${prefix} <urn:s> <urn:p> long:ok .`, "text/turtle").size).toBe(1);
+  const objects = Array.from({ length: 1_025 }, (_, index) => `long:n${index}`).join(", ");
+  let failure: unknown;
+  try {
+    readLocalStoreRdf(`${prefix} <urn:s> <urn:p> ${objects} .`, "text/turtle");
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({
+    cause: { message: expect.stringContaining("maxTotalTermLength") },
+  });
 });

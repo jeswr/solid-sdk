@@ -1,15 +1,21 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-import type { Term } from "@jeswr/fetch-rdf";
+import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { DataFactory, type Store } from "n3";
+import { isIsoInstant } from "../../core/schema.js";
 import type { Agreement, Json } from "../../core/types.js";
 import { entities } from "../../generated/model.js";
 import { AWP } from "../../profile/vocabulary.js";
 import type { RuntimeState } from "../../store/state.js";
-import { decodeSnapshotEntry, readLocalStoreRdf, writeNQuads } from "../../wire/store-quads.js";
+import {
+  assertLocalSnapshotSize,
+  decodeSnapshotEntry,
+  readLocalStoreRdf,
+  writeNQuads,
+} from "../../wire/store-quads.js";
 import { makeNode } from "../core-node.js";
 import { IndexedStore } from "../indexed-store.js";
-import { AgreementNode } from "../message-nodes.js";
+import { agreementSpec, operationRefSpec, participantRefSpec } from "../message-nodes.js";
 import { SCHEMA, scopedId, XSD } from "../named-values.js";
 import {
   assertSameGraph,
@@ -18,9 +24,11 @@ import {
   graphContents,
   hasUnpairedSurrogate,
   inGraph,
+  instant,
   link,
   readStoreText,
   StoreNode,
+  storeInstant,
   storeModel,
   storeText,
 } from "./common.js";
@@ -35,6 +43,7 @@ const POSITION = SCHEMA + "position";
 const VERSION = AWP + "stateVersion";
 const PRESENT = AWP + "sectionPresent";
 const ITEM = AWP + "memoryItem";
+const INSTANT_LEXICAL = AWP + "instantLexical";
 const { literal, namedNode } = DataFactory;
 
 export const GENERIC_SECTIONS = [
@@ -99,7 +108,6 @@ const entryId = (section: string, key: string) =>
     : scopedId(section, key);
 const text = (term: string, optional = false) => field("text", term, optional);
 const iri = (term: string, optional = false) => field("iri", term, optional);
-const time = (term: string) => field("time", term);
 const value = (term: string, optional = false) => field("value", term, optional);
 
 storeModel("TrustHold", {
@@ -110,13 +118,13 @@ storeModel("TrustHold", {
   kid: text("kid"),
   party: iri("party"),
   purpose: iri("admittedPurpose"),
-  expiresAt: time("effectiveUntil"),
+  expiresAt: instant("effectiveUntil"),
 });
 storeModel("TrustRefusal", { value: field("boolean", "trustRefused") });
 storeModel("ApprovalGrant", {
   id: iri("recordIdentifier"),
   decision: text("approvalDecisionName"),
-  validUntil: time("effectiveUntil"),
+  validUntil: instant("effectiveUntil"),
   jws: exact("approvalJws", "approvalJwsDigest"),
   payment: field("open", "approvalPayment", true),
   releaseBinding: field("open", "recordApprovalBinding", true),
@@ -131,8 +139,8 @@ storeModel(
     actor: iri("actor"),
     actionDigest: text("actionDigest"),
     conversation: iri("conversation"),
-    issuedAt: time("issuedAt"),
-    validUntil: time("effectiveUntil"),
+    issuedAt: instant("issuedAt"),
+    validUntil: instant("effectiveUntil"),
     kid: text("kid"),
     jws: exact("approvalJws", "approvalJwsDigest", true),
     releaseBinding: field("open", "recordApprovalBinding", true),
@@ -142,6 +150,35 @@ storeModel(
 storeModel("OrganisationApprovals", {
   items: link("nodes", "approvalItems", "OrganisationApproval"),
 });
+// Keep the Agreement protocol graph for normal data and use local literal escapes
+// for native values that RDF cannot represent directly.
+storeModel("StoreOperationRef", operationRefSpec.fields, operationRefSpec.type);
+storeModel(
+  "StoreParticipantRef",
+  Object.fromEntries(
+    Object.entries(participantRefSpec.fields).map(([key, field]) => [
+      key,
+      { ...field, lexical: true },
+    ]),
+  ),
+  participantRefSpec.type,
+);
+storeModel(
+  "StoreAgreement",
+  {
+    ...agreementSpec.fields,
+    conversation: { ...agreementSpec.fields.conversation!, lexical: true },
+    offer: { ...agreementSpec.fields.offer!, lexical: true },
+    acceptance: { ...agreementSpec.fields.acceptance!, lexical: true },
+    operation: { ...agreementSpec.fields.operation!, model: "StoreOperationRef" },
+    offeror: { ...agreementSpec.fields.offeror!, model: "StoreParticipantRef" },
+    acceptor: { ...agreementSpec.fields.acceptor!, model: "StoreParticipantRef" },
+    terms: { ...agreementSpec.fields.terms!, protocolOpen: true },
+    selection: { ...agreementSpec.fields.selection!, protocolOpen: true },
+    formedAt: instant("formedAt"),
+  },
+  agreementSpec.type,
+);
 const head = {
   seq: field("integer", "sequence"),
   hash: text("entryHash"),
@@ -199,11 +236,14 @@ function writeGenerated(name: GeneratedName, raw: Json, id: string, local: Store
     if (key === "expiresAt" || key === "at") {
       if (typeof val !== "string" || !Number.isFinite(Date.parse(val)))
         throw new TypeError("Invalid store timestamp");
-      wrap[key] = new Date(val);
-      node.put(
-        key === "at" ? AWP + "at" : AWP + "effectiveUntil",
-        literal(val, namedNode(XSD + "dateTime")),
-      );
+      const term = storeInstant(val, true);
+      if (term.datatype.value === XSD + "dateTime") {
+        node.put(key === "at" ? AWP + "at" : AWP + "effectiveUntil", term);
+      } else {
+        // Keep the generated date-time property queryable and retain the source lexeme.
+        wrap[key] = new Date(val);
+        node.put(INSTANT_LEXICAL, term);
+      }
     } else {
       if (val === undefined) throw new TypeError("Missing generated store field");
       wrap[accessor] = val;
@@ -219,14 +259,17 @@ function readGenerated(name: GeneratedName, id: string, local: Store): Json {
   if (!node.types.has(entity.typeIri)) throw new TypeError("Missing generated store class");
   const wrap = new entity.Wrapper(id, local, DataFactory) as unknown as Record<string, unknown>;
   return Object.fromEntries(
-    generated[name].map((key) => [
-      key,
-      key === "expiresAt" || key === "at"
-        ? wrap[key] instanceof Date
-          ? node.term(key === "at" ? AWP + "at" : AWP + "effectiveUntil")?.value
-          : undefined
-        : wrap[key === "id" ? "mandateId" : key],
-    ]),
+    generated[name].map((key) => {
+      if (key !== "expiresAt" && key !== "at") return [key, wrap[key === "id" ? "mandateId" : key]];
+      if (!(wrap[key] instanceof Date)) throw new TypeError("Missing generated store timestamp");
+      const lexical = node.term(INSTANT_LEXICAL);
+      return [
+        key,
+        lexical
+          ? readStoreText(lexical)
+          : node.term(key === "at" ? AWP + "at" : AWP + "effectiveUntil")?.value,
+      ];
+    }),
   ) as Json;
 }
 
@@ -239,11 +282,19 @@ function writePayload(section: Section, raw: Json, id: string, local: Store, pol
   }
   if ((name === "UsedApproval" || name === "TrustRefusal") && raw !== true)
     throw new TypeError("Expected a true state marker");
-  const body = name === "Agreement" ? (raw as unknown as Agreement).id : scopedId(id, "payload");
-  envelope.put(ENTRY_VALUE, namedNode(body));
   if (name === "Agreement") {
-    AgreementNode.toNode(raw as unknown as Agreement, body, local);
-  } else if (name === "MemoryScope") {
+    const agreement = raw as unknown as Agreement;
+    if (hasUnpairedSurrogate(agreement.id) || hasUnpairedSurrogate(agreement.operation.id)) {
+      envelope.putValue(ENTRY_VALUE, raw);
+    } else {
+      envelope.put(ENTRY_VALUE, namedNode(agreement.id));
+      makeNode("StoreAgreement", agreement, agreement.id, local);
+    }
+    return;
+  }
+  const body = scopedId(id, "payload");
+  envelope.put(ENTRY_VALUE, namedNode(body));
+  if (name === "MemoryScope") {
     if (!Array.isArray(raw)) throw new TypeError("Expected a context list");
     makeNode(name, {}, body, local);
     const scope = new StoreNode(body, local, name);
@@ -279,11 +330,11 @@ function readPayload(
     return raw;
   }
   const term = envelope.term(ENTRY_VALUE);
+  if (name === "Agreement" && term?.termType === "Literal") return envelope.valueAt(ENTRY_VALUE)!;
   if (term?.termType !== "NamedNode") throw new TypeError("Missing typed store entry");
   const local = envelope.dataset;
   const node = new StoreNode(term, local, name);
-  if (name === "Agreement")
-    return AgreementNode.fromNode(new AgreementNode(term, local)) as unknown as Json;
+  if (name === "Agreement") return new StoreNode<Json>(term, local, "StoreAgreement").read();
   if (name === "MemoryScope") {
     node.read();
     return ordered(node, ITEM).map(({ node }) => readMemoryFact(node, policy)) as unknown as Json;
@@ -339,39 +390,65 @@ function header(): IndexedStore {
   for (const section of sections) root.add(SECTION, sectionIri(section));
   return local;
 }
-function sectionHeader(section: Section, present: boolean): string {
+type LayoutBlock = { readonly bytes: string; verify(): void };
+
+function layoutBlock(dataset: Store): LayoutBlock {
+  let pending = [...dataset];
+  const bytes = writeNQuads(dataset);
+  return {
+    bytes,
+    verify() {
+      if (!pending.length) return;
+      if (!bytes.endsWith("\n")) throw new TypeError("Unterminated snapshot layout block");
+      const actual = readLocalStoreRdf(bytes, "application/n-quads");
+      if (actual.size !== pending.length || pending.some((quad) => !actual.has(quad)))
+        throw new TypeError("Invalid snapshot layout block");
+      pending = [];
+    },
+  };
+}
+
+function sectionHeader(section: Section, present: boolean): LayoutBlock {
   const local = new IndexedStore();
   const root = new StoreNode(sectionIri(section), local, "StateSection");
   root.types.add(AWP + (typed(section) ? "TypedStateSection" : "StateSection"));
   root.put(PRESENT, literal(String(present), namedNode(XSD + "boolean")));
-  return writeNQuads(inGraph(local, root.id));
+  return layoutBlock(inGraph(local, root.id));
 }
 function positionBlock(section: Section, id: string, position: number) {
   const local = new IndexedStore();
   const root = new StoreNode(sectionIri(section), local, "StateSection");
   root.add(ENTRY, id);
   new StoreNode(id, local, "StateEntry").position = position;
-  return writeNQuads(inGraph(local, root.id));
+  return layoutBlock(inGraph(local, root.id));
 }
 
-type EntryMemo = {
+type EntryPayload = {
   readonly native: string;
   readonly id: string;
   readonly bytes: string;
-  readonly position: number;
-  readonly location: string;
   readonly policies: ReadonlyMap<string, string>;
+  authored?: readonly Quad[];
 };
 
-function encodeEntry(section: Section, key: string, id: string, raw: Json) {
+type EntryMemo = {
+  readonly payload: EntryPayload;
+  readonly position: number;
+  readonly location: LayoutBlock;
+};
+
+function encodeEntry(section: Section, key: string, id: string, raw: Json, retainQuads = false) {
   const local = new IndexedStore();
   const policies = new IndexedStore();
   const entry = new StoreNode(id, local, "StateEntry");
   entry.types.add(AWP + (typed(section) ? "TypedStateEntry" : "StateEntry"));
   entry.put(ENTRY_KEY, storeText(key));
   writePayload(section, raw, id, local, policies);
+  const graph = inGraph(local, sectionIri(section));
+  const authored = retainQuads ? [...graph, ...policies] : undefined;
   return {
-    bytes: writeNQuads(inGraph(local, sectionIri(section)), Infinity),
+    bytes: writeNQuads(graph, Infinity),
+    authored,
     policies: new Map(
       policies
         .getGraphs(null, null, null)
@@ -389,7 +466,7 @@ type VerifiedEntry = {
   readonly links: ReadonlySet<string>;
 };
 
-function verifyEntry(section: Section, key: string, row: EntryMemo): VerifiedEntry {
+function verifyEntry(section: Section, key: string, row: EntryPayload): VerifiedEntry {
   const dataset = readLocalStoreRdf(
     row.bytes + [...row.policies.values()].join(""),
     "application/n-quads",
@@ -400,13 +477,22 @@ function verifyEntry(section: Section, key: string, row: EntryMemo): VerifiedEnt
     new StoreNode(row.id, local, "StateEntry"),
     readPolicy(dataset),
   );
-  const canonical = encodeEntry(section, key, row.id, value);
-  if (
-    canonical.bytes !== row.bytes ||
-    canonical.policies.size !== row.policies.size ||
-    [...canonical.policies].some(([id, bytes]) => row.policies.get(id) !== bytes)
-  )
-    throw new TypeError(`Noncanonical snapshot entry in ${section}`);
+  if (row.authored && JSON.stringify(value) === row.native) {
+    // Exact JSON includes nested field order. The same input would produce the
+    // same canonical graph, so verify the RDF bytes against the original quads.
+    if (dataset.size !== row.authored.length || row.authored.some((quad) => !dataset.has(quad)))
+      throw new TypeError(`Inconsistent snapshot entry in ${section}`);
+  } else {
+    // Typed wrappers can change property order. Recheck their canonical form.
+    const canonical = encodeEntry(section, key, row.id, value);
+    if (
+      canonical.bytes !== row.bytes ||
+      canonical.policies.size !== row.policies.size ||
+      [...canonical.policies].some(([id, bytes]) => row.policies.get(id) !== bytes)
+    )
+      throw new TypeError(`Noncanonical snapshot entry in ${section}`);
+  }
+  row.authored = undefined;
   const subjects = new Set<string>();
   const links = new Set<string>();
   for (const { subject, object } of local) {
@@ -429,9 +515,9 @@ function sectionValue(section: Section, pairs: ReadonlyArray<readonly [string, J
 /** Cache per entry, with positions separate from the payload. Cache only the most recent save. */
 export class SnapshotMemo {
   private entries = new Map<Section, Map<string, EntryMemo>>();
-  private output?: { bytes: string; layout: string };
-  private readonly verified = new WeakMap<EntryMemo, VerifiedEntry>();
-  private readonly root = writeNQuads(header());
+  private output?: string;
+  private readonly verified = new WeakMap<EntryPayload, VerifiedEntry>();
+  private readonly root = layoutBlock(header());
   private readonly present = new Map(
     sections.map((section) => [section, sectionHeader(section, true)]),
   );
@@ -440,6 +526,8 @@ export class SnapshotMemo {
   );
   encodedEntries = 0;
 
+  constructor(private readonly retainQuads = true) {}
+
   write(state: RuntimeState): string {
     if (
       state.version !== 1 ||
@@ -447,8 +535,7 @@ export class SnapshotMemo {
     )
       throw new TypeError("Unsupported native snapshot section or version");
     const next = new Map<Section, Map<string, EntryMemo>>();
-    const chunks = [this.root];
-    const layout = [this.root];
+    const chunks = [this.root.bytes];
     const policies = new Map<string, string>();
     let encoded = 0;
     for (const section of sections) {
@@ -456,8 +543,7 @@ export class SnapshotMemo {
       if (value === undefined) {
         const absent = this.absent.get(section);
         if (!absent) throw new TypeError(`Missing snapshot section ${section}`);
-        chunks.push(absent);
-        layout.push(absent);
+        chunks.push(absent.bytes);
         continue;
       }
       if (
@@ -467,8 +553,7 @@ export class SnapshotMemo {
       )
         throw new TypeError(`Invalid snapshot section ${section}`);
       const heading = this.present.get(section)!;
-      chunks.push(heading);
-      layout.push(heading);
+      chunks.push(heading.bytes);
       const current = new Map<string, EntryMemo>();
       const prior = this.entries.get(section);
       next.set(section, current);
@@ -486,74 +571,59 @@ export class SnapshotMemo {
           continue;
         }
         const cached = prior?.get(key);
-        const id = cached?.id ?? entryId(sectionIri(section), key);
+        const id = cached?.payload.id ?? entryId(sectionIri(section), key);
         const location =
           cached?.position === position ? cached.location : positionBlock(section, id, position);
-        let row: EntryMemo;
-        if (cached?.native === native) {
-          row = cached.location === location ? cached : { ...cached, position, location };
-        } else {
+        let payload = cached?.payload;
+        if (payload?.native !== native) {
           const raw = decodeSnapshotEntry(native) as Json;
-          row = {
+          payload = {
             native,
             id,
-            position,
-            location,
-            ...encodeEntry(section, key, id, raw),
+            ...encodeEntry(section, key, id, raw, this.retainQuads),
           };
           encoded++;
         }
-        for (const [id, bytes] of row.policies) {
+        for (const [id, bytes] of payload.policies) {
           const previous = policies.get(id);
           if (previous !== undefined && previous !== bytes)
             throw new TypeError("Conflicting snapshot ODRL policy identity");
           policies.set(id, bytes);
         }
-        current.set(key, row);
-        chunks.push(row.location, row.bytes);
-        layout.push(row.location);
+        current.set(key, { payload, position, location });
+        chunks.push(location.bytes, payload.bytes);
         position++;
       }
     }
     for (const id of [...policies.keys()].sort()) chunks.push(policies.get(id)!);
     const bytes = chunks.join("");
+    assertLocalSnapshotSize(bytes);
     this.entries = next;
-    this.output = { bytes, layout: layout.join("") };
+    this.output = bytes;
     this.encodedEntries = encoded;
     return bytes;
   }
 
   /** Decode the assembled output, reusing validation only for identical entry bytes. */
   decode(bytes: string): RuntimeState {
-    if (bytes !== this.output?.bytes) return readStateSnapshot(bytes);
-    const layout = readLocalStoreRdf(this.output.layout, "application/n-quads");
-    readSnapshotHeader(layout);
-    let size = sections.length + 2;
+    if (bytes !== this.output) return readStateSnapshot(bytes);
+    this.root.verify();
     const result: Partial<Record<keyof RuntimeState, unknown>> = { version: 1 };
     for (const section of sections) {
-      const id = sectionIri(section);
-      const root = new StoreNode(id, graphContents(layout, id), "StateSection");
-      const linked = ordered(root, ENTRY);
       const entries = this.entries.get(section);
-      if (
-        sectionPresent(root, section) !== (entries !== undefined) ||
-        linked.length !== (entries?.size ?? 0)
-      )
-        throw new TypeError(`Invalid snapshot layout in ${section}`);
-      size += 2 + linked.length * 2;
+      (entries ? this.present.get(section)! : this.absent.get(section)!).verify();
       if (!entries) continue;
 
+      const id = sectionIri(section);
       const subjects = new Map<string, VerifiedEntry>();
       const pairs: Array<readonly [string, Json]> = [];
       const checked: VerifiedEntry[] = [];
       for (const [key, row] of entries) {
-        const link = linked[pairs.length]?.node;
-        if (link?.id !== row.id || link.term(POSITION)?.value !== String(row.position))
-          throw new TypeError(`Invalid snapshot entry order in ${section}`);
-        let entry = this.verified.get(row);
+        row.location.verify();
+        let entry = this.verified.get(row.payload);
         if (!entry) {
-          entry = verifyEntry(section, key, row);
-          this.verified.set(row, entry);
+          entry = verifyEntry(section, key, row.payload);
+          this.verified.set(row.payload, entry);
         }
         checked.push(entry);
         pairs.push([key, entry.value]);
@@ -572,19 +642,38 @@ export class SnapshotMemo {
       }
       result[section] = sectionValue(section, pairs);
     }
-    if (layout.size !== size) throw new TypeError("Unexpected quads in snapshot layout");
     return result as unknown as RuntimeState;
   }
 }
 
 export function stateDataset(state: RuntimeState): Store {
-  return readLocalStoreRdf(new SnapshotMemo().write(state), "application/n-quads");
+  return readLocalStoreRdf(new SnapshotMemo(false).write(state), "application/n-quads");
 }
 
 export class UnsupportedSnapshotVersion extends Error {}
 export function stateFromRdf(dataset: Store): RuntimeState {
   const decoded = decodeState(dataset);
-  assertSameGraph(dataset, stateDataset(decoded));
+  // Earlier v2 writers tagged Agreement timestamps with xsd:dateTime even when
+  // the runtime admitted a shorter lexical form. Compare those using today's term.
+  const formedAt = namedNode(AWP + "formedAt");
+  const agreementGraph = namedNode(sectionIri("agreements"));
+  let normalized: Store | undefined;
+  for (const quad of dataset.getQuads(null, formedAt, null, agreementGraph)) {
+    const term = quad.object;
+    if (
+      term.termType !== "Literal" ||
+      term.datatype.value !== XSD + "dateTime" ||
+      !isIsoInstant(term.value)
+    )
+      continue;
+    const expected = storeInstant(term.value, true);
+    if (term.equals(expected)) continue;
+    // A competing literal is rejected by the singleton field reader above.
+    normalized ??= new IndexedStore([...dataset]);
+    normalized.removeQuad(quad);
+    normalized.addQuad(quad.subject, formedAt, expected, agreementGraph);
+  }
+  assertSameGraph(normalized ?? dataset, stateDataset(decoded));
   return decoded;
 }
 
@@ -658,11 +747,7 @@ export function readStateSnapshot(text: string): RuntimeState {
     return stateFromRdf(readLocalStoreRdf(text, "application/n-quads"));
   } catch (cause) {
     if (cause instanceof UnsupportedSnapshotVersion) throw cause;
-    throw new Error("state snapshot is malformed", { cause });
+    const detail = cause instanceof Error ? `: ${cause.message}` : "";
+    throw new Error(`state snapshot is malformed${detail}`, { cause });
   }
-}
-
-/** The memory check decodes its own encoder output; the file reader also verifies the full graph. */
-export function decodeSnapshotForRoundTrip(text: string): RuntimeState {
-  return decodeState(readLocalStoreRdf(text, "application/n-quads"));
 }

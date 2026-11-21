@@ -16,7 +16,7 @@ awp:InvokeBodyChallengeShape a sh:NodeShape;
     sh:targetClass awp:InvokeBodyChallenge.
 awp:MandateRevocationShape a sh:NodeShape;
     sh:name "MandateRevocation";
-    sh:property shapes:01e1ac5a9231dd01565e36c8025c9db2ffdfee67b6ccdcfb2013c007c5005e12-MandateRevocation-stateMandateVersion, shapes:84c96c3ef00581730babaf814d933d41d48fc1cb0d42dba56c421e3b46b3f429-MandateRevocation-digest, shapes:c796a08bf33a0ae9155feeded74156d95b4dc4a9f1ec0e41452b2ba172af8794-MandateRevocation-at, shapes:e88a249836ad4aca7f8fc041d428519f000c88f99059da09b1071b54583d3ab4-MandateRevocation-recordIdentifier;
+    sh:property shapes:01e1ac5a9231dd01565e36c8025c9db2ffdfee67b6ccdcfb2013c007c5005e12-MandateRevocation-stateMandateVersion, shapes:7125c1ea8e060d3ea4174e942517eea3ab3fedc2667a57ca5919562f2047e03d-MandateRevocation-instantLexical, shapes:84c96c3ef00581730babaf814d933d41d48fc1cb0d42dba56c421e3b46b3f429-MandateRevocation-digest, shapes:c796a08bf33a0ae9155feeded74156d95b4dc4a9f1ec0e41452b2ba172af8794-MandateRevocation-at, shapes:e88a249836ad4aca7f8fc041d428519f000c88f99059da09b1071b54583d3ab4-MandateRevocation-recordIdentifier;
     sh:targetClass awp:MandateRevocation.
 awp:MessageAuthorshipShape a sh:NodeShape;
     <http://www.w3.org/2000/01/rdf-schema#comment> "The authorship component of Message.";
@@ -33,7 +33,7 @@ awp:RecordEntryShape a sh:NodeShape;
     sh:targetClass awp:RecordEntry.
 awp:TrustPinShape a sh:NodeShape;
     sh:name "TrustPin";
-    sh:property shapes:55fde8a13c4738c83b3fb2431fe44e56cb1d9ac9d934016d40941175e0c8e42e-TrustPin-admittedPurpose, shapes:89570e4868a0690cd3e7eb8dd8fdc0362517f82365f56bf162010c877688971b-TrustPin-kid, shapes:a340833e0de7b7de4b0116024b0e619753223ab6ef6539e7a8556820ce57127f-TrustPin-party, shapes:d9585dc00b914c2ce4fb1d0495f0345ade88bcb6d14459e2b08d4430ac6903f4-TrustPin-effectiveUntil;
+    sh:property shapes:55fde8a13c4738c83b3fb2431fe44e56cb1d9ac9d934016d40941175e0c8e42e-TrustPin-admittedPurpose, shapes:89570e4868a0690cd3e7eb8dd8fdc0362517f82365f56bf162010c877688971b-TrustPin-kid, shapes:a340833e0de7b7de4b0116024b0e619753223ab6ef6539e7a8556820ce57127f-TrustPin-party, shapes:bcc14cea97e352d21a6e97640ffeda0308f4335648b5d69318bbdef1cd6c31b4-TrustPin-instantLexical, shapes:d9585dc00b914c2ce4fb1d0495f0345ade88bcb6d14459e2b08d4430ac6903f4-TrustPin-effectiveUntil;
     sh:targetClass awp:TrustPin.
 awp:WithheldRecordEntryShape a sh:NodeShape;
     sh:name "WithheldRecordEntry";
@@ -126,6 +126,10 @@ shapes:6f71a376fb821a204bb20e11ff2f88e4c59dad5b68567599b22afce56161b5d5-InvokeBo
     sh:nodeKind sh:IRI;
     sh:path awp:nonce;
     sh:severity sh:Violation.
+shapes:7125c1ea8e060d3ea4174e942517eea3ab3fedc2667a57ca5919562f2047e03d-MandateRevocation-instantLexical sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "instantLexical";
+    sh:path awp:instantLexical.
 shapes:7e0dc23ce3795151f1bf24221ba26906dbb89a670136cc4c2811ea9069cbf4a5-RecordEntry-previousEntry sh:maxCount 1;
     sh:name "previousEntry";
     sh:nodeKind sh:IRI;
@@ -182,6 +186,10 @@ shapes:b434f85d7ec5c80796e91fab116c6cd129eab921da945d2f8bcbfb834e150b74-RecordEn
     sh:minCount 1;
     sh:name "entryHash";
     sh:path awp:entryHash.
+shapes:bcc14cea97e352d21a6e97640ffeda0308f4335648b5d69318bbdef1cd6c31b4-TrustPin-instantLexical sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "instantLexical";
+    sh:path awp:instantLexical.
 shapes:bdcaecd3e1b902308886a495fd61a710bcc3f37ddb8e4053b3076547d93a36e3-PaymentReservation-amountMinor sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minCount 1;
