@@ -23,9 +23,21 @@ import { withPodReadLimits } from "./pod-operation.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
 import { wacAclLink } from "./wac-link.js";
 
-/** Adapt only the chat storage surface while MCP-01's shared port is absent. */
-export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort {
-  const fetch = scopedFetch(config);
+/** Chat storage settings. A PodPort-only server (such as storage-client) has no raw fetch. */
+export type ChatPodConfig = Omit<SolidMcpConfig, "fetch"> & { fetch?: typeof fetch };
+
+/**
+ * Adapt the chat storage surface to a pod capability. With `config.fetch`, ACLs are discovered
+ * with a direct HEAD as before. Without it, `pod` must implement `head`, which promises no
+ * redirects, retained Links on 404 and a thrown error on invalid metadata; its advertised ACL is
+ * then held to the same pod-scope and shape checks.
+ */
+export function createChatPodPort(config: ChatPodConfig, pod?: PodPort): ChatPodPort {
+  const direct = config.fetch;
+  const source = pod ?? (direct ? createFetchPodPort({ ...config, fetch: direct }) : undefined);
+  if (!source) throw new TypeError("Chat storage requires a fetch or a PodPort");
+  const head = source.head;
+  if (!direct && !head) throw new TypeError("Chat ACL discovery requires PodPort.head");
   function check(response: Response): void {
     if (!response.ok)
       throw Object.assign(new Error(`Chat pod request failed (${response.status})`), {
@@ -56,7 +68,8 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
   }
   // Container parsing must not let a foreign JSON-LD context bypass pod scope.
   const rdfFetch: typeof globalThis.fetch = async (input, init) => {
-    const response = await fetch(input, init);
+    // Only reached without a PodPort, so the direct fetch exists.
+    const response = await scopedFetch({ ...config, fetch: direct as typeof fetch })(input, init);
     if (!response.ok) return response;
     requireChatRdf(response.headers.get("content-type") ?? "text/turtle");
     return response;
@@ -66,10 +79,18 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     webId: config.webId ?? "",
     async discoverAcl(url) {
       const target = requirePodScopedWriteUrl(config, url);
-      // Inspect this exact resource, including a not-yet-created container's 404.
-      const response = await config.fetch(target, { method: "HEAD", redirect: "manual" });
-      if (response.status !== 404) check(response);
-      const acl = new URL(wacAclLink(response.headers.get("link") ?? ""), target);
+      let link: string;
+      if (direct) {
+        // Inspect this exact resource, including a not-yet-created container's 404.
+        const response = await direct(target, { method: "HEAD", redirect: "manual" });
+        if (response.status !== 404) check(response);
+        link = wacAclLink(response.headers.get("link") ?? "");
+      } else {
+        const advertised = (await head?.call(source, target))?.acl;
+        if (!advertised) throw new Error("A unique WAC ACL link is required for chats");
+        link = advertised;
+      }
+      const acl = new URL(link, target);
       if (acl.hash || acl.search || acl.href === target)
         throw new Error("Invalid chat ACL resource URL");
       return requirePodScopedWriteUrl(config, acl.href);
@@ -77,7 +98,7 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     async read(url) {
       return portOperation(() =>
         withPodReadLimits(async () => {
-          const output = new PodOutput(pod ?? createFetchPodPort(config));
+          const output = new PodOutput(source);
           const raw = await output.read(url, { accept: "text/turtle" });
           requireChatRdf(raw.contentType || "text/turtle");
           const read = await output.representation(url, raw);
@@ -111,18 +132,15 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     async write(url, body, contentType, cond) {
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
       const target = requirePodScopedWriteUrl(config, url);
-      return portOperation(() =>
-        new PodOutput(pod ?? createFetchPodPort(config)).write(target, body, contentType, cond),
-      );
+      return portOperation(() => new PodOutput(source).write(target, body, contentType, cond));
     },
   };
 }
 
-export function registerChatTools(
-  server: McpServer,
-  config: SolidMcpConfig,
-  pod: PodPort = createFetchPodPort(config),
-): void {
+export function registerChatTools(server: McpServer, config: ChatPodConfig, port?: PodPort): void {
+  const fetch = config.fetch;
+  const pod = port ?? (fetch ? createFetchPodPort({ ...config, fetch }) : undefined);
+  if (!pod) throw new TypeError("Chat tools require a fetch or a PodPort");
   const writer = () => new ChatWriter(createChatPodPort(config, pod));
   const result = async (value: unknown) => ({
     content: [
