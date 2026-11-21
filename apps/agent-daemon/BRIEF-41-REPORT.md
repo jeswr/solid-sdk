@@ -815,3 +815,12 @@ suite-native build because `@capacitor/core` was unavailable.
   36 cloud tests using Node's HTTP parser, with those five fixtures excluded.
 - The full workspace gate stopped on unrelated builds missing
   `oauth4webapi` and `@capacitor/core`.
+
+## Review round 3 fix
+
+Round 3 found one issue: a client that half-closes (sends its TCP FIN) right after a complete
+body got no reply, because Node aborts the request on the FIN while the gate is still committing,
+so a decision could be recorded that the client never hears about. The listener now sets Node's
+`httpAllowHalfOpen`, so the reply still goes out. A test sends the whole request and the FIN in
+one write, with a gate that takes 200 ms, on both routes and both framings; it fails without the
+fix.

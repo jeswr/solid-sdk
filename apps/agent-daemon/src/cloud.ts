@@ -235,7 +235,9 @@ function listener(a2a: CloudReceiver, gate: CloudComposition["gate"], signal: Ab
   // A client that half-closes after sending a complete body still gets its reply. Without this,
   // Node aborts the request on the client's FIN and the gate can record a decision that the
   // client never hears about.
-  server.httpAllowHalfOpen = true;
+  // `httpAllowHalfOpen` is Node's (untyped) switch for this; the half-close test fails if a
+  // future Node drops it.
+  (server as typeof server & { httpAllowHalfOpen: boolean }).httpAllowHalfOpen = true;
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 1000;
   // Leave room to deliver a 503 when active uploads occupy separate connections.
