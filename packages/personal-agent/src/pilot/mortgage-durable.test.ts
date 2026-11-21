@@ -7,14 +7,7 @@
  * scripts/pilot-a2a-integration.mjs. Agents use the explicitly selected solid-odrl module so
  * the gate needs no Rust binary.
  */
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
