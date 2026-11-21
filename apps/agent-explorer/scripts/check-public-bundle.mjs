@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
-// Fails when any file of a public site build carries one of the roadmap's longest texts, or when
+// Fails when any file of a public site build carries any roadmap text of 40 characters or more, or when
 // the build holds a symbolic link (an upload would follow it). The roadmap is the team's working
 // plan and is never published; checking its text, not a key name, also catches a copy that
 // arrived another way (for example inside a spec or under media/). Usage:
@@ -21,8 +21,7 @@ const texts = [];
     for (const v of Object.values(value)) walk(v);
   }
 })(roadmap);
-texts.sort((a, b) => b.length - a.length);
-const probes = texts.slice(0, 5);
+const probes = [...new Set(texts)];
 if (probes.length < 3) throw new Error('the roadmap has too few long texts to check against');
 const needles = probes.flatMap((t) => [t, JSON.stringify(t).slice(1, -1)]).map((t) => Buffer.from(t, 'utf8'));
 
