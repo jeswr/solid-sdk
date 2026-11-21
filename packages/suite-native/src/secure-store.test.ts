@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, test, vi } from "vitest";
 import {
   createSecureStore,
@@ -27,6 +28,9 @@ const nonObjects = [undefined, null, true, 1, "native detail", []];
 
 function plugin() {
   return {
+    takeMigrationNotice: vi
+      .fn<SecureStorePlugin["takeMigrationNotice"]>()
+      .mockResolvedValue({ signInAgain: false }),
     status: vi.fn<SecureStorePlugin["status"]>().mockResolvedValue({
       available: true,
       userPresence: true,
@@ -49,6 +53,31 @@ async function rejectsCode(promise: Promise<unknown>, code: SecureStoreErrorCode
 }
 
 describe("createSecureStore", () => {
+  test("consumes exactly one validated boolean without origin or token arguments", async () => {
+    const p = plugin();
+    p.takeMigrationNotice.mockResolvedValueOnce({ signInAgain: true });
+    const store = createSecureStore(p);
+    expect(await store.takeMigrationNotice()).toBe(true);
+    expect(await store.takeMigrationNotice()).toBe(false);
+    expect(p.takeMigrationNotice).toHaveBeenNthCalledWith(1);
+    expect(p.takeMigrationNotice).toHaveBeenNthCalledWith(2);
+    expect(p.get).not.toHaveBeenCalled();
+    expect(p.clear).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ...nonObjects,
+    {},
+    { signInAgain: 1 },
+    { signInAgain: "true" },
+    { signInAgain: null },
+    { signInAgain: false, token: "private" },
+    Object.create({ signInAgain: true }),
+  ])("rejects malformed migration notice %j", async (response) => {
+    const p = plugin();
+    p.takeMigrationNotice.mockResolvedValue(response as { signInAgain: boolean });
+    await rejectsCode(createSecureStore(p).takeMigrationNotice(), "failed");
+  });
   test("reports capabilities without prompting and threads read and committed versions", async () => {
     const p = plugin();
     const store = createSecureStore(p);
@@ -278,6 +307,7 @@ describe("createSecureStore", () => {
       method.mockRejectedValue({ code, message: "secret native detail", cause: "secret" });
     }
     const store = createSecureStore(p);
+    await rejectsCode(store.takeMigrationNotice(), code);
     await rejectsCode(store.status(), code);
     await rejectsCode(store.get(key), code);
     await rejectsCode(store.set(key, "token", options), code);
@@ -427,5 +457,37 @@ describe("refreshTokenKey", () => {
     expect(await refreshTokenKey({ issuer: "a,b", webId: "c", clientId: "d" })).not.toBe(
       await refreshTokenKey({ issuer: "a", webId: "b,c", clientId: "d" }),
     );
+  });
+});
+
+describe("migration notice", () => {
+  test("returns only the one-shot boolean and passes no arguments", async () => {
+    const p = plugin();
+    p.takeMigrationNotice.mockResolvedValueOnce({ signInAgain: true });
+    const store = createSecureStore(p);
+    expect(await store.takeMigrationNotice()).toBe(true);
+    expect(await store.takeMigrationNotice()).toBe(false);
+    expect(p.takeMigrationNotice.mock.calls).toEqual([[], []]);
+    expect(p.get).not.toHaveBeenCalled();
+    expect(p.clear).not.toHaveBeenCalled();
+  });
+  test.each([
+    ...nonObjects,
+    {},
+    { signInAgain: 1 },
+    { signInAgain: "true" },
+    { signInAgain: null },
+    { signInAgain: undefined },
+    { signInAgain: true, namespace: "secret" },
+    Object.create({ signInAgain: true }),
+  ])("rejects a malformed response %#", async (raw) => {
+    const p = plugin();
+    p.takeMigrationNotice.mockResolvedValue(raw as { signInAgain: boolean });
+    await rejectsCode(createSecureStore(p).takeMigrationNotice(), "failed");
+  });
+  test.each(codes)("maps %s without native details", async (code) => {
+    const p = plugin();
+    p.takeMigrationNotice.mockRejectedValue({ code, message: "secret" });
+    await rejectsCode(createSecureStore(p).takeMigrationNotice(), code);
   });
 });

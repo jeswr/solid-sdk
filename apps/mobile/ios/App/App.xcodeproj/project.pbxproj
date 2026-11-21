@@ -1,4 +1,5 @@
 // !$*UTF8*$!
+// AUTHORED-BY Codex GPT-6
 {
 	archiveVersion = 1;
 	classes = {
@@ -7,6 +8,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A8BF4CB60DFD67D74F2994E2 /* SecureStoreMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6388D325C79EAE6B609D1FFE /* SecureStoreMigrationTests.swift */; };
+		E65B495872FFB394BAFD6808 /* SecureStoreMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60CE6A724D7B2CA0E9E13616 /* SecureStoreMigration.swift */; };
 		13BFB63FC7789FC67E2029A8 /* SuiteOriginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 972ED7D72093E17922DEAB5B /* SuiteOriginTests.swift */; };
 		39109055553BED83ECA4B1C6 /* SuiteSchemeHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76DAAC37EC9C6F21D26A402 /* SuiteSchemeHandlerTests.swift */; };
 		6B24F5AA202B17FE20F62ABA /* RouteResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29859CBC34FA94A45846F22C /* RouteResolverTests.swift */; };
@@ -122,6 +125,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6388D325C79EAE6B609D1FFE /* SecureStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreMigrationTests.swift; sourceTree = "<group>"; };
+		60CE6A724D7B2CA0E9E13616 /* SecureStoreMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreMigration.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		3531ECFDEC29FDB44678B88B /* SuiteShareIntakePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SuiteShareIntakePlugin.swift; sourceTree = "<group>"; };
 		456C42C6348DCCE2ABC80904 /* ShareStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareStore.swift; sourceTree = "<group>"; };
@@ -236,6 +241,7 @@
 			isa = PBXGroup;
 			children = (
 				0179CB0ADC21CB79C29F306A /* SecureStorePersistenceTests.swift */,
+				6388D325C79EAE6B609D1FFE /* SecureStoreMigrationTests.swift */,
 				CA3F0A6C79B7294EF6AD7021 /* SecureStoreTests.swift */,
 				2A12E13A9441ED49556141B6 /* PushProofTests.swift */,
 				1E99F3C474DD7D33A81610C6 /* PushStateTests.swift */,
@@ -285,6 +291,7 @@
 				5E7B7CD53279D54835AB8F8F /* Localizable.strings */,
 				727FE8EF11E7A38634D4AEF8 /* InfoPlist.strings */,
 				6D3649DD161E6A9FD6AC6407 /* SecureStorePersistence.swift */,
+				60CE6A724D7B2CA0E9E13616 /* SecureStoreMigration.swift */,
 				353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */,
 				0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */,
 				F87F89D3293E5108720B588A /* SecureStore.swift */,
@@ -580,6 +587,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E65B495872FFB394BAFD6808 /* SecureStoreMigration.swift in Sources */,
 				CB20AD68EF1E7F678BF04177 /* SecureStorePersistence.swift in Sources */,
 				0C95C5B31EC3F8AEBFAE0994 /* SecureStoreKeys.swift in Sources */,
 				7F247B81197F10306C06213A /* SecureStoreState.swift in Sources */,
@@ -627,6 +635,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A8BF4CB60DFD67D74F2994E2 /* SecureStoreMigrationTests.swift in Sources */,
 				1460777E6C7800AABB8FA156 /* SecureStorePersistenceTests.swift in Sources */,
 				D6208C9BB8FB2AABB0B5692A /* SecureStoreTests.swift in Sources */,
 				AA4353B5285F34797E4A0122 /* PushCryptoTests.swift in Sources */,

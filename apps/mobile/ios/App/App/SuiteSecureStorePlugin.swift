@@ -11,6 +11,7 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "SuiteSecureStorePlugin"
     public let jsName = "SuiteSecureStore"
     public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "takeMigrationNotice", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "get", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "set", returnType: CAPPluginReturnPromise),
@@ -105,6 +106,20 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
     private static func reject(_ call: CAPPluginCall, _ error: Error) {
         let code = SecureStoreFailure.code(error).rawValue
         call.reject(code, code)
+    }
+
+    @objc func takeMigrationNotice(_ call: CAPPluginCall) {
+        // Capture configuration before moving to the storage queue. Remote builds do not consume it.
+        let bundled = SuiteOrigin.isBundled(serverURL: bridge?.config.serverURL, localURL: bridge?.config.localURL)
+        queue.async {
+            do {
+                guard bundled else { call.resolve(["signInAgain": false]); return }
+                let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                          appropriateFor: nil, create: true)
+                let notice = try SecureStoreMigration(support: support, keys: SecureStoreMigrationKeychain()).takeNotice()
+                call.resolve(["signInAgain": notice])
+            } catch { Self.reject(call, error) }
+        }
     }
 
     @objc func status(_ call: CAPPluginCall) {
