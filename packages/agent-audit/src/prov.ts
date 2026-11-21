@@ -48,6 +48,12 @@ export function writeEntryGraph(
     ])
       if (id !== undefined) n.setIri(`${PROV}used`, id);
     if (r.type === "decision") writeDecisionRecord(n, r, e.at);
+    if (r.type === "personal-data-read") {
+      if (r.purpose !== undefined) n.setIri("https://w3id.org/dpv#hasPurpose", r.purpose);
+      for (const category of r.categories as string[])
+        n.setIri("https://w3id.org/dpv#hasPersonalData", category);
+      for (const resource of r.resources as string[]) n.setIri(`${PROV}used`, resource);
+    }
   }
 }
 

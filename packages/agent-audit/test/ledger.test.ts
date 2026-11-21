@@ -36,7 +36,23 @@ afterEach(() => {
 it("accepts every specified kind, snapshots input/output and uses the pilot hash shape", () => {
   const ledger = new MemoryLedger();
   expect(verifyLedger([]).ok).toBe(true);
-  for (const type of ENTRY_KINDS) ledger.append({ ...record, type }, AT);
+  for (const type of ENTRY_KINDS)
+    ledger.append(
+      {
+        ...record,
+        type,
+        ...(type === "personal-data-read"
+          ? {
+              tool: "memory_recall",
+              decision: "permit" as const,
+              reason: "autonomous",
+              categories: ["https://w3id.org/dpv/pd#Preference"],
+              resources: [],
+            }
+          : {}),
+      },
+      AT,
+    );
   ledger.append(
     {
       ...record,

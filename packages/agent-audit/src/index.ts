@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+export { loadChain, PodChain } from "./chain.js";
 export { proposalStorage, runAuditCli } from "./cli.js";
 export { DEFAULT_LEDGER_BOUNDS, FileLedger, type LedgerBounds } from "./file-ledger.js";
 export {

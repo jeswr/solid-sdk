@@ -125,7 +125,7 @@ export function aggregateTaskStats(
   const tasks = new Map<string, AuditRecord[]>();
   const unassigned: AuditRecord[] = [];
   for (const { record } of snapshot) {
-    if (record.type === "ledger-checkpoint") continue;
+    if (record.type === "ledger-checkpoint" || record.type === "personal-data-read") continue;
     if (record.taskId === undefined) {
       unassigned.push(record);
       continue;

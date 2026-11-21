@@ -17,6 +17,7 @@ export const ENTRY_KINDS = [
   "tool-call",
   "tamper-suspected",
   "conversation",
+  "personal-data-read",
 ] as const;
 const iri = z
   .string()
@@ -47,39 +48,53 @@ export const termsSchema = z.strictObject({
   /** Commits the executor's full intent, carrier, preview and expiry without exposing them. */
   proposalDigest: digestSchema.optional(),
 });
-const recordSchema = z.strictObject({
-  type: z.enum(ENTRY_KINDS),
-  id: iri,
-  agent: iri,
-  owner: iri,
-  taskId: taskIdSchema.optional(),
-  conversation: iri.optional(),
-  proposal: iri.optional(),
-  mandate: iri.optional(),
-  approval: iri.optional(),
-  decisionRecord: iri.optional(),
-  transmission: iri.optional(),
-  receipt: iri.optional(),
-  terms: termsSchema.optional(),
-  termsDigest: digestSchema.optional(),
-  messageDigest: digestSchema.optional(),
-  decision: z.enum(["permit", "confirm-required", "prohibited", "refuse-all"]).optional(),
-  status: z.enum(["attempting", "sent", "not-sent", "uncertain", "refused"]).optional(),
-  reason: label.optional(),
-  accountId: label.optional(),
-  recipientHashes: z.array(recipientHashSchema).max(100).optional(),
-  context: z.enum(["reader", "proposer"]).optional(),
-  provider: z.enum(["openai", "anthropic"]).optional(),
-  model: label.optional(),
-  modelCall: iri.optional(),
-  tool: instrumentationLabel.optional(),
-  tokens: count.optional(),
-  inputTokens: count.optional(),
-  outputTokens: count.optional(),
-  toolCalls: count.optional(),
-  latencyMs: count.optional(),
-  retries: count.optional(),
-});
+const recordSchema = z
+  .strictObject({
+    type: z.enum(ENTRY_KINDS),
+    id: iri,
+    agent: iri,
+    owner: iri,
+    taskId: taskIdSchema.optional(),
+    conversation: iri.optional(),
+    proposal: iri.optional(),
+    mandate: iri.optional(),
+    approval: iri.optional(),
+    decisionRecord: iri.optional(),
+    transmission: iri.optional(),
+    receipt: iri.optional(),
+    terms: termsSchema.optional(),
+    termsDigest: digestSchema.optional(),
+    messageDigest: digestSchema.optional(),
+    decision: z.enum(["permit", "confirm-required", "prohibited", "refuse-all"]).optional(),
+    status: z.enum(["attempting", "sent", "not-sent", "uncertain", "refused"]).optional(),
+    reason: label.optional(),
+    purpose: iri.optional(),
+    categories: z.array(iri).min(1).max(64).optional(),
+    resources: z.array(iri).max(100).optional(),
+    accountId: label.optional(),
+    recipientHashes: z.array(recipientHashSchema).max(100).optional(),
+    context: z.enum(["reader", "proposer"]).optional(),
+    provider: z.enum(["openai", "anthropic"]).optional(),
+    model: label.optional(),
+    modelCall: iri.optional(),
+    tool: instrumentationLabel.optional(),
+    tokens: count.optional(),
+    inputTokens: count.optional(),
+    outputTokens: count.optional(),
+    toolCalls: count.optional(),
+    latencyMs: count.optional(),
+    retries: count.optional(),
+  })
+  .superRefine((record, context) => {
+    const fields =
+      record.type === "personal-data-read"
+        ? (["tool", "decision", "reason", "categories", "resources"] as const)
+        : (["purpose", "categories", "resources"] as const);
+    for (const field of fields) {
+      if ((record[field] !== undefined) !== (record.type === "personal-data-read"))
+        context.addIssue({ code: "custom", path: [field], message: "Invalid audit record fields" });
+    }
+  });
 const checkpointSchema = z.strictObject({
   type: z.literal("ledger-checkpoint"),
   lastPrunedSeq: count.min(1),
