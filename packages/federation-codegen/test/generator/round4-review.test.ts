@@ -329,6 +329,11 @@ it("H1/M2: walks every production writer and quad emission call site in both pac
     "model-runtime/src/rdf.ts",
   ]);
   expect(sites.sort()).toEqual([
+    // Concept-class lowering constructs sh:in and RDF-list quads. All three
+    // pass through the same validated serializeCanonicalTurtle boundary.
+    "federation-codegen/src/emit.ts:emitShapesTtl:DataFactory.quad",
+    "federation-codegen/src/emit.ts:emitShapesTtl:DataFactory.quad",
+    "federation-codegen/src/emit.ts:emitShapesTtl:DataFactory.quad",
     "federation-codegen/src/rdf.ts:serializeCanonicalTurtle:Writer",
     "federation-codegen/src/rdf.ts:serializeCanonicalTurtle:writer.addQuads",
     "federation-codegen/src/shapes.ts:parseShapes:DataFactory.quad",

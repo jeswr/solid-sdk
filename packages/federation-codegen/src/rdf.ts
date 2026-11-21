@@ -25,6 +25,11 @@ export const SKOS = "http://www.w3.org/2004/02/skos/core#";
 export const XSD = "http://www.w3.org/2001/XMLSchema#";
 export const FEDGEN = "https://w3id.org/jeswr/fedgen#";
 
+/** UTF-16 code-unit order preserves distinct IRI/key identities, unlike ICU collation. */
+export function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** Parse a Turtle string into quads via `n3.Parser` (never a bespoke parser). */
 export function parseTurtle(ttl: string, baseIRI?: string): Quad[] {
   return new Parser(baseIRI ? { baseIRI } : {}).parse(ttl);
@@ -91,7 +96,7 @@ function termKey(term: Term): string {
 export function compareQuads(a: Quad, b: Quad): number {
   const ka = `${termKey(a.subject)} ${termKey(a.predicate)} ${termKey(a.object)}`;
   const kb = `${termKey(b.subject)} ${termKey(b.predicate)} ${termKey(b.object)}`;
-  return ka < kb ? -1 : ka > kb ? 1 : 0;
+  return compareStrings(ka, kb);
 }
 
 /**

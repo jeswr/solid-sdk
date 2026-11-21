@@ -18,6 +18,7 @@
         "$TURBO_ROOT$/packages/solid-bookmark/codegen.config.json",
         "$TURBO_ROOT$/packages/solid-bookmark/src/**",
         "$TURBO_ROOT$/packages/solid-federation-vocab/sectors/**",
+        "$TURBO_ROOT$/packages/solid-health-diary/shapes/diet.*.ttl",
         "$TURBO_ROOT$/decisions/0003-domain-model-codegen.md"
       ]
     }

@@ -26,6 +26,7 @@ import {
   validateManifest,
 } from "@jeswr/model-runtime";
 import {
+  assertClassOwnership,
   type CodegenConfig,
   type CompositeEntityConfig,
   entityConfigFor,
@@ -34,10 +35,12 @@ import {
 } from "./config.js";
 import { SH } from "./rdf.js";
 import {
+  enumValues,
   implicitClassTargets,
   localName,
   type NodeShapeModel,
   type NormalizedShapes,
+  propertySources,
   type ShapeConstraint,
   sharedAliasPredicates,
 } from "./shapes.js";
@@ -52,6 +55,12 @@ const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
  */
 export function isFailClosedSeverity(severity: string | undefined): boolean {
   return severity === undefined || severity === `${SH}Violation`;
+}
+
+function requiresPresence(c: ShapeConstraint): boolean {
+  return propertySources(c).some(
+    (source) => (source.minCount ?? 0) >= 1 && isFailClosedSeverity(source.severity),
+  );
 }
 
 /** Which guards on a field came from the config (vs the shape) — for traceability. */
@@ -109,7 +118,9 @@ export function linkTargetConforms(
     if (!classConforms(shapes, targetClass, c.hasClass)) return false;
   }
   if (c.node !== undefined) {
-    const target = shapes.nodeShapes.find((shape) => shape.iri === c.node);
+    const target = shapes.nodeShapes.find((shape) =>
+      (shape.shapeIris ?? [shape.iri]).includes(c.node as string),
+    );
     if (target === undefined || target.targetClass !== targetClass) return false;
   }
   return true;
@@ -155,9 +166,11 @@ function compileField(
   if (constraint.maxCount !== undefined) field.maxCount = constraint.maxCount;
   // G2 — a closed `sh:in` value set compiles to the manifest's enum list. An empty
   // array is present-but-malformed (admission blocks it) — never emit an empty enum.
-  if (constraint.in !== undefined && constraint.in.length > 0) field.in = constraint.in;
+  const values = enumValues(constraint);
+  if (values !== undefined) field.in = values;
 
   const guards: ManifestFieldGuards = {};
+  if (constraint.conceptIris !== undefined) guards.iriEnum = true;
 
   // Shape-derived: http(s) scheme guard from an ^https?:// pattern on an IRI field.
   if (constraint.kind === "iri" && isHttpPattern(constraint.pattern)) {
@@ -167,11 +180,7 @@ function compileField(
   // G1 — SEVERITY-AWARE requiredness: fail-closed on absence only when the required
   // constraint is Violation-graded (or severity absent, SHACL's default). A
   // Warning/Info minCount ≥ 1 is advisory and compiles to NO runtime guard.
-  if (
-    constraint.minCount !== undefined &&
-    constraint.minCount >= 1 &&
-    isFailClosedSeverity(constraint.severity)
-  ) {
+  if (requiresPresence(constraint)) {
     guards.requiredFailClosed = true;
   }
   // G3 — closed, named numeric-range / string-length guards (pure DATA numbers).
@@ -231,11 +240,7 @@ function compileField(
       record("sortOnRead");
     }
     if (fieldConfig.default !== undefined) {
-      if (
-        constraint.minCount !== undefined &&
-        constraint.minCount >= 1 &&
-        isFailClosedSeverity(constraint.severity)
-      ) {
+      if (requiresPresence(constraint)) {
         throw new Error(`field ${name} config default cannot satisfy a Violation MUST`);
       }
       field.default = fieldConfig.default;
@@ -440,11 +445,7 @@ function compileCompositeEntity(
         };
         // G1 — the cross-node MUST: fail-closed only when Violation-graded (or severity
         // absent, SHACL's default). A Warning/Info link is advisory (no runtime guard).
-        if (
-          constraint.minCount !== undefined &&
-          constraint.minCount >= 1 &&
-          isFailClosedSeverity(constraint.severity)
-        ) {
+        if (requiresPresence(constraint)) {
           nested.guards = { requiredFailClosed: true };
         }
         // The nested requiredFailClosed is shape-derived (no config guards).
@@ -464,7 +465,11 @@ function compileCompositeEntity(
           );
         continue; // Root omissions still undergo MUST/alias fidelity checks.
       }
-      if (nodeName !== compConfig.root && constraint.hasClass !== undefined)
+      if (
+        nodeName !== compConfig.root &&
+        constraint.hasClass !== undefined &&
+        constraint.conceptIris === undefined
+      )
         throw new Error(
           `child shape sh:class constraint ${constraint.pathIri} requires a projected composite link`,
         );
@@ -495,6 +500,7 @@ function compileCompositeEntity(
 
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
+  assertClassOwnership(config);
   if (implicitClassTargets(shapes.quads).length)
     throw new TypeError("implicit class targets are not modeled by the runtime");
   if (sharedAliasPredicates(shapes).length)
@@ -505,6 +511,8 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
   // including nested links and optional properties omitted by a composite.
   for (const shape of shapes.nodeShapes) {
     for (const c of shape.properties) {
+      if (c.conceptIris !== undefined && (c.kind !== "iri" || enumValues(c)?.length === 0))
+        throw new TypeError(`property ${c.shapeIri} has an invalid concept IRI enumeration`);
       if (c.kind === "iri" && c.datatype !== undefined) {
         throw new TypeError(
           `property ${c.shapeIri} has an incompatible datatype and IRI node kind`,
