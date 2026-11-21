@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
@@ -26,6 +27,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__chat-test-reset");
+  await seedDemoSession(page);
   // Observe clipboard writes without requiring a platform clipboard in CI.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -216,6 +218,9 @@ test("create, append, edit, tombstone, turn into task, live sync and keyboard na
   await page.keyboard.press("Escape");
   // Focus returns to the actions trigger, whose tooltip opens on focus; move focus
   // back to the log so the scan sees the room rather than a transient tooltip.
+  // Radix restores that focus only once the menu's exit animation unmounts it, so
+  // wait for it first: focusing the log earlier would be undone by the restore.
+  await expect(edited.getByRole("button", { name: "Message actions", exact: true })).toBeFocused();
   await log.focus();
   await accessible(page);
   await capture(page, info, "room");

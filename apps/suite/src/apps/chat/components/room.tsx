@@ -145,6 +145,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
   const { session, client, details, setDetails, setCurrentRoom } = useChat();
   const [editing, setEditing] = useState<Message>();
   const [deleting, setDeleting] = useState<Message>();
+  const [deleteModeration, setDeleteModeration] = useState(false);
   const [task, setTask] = useState<Message>();
   const [busy, setBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -242,11 +243,26 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       </div>
     );
   const data = room.data;
-  const canRewrite = data.creator === session.webId;
+  const canModerate = data.memberContainers !== undefined && data.creator === session.webId;
+  const canRewrite =
+    data.creator === session.webId ||
+    !!data.memberContainers?.some((member) => member.owner === session.webId);
   const list = messages.data?.messages ?? [];
-  const lastOwn = [...list]
-    .reverse()
-    .find((message) => message.author === session.webId && !message.deleted);
+  // A delivered send stays in the outbox until the timeline rereads it; the shortcut must reach
+  // it meanwhile. Reread messages win, so a later edit or delete is never shadowed.
+  const lastOwn = [
+    ...new Map(
+      [...send.data.filter((item) => !item.status), ...list].map((message) => [
+        message.id,
+        message,
+      ]),
+    ).values(),
+  ]
+    .filter((message) => message.author === session.webId && !message.deleted)
+    .sort(
+      (a, b) => (a.published ?? "").localeCompare(b.published ?? "") || a.id.localeCompare(b.id),
+    )
+    .at(-1);
   return (
     <div className="chat-room">
       <header className="chat-room-header">
@@ -294,11 +310,13 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
           loading={messages.status === "loading"}
           hasOlder={!!messages.data.next}
           canRewrite={canRewrite}
+          canModerate={canModerate}
           onRendered={setRenderedAt}
           loadOlder={messages.loadOlder}
           onEdit={setEditing}
           onDelete={(message) => {
             setDeleteError("");
+            setDeleteModeration(message.author !== session.webId);
             setDeleting(message);
           }}
           onTask={setTask}
@@ -353,7 +371,9 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       >
         <AlertDialogContent className="chat-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete message?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {deleteModeration ? "Remove message?" : "Delete message?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               The message text will be replaced with “Message deleted”. Replies keep their place.
             </AlertDialogDescription>
@@ -367,8 +387,11 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
                 event.preventDefault();
                 if (!deleting) return;
                 setBusy(true);
-                void actions
-                  .remove(url, deleting.id)
+                void (
+                  deleting.author === session.webId
+                    ? actions.remove(url, deleting.id)
+                    : actions.moderate(url, deleting.id)
+                )
                   .then(
                     () => setDeleting(undefined),
                     () => setDeleteError("Couldn't delete the message. Try again."),
@@ -376,7 +399,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
                   .finally(() => setBusy(false));
               }}
             >
-              {busy ? "Deleting…" : "Delete message"}
+              {busy ? "Deleting…" : deleteModeration ? "Remove message" : "Delete message"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

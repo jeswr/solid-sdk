@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Chat model (CHT-00)
 
@@ -13,7 +14,7 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   the caller's `chat/rooms.ttl#it` collection; they confer no remote access.
 - `dayUrl`, `dayPage`: UTC `yyyy/mm/dd.ttl`, inclusive backwards date cursor,
   explicit lower bound and bounded number of days. Missing days are empty;
-  errors other than 404 propagate. Each returned document keeps its validator.
+  v1 errors other than 404 propagate. Each returned document keeps its validator.
 - `appendMessage`: caller supplies a stable ID, timestamp and author. Returns
   a copy, rejects duplicate subjects. `sendMessage` creates missing year/month
   containers, creates a missing day with If-None-Match, or PATCHes only the new
@@ -39,15 +40,17 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   `#reaction-`/`#undo-` subjects, and Like/Undo subjects not also typed as a
   message, never appear in `readMessages`; adding `a as:Like` to a message does
   not hide it.
-  Authorship is what the writer claims in `as:attributedTo`: a member with Append
+  In v1 rooms, authorship is what the writer claims in `as:attributedTo`: a member with Append
   can write Likes or Undos in another member's name, as with message authorship.
   The author check holds between honest clients only; the timeline caps chips at
   `MAX_REACTION_CHIPS` per message.
-  `react` / `unreact` use only PATCH INSERT DATA with the day's strong If-Match,
+  In v1, `react` / `unreact` use only PATCH INSERT DATA with the day's strong If-Match,
   re-reading and retrying one 412. Missing or deleted messages cannot be reacted to.
-- `createRoom`: creates parents, then a new room, its advertised WAC ACL and
-  index, in that order. Owner gets Read/Write/Control, members Read/Append with
-  default inheritance. No public grants. It does not auto-join the owner or send
+- `createRoom`: creates parents, then a new room, its advertised WAC
+  root ACL, `members/`, each member container and its advertised ACL, then the
+  index last (the ready marker). Owner gets Read/Write/Control throughout; v2 members
+  get Read at the root and Read/Write in their own container, with defaults. No public
+  grants. It does not auto-join the owner or send
   invitations. Failed multi-resource creation may leave an empty/partial room;
   errors propagate, and a retry never overwrites that room or an existing ACL.
   WAC ACL URLs are discovered from Link; unsupported/missing ACL links fail closed.
@@ -63,7 +66,74 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   timestamp and mention IDs. Preference transport remains SDK/hook work.
 
 Callers explicitly select the room/storage and inject the authenticated fetch.
-All requests refuse redirects and stay in that scope. The server remains the
-permission authority: local author checks cannot prevent a malicious client
-from rewriting shared data. Read+Append members cannot edit/delete existing
-statements without further server permission; see root QUESTIONS.md.
+All requests refuse redirects and stay in that scope. The server remains the permission authority.
+
+## Room layout v2 (sst-l5s6, sst-tgk5)
+
+New rooms and direct messages use `<room>/members/<key>/yyyy/mm/dd.ttl`, where
+`key` is the first 32 lowercase hex characters of SHA-256 of the exact WebID,
+computed with Web Crypto. UTC dates and message fragments retain the v1 rules.
+`buildRoomV2` adds the layout; asynchronous `readRoomLayout` validates hash paths
+and owners. The synchronous `buildRoom`/`readRoom` retain the v1 metadata API.
+An index with `sioc:space_of` is v2 even if all listed containers are rejected;
+it never falls back to reading or writing shared root days.
+
+| Term | Mapping |
+| --- | --- |
+| `sioc:Container` | A member's write container |
+| `sioc:has_owner` | That member's WebID (must be a `vcard:hasMember` or the room creator) |
+| `sioc:has_space` | The room's `index.ttl#it` |
+| `sioc:space_of` | Room-to-member-container discovery |
+
+SIOC already describes LongChat content and supplies the container/space relation;
+no vocabulary terms are minted. Only the exact computed URL with one owner and
+the declared room space is accepted. Readers check every author claim, including
+LongChat `foaf:maker`, and bind subjects to the fetched document. An authorless
+message inherits its container owner; malformed or mismatched claims are dropped.
+The page's `dropped` counter reports rejected messages and events for debugging;
+search also includes these drops in its skipped-records count. One shared client
+limiter bounds member reads across rooms to six concurrent requests; the open room's
+timeline reads start before queued search and unread reads. For another member's resources,
+404/410 are an absent day (empty, not counted). 403/406/415/501 (501 is CSS's answer when a
+stored type has no RDF conversion), invalid N3, malformed or invalid JSON-LD, unsupported
+content types and parser-budget failures are empty and each increments `dropped`. fetch-rdf does
+not separate body transport failures from parser failures, so a parse-stage cause that is a
+TypeError or carries a system code (ECONNRESET, UND_ERR_*) is treated as transport and
+propagates; any other parser Error is the writer's content and is isolated. `reader` is required; the reader's own days retain strict errors (404 remains
+empty); index, network and other HTTP failures propagate. Merge order remains
+publication time then ID.
+Search, unread counts and history use those same pages. Files are discovered inside
+validated member containers and their date containers through the same limiter.
+`loadRoomFiles` returns `{ files, dropped }`, counting isolated member-listing failures;
+the client files API returns the file list. Own listing failures remain strict.
+
+Send, own edit/delete and task overlays write only the actor's member day. Likes
+and Undos live in the reactor's container on the target message's day (not the
+reaction's wall-clock day). A Like may point to another member's message in that
+same room/day. `readReactions` takes validated containers and known message subjects
+for v2: the actor must own the event's container and an Undo must share the Like's
+document and actor. Creating a missing reaction day uses If-None-Match; subsequent
+events use conditional INSERT DATA with one conflict retry. Edits/tombstones use
+copy-on-write PUT with a strong If-Match. `removeMessage` is the explicit owner
+moderation operation and preserves the original author.
+
+The trust root is whoever controls the storage hosting the room. The index's creator
+is a claim, not proof of storage control; this client does not check `pim:storage`.
+With the documented v2 ACLs enforced by that storage, members cannot forge other
+members' messages or reactions. The storage controller and the ACL's owner can write
+in every member container, including for moderation. LongChat/SolidOS clients do not
+read v2 member containers (v1 paths were
+already not SolidOS-shaped). Existing v1 rooms retain shared days, member
+Read/Append, owner-only client edit/delete, and claimed authorship: client-side
+author checks hold only between honest v1 clients.
+
+A v1 member has Append on the room and can append SIOC descriptors to the index,
+making clients read that room as v2. V1 authorship was already only a claim; v2
+layout detection trusts the index writer and does not upgrade legacy ACL guarantees.
+Resuming creation with no index refuses (`unsafe-acl`) an existing root ACL that grants any
+mode other than Read (Append, Write, Control or an unknown mode) to an agent other than the
+owner, an agent class or a group, before creating member containers or publishing a v2 index.
+Every subject with `acl:mode` counts, typed `acl:Authorization` or not.
+
+The SIOC member-container accessors remain in `layout.ts` until they move to the
+generated model under sst-m3nr.
