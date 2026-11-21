@@ -12,6 +12,7 @@ import { vocabularyLabel } from "../model/labels.js";
 import { alternativeWireId } from "../profile/configurations.js";
 import { type ContentVocabulary, identifiersIn } from "../profile/content.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
+import { trustLinks } from "../trace/linked.js";
 import type { Namer } from "../trace/packet.js";
 import type { TraceSink } from "../trace/recorder.js";
 import type { Check, TraceEventInput, TraceRef, Verdict } from "../trace/types.js";
@@ -612,8 +613,24 @@ export function defaultName(iri: string | undefined): string {
   return iri === undefined ? "(none)" : (vocabularyLabel(iri) ?? "the unlabelled resource");
 }
 
-export function resolutionView(r: Resolution): NonNullable<TraceEventInput["resolution"]> {
-  return { question: r.question, path: r.path.map((p) => ({ ...p })), answer: r.answer };
+export function resolutionTrace(
+  r: Resolution,
+  gate: Pick<GateContext, "sink" | "resolver">,
+  ruleId?: string,
+): Pick<TraceEventInput, "resolution" | "linkedInputs"> {
+  const basis = gate.sink?.linked ? gate.resolver?.traceBasis(r) : undefined;
+  return {
+    resolution: { question: r.question, path: r.path.map((p) => ({ ...p })), answer: r.answer },
+    ...(basis
+      ? {
+          linkedInputs: trustLinks(
+            basis.entry,
+            basis.owner,
+            ruleId === r.rule?.id && ruleId !== undefined,
+          ),
+        }
+      : {}),
+  };
 }
 
 const short = (iri: string) => iri.split(/[#/]/).filter(Boolean).pop() ?? iri;

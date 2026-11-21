@@ -144,7 +144,7 @@ export function stepsIn(
 /** Run through the data engine and compare against the maintained complete outline. */
 export async function runReference(
   scenario: ScenarioId,
-  opts: { commit?: string; configuration?: Configuration } = {},
+  opts: { commit?: string; configuration?: Configuration; linked?: boolean } = {},
 ): Promise<TraceFile> {
   if (
     opts.configuration &&
@@ -153,7 +153,10 @@ export async function runReference(
     throw new Error("the mortgage data profiles require the baseline configuration");
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const data = loadCase(root, scenario);
-  const [path] = await runScenario(data.profile, data.scenario, { commit: opts.commit });
+  const [path] = await runScenario(data.profile, data.scenario, {
+    commit: opts.commit,
+    linked: opts.linked,
+  });
   if (!path?.trace || !path.matches)
     throw new Error(`mortgage data path ${scenario} did not reproduce its complete outline`);
   return path.trace;

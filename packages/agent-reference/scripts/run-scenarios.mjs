@@ -21,6 +21,7 @@ import { outlineOf } from "../dist/trace/types.js";
 import { jointPaths, recordedJoint, traceHash } from "./recorded-joint.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const linked = !process.argv.includes("--no-linked");
 const record = process.argv.includes("--record-outlines");
 const selected = process.argv.find((arg) => arg.startsWith("--scenario="))?.slice(11);
 const requestedConfiguration = process.argv
@@ -55,6 +56,7 @@ async function* pathsFor(profile, scenario) {
   for (const configuration of configurations)
     yield* await runScenario(profile, scenario, {
       commit,
+      linked,
       configuration,
       compare: !record,
       reportExpectationFailures: true,
@@ -70,11 +72,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   const { profile, scenario } = loadCase(root, id);
   for await (const path of pathsFor(profile, scenario)) {
     assertPublishable(path);
-    if (
-      path.blocked &&
-      jointPaths.has(`${id}/${path.path}`) &&
-      !registry.jointProtocols.has(SPARQ_AGGREGATE.method)
-    ) {
+    if (!path.configuration && jointPaths.has(`${id}/${path.path}`)) {
       const saved = recordedJoint(root, previous, id, path.path);
       status.paths.push(saved);
       const trace = JSON.parse(readFileSync(join(root, "traces", saved.trace), "utf8"));
@@ -186,5 +184,5 @@ console.log(
 
 if (retained)
   console.log(
-    `${retained} recorded real joint paths retained after SHA-256 verification; package absent, no live rerun.`,
+    `${retained} recorded real joint paths retained after SHA-256 verification; original trace bytes kept.`,
   );

@@ -6,6 +6,7 @@
 // data/bundle.js (metadata and summaries), plus one fetchable JSON file per trace.
 // Usage: node scripts/bundle-data.mjs
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -235,6 +236,11 @@ mkdirSync(traceDir, { recursive: true });
 for (const { name, text } of traceFiles) writeFileSync(join(traceDir, name), text);
 for (const f of readdirSync(dirname(outPath))) {
   if (/^traces-\d+\.js$/.test(f)) rmSync(join(dirname(outPath), f));
+}
+const contextDir = join(dirname(outPath), 'contexts');
+mkdirSync(contextDir, { recursive: true });
+for (const file of ['v1.jsonld', 'store-v1.jsonld', 'odrl-v1.jsonld', 'scenario-v1.jsonld']) {
+  copyFileSync(join(root, '../../packages/agent-reference/vocab/context', file), join(contextDir, file));
 }
 writeFileSync(outPath, out);
 console.log(`wrote ${outPath}: ${traces.length} trace index entries, ${tours.length} tours, ${specs.length} specs, roadmap ${roadmap ? 'yes' : 'no'}`);

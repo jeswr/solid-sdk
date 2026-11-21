@@ -12,7 +12,7 @@
  * in-memory fixtures.
  */
 import type { Iri } from "../core/types.js";
-import type { TrustStore } from "../mechanisms/trust.js";
+import type { SourceAuthorityRule, TrustStore } from "../mechanisms/trust.js";
 
 export type PathKind = "own-list" | "root" | "register" | "federation" | "international";
 
@@ -73,7 +73,10 @@ export interface TrustRoot {
   readonly delegates: readonly Register[];
 }
 
+export type TrustBasis = OwnListEntry | RegisterEntry | SourceAuthorityRule;
+
 export interface TrustResolverOptions {
+  readonly traceLinked?: boolean;
   /** Display name of the principal whose list this is ("Sam"). */
   readonly principal: string;
   readonly trust: TrustStore;
@@ -100,7 +103,20 @@ export interface AnsweredEntry {
 
 export class TrustResolver {
   private answers: () => readonly AnsweredEntry[] = () => [];
-  constructor(private readonly opts: TrustResolverOptions) {}
+  private readonly traceEntries?: WeakMap<Resolution, TrustBasis>;
+  constructor(private readonly opts: TrustResolverOptions) {
+    if (opts.traceLinked) this.traceEntries = new WeakMap();
+  }
+
+  traceBasis(resolution: Resolution): { entry: TrustBasis; owner: string } | undefined {
+    const entry = this.traceEntries?.get(resolution);
+    return entry ? { entry, owner: this.opts.trust.data.owner } : undefined;
+  }
+
+  private traced(resolution: Resolution, entry: TrustBasis | undefined): Resolution {
+    if (entry) this.traceEntries?.set(resolution, entry);
+    return resolution;
+  }
 
   /** The agent's runtime supplies the entries of the register answers its gate admitted. */
   bindAnswers(read: () => readonly AnsweredEntry[]): void {
@@ -198,7 +214,7 @@ export class TrustResolver {
       this.pinnedOnly ||
       blocked
     ) {
-      return {
+      const resolution: Resolution = {
         question,
         path: [
           {
@@ -226,6 +242,17 @@ export class TrustResolver {
         checkedAt: input.at,
         ...(a.rule ? { rule: a.rule } : {}),
       };
+      if (!this.traceEntries) return resolution;
+      const rule = a.rule;
+      const entry =
+        rule &&
+        this.opts.trust.data.sourceAuthority.find(
+          (candidate) =>
+            candidate.id === rule.id &&
+            candidate.version === rule.version &&
+            candidate.source === input.source,
+        );
+      return this.traced(resolution, blocked ?? entry);
     }
     const path: PathStep[] = [
       {
@@ -270,18 +297,21 @@ export class TrustResolver {
         ? `${name(input.source)} is authorized; it is an authority for ${input.claimType}. Checked ${input.at}.`
         : `${name(input.source)} is ${entry.status}, but not an authority for ${input.claimType}. Checked ${input.at}.`,
     });
-    return {
-      question,
-      path,
-      answer: ok
-        ? `Accepted, for ${input.claimType} claims only.`
-        : `Not accepted for ${input.claimType}.`,
-      outcome: ok ? "accepted" : "not-accepted",
-      checkedAt: input.at,
-      expires:
-        entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString(),
-      rule: { id: entry.id },
-    };
+    return this.traced(
+      {
+        question,
+        path,
+        answer: ok
+          ? `Accepted, for ${input.claimType} claims only.`
+          : `Not accepted for ${input.claimType}.`,
+        outcome: ok ? "accepted" : "not-accepted",
+        checkedAt: input.at,
+        expires:
+          entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString(),
+        rule: { id: entry.id },
+      },
+      entry,
+    );
   }
 
   /** May `party` receive this for `task` (an operation id)? Own list, then root, then register. */
@@ -302,7 +332,10 @@ export class TrustResolver {
         kind: "own-list",
         says: `${name(input.party)} is blocked.`,
       });
-      return { question, path, answer: "Blocked.", outcome: "blocked", checkedAt: input.at };
+      return this.traced(
+        { question, path, answer: "Blocked.", outcome: "blocked", checkedAt: input.at },
+        own,
+      );
     }
     if (
       !input.registeredRole &&
@@ -314,13 +347,16 @@ export class TrustResolver {
         kind: "own-list",
         says: `${name(input.party)} is accepted for ${input.taskLabel}.`,
       });
-      return {
-        question,
-        path,
-        answer: `Accepted, for ${input.taskLabel} only.`,
-        outcome: "accepted",
-        checkedAt: input.at,
-      };
+      return this.traced(
+        {
+          question,
+          path,
+          answer: `Accepted, for ${input.taskLabel} only.`,
+          outcome: "accepted",
+          checkedAt: input.at,
+        },
+        own,
+      );
     }
     path.push({
       at: this.ownListName,
@@ -349,15 +385,18 @@ export class TrustResolver {
         kind: "own-list",
         says: `The retained registration for ${input.taskLabel} is ${valid ? "current" : "unavailable"}.`,
       });
-      return {
-        question,
-        path,
-        answer: valid ? `Accepted, for ${input.taskLabel} only.` : "Registration unavailable.",
-        outcome: valid ? "accepted" : "not-accepted",
-        checkedAt: input.at,
-        expires: registration.expiresAt,
-        rule: { id: registration.id },
-      };
+      return this.traced(
+        {
+          question,
+          path,
+          answer: valid ? `Accepted, for ${input.taskLabel} only.` : "Registration unavailable.",
+          outcome: valid ? "accepted" : "not-accepted",
+          checkedAt: input.at,
+          expires: registration.expiresAt,
+          rule: { id: registration.id },
+        },
+        registration,
+      );
     }
     const root = this.pinnedOnly ? undefined : this.opts.root;
     if (!root) {
@@ -409,14 +448,17 @@ export class TrustResolver {
             ? `${name(input.party)} is authorized for ${input.taskLabel}. Checked ${input.at}.`
             : `${name(input.party)} is authorized, but not for ${input.taskLabel}. Checked ${input.at}.`,
     });
-    return {
-      question,
-      path,
-      answer: ok ? `Accepted, for ${input.taskLabel} only.` : "Not accepted.",
-      outcome: ok ? "accepted" : "not-accepted",
-      checkedAt: input.at,
-      expires,
-      rule: { id: entry.id },
-    };
+    return this.traced(
+      {
+        question,
+        path,
+        answer: ok ? `Accepted, for ${input.taskLabel} only.` : "Not accepted.",
+        outcome: ok ? "accepted" : "not-accepted",
+        checkedAt: input.at,
+        expires,
+        rule: { id: entry.id },
+      },
+      entry,
+    );
   }
 }

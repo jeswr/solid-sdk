@@ -21,7 +21,7 @@ try {
 } catch {}
 const outDir = join(root, "traces");
 mkdirSync(outDir, { recursive: true });
-const traces = await generateTraces(commit);
+const traces = await generateTraces(commit, true);
 const index = [];
 for (const [file, trace] of traces) {
   writeFileSync(join(outDir, `${file}.json`), `${JSON.stringify(trace, null, 2)}\n`);

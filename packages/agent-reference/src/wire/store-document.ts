@@ -2,7 +2,8 @@
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import jsonld from "jsonld";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
+import { scopedId } from "../model/named-values.js";
 import { AWP, ODRL, PROV, SCHEMA } from "../profile/vocabulary.js";
 import { ODRL_CONTEXT, VC_CONTEXT } from "./contexts.js";
 import { STORE_CONTEXT, storeJsonLdLoader } from "./store-contexts.js";
@@ -44,22 +45,59 @@ export function storeProjection(dataset: DatasetCore, root: string): Store {
       }
     }
   }
-  return projected;
+  // Some held rule ids append a second '#' to a vocabulary IRI. Escape it in the
+  // display graph so strict JSON-LD readers retain the node and its links.
+  const terms = new Set<string>();
+  for (const { subject, predicate, object } of projected) {
+    terms.add(subject.value);
+    terms.add(predicate.value);
+    if (object.termType === "NamedNode") terms.add(object.value);
+  }
+  const aliases = new Map<string, string>();
+  for (const iri of [...terms].sort()) {
+    const fragment = iri.indexOf("#");
+    if (fragment < 0 || !iri.includes("#", fragment + 1)) continue;
+    const escaped = iri.slice(0, fragment + 1) + iri.slice(fragment + 1).replaceAll("#", "%23");
+    let id = escaped;
+    while (terms.has(id)) id = scopedId(id, iri);
+    terms.add(id);
+    aliases.set(iri, id);
+  }
+  if (!aliases.size) return projected;
+  type NamedNode = Extract<Quad["subject"], { termType: "NamedNode" }>;
+  const rename = (term: NamedNode): NamedNode => {
+    const id = aliases.get(term.value);
+    return id === undefined ? term : DataFactory.namedNode(id);
+  };
+  const display = new Store();
+  for (const { subject, predicate, object } of projected)
+    display.addQuad(
+      subject.termType === "NamedNode" ? rename(subject) : subject,
+      predicate.termType === "NamedNode" ? rename(predicate) : predicate,
+      object.termType === "NamedNode" ? rename(object) : object,
+    );
+  return display;
 }
 
-export interface LinkedStoreView {
-  readonly what: string;
+export interface LinkedStoreView<Kind extends string = string> {
+  readonly what: Kind;
   readonly context: string | readonly string[];
   readonly jsonld: string;
   readonly turtle: string;
 }
 
-export async function linkedView(
+export async function linkedView<Kind extends string>(
   dataset: DatasetCore,
   root: string,
-  what: string,
-): Promise<LinkedStoreView> {
-  const projected = storeProjection(dataset, root);
+  what: Kind,
+): Promise<LinkedStoreView<Kind>> {
+  return linkedViewOfProjection(storeProjection(dataset, root), what);
+}
+
+export async function linkedViewOfProjection<Kind extends string>(
+  projected: Store,
+  what: Kind,
+): Promise<LinkedStoreView<Kind>> {
   if (!projected.size) throw new TypeError("Store view root is absent");
   const uses = (prefix: string) =>
     [...projected].some(

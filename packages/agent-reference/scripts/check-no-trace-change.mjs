@@ -56,10 +56,14 @@ try {
     const output = openSync(log, "wx");
     let run;
     try {
-      run = spawnSync(process.execPath, ["scripts/run-scenarios.mjs", `--scenario=${scenario}`], {
-        cwd: copy,
-        stdio: ["ignore", output, "inherit"],
-      });
+      run = spawnSync(
+        process.execPath,
+        ["scripts/run-scenarios.mjs", `--scenario=${scenario}`, "--no-linked"],
+        {
+          cwd: copy,
+          stdio: ["ignore", output, "inherit"],
+        },
+      );
     } finally {
       closeSync(output);
     }
@@ -100,6 +104,8 @@ try {
         const expected = json(root, file);
         const actual = json(copy, file);
         delete expected.generated?.commit;
+        delete expected.linked;
+        for (const event of expected.events) delete event.linked;
         delete actual.generated?.commit;
         compare(file, actual, expected);
       } else if (!readFileSync(join(root, file)).equals(readFileSync(join(copy, file)))) {

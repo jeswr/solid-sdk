@@ -321,7 +321,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .raw { flex: 0 0 44%; min-width: 0; margin: 0; overflow: auto; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; }
 .caption { margin: 8px 0 0; font-size: 19px; line-height: 1.4; font-weight: 500; min-height: 2.8em; max-width: 70ch; letter-spacing: -0.005em; text-wrap: pretty; }
 
-.inspector { grid-area: insp; border-left: 1px solid var(--line); overflow-y: auto; overflow-wrap: anywhere; padding: 14px 18px 24px; background: var(--surface); min-width: 0; min-height: 0; }
+.inspector { container-type: inline-size; grid-area: insp; border-left: 1px solid var(--line); overflow-y: auto; overflow-wrap: anywhere; padding: 14px 18px 24px; background: var(--surface); min-width: 0; min-height: 0; }
 .insp-head h2 { font-size: 17px; margin: 0 0 8px; }
 .who { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
 .chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 6px; font-size: 12px; background: var(--surface-2); color: var(--ink-2); font-weight: 500; }
@@ -369,9 +369,32 @@ details.layer[open] > summary .ln::before { transform: rotate(90deg); }
 .digest code { font-size: 10.5px; color: var(--ink-3); word-break: break-all; }
 .rdf { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .rdf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
-.rdf-head .ln { font-weight: 650; font-size: 12.5px; }
-.rdf .seg.small button { padding: 3px 8px; font-size: 11.5px; }
+.rdf-view { min-width: 0; margin-top: 8px; }
+.rdf-view .rdf-head h3, .rdf-dialog h2 { margin: 0; font-size: 13.5px; }
+.rdf-head button { color: var(--accent); }
+.rdf-panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 8px; }
+@container (min-width: 620px) {
+  .rdf-view .rdf-panes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.rdf-pane { min-width: 0; min-height: 0; }
+.rdf-pane h4, .rdf-dialog h4 { margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }
+.rdf-pane .rdf-doc, .rdf-dialog .rdf-doc { overflow: auto; min-width: 0; min-height: 0; max-height: 40vh; margin: 0; white-space: pre; }
 .rdf-doc { max-height: 320px; white-space: pre; }
+.rdf-dialog {
+  width: min(1120px, calc(100% - 24px)); height: min(84dvh, 900px);
+  max-width: none; max-height: none; padding: 14px;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--r); box-shadow: var(--shadow);
+}
+.rdf-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.rdf-dialog::backdrop { background: var(--scrim); }
+.rdf-dialog-content { min-width: 0; min-height: 0; }
+.rdf-dialog .rdf-panes { height: 100%; margin: 0; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.rdf-dialog .rdf-pane, .rdf-context-document { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.rdf-dialog .rdf-doc { flex: 1; max-height: none; }
+@media (min-width: 761px) {
+  .rdf-dialog .rdf-panes { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
+}
 .rdf-note { margin: 6px 0 0; font-size: 11.5px; color: var(--ink-3); }
 .rdf-note .linkish { font-size: 11.5px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 

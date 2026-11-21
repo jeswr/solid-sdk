@@ -3,6 +3,158 @@
   "schema": "agent-scenario-runs/0.1",
   "paths": [
     {
+      "scenario": "mortgage-core",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 97,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 111,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 119,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 129,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 138,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 146,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 155,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 163,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 172,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 180,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 188,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 196,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "trace": "mortgage-core--baseline.json"
+    },
+    {
+      "scenario": "mortgage-core",
+      "useCase": "mortgage-in-principle",
+      "path": "main",
+      "settlement": "rdf-order",
+      "configuration": "authenticity-data-integrity",
+      "status": "runs",
+      "actual": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "consequences": [
+        {
+          "seq": 97,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 111,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 119,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 129,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 138,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 146,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 155,
+          "agent": "sams-agent",
+          "outcome": "go"
+        },
+        {
+          "seq": 163,
+          "agent": "lender",
+          "outcome": "admit"
+        },
+        {
+          "seq": 172,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 180,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        },
+        {
+          "seq": 188,
+          "agent": "lender",
+          "outcome": "go"
+        },
+        {
+          "seq": 196,
+          "agent": "sams-agent",
+          "outcome": "admit"
+        }
+      ],
+      "addedExchanges": 0,
+      "trace": "mortgage-core--authenticity-data-integrity.json"
+    },
+    {
       "scenario": "age-check",
       "useCase": "age-check",
       "path": "main",
@@ -1826,158 +1978,6 @@
       },
       "consequences": [],
       "trace": "meeting-notes--branch-1--baseline.json"
-    },
-    {
-      "scenario": "mortgage-core",
-      "useCase": "mortgage-in-principle",
-      "path": "main",
-      "settlement": "rdf-order",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 97,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 111,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 119,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 129,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 138,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 146,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 155,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 163,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 172,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 180,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 188,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 196,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        }
-      ],
-      "trace": "mortgage-core--baseline.json"
-    },
-    {
-      "scenario": "mortgage-core",
-      "useCase": "mortgage-in-principle",
-      "path": "main",
-      "settlement": "rdf-order",
-      "configuration": "authenticity-data-integrity",
-      "status": "runs",
-      "actual": {
-        "outcome": "ask-principal",
-        "reason": "approval-required",
-        "check": "limits-approval"
-      },
-      "consequences": [
-        {
-          "seq": 97,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 111,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 119,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 129,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 138,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 146,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 155,
-          "agent": "sams-agent",
-          "outcome": "go"
-        },
-        {
-          "seq": 163,
-          "agent": "lender",
-          "outcome": "admit"
-        },
-        {
-          "seq": 172,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 180,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        },
-        {
-          "seq": 188,
-          "agent": "lender",
-          "outcome": "go"
-        },
-        {
-          "seq": 196,
-          "agent": "sams-agent",
-          "outcome": "admit"
-        }
-      ],
-      "addedExchanges": 0,
-      "trace": "mortgage-core--authenticity-data-integrity.json"
     },
     {
       "scenario": "mortgage-injected-fee",

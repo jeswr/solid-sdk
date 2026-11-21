@@ -117,6 +117,7 @@ import { ActionIntentNode, MessageNode } from "../model/message-nodes.js";
 import type { NamedValuesNode } from "../model/named-values.js";
 import { PaymentAgreementNode, PaymentFacts, type PaymentOfferNode } from "../model/payment.js";
 import { StatementQualityNode } from "../model/quality.js";
+import { mandateDataset, policySubject } from "../model/store/policy.js";
 import {
   alternativeWireId,
   CONFIGURATIONS,
@@ -168,6 +169,7 @@ import type {
   WireMessage,
 } from "../store/state.js";
 import { domainValue } from "../store/state.js";
+import { memoryLink, recordLink, type TraceLinkedInput, termsLinks } from "../trace/linked.js";
 import { peekWire } from "../trace/packet.js";
 import { AgreementCredentialError, agreementMessageNode } from "../wire/agreement-credential.js";
 import { snapshotApprovalRelease } from "../wire/approval-release.js";
@@ -594,12 +596,18 @@ export class AgentRuntime {
     const auditSink = {
       agent: originalSink?.agent ?? this.identity.actor,
       observePayloads: originalSink?.observePayloads,
+      linked: originalSink?.linked,
       emit: (
         event: import("../trace/types.js").TraceEventInput,
         observation?: import("../trace/recorder.js").TraceObservation,
       ) => {
+        let entry: LedgerEntry | undefined;
         if (event.kind === "record" && event.fact?.claimType === "usage-model.opinion")
-          this.record({ type: "usage-model-opinion", ...copyData(event.fact), at: this.now() });
+          entry = this.record({
+            type: "usage-model-opinion",
+            ...copyData(event.fact),
+            at: this.now(),
+          });
         if (event.kind === "check") {
           const record = {
             type: "gate-check",
@@ -615,7 +623,7 @@ export class AgentRuntime {
           recordChecks[event.part]?.push(digestOf(record));
         }
         if (event.kind === "decision") {
-          this.record({
+          entry = this.record({
             type: "gate-decision",
             agent: this.identity.actor,
             gate: event.part,
@@ -636,6 +644,11 @@ export class AgentRuntime {
                 : undefined;
         const gateRun = gate ? gateRuns[gate] - (event.kind === "message-out" ? 1 : 0) : undefined;
         if (gate && event.kind === "decision") gateRuns[gate]++;
+        if (originalSink?.linked) {
+          const extra = this.linkTraceEvent(event, entry);
+          if (extra.length)
+            event = { ...event, linkedInputs: [...(event.linkedInputs ?? []), ...extra] };
+        }
         originalSink?.emit(
           gateRun === undefined ? event : { ...event, gateRun },
           originalSink.observePayloads ? observation : undefined,
@@ -2045,10 +2058,10 @@ export class AgentRuntime {
         });
       }
       const part = { id, mediaType: "text/plain", bytes: input.text, digest };
-      this.gateMemory.enter(task, {
+      const item = {
         id,
         digest,
-        kind: "content",
+        kind: "content" as const,
         accepted: false,
         label: "Unsigned email prose; address-only identity; never instructions or commitments",
         source: input.from,
@@ -2057,7 +2070,8 @@ export class AgentRuntime {
         subject: input.from,
         admittedPurpose: input.purpose,
         statement: part,
-      });
+      };
+      this.gateMemory.enter(task, item);
       this.record({
         type: "email-content",
         id,
@@ -2071,6 +2085,7 @@ export class AgentRuntime {
       sink?.emit({
         part: "memory",
         kind: "store",
+        ...(sink.linked ? { linkedInputs: [memoryLink(item)] } : {}),
         caption:
           "Unsigned address-only prose enters the unstructured-content channel; never facts or instructions.",
       });
@@ -3283,12 +3298,7 @@ export class AgentRuntime {
       if (original.terms) statement.terms = original.terms as unknown as Json;
       const jws = await signCompact(key, TYP.statement, statement);
       this.record({ type: "reading", statement, digest: digestOf(statement), at: this.now() });
-      this.options.gates?.sink?.emit({
-        part: "memory",
-        kind: "store",
-        caption: `Model-output reading of unstructured data ${input.originalDigest}; claim ${input.claimType}.`,
-      });
-      this.gateMemory.enter(input.task, {
+      const item = {
         ...original,
         id: String(statement.id),
         label: `Reading of ${original.label}`,
@@ -3296,12 +3306,20 @@ export class AgentRuntime {
         subject: input.subject,
         claimType: input.claimType,
         method: "model-output",
-        kind: "reading",
+        kind: "reading" as const,
         statement,
         identifiers: identifiersIn(statement),
         accepted: false,
         digest: digestOf(statement),
+      };
+      const sink = this.options.gates?.sink;
+      sink?.emit({
+        part: "memory",
+        kind: "store",
+        ...(sink.linked ? { linkedInputs: [memoryLink(item)] } : {}),
+        caption: `Model-output reading of unstructured data ${input.originalDigest}; claim ${input.claimType}.`,
       });
+      this.gateMemory.enter(input.task, item);
       this.persist();
       return { statement, jws };
     });
@@ -4209,6 +4227,11 @@ export class AgentRuntime {
         sink?.emit({
           part: "record",
           kind: "record",
+          ...(sink.linked
+            ? this.linkedRecord(
+                this.auditEntries().findLast((entry) => entry.hash === audit.unjudged.at(-1)?.hash),
+              )
+            : {}),
           caption: `${audit.unjudged.length} replies inside agreed exchanges carry no authorisation decision; they are reported, not judged.`,
         });
       const outside = audit.outside.filter((release) => release.verdict === "outside");
@@ -4359,6 +4382,69 @@ export class AgentRuntime {
     );
   }
 
+  private linkTraceEvent(
+    event: import("../trace/types.js").TraceEventInput,
+    entry: LedgerEntry | undefined,
+  ): readonly TraceLinkedInput[] {
+    if (entry) return [recordLink(entry)];
+    if (event.kind === "record" && event.part === "record" && event.rule) {
+      const id = event.rule.id;
+      const grant = this.ledger
+        .entries()
+        .findLast(
+          ({ record }) =>
+            record.type === "grant" && record.kind === "owner-mandate" && record.id === id,
+        );
+      return grant ? [recordLink(grant)] : [];
+    }
+    if (event.kind === "store" || event.kind === "recall") {
+      const fact = event.fact && this.gateMemory.facts.get(event.fact.id);
+      return fact && !event.linkedInputs?.length ? [memoryLink(fact)] : [];
+    }
+    if (
+      event.kind !== "check" ||
+      !event.rule ||
+      event.linkedInputs?.some((input) => input.what === "policy")
+    )
+      return [];
+    const { id } = event.rule;
+    const loaded = this.mandate;
+    if (loaded?.credential) {
+      const mandate = loaded.mandate;
+      const policies = [mandate.autonomous, mandate.withApproval];
+      const policy = policies.find(
+        (p) =>
+          p.id === id ||
+          [p.permissions, p.prohibitions, p.obligations].some((rules) =>
+            rules?.some((rule) => rule.id === id),
+          ),
+      );
+      if (policy || id === mandate.id || mandate.standing?.some((rule) => rule.id === id)) {
+        const dataset = mandateDataset(loaded);
+        const root = policySubject(id);
+        return [
+          {
+            what: "policy",
+            root: dataset.countQuads(root, null, null, null)
+              ? root
+              : policy
+                ? policySubject(policy.id)
+                : mandate.id,
+            dataset,
+          },
+        ];
+      }
+    }
+    for (const fact of this.gateMemory.facts.values()) {
+      if (fact.terms?.policy.id === id) return termsLinks(true, fact.terms).linkedInputs ?? [];
+    }
+    return [];
+  }
+
+  private linkedRecord(entry: LedgerEntry | undefined) {
+    return this.options.gates?.sink?.linked && entry ? { linkedInputs: [recordLink(entry)] } : {};
+  }
+
   /** Check this agent's own record and show it in the trace. */
   checkRecord(entries: readonly LedgerEntry[]): {
     ok: boolean;
@@ -4368,6 +4454,11 @@ export class AgentRuntime {
     this.options.gates?.sink?.emit({
       part: "record",
       kind: "record",
+      ...this.linkedRecord(
+        v.ok && this.options.gates?.sink?.linked
+          ? entries.findLast((entry) => entry.record.type !== "gate-check")
+          : undefined,
+      ),
       caption: `${entries.length} entries in this agent's hash-chained record; the chain ${
         v.ok ? "verifies" : "does not verify"
       }.`,
@@ -5799,6 +5890,7 @@ export class AgentRuntime {
       this.options.gates?.sink?.emit({
         part: "memory",
         kind: "store",
+        ...(this.options.gates.sink.linked ? { linkedInputs: [memoryLink(item)] } : {}),
         caption: `Unstructured data ${part.digest}; not instructions; source ${item.source}.`,
       });
     }
@@ -6502,10 +6594,11 @@ export class AgentRuntime {
       if (contains(value.continuation)) delete this.state.pending[key];
     for (const [key, value] of Object.entries(this.state.recordMessages))
       if (contains(value.jws)) delete this.state.recordMessages[key];
-    this.record({ type: "items-deleted", items: [...ids], at: this.now() });
+    const entry = this.record({ type: "items-deleted", items: [...ids], at: this.now() });
     this.options.gates?.sink?.emit({
       part: "record",
       kind: "record",
+      ...this.linkedRecord(entry),
       caption: `Payloads deleted; digest tombstones retained for ${[...ids].join(", ")}.`,
     });
   }
@@ -6672,6 +6765,11 @@ export class AgentRuntime {
     this.options.gates?.sink?.emit({
       part: "record",
       kind: "record",
+      ...this.linkedRecord(
+        this.options.gates?.sink?.linked
+          ? this.ledger.entries().findLast((entry) => String(entry.record.type).startsWith("duty-"))
+          : undefined,
+      ),
       caption: `Duty audit: ${Object.values(this.state.duties.work)
         .map(
           (duty) =>
@@ -6778,10 +6876,11 @@ export class AgentRuntime {
       if (duty.status === "pending" && deadlineMissed(duty.due, this.now())) {
         changed = true;
         duty.status = "failed";
-        this.record({ type: "duty-failed", ...duty, at: this.now() });
+        const entry = this.record({ type: "duty-failed", ...duty, at: this.now() });
         this.options.gates?.sink?.emit({
           part: "record",
           kind: "record",
+          ...this.linkedRecord(entry),
           caption: `Failed notification duty ${duty.id}, due ${duty.due}.`,
         });
       }
@@ -6828,10 +6927,14 @@ export class AgentRuntime {
         duty.status = late ? "failed" : "discharged";
         duty.at = this.now();
         duty.message = result.outbound[0]?.id;
-        this.record({ type: late ? "duty-late-notification" : "duty-discharged", ...duty });
+        const entry = this.record({
+          type: late ? "duty-late-notification" : "duty-discharged",
+          ...duty,
+        });
         this.options.gates?.sink?.emit({
           part: "record",
           kind: "record",
+          ...this.linkedRecord(entry),
           caption: `Notification duty ${duty.id} discharged at ${duty.at} by message ${duty.message}.`,
         });
         outbound.push(...result.outbound);

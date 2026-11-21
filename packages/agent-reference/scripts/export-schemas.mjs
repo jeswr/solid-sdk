@@ -15,7 +15,7 @@ const authoringSchema = (schema, kind) =>
   });
 
 // The runtime trace schema passes through optional event fields.
-const exportedTraceSchema = traceFileSchema.extend({
+const exportedTraceSchema = traceFileSchema.safeExtend({
   events: z.array(
     traceFileSchema.shape.events.element.extend({
       fault: z

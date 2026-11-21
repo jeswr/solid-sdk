@@ -59,6 +59,15 @@ Traces carry outcomes, trust-resolution paths, labelled facts and declared stand
 cases use the core reason registry; the public pilot extension-code union remains available
 for compatibility. A signature establishes attribution, not truth or permission.
 
+The trace generators add optional RDF views of stored facts, record entries,
+policies and trust entries. Each event's `linked` list points into the trace's
+`linked` table. The table stores each view under the SHA-256 of its JSON-LD
+text, alongside its context and Turtle. Use
+`node scripts/run-scenarios.mjs --scenario=<id> --no-linked` to regenerate
+the original trace format. Library runs opt in with `{ linked: true }`.
+The runtime builds the view graphs only when requested, and the recorder
+serialises them after the run.
+
 Experimental. Synthetic parties and data only; both sides of every exchange run this code.
 
 <!-- AUTHORED-BY Codex GPT-6 -->

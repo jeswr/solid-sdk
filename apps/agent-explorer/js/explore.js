@@ -67,6 +67,7 @@
       '  <p class="caption" id="caption" aria-live="polite" data-anchor="stage.caption"></p>' +
       '</section>' +
       '<aside class="inspector" id="inspector" data-anchor="inspector" aria-label="Inspector"></aside>' +
+      '<dialog class="rdf-dialog" id="rdf-dialog" aria-labelledby="rdf-dialog-title"><div class="rdf-head"><h2 id="rdf-dialog-title">RDF view</h2><button type="button" class="linkish" data-rdf-close>Close</button></div><div class="rdf-dialog-content"></div></dialog>' +
       '<footer class="timeline" data-anchor="timeline">' +
       '  <div class="controls">' +
       '    <div class="btns">' +
@@ -133,9 +134,12 @@
     root.querySelector('#inspector').addEventListener('click', function (e) {
       var j = e.target.closest('[data-jump]');
       if (j) { stop(); go(stopIndexFor(Number(j.dataset.jump))); }
-      var f = e.target.closest('[data-rdf-form]');
-      if (f) { S.rdfForm = f.dataset.rdfForm; renderInspector(); }
-      if (e.target.closest('[data-rdf-context]')) { S.rdfContext = !S.rdfContext; renderInspector(); }
+    });
+    AX.linked.bind(root.querySelector('#inspector'), root.querySelector('#rdf-dialog'), {
+      getInput: function (id) { return S.linkedViews.get(id); },
+      getContext: function () { return !!S.rdfContext; },
+      toggleContext: function () { S.rdfContext = !S.rdfContext; renderInspector(); },
+      pause: stop,
     });
     root.querySelectorAll('[data-chat-mode]').forEach(function (b) {
       b.addEventListener('click', function () { S.chatMode = b.dataset.chatMode; AX.store.set('ax-chat-mode', S.chatMode); if (S.trace) renderChat(); });
@@ -622,55 +626,17 @@
       return '<li><a href="' + AX.buildHash('layers', { select: r.layer + '/' + r.suite }) + '"><span class="ref-layer">' + esc(l ? AX.layerTitle(l) : r.layer) + '</span><span class="ref-suite">' + esc(AX.suiteName(r.layer, r.suite)) + '</span></a>' + (r.clause ? '<code>' + esc(r.clause) + '</code>' : '') + '</li>';
     }).join('') + '</ul></dd></dl>';
   }
-  // The whole message as linked data. JSON-LD first, with its context folded away;
-  // the same graph as Turtle (or TriG, where the proof sits in a named graph) one click behind.
-  // Traces made before messages were RDF have none of these fields and show nothing here.
-  function rdfHtml(p) {
-    if (!p) return '';
-    var text = p.rdf || p.turtle || p.trig || '';
-    if (p.jsonld == null && !text) return '';
-    var textName = p.rdf ? 'RDF' : (p.turtle ? 'Turtle' : 'TriG');
-    var form = text && (S.rdfForm === 'text' || p.jsonld == null) ? 'text' : 'jsonld';
-    var doc = p.jsonld;
-    var invalidJson = false;
-    if (form === 'jsonld' && typeof doc === 'string') {
-      try { doc = JSON.parse(doc); }
-      catch (error) { invalidJson = true; }
-    }
-    var ctx;
-    if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
-      ctx = doc['@context'] !== undefined ? doc['@context'] : p.context;
-      var shown = Object.create(null);
-      if (S.rdfContext && ctx !== undefined) shown['@context'] = ctx;
-      Object.keys(doc).forEach(function (k) { if (k !== '@context') shown[k] = doc[k]; });
-      doc = shown;
-    }
-    var h = '<div class="rdf" data-anchor="inspector.message.rdf"><div class="rdf-head"><span class="ln">As linked data</span>';
-    if (text) {
-      h += '<span class="seg small" role="group" aria-label="Form">' +
-        '<button type="button" data-rdf-form="jsonld" aria-pressed="' + (form === 'jsonld') + '">JSON-LD</button>' +
-        '<button type="button" data-rdf-form="text" aria-pressed="' + (form === 'text') + '">' + textName + '</button></span>';
-    }
-    h += '</div>';
-    if (form === 'jsonld') {
-      h += codeBlock(invalidJson ? doc : JSON.stringify(doc, null, 2), 'jsonld', true);
-      if (ctx !== undefined) {
-        h += '<p class="rdf-note">' + (S.rdfContext
-          ? 'The context maps each short name to a full term. It is pinned: the gate never fetches it.'
-          : 'The context, which maps each short name to a full term, is folded away.') +
-          ' <button type="button" class="linkish" data-rdf-context="1">' + (S.rdfContext ? 'Hide context' : 'Show context') + '</button></p>';
-      }
-    } else {
-      h += codeBlock(text, 'rdf', true) + '<p class="rdf-note">The same graph, written out in full.</p>';
-    }
-    return h + '</div>';
+  function linkedHtml(input, title, message) {
+    var id = 'rdf-inspector-' + S.linkedViews.size;
+    S.linkedViews.set(id, input);
+    return AX.linked.html(input, { id: id, context: !!S.rdfContext, title: title, message: message });
   }
   function packetHtml(p, e) {
     var sender = (e.pFrom && traceAgent(e.pFrom).name) || p.from;
     var receiver = (e.pTo && traceAgent(e.pTo).name) || p.to;
     var h = '<section class="msg" data-anchor="inspector.message"><h3>Verifiable message</h3>';
     h += '<p class="msg-meta"><code>' + esc(p.id) + '</code> <span class="kind-chip">' + esc(p.kind) + '</span> ' + esc(sender) + ' to ' + esc(receiver) + '</p>';
-    h += rdfHtml(p);
+    h += linkedHtml(AX.linked.packet(p), 'RDF view', true);
     if (p.attachments && p.attachments.length) {
       h += '<details class="layer present"><summary>Attachments</summary>' + codeBlock(JSON.stringify(p.attachments, null, 2)) + '</details>';
     }
@@ -776,6 +742,9 @@
     var t = S.trace;
     var e = t.events[S.idx];
     var step = stepOf(S.idx);
+    S.linkedViews = new Map();
+    var views = AX.linked.entries(t, e);
+    var memory = views.find(function (view) { return view.what === 'memory-item'; });
     var h = '<header class="insp-head"><p class="eyebrow">Step ' + step.position + ' of ' + AX.stepsOf(t).length + '</p>';
     h += '<h2>' + esc(AX.stepTitle(t, step)) + '</h2>';
     h += '<p class="who"><span class="chip">' + esc(traceAgent(e.agent).name) + '</span><span class="chip">' + esc(AX.partName(e.part)) + '</span><span class="chip quiet">' + esc(AX.kindLabels[e.kind] || e.kind) + '</span></p></header>';
@@ -792,11 +761,22 @@
       h += '<section class="part-info"><h3>' + esc(part ? part.name : e.part) + '</h3><p>' + esc(part ? part.summary : '') + '</p>';
       if (e.rule) h += '<dl class="kv"><dt>Rule</dt><dd>' + esc(displayText(e.rule.text)) + '<div class="rule-id"><code>' + esc(e.rule.id) + '</code></div></dd></dl>';
       if (e.chat) h += '<dl class="kv"><dt>In the chat</dt><dd>' + esc(displayText(e.chat.text)) + '</dd></dl>';
-      if (e.fact) h += '<details class="layer present fact"><summary class="layer-head"><span class="ln">Fact stored</span><span class="lstate">' + esc(e.fact.claimType || '') + '</span></summary>' + codeBlock(JSON.stringify(e.fact, null, 2)) + '</details>';
+      if (e.fact) h += '<details class="layer present fact"><summary class="layer-head"><span class="ln">' +
+        (e.kind === 'recall' ? 'Fact recalled' : 'Fact stored') + (memory && e.fact.label ? ' · ' + esc(e.fact.label) : '') +
+        '</span><span class="lstate">' + esc(e.fact.claimType || '') + '</span></summary>' +
+        (memory ? linkedHtml(memory, 'RDF view') : codeBlock(JSON.stringify(e.fact, null, 2))) + '</details>';
       h += refsHtml(e.refs) + '</section>';
     } else if (e.packet) {
       h += refsHtml(e.refs);
     }
+    views.forEach(function (view) {
+      if (view === memory && e.fact && e.kind !== 'check' && e.kind !== 'decision' && !e.packet) return;
+      var title = view.what === 'policy' ? 'The rule as policy' :
+        view.what === 'trust-entry' ? 'The trust entry' :
+        view.what === 'record-entry' && e.kind === 'decision' ? 'Recorded as' :
+        view.what === 'record-entry' ? 'Record entry' : 'RDF view';
+      h += linkedHtml(view, title);
+    });
     var ins = root.querySelector('#inspector');
     var keepOpen = {};
     ins.querySelectorAll('details.layer').forEach(function (d, k) { if (d.open) keepOpen[k] = true; });

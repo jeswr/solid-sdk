@@ -56,6 +56,7 @@ function browser(fetch, data) {
   const context = vm.createContext({ window, fetch, location: { hash: '#/start' }, history: {}, Map });
   vm.runInContext(util, context);
   vm.runInContext(highlighter, context);
+  vm.runInContext(readFileSync(root + "js/linked.js", "utf8"), context);
   return { AX: window.AX, index, context, window };
 }
 
@@ -167,6 +168,11 @@ function bundleFixture(t) {
   for (const name of ['scripts/bundle-data.mjs', 'scripts/site-files.mjs', 'js/trace-data.js', 'data/model.json']) {
     copyFileSync(root + name, join(dir, name));
   }
+  const contextPath = 'packages/agent-reference/vocab/context';
+  mkdirSync(join(repo, contextPath), { recursive: true });
+  for (const file of ['v1.jsonld', 'store-v1.jsonld', 'odrl-v1.jsonld', 'scenario-v1.jsonld']) {
+    copyFileSync(join(root, '../..', contextPath, file), join(repo, contextPath, file));
+  }
   return dir;
 }
 
@@ -266,7 +272,7 @@ function exploreDOM(setup) {
   function node(key) {
     if (!nodes.has(key)) nodes.set(key, {
       innerHTML: '', style: { setProperty() {} }, classList: { add() {}, remove() {}, toggle() {} },
-      setAttribute() {}, querySelector: (selector) => selector === '.phone' ? node(selector) : null,
+      setAttribute() {}, querySelector: (selector) => ['.phone', '.rdf-dialog-content', '[data-rdf-close]'].includes(selector) ? node(selector) : null,
       querySelectorAll: () => [], addEventListener(type, listener) { this[type] = listener; },
       closest() { return node('parent'); },
     });
@@ -395,18 +401,20 @@ test('Explore uses one step count, shows recorded branch decisions and keeps the
   assert.match(stage, /id="ax-packet"[^]*?<rect x="-11" y="-8"/);
 
   const inspector = node('#inspector');
-  assert.match(inspector.innerHTML, /<pre class="json rdf-doc"><code><span class="tok-punctuation">\{<\/span>\n {2}<span class="tok-key">&quot;id&quot;<\/span>/);
+  assert.match(inspector.innerHTML, /<pre class="json rdf-doc"[^>]*><code><span class="tok-punctuation">\{<\/span>\n {2}<span class="tok-key">&quot;id&quot;<\/span>/);
   assert.doesNotMatch(inspector.innerHTML, /&quot;@context&quot;/);
   assert.ok(inspector.innerHTML.includes('<code>' + digest + '</code>'));
-  inspector.click({ target: { closest: (selector) => selector === '[data-rdf-context]' ? {} : null } });
-  assert.match(inspector.innerHTML, /<pre class="json rdf-doc"><code><span class="tok-punctuation">\{<\/span>\n {2}<span class="tok-keyword">&quot;@context&quot;<\/span>/);
+  inspector.click({ target: { closest: (selector) =>
+    selector === '.rdf-view' ? { id: 'rdf-inspector-0' } :
+      selector === '[data-rdf-context]' ? {} : null } });
+  assert.match(inspector.innerHTML, /<pre class="json rdf-doc"[^>]*><code><span class="tok-punctuation">\{<\/span>\n {2}<span class="tok-keyword">&quot;@context&quot;<\/span>/);
   const event = E.state.trace.events.find((e) => e.seq === 81);
   const stripTokens = (html) => html.replace(/<span class="tok-[a-z-]+">([^<>]*)<\/span>/g, '$1');
-  const linkedDataHtml = () => inspector.innerHTML.match(/<pre class="json rdf-doc"><code>([\s\S]*?)<\/code><\/pre>/)[1];
-  assert.equal(stripTokens(linkedDataHtml()), setup.AX.esc(JSON.stringify(JSON.parse(event.packet.jsonld), null, 2)));
-  inspector.click({ target: { closest: (selector) => selector === '[data-rdf-form]' ? { dataset: { rdfForm: 'text' } } : null } });
-  assert.match(linkedDataHtml(), /<span class="tok-iri">/);
-  assert.equal(stripTokens(linkedDataHtml()), setup.AX.esc(event.packet.rdf));
+  const linkedPanes = Array.from(inspector.innerHTML.matchAll(/<pre class="json rdf-doc"[^>]*><code>([\s\S]*?)<\/code><\/pre>/g), (match) => match[1]);
+  assert.equal(linkedPanes.length, 2);
+  assert.equal(stripTokens(linkedPanes[0]), setup.AX.esc(JSON.stringify(JSON.parse(event.packet.jsonld), null, 2)));
+  assert.match(linkedPanes[1], /<span class="tok-iri">/);
+  assert.equal(stripTokens(linkedPanes[1]), setup.AX.esc(event.packet.rdf));
 
   await E.apply({ scenario: 'mortgage-main', seq: 81, level: 'raw' });
   assert.equal(node('#raw').hidden, false);

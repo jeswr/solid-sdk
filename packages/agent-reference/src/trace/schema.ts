@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 /** Trace contract; legacy hostile-input inspector entries remain readable. */
 import { z } from "zod";
-import { PACKET_LAYERS, TRACE_SCHEMA } from "./types.js";
+import { LINKED_KINDS, PACKET_LAYERS, TRACE_SCHEMA } from "./types.js";
 
 const layer = z.object({
   present: z.boolean(),
@@ -41,9 +41,33 @@ export const documentPacketSchema = z
   })
   .strict();
 export const packetViewSchema = z.union([documentPacketSchema, z.object(fields).strict()]);
+const linkedKey = z.string().regex(/^sha-256:[a-f0-9]{64}$/);
+const linkedView = z.strictObject({
+  what: z.enum(LINKED_KINDS),
+  context: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+  jsonld: z.string().min(1),
+  turtle: z.string().min(1),
+});
 export const traceFileSchema = z
   .object({
     schema: z.literal(TRACE_SCHEMA),
-    events: z.array(z.object({ packet: packetViewSchema.optional() }).passthrough()),
+    events: z.array(
+      z
+        .object({ packet: packetViewSchema.optional(), linked: z.array(linkedKey).optional() })
+        .passthrough(),
+    ),
+    linked: z.record(linkedKey, linkedView).optional(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((trace, ctx) => {
+    for (const [eventIndex, event] of trace.events.entries()) {
+      event.linked?.forEach((key, keyIndex) => {
+        if (!trace.linked || !Object.hasOwn(trace.linked, key))
+          ctx.addIssue({
+            code: "custom",
+            path: ["events", eventIndex, "linked", keyIndex],
+            message: "Missing linked view",
+          });
+      });
+    }
+  });
