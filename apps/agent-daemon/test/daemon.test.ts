@@ -2,7 +2,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
+import {
+  AuditWriter,
+  auditArtifact,
+  FileLedger,
+  MemoryLedger,
+  PodMirror,
+} from "@jeswr/agent-audit";
+import { seal } from "@jeswr/agent-audit/verify";
 import {
   type BridgeMessage,
   ChannelParseError,
@@ -45,7 +52,14 @@ import {
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { fakeFetch } from "@jeswr/agent-model-gateway/testing";
-import { AgentRuntime, CONFIG_ED25519, introduce, PILOT_PROFILE } from "@jeswr/agent-reference";
+import {
+  AgentRuntime,
+  CONFIG_ED25519,
+  FileStateStore,
+  introduce,
+  PILOT_PROFILE,
+  FileLedger as ReferenceLedger,
+} from "@jeswr/agent-reference";
 import type { JsonObject } from "@jeswr/agent-reference/core/types";
 import { evaluateRule, ruleSchema } from "@jeswr/agent-reference/derive/rules";
 import { GateMemory } from "@jeswr/agent-reference/gates/common";
@@ -62,7 +76,7 @@ import {
   issue,
   publishVerificationMethod,
 } from "@jeswr/solid-vc";
-import { mkdtemp, readFile, rm } from "fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -83,6 +97,7 @@ import {
 } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
+import { testRecordPort } from "./record-port.js";
 
 export const ROOT = "https://pod.example/";
 export const OWNER = `${ROOT}profile/card#me`;
@@ -162,8 +177,30 @@ function harness() {
     },
     account: "fixture",
   }).reader;
+  const render = (proposal: OutboxEntry["proposal"]): OutboxEntry["renderable"] => ({
+    compactJws: "fixture.signed.carrier",
+    message: {
+      profile: "urn:profile:fixture",
+      configuration: "urn:config:fixture",
+      id: "urn:message:fixture",
+      conversation: proposal.intent.conversation,
+      kind: "invoke",
+      from: { actor: AGENT_ID },
+      createdAt: new Date(AT).toISOString(),
+      expiresAt: "2026-11-02T12:00:00.000Z",
+      body: {
+        operation: { id: proposal.intent.operation, version: "1" },
+        input: {},
+        basis: { kind: "public" },
+      },
+    },
+  });
   const options: DaemonOptions = {
     gate: {
+      ...testRecordPort(AGENT_ID, OWNER),
+      async release(proposal) {
+        return { ok: true, renderable: render(proposal), preview: "Fixture preview" };
+      },
       async check({ message }) {
         const digest = `sha-256:${message.rawSha256}`;
         try {
@@ -190,25 +227,10 @@ function harness() {
       entries: () => ledger.entries(),
       sync: async () => undefined,
     },
-    project: async (proposal) => {
-      const renderable: OutboxEntry["renderable"] = {
-        compactJws: "fixture.signed.carrier",
-        message: {
-          profile: "urn:profile:fixture",
-          configuration: "urn:config:fixture",
-          id: "urn:message:fixture",
-          conversation: proposal.intent.conversation,
-          kind: "invoke",
-          from: { actor: AGENT_ID },
-          createdAt: new Date(AT).toISOString(),
-          expiresAt: "2026-11-02T12:00:00.000Z",
-          body: {
-            operation: { id: proposal.intent.operation, version: "1" },
-            input: {},
-            basis: { kind: "public" },
-          },
-        },
-      };
+    project: async (proposal, sign) => {
+      const released = await sign();
+      if (!released.ok) throw new ProposalRefusedError(released.reason);
+      const { renderable } = released;
       const bytes = canonicalJson(renderable);
       const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/json" };
       const entry: OutboxEntry = {
@@ -260,6 +282,8 @@ function harness() {
   return {
     pod,
     workspace,
+    release: (proposal: OutboxEntry["proposal"]) =>
+      ({ ok: true, renderable: render(proposal), preview: "Fixture preview" }) as const,
     state,
     ledger,
     options,
@@ -314,7 +338,10 @@ it.each([
   const records = h.ledger
     .entries()
     .map((e) => e.record)
-    .filter((r) => r.type !== "ledger-checkpoint");
+    .filter(
+      (r) =>
+        r.type !== "ledger-checkpoint" && r.type !== "gate-decision" && r.type !== "record-anchor",
+    );
   const taskId = records[0]?.taskId;
   expect(taskId).toMatch(/^task-[a-f0-9]{64}$/);
   expect(records.every((r) => r.taskId === taskId)).toBe(true);
@@ -358,7 +385,11 @@ it.each([
     // Cursor replay retains the task and producing Proposer call without invoking it again.
     await createDaemon(h.options).once();
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
-    expect(h.ledger.entries()).toHaveLength(records.length);
+    expect(
+      h.ledger
+        .entries()
+        .filter(({ record }) => record.type !== "gate-decision" && record.type !== "record-anchor"),
+    ).toHaveLength(records.length);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -378,7 +409,10 @@ it.each([
   const records = h.ledger
     .entries()
     .map((e) => e.record)
-    .filter((r) => r.type !== "ledger-checkpoint");
+    .filter(
+      (r) =>
+        r.type !== "ledger-checkpoint" && r.type !== "gate-decision" && r.type !== "record-anchor",
+    );
   const failure = records.find((r) => r.type === "model-call");
   expect(failure).toMatchObject({ taskId: records[0]?.taskId, inputTokens: 7, outputTokens: 3 });
   expect(failure?.taskId).toMatch(/^task-[a-f0-9]{64}$/);
@@ -404,7 +438,13 @@ it("imports ACL first, deterministically triages, proposes, audits, checkpoints,
   expect(h.state.cursors.get("fixture")).toBe("one");
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
   expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
-  expect(h.ledger.entries().map((e) => e.record.type)).toEqual(["ingest", "proposal"]);
+  expect(h.ledger.entries().map((e) => e.record.type)).toEqual([
+    "gate-decision",
+    "ingest",
+    "gate-decision",
+    "proposal",
+    "record-anchor",
+  ]);
   expect(h.state.held()).toBe(false);
   expect([...h.pod.resources.keys()].some((url) => url.includes("agent/proposals/"))).toBe(true);
   // The agent introduces itself after the owner-only workspace ACL, before any inbox content.
@@ -434,10 +474,10 @@ it.each([
   if (cached) await h.state.proposalResults.put(key, result);
   else vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue(result);
   const projectOutbox = vi.fn(h.options.project);
-  const project: DaemonOptions["project"] = async (proposal) => {
+  const project: DaemonOptions["project"] = async (proposal, release) => {
     expect(proposal.id).toBe(expectedId);
     expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
-    return projectOutbox(proposal);
+    return projectOutbox(proposal, release);
   };
   const options = { ...h.options, project };
   await createDaemon(options).once();
@@ -479,14 +519,15 @@ async function legacyRun(
   };
   // The trusted outbox is idempotent by proposal ID, as the executor's store is.
   const outbox = new Map<string, OutboxEntry>();
-  const project = vi.fn<DaemonOptions["project"]>(async (proposal) => {
+  const project = vi.fn<DaemonOptions["project"]>(async (proposal, release) => {
+    const entry = await h.options.project(proposal, release);
     const existing = outbox.get(proposal.id);
     if (existing) return existing;
-    const entry = await h.options.project(proposal);
     outbox.set(proposal.id, entry);
     return entry;
   });
-  const entry = await project({ ...exampleRecords["action-proposal"], id: legacyId });
+  const legacy = { ...exampleRecords["action-proposal"], id: legacyId };
+  const entry = await project(legacy, async () => h.release(legacy));
   project.mockClear();
   const call = measuredCall("proposer");
   await h.state.proposalResults.put(key, {
@@ -764,7 +805,12 @@ it("retries finalization persistence failure without publishing or regenerating 
   const publish = vi.spyOn(h.workspace, "proposal");
   await expect(createDaemon(h.options).once()).rejects.toThrow("finalized cache unavailable");
   expect(publish).not.toHaveBeenCalled();
-  expect(h.ledger.entries().map((entry) => entry.record.type)).toEqual(["ingest"]);
+  expect(h.ledger.entries().map((entry) => entry.record.type)).toEqual([
+    "gate-decision",
+    "ingest",
+    "gate-decision",
+    "record-anchor",
+  ]);
   expect(h.state.cursors.size).toBe(0);
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
   await createDaemon(h.options).once();
@@ -796,11 +842,13 @@ it("refuses changed trusted terms when replaying existing proposal evidence", as
   const h = harness();
   vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
   await expect(createDaemon(h.options).once()).rejects.toThrow("cursor unavailable");
-  const entry = await h.options.project(exampleRecords["action-proposal"]);
+  const draft = exampleRecords["action-proposal"];
+  const entry = await h.options.project(draft, async () => h.release(draft));
   await expect(
     createDaemon({
       ...h.options,
-      project: async (proposal) => {
+      project: async (proposal, sign) => {
+        await sign();
         const changed = { ...entry, proposal, wireDigest: digestBytes("different wire") };
         changed.proposal.intent.termsDigest = proposalTermsDigest(changed);
         return changed;
@@ -816,8 +864,8 @@ it("refuses an outbox entry for a different proposal before audit or cursor comm
   await expect(
     createDaemon({
       ...h.options,
-      project: async (proposal) => ({
-        ...(await h.options.project(proposal)),
+      project: async (proposal, release) => ({
+        ...(await h.options.project(proposal, release)),
         proposal: { ...proposal, id: "urn:proposal:different" },
       }),
     }).once(),
@@ -832,8 +880,8 @@ it("refuses an outbox entry whose finalized approval digest does not match its t
   await expect(
     createDaemon({
       ...h.options,
-      project: async (proposal) => {
-        const entry = await h.options.project(proposal);
+      project: async (proposal, release) => {
+        const entry = await h.options.project(proposal, release);
         entry.proposal.intent.termsDigest = digestOf("model-supplied digest");
         return entry;
       },
@@ -895,7 +943,8 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   const terms = proposalApprovalTerms(outbox);
   const mirror = new PodMirror(h.pod.io, ROOT);
   const writer = new AuditWriter(h.ledger, mirror);
-  const project = vi.fn(async (candidate: OutboxEntry["proposal"]) => {
+  const project = vi.fn<DaemonOptions["project"]>(async (candidate, sign) => {
+    await sign();
     const entry = { ...outbox, proposal: structuredClone(candidate) };
     entry.proposal.intent.termsDigest = proposalTermsDigest(entry);
     return entry;
@@ -1127,7 +1176,7 @@ it.each([
 ] as const)("routes a structured message with a %s verdict", async (outcome) => {
   const h = harness();
   const verdict = { outcome, digest: `sha-256:${h.message.rawSha256}` };
-  const gate = { check: vi.fn(async () => verdict) };
+  const gate = { ...h.options.gate, check: vi.fn(async () => verdict) };
   const reader = vi.spyOn(h.options.gateway.reader, "extract");
   await createDaemon({ ...h.options, gate }).once();
   expect(h.ingest.parse).toHaveBeenCalledOnce();
@@ -1135,6 +1184,7 @@ it.each([
     account: "fixture",
     binding: "direct",
     message: h.message,
+    replayKey: expect.stringMatching(/^sha-256:[a-f0-9]{64}$/),
   });
   expect(reader).toHaveBeenCalledTimes(outcome === "refused" ? 0 : 1);
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(outcome === "admitted" ? 1 : 0);
@@ -1162,6 +1212,7 @@ it("rolls back the entire batch before any inbox write when a gate check throws"
     next: "one",
   });
   const gate = {
+    ...h.options.gate,
     check: vi
       .fn()
       .mockResolvedValueOnce({ outcome: "admitted", digest: `sha-256:${h.message.rawSha256}` })
@@ -1174,7 +1225,10 @@ it("rolls back the entire batch before any inbox write when a gate check throws"
     h.pod.requests.some(({ url, method }) => method === "PUT" && url.includes("/direct/")),
   ).toBe(false);
   expect(h.state.cursors.size).toBe(0);
-  expect(h.ledger.entries()).toHaveLength(0);
+  expect(h.ledger.entries().map(({ record }) => record.type)).toEqual([
+    "gate-decision",
+    "record-anchor",
+  ]);
   expect(reader).not.toHaveBeenCalled();
   expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
 });
@@ -1192,7 +1246,10 @@ it.each([
   ["malformed", {}],
   ["bounds-exceeded", {}],
 ] as const)("refuses %s through the daemon's inbound gate", async (reason, changes) => {
-  const { gate, peer, receiver, sign, now } = await createTestGate();
+  const { gate, peer, receiver, sign, now } = await createTestGate(undefined, {
+    actor: AGENT_ID,
+    party: OWNER,
+  });
   try {
     const message = {
       profile: PILOT_PROFILE,
@@ -1275,6 +1332,18 @@ it.each([
     expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
     expect(h.pod.requests.some(({ url }) => url.includes("/inbox/direct/"))).toBe(false);
     expect(h.ledger.entries().some(({ record }) => record.type === "ingest")).toBe(false);
+    const gateDecisions = h.ledger
+      .entries()
+      .filter(({ record }) => record.type === "gate-decision" && record.outcome === "refuse");
+    expect(gateDecisions).toHaveLength(1);
+    expect(gateDecisions[0]?.record).toMatchObject({
+      direction: "in",
+      outcome: "refuse",
+      reason,
+      configuration: CONFIG_ED25519,
+      messageDigest: `sha-256:${checked.message.rawSha256}`,
+    });
+
     expect(h.state.cursors.get("fixture")).toBe("one");
     expect((await gate.status()).ledger.ok).toBe(true);
   } finally {
@@ -1284,7 +1353,10 @@ it.each([
 
 it("drops a genuinely bad signature and admits the valid signed message down the same reader", async () => {
   const h = harness();
-  const { gate, sign, peer, receiver, now } = await createTestGate();
+  const { gate, sign, peer, receiver, now } = await createTestGate(undefined, {
+    actor: AGENT_ID,
+    party: OWNER,
+  });
   try {
     const messageId = "urn:uuid:00000000-0000-4000-8000-000000000051";
     const jws = await sign({
@@ -1321,7 +1393,10 @@ it("drops a genuinely bad signature and admits the valid signed message down the
     expect(extracted).not.toHaveBeenCalled();
     expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
     expect(h.pod.requests.some(({ url }) => url.includes("/inbox/direct/"))).toBe(false);
-    expect(h.ledger.entries()).toHaveLength(0);
+    expect(h.ledger.entries().map(({ record }) => record.type)).toEqual([
+      "gate-decision",
+      "record-anchor",
+    ]);
 
     const batch = { items: [{ id: "good", raw: good }], next: "two" };
     h.ingest.list.mockResolvedValue(batch);
@@ -1348,7 +1423,7 @@ it("drops a genuinely bad signature and admits the valid signed message down the
 
 it.each([false, true])("stores and triages plain email with owner flag %s", async (flagged) => {
   const h = harness();
-  const { gate } = await createTestGate();
+  const { gate } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const raw = [
     "From: peer@example.test",
     "To: receiver@example.test",
@@ -1391,7 +1466,7 @@ it.each([false, true])("stores and triages plain email with owner flag %s", asyn
 
 it("imports Latin-1 HTML mail before committing its cursor", async () => {
   const h = harness();
-  const { gate } = await createTestGate();
+  const { gate } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const raw = [
     "From: peer@example.test",
     "To: receiver@example.test",
@@ -1431,7 +1506,7 @@ it.each([
   ["text/html", "<p>Ordinary attachment</p>"],
 ])("imports ordinary mail with 13 %s attachments before committing its cursor", async (type, body) => {
   const h = harness();
-  const { gate } = await createTestGate();
+  const { gate } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const raw = [
     "From: peer@example.test",
     "To: receiver@example.test",
@@ -1562,7 +1637,7 @@ it.each([
 
 it("records a body-free Teams refusal before checkpointing the later valid message", async () => {
   const h = harness();
-  const { gate, ledger } = await createTestGate();
+  const { gate, ledger } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const oversized = { id: "oversized", subject: "x".repeat(65_536) };
   const { binding } = teams.reader([
     teams.page([{ id: teams.chat }]),
@@ -2568,12 +2643,18 @@ it.each([
 
 it("caches and audits a gate refusal without publishing or trying the proposal again", async () => {
   const h = harness();
-  const project = vi.fn<DaemonOptions["project"]>(async () => {
-    throw new ProposalRefusedError("unsupported-operation");
-  });
-  const daemon = createDaemon({ ...h.options, project });
+  const project = vi.fn(h.options.project);
+  const release = vi.fn(async () => ({ ok: false, reason: "unsupported-operation" }) as const);
+  const daemon = createDaemon({ ...h.options, project, gate: { ...h.options.gate, release } });
   await daemon.once();
   await daemon.once();
+  expect(release).toHaveBeenCalledOnce();
+  expect(
+    h.ledger
+      .entries()
+      .filter(({ record }) => record.type === "gate-decision" && record.direction === "out")
+      .map(({ record }) => record),
+  ).toMatchObject([{ outcome: "stop", reason: "unsupported-operation" }]);
   expect(project).toHaveBeenCalledOnce();
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
   const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
@@ -2592,4 +2673,503 @@ it("caches and audits a gate refusal without publishing or trying the proposal a
     proposal: proposal.id,
     reason: "unsupported-operation",
   });
+});
+
+it("writes a gate decision before handing the signed proposal to the projector", async () => {
+  const h = harness();
+  const project: DaemonOptions["project"] = async (proposal, sign) => {
+    const release = await sign();
+    if (!release.ok) throw new Error("Fixture release was refused");
+    expect(h.ledger.entries().at(-1)?.record).toMatchObject({
+      type: "gate-decision",
+      direction: "out",
+      outcome: "go",
+      messageDigest: digestBytes(release.renderable.compactJws),
+    });
+    return h.options.project(proposal, sign);
+  };
+  await createDaemon({ ...h.options, project }).once();
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+});
+
+it("keeps rendering and execution behind a durable outbound gate decision", async () => {
+  const h = harness();
+  const { append } = h.options.audit;
+  h.options.audit.append = async (record, at) => {
+    if (record.type === "gate-decision" && record.direction === "out")
+      throw new Error("Gate audit unavailable");
+    return append(record, at);
+  };
+  const render = vi.fn(h.options.project);
+  const project: DaemonOptions["project"] = async (proposal, sign) => {
+    try {
+      await sign();
+      return render(proposal, sign);
+    } catch {
+      throw new ProposalRefusedError("unsupported-operation");
+    }
+  };
+  await expect(createDaemon({ ...h.options, project }).once()).rejects.toThrow(
+    "Gate audit unavailable",
+  );
+  expect(render).not.toHaveBeenCalled();
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  expect(h.state.cursors.size).toBe(0);
+});
+
+it("seals a moved audit head at heartbeat and shutdown, retrying if another writer advances it", async () => {
+  const h = harness();
+  const at = new Date(AT).toISOString();
+  const control = { type: "control", agent: AGENT_ID, owner: OWNER } as const;
+  const first = h.ledger.append({ ...control, id: "urn:control:heartbeat" }, at);
+  const port = testRecordPort(AGENT_ID, OWNER);
+  const anchor = vi.fn(port.anchor);
+  anchor.mockImplementationOnce(async (head, publish) => {
+    expect(head).toEqual({ seq: first.seq, hash: first.hash });
+    h.ledger.append({ ...control, id: "urn:control:concurrent" }, at);
+    return port.anchor(head, publish);
+  });
+  h.executor.runOutboxOnce.mockImplementationOnce(async () => {
+    expect(h.ledger.entries().at(-1)?.record).toMatchObject({
+      type: "record-anchor",
+      seq: 2,
+    });
+    h.ledger.append({ ...control, id: "urn:control:shutdown" }, at);
+    return {};
+  });
+  const daemon = createDaemon({
+    ...h.options,
+    accounts: [],
+    gate: { ...h.options.gate, head: port.head, anchor, release: vi.fn() },
+  });
+  await daemon.once();
+  expect(h.ledger.entries().at(-1)?.record).toMatchObject({ type: "record-anchor", seq: 4 });
+  expect(anchor).toHaveBeenCalledTimes(3);
+  await daemon.once();
+  expect(anchor).toHaveBeenCalledTimes(3);
+});
+
+it.each([
+  "local append",
+  "mirror",
+] as const)("recovers a refused check after %s failure and reopening the daemon", async (failure) => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "brief-41-recovery-"));
+  const ref = {
+    directory: join(directory, "gate"),
+    ownerDir: join(directory, "owner"),
+    agentWebId: AGENT_ID,
+    ownerWebId: OWNER,
+    now: () => new Date(AT),
+  };
+  try {
+    await initGate({ ...ref, confirm: async () => true });
+    const { append } = h.options.audit;
+    let interrupted = false;
+    h.options.audit.append = async (record, at) => {
+      if (record.type === "gate-decision" && !interrupted) {
+        interrupted = true;
+        if (failure === "mirror") await append(record, at);
+        throw new Error("Interrupted after gate commit");
+      }
+      return append(record, at);
+    };
+    const start = (accounts = h.options.accounts) =>
+      createDaemon({ ...h.options, accounts, gate: createInboundGate(ref) }).once();
+    await expect(start()).rejects.toThrow("Interrupted after gate commit");
+    expect(h.state.cursors.size).toBe(0);
+    const decisions = () =>
+      h.ledger.entries().filter(({ record }) => record.type === "gate-decision");
+    expect(decisions()).toHaveLength(failure === "mirror" ? 1 : 0);
+    if (failure === "local append") {
+      // An empty account list proves startup recovery runs independently of redelivery.
+      await start([]);
+      expect(decisions()).toHaveLength(1);
+    }
+    await start();
+    expect(decisions()).toHaveLength(1);
+    const decision = decisions()[0]?.record;
+    if (decision?.type !== "gate-decision") throw new Error("Missing linked decision");
+    const { gateSeq, gateHash } = decision;
+    expect(decision).toMatchObject({
+      id: `urn:sha256:${digestOf({ gateSeq, gateHash }).slice(8)}`,
+      direction: "in",
+      outcome: "refuse",
+      messageDigest: `sha-256:${h.message.rawSha256}`,
+    });
+    expect(h.state.cursors.get("fixture")).toBe("one");
+    expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+async function withDurableGate(
+  exercise: (ref: Parameters<typeof openGate>[0], directory: string) => Promise<void>,
+) {
+  const directory = await mkdtemp(join(tmpdir(), "brief-41q-"));
+  const ref = { directory: join(directory, "gate"), now: () => new Date(AT) };
+  try {
+    await initGate({
+      ...ref,
+      ownerDir: join(directory, "owner"),
+      agentWebId: AGENT_ID,
+      ownerWebId: OWNER,
+      confirm: async () => true,
+    });
+    await exercise(ref, directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+it.each([
+  "before gate decision append",
+  "after gate decision fsync",
+] as const)("reconciles exactly one completed check after a crash %s", async (boundary) =>
+  withDurableGate(async (ref) => {
+    const h = harness();
+    const gateLedger = join(ref.directory, "ledger.jsonl");
+    const gateDecisions = () =>
+      readLedgerSegment(gateLedger).filter(({ record }) => record.type === "suite-gate-decision");
+    const start = (accounts = h.options.accounts) =>
+      createDaemon({ ...h.options, accounts, gate: createInboundGate(ref) }).once();
+    const reader = vi.spyOn(h.options.gateway.reader, "extract");
+    const save = FileStateStore.prototype.save;
+    const commit = AgentRuntime.prototype.commitBindingEvent;
+    const crash = new Error("simulated gate process exit");
+    const write =
+      boundary === "after gate decision fsync"
+        ? vi.spyOn(FileStateStore.prototype, "save").mockImplementation(function (
+            this: FileStateStore,
+            state,
+          ) {
+            if (gateDecisions().length) throw crash;
+            save.call(this, state);
+          })
+        : vi.spyOn(AgentRuntime.prototype, "commitBindingEvent").mockImplementation(function (
+            this: AgentRuntime,
+            record,
+          ) {
+            if (record.type === "suite-gate-decision") return Promise.reject(crash);
+            return commit.call(this, record);
+          });
+    try {
+      await expect(start()).rejects.toThrow(crash);
+      expect(gateDecisions()).toHaveLength(boundary === "after gate decision fsync" ? 1 : 0);
+      expect(reader).not.toHaveBeenCalled();
+      expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+      expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+      expect(h.ledger.entries()).toHaveLength(0);
+    } finally {
+      write.mockRestore();
+    }
+    const decisions = () =>
+      h.ledger.entries().filter(({ record }) => record.type === "gate-decision");
+    h.executor.runOutboxOnce.mockImplementationOnce(async () => {
+      expect(decisions().map(({ record }) => record)).toMatchObject([
+        {
+          direction: "in",
+          outcome: "refuse",
+          reason: "malformed",
+          messageDigest: `sha-256:${h.message.rawSha256}`,
+        },
+      ]);
+      return {};
+    });
+    await start([]);
+    await start();
+    expect(decisions()).toHaveLength(1);
+    expect(gateDecisions()).toHaveLength(1);
+  }));
+
+it("fails closed when restoring an older gate snapshot beside the suite decisions", async () =>
+  withDurableGate(async (ref, directory) => {
+    const h = harness();
+    const initial = await openGate(ref);
+    await initial.close();
+    const snapshot = ["state.json", "ledger.jsonl"].map((name) => ({
+      path: join(ref.directory, name),
+      backup: join(directory, `older-${name}`),
+    }));
+    await Promise.all(snapshot.map(({ path, backup }) => copyFile(path, backup)));
+    const start = () => createDaemon({ ...h.options, gate: createInboundGate(ref) }).once();
+    await start();
+    const reader = vi.spyOn(h.options.gateway.reader, "extract");
+    h.executor.runOutboxOnce.mockClear();
+    await Promise.all(snapshot.map(({ path, backup }) => copyFile(backup, path)));
+    await expect(start()).rejects.toThrow("Audit ledger gate record missing");
+    expect(reader).not.toHaveBeenCalled();
+    expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+    expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  }));
+
+it("reconciles from the pruned gate decision watermark when no linked decisions remain", async () =>
+  withDurableGate(async (ref, directory) => {
+    const h = harness();
+    const path = join(directory, "events.jsonl");
+    let ledger = new FileLedger(path, { segmentMaxEntries: 2, maxSegments: 1 });
+    const audit: DaemonOptions["audit"] = {
+      append: async (record, at) => ledger.append(record, at),
+      entries: () => ledger.entries(),
+      sync: async () => undefined,
+    };
+    const start = (accounts = h.options.accounts) =>
+      createDaemon({ ...h.options, accounts, audit, gate: createInboundGate(ref) }).once();
+    await start();
+    const linked = ledger.entries().find(({ record }) => record.type === "gate-decision")?.record;
+    if (linked?.type !== "gate-decision") throw new Error("Missing linked decision");
+    const control = () =>
+      ledger.append(
+        { type: "control", id: "urn:control:retention", agent: AGENT_ID, owner: OWNER },
+        new Date(AT).toISOString(),
+      );
+    for (let i = 0; i < 3; i++) {
+      control();
+      await start([]);
+    }
+    for (let i = 0; i < 5; i++) control();
+    expect(ledger.entries().some(({ record }) => record.type === "gate-decision")).toBe(false);
+    ledger = new FileLedger(path, { segmentMaxEntries: 2, maxSegments: 1 });
+    const append = vi.spyOn(audit, "append");
+    await start([]);
+    expect(append).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "gate-decision" }),
+      expect.any(String),
+    );
+    expect(ledger.entries().map(({ record }) => record)).toContainEqual(
+      expect.objectContaining({
+        type: "ledger-checkpoint",
+        lastPrunedGate: { seq: linked.gateSeq, hash: linked.gateHash },
+      }),
+    );
+  }));
+
+it.each([
+  "retained decision",
+  "suite checkpoint",
+] as const)("starts after gate retention prunes the link in a %s", async (link) =>
+  withDurableGate(async (ref, directory) => {
+    const h = harness();
+    const at = new Date(AT).toISOString();
+    const gate = await openGate(ref);
+    const digest = digestBytes("synthetic delivery");
+    let head: ReturnType<typeof gate.head>;
+    try {
+      await gate.recordParseRefusal({
+        binding: "direct",
+        account: "fixture",
+        reason: "malformed",
+        digest,
+      });
+      head = gate.head();
+    } finally {
+      await gate.close();
+    }
+    const decision = h.ledger.append(
+      {
+        agent: AGENT_ID,
+        owner: OWNER,
+        id: "urn:decision:retention",
+        type: "gate-decision",
+        direction: "in",
+        outcome: "refuse",
+        reason: "malformed",
+        messageDigest: digest,
+        configuration: CONFIG_ED25519,
+        gateSeq: head.seq,
+        gateHash: head.hash,
+      },
+      at,
+    );
+    const retained =
+      link === "retained decision"
+        ? decision
+        : seal(2, at, decision.hash, {
+            type: "ledger-checkpoint",
+            lastPrunedSeq: decision.seq,
+            lastPrunedHash: decision.hash,
+            lastPrunedGate: head,
+          });
+    const path = join(directory, "events.jsonl");
+    await writeFile(path, `${JSON.stringify(retained)}\n`);
+    const audit = new FileLedger(path);
+    const ledger = new ReferenceLedger(join(ref.directory, "ledger.jsonl"), {
+      segmentMaxEntries: 1,
+      maxSegments: 1,
+    });
+    for (let i = 0; i < 3; i++) ledger.append({ type: "fixture" }, at);
+    expect(ledger.entries()[0]?.seq).toBeGreaterThan(head.seq);
+    const store = new FileStateStore(join(ref.directory, "state.json"));
+    try {
+      store.save({ ...store.load(), ledgerAuditHead: ledger.head() });
+    } finally {
+      store.close();
+    }
+    await createDaemon({
+      ...h.options,
+      accounts: [],
+      audit: {
+        append: async (record, time) => audit.append(record, time),
+        entries: () => audit.entries(),
+        sync: async () => undefined,
+      },
+      gate: createInboundGate(ref),
+    }).once();
+    expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(1);
+    const print = vi.fn();
+    const host = createCliHost({
+      gate: { stateDirectory: directory, agentWebId: AGENT_ID, ownerWebId: OWNER },
+      daemon: async () => {
+        throw new Error("Local audit does not start the daemon");
+      },
+      local: createLocalState(directory),
+      ledger: audit,
+      accounts: vi.fn(),
+      credentials: {} as never,
+      openLoginUrl: vi.fn(),
+      launchCommand: [],
+    });
+    expect(
+      await runCli(["audit", "--ledger", path], host, {
+        print,
+        confirm: vi.fn(),
+        signal: new AbortController().signal,
+      }),
+    ).toBe(0);
+    expect(print).toHaveBeenCalledWith("unverifiable-pruned gate links: 1");
+    expect(print).toHaveBeenCalledWith("PASS");
+  }));
+
+it("rejects a forged startup anchor even when the gate already witnessed its head", async () =>
+  withDurableGate(async (ref) => {
+    const h = harness();
+    const reader = vi.spyOn(h.options.gateway.reader, "extract");
+    const at = new Date(AT).toISOString();
+    const identity = { agent: AGENT_ID, owner: OWNER };
+    const { seq, hash } = h.ledger.append(
+      { ...identity, type: "control", id: "urn:control:head" },
+      at,
+    );
+    const gate = await openGate(ref);
+    try {
+      const jws = await gate.anchor({ seq, hash });
+      h.ledger.append(
+        {
+          ...identity,
+          type: "record-anchor",
+          id: "urn:anchor:forged",
+          seq,
+          hash,
+          jws: jws.replace(/\.[^.]+$/, `.${"a".repeat(86)}`),
+        },
+        at,
+      );
+    } finally {
+      await gate.close();
+    }
+    await expect(
+      createDaemon({ ...h.options, gate: createInboundGate(ref) }).once(),
+    ).rejects.toThrow("invalid anchor signature at record 2");
+    expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+    expect(reader).not.toHaveBeenCalled();
+  }));
+
+it("witnesses the exact durable orphan anchor before dispatch, only once across restarts", async () =>
+  withDurableGate(async (ref) => {
+    const h = harness();
+    const at = new Date(AT).toISOString();
+    const identity = { agent: AGENT_ID, owner: OWNER };
+    const { seq, hash } = h.ledger.append(
+      { ...identity, type: "control", id: "urn:control:head" },
+      at,
+    );
+    const gate = await openGate(ref);
+    try {
+      await expect(
+        gate.anchor({ seq, hash }, async (jws) => {
+          h.ledger.append(
+            { ...identity, type: "record-anchor", id: "urn:anchor:orphan", seq, hash, jws },
+            at,
+          );
+          throw new Error("crashed before witnessing");
+        }),
+      ).rejects.toThrow("crashed before witnessing");
+    } finally {
+      await gate.close();
+    }
+    const witnesses = () =>
+      readLedgerSegment(join(ref.directory, "ledger.jsonl"))
+        .filter(({ record }) => record.type === "record-anchor-receipt")
+        .map(({ record }) => record);
+    expect(witnesses()).toHaveLength(0);
+    h.executor.runOutboxOnce.mockImplementation(async () => {
+      expect(witnesses()).toMatchObject([{ seq, hash }]);
+      return {};
+    });
+    const start = () =>
+      createDaemon({ ...h.options, accounts: [], gate: createInboundGate(ref) }).once();
+    await start();
+    await start();
+    expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(2);
+    expect(h.ledger.entries()).toHaveLength(2);
+  }));
+
+it.each([
+  "healthy",
+  "interrupted",
+] as const)("audits a release through the factory signer with a %s audit writer", async (mode) => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "brief-41-factory-release-"));
+  const ref = {
+    directory: join(directory, "gate"),
+    ownerDir: join(directory, "owner"),
+    agentWebId: AGENT_ID,
+    ownerWebId: OWNER,
+    now: () => new Date(AT),
+  };
+  try {
+    await initGate({ ...ref, confirm: async () => true });
+    const gate = createInboundGate(ref);
+    h.ingest.parse.mockReturnValue({ ...h.message, jsonLdBlocks: [] });
+    const project: DaemonOptions["project"] = async (proposal) => {
+      // This is the signer captured by createOutboxProjector in the Phase 3 composition.
+      const release = await gate.release(proposal);
+      expect(release).toEqual({ ok: false, reason: "unsupported-operation" });
+      expect(h.ledger.entries().at(-1)?.record).toMatchObject({
+        type: "gate-decision",
+        direction: "out",
+        outcome: "stop",
+        reason: "unsupported-operation",
+      });
+      throw new ProposalRefusedError("unsupported-operation");
+    };
+    const options = { ...h.options, gate, project, isFlagged: async () => true };
+    if (mode === "interrupted") {
+      const { append } = h.options.audit;
+      let interrupted = false;
+      h.options.audit.append = async (record, at) => {
+        if (record.type === "gate-decision" && record.direction === "out" && !interrupted) {
+          interrupted = true;
+          throw new Error("Release audit unavailable");
+        }
+        return append(record, at);
+      };
+      await expect(createDaemon(options).once()).rejects.toThrow("Release audit unavailable");
+      expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+      expect(h.state.cursors.size).toBe(0);
+      await createDaemon({ ...options, accounts: [], gate: createInboundGate(ref) }).once();
+      const decisions = h.ledger
+        .entries()
+        .filter(({ record }) => record.type === "gate-decision" && record.direction === "out");
+      expect(decisions.map(({ record }) => record)).toMatchObject([
+        { outcome: "stop", reason: "unsupported-operation", taskId: expect.any(String) },
+      ]);
+    } else {
+      await createDaemon(options).once();
+    }
+    expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

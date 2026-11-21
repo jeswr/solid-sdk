@@ -11,13 +11,20 @@ import {
   taskStatsCsv,
   taskStatsJson,
 } from "@jeswr/agent-audit";
+import { verifyLedger as verifyAuditLedger } from "@jeswr/agent-audit/verify";
 import { type Deps, login } from "@jeswr/agent-credentials";
 import type { ControlStore } from "@jeswr/agent-executor";
 import type { IntroductionCard } from "@jeswr/agent-reference";
 import { constants, existsSync } from "fs";
 import { open } from "fs/promises";
 import { join } from "path";
-import { installGateMandate, readGateStatus } from "./gate.js";
+import {
+  installGateMandate,
+  readGate,
+  readGateStatus,
+  readSavedGateEvidence,
+  validAnchorSignature,
+} from "./gate.js";
 import { initGate, pinPeer } from "./gate-setup.js";
 import { installLaunchd } from "./launchd.js";
 import { type createLocalState, createProcessLease } from "./local.js";
@@ -104,13 +111,18 @@ export function createCliHost(o: CliHostOptions): CliHost {
     async stats(task) {
       return aggregateTaskStats(o.ledger.entries(), task);
     },
-    audit: (args, print) => runAuditCli(args, print),
+    audit(args, print) {
+      if (args[0] === "--ledger") return auditLocal(args, print, o.gate);
+      if (args.length === 1 && args[0] === "--help")
+        print("Usage: awp audit --ledger <events.jsonl>");
+      return runAuditCli(args, print);
+    },
     install: (confirm) => installLaunchd({ command: o.launchCommand, confirm }),
     ...(o.gate ? { gate: gateCommand(o.gate) } : {}),
   };
 }
 const usage =
-  "Usage: awp run | once | halt | resume | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd | gate";
+  "Usage: awp run | once | halt | resume | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | audit --ledger <events.jsonl> | install-launchd | gate";
 const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
 const gateUsage =
   "Usage: awp gate init --owner-dir <dir> | pin <card.json> | mandate <mandate.jws> | status";
@@ -179,6 +191,53 @@ function readLedger(path: string): readonly LedgerEntry[] {
   const ledger = new FileLedger(path);
   if (!existsSync(path) && ledger.segments().length === 0) throw new Error("Missing ledger");
   return ledger.entries();
+}
+/** Compare local records with the paired reference ledger and the configured actor key. */
+async function auditLocal(
+  args: readonly string[],
+  print: (line: string) => void,
+  options: CliHostOptions["gate"],
+): Promise<number> {
+  const fail = (problem: string) => {
+    print(`BREACH ${problem}`);
+    return 1;
+  };
+  const path = args[1];
+  if (args.length !== 2 || !path || path.startsWith("--") || !options)
+    return fail("local audit requires a ledger path and configured gate");
+  print("Truncation of the unwitnessed tail after the latest witness cannot be detected.");
+  let entries: readonly LedgerEntry[];
+  try {
+    entries = readLedger(path);
+  } catch {
+    return fail("audit ledger integrity or read failure");
+  }
+  const directory = join(options.stateDirectory, "gate");
+  const stored = await readGate(directory);
+  const { actor, party } = stored.identity;
+  if (actor !== options.agentWebId || party !== options.ownerWebId)
+    return fail("gate identity mismatch");
+  let evidence: Awaited<ReturnType<typeof readSavedGateEvidence>>;
+  try {
+    evidence = await readSavedGateEvidence(stored.dir, stored.identity);
+  } catch {
+    return fail("gate ledger integrity failure");
+  }
+  const check = verifyAuditLedger(entries, evidence);
+  if (!check.ok) return fail(`${check.problem} at record ${check.firstBadSeq}`);
+  for (const { seq, record } of entries) {
+    if (record.type === "ledger-checkpoint") continue;
+    if (record.agent !== actor || record.owner !== party)
+      return fail(`identity mismatch at record ${seq}`);
+    if (record.type !== "record-anchor") continue;
+    // The schema checks the exact signed payload shape and its agreement with this row.
+    if (!(await validAnchorSignature(record.jws, stored.actorKey)))
+      return fail(`invalid anchor signature at record ${seq}`);
+  }
+  if (check.unverifiablePrunedGateLinks)
+    print(`unverifiable-pruned gate links: ${check.unverifiablePrunedGateLinks}`);
+  print("PASS");
+  return 0;
 }
 async function runStats(rest: readonly string[], host: CliHost | undefined, io: CliIo) {
   if (rest.length === 1 && rest[0] === "--help") {

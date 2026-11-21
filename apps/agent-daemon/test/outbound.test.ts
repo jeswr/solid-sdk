@@ -9,7 +9,7 @@ import * as execution from "@jeswr/agent-executor";
 import { createMemoryStores } from "@jeswr/agent-executor/testing";
 import { AGENT, issueApproval, solidOdrlEngine, verifyApproval } from "@jeswr/agent-mandate";
 import { type ActionProposal, canonicalJson, digestBytes } from "@jeswr/agent-model";
-import { CONFIG_ED25519, saveAgent } from "@jeswr/agent-reference";
+import { AgentRuntime, CONFIG_ED25519, saveAgent } from "@jeswr/agent-reference";
 import {
   SCHEDULE_OP,
   SchedulingHandler,
@@ -26,6 +26,7 @@ import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { installGateMandate, type OutboundMapping } from "../src/gate.js";
 import * as daemon from "../src/index.js";
+import { createMemoryPod, createMemoryState, createTestMemory } from "../src/testing.js";
 
 const AT = "2026-11-21T12:00:00.000Z";
 const UNTIL = "2026-11-22T12:00:00.000Z";
@@ -254,6 +255,8 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
     receiver,
     peerRuntime,
     inbound: inbound.message,
+    raw: encodeEnvelope(jws),
+    options,
     binding,
     gate,
     stores,
@@ -428,6 +431,37 @@ it("rechecks a previously released proposal after a deny-all mandate is installe
   }
 });
 
+it("recovers the decision for a committed release interrupted before its gate decision append", async () => {
+  const f = await fixture();
+  try {
+    const commit = AgentRuntime.prototype.commitBindingEvent;
+    const interrupt = vi.spyOn(AgentRuntime.prototype, "commitBindingEvent");
+    interrupt.mockImplementation(function (this: AgentRuntime, record) {
+      if (record.type === "suite-gate-decision" && record.direction === "out")
+        return Promise.reject(new Error("crashed after the release receipt"));
+      return commit.call(this, record);
+    });
+    try {
+      await expect(f.project()).rejects.toThrow("crashed after the release receipt");
+      expect(f.stores.entries.size).toBe(0);
+    } finally {
+      interrupt.mockRestore();
+    }
+    const reopened = await f.reopen();
+    const decisions = () => reopened.decisions(0).filter(({ direction }) => direction === "out");
+    expect(decisions()).toMatchObject([{ outcome: "go", reason: "go" }]);
+    const entry = await f.project();
+    expect(decisions()).toMatchObject([
+      {
+        outcome: "go",
+        messageDigest: digestBytes(entry.renderable.compactJws),
+      },
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
 it("rejects a gate envelope used for a different proposal or conversation", async () => {
   const f = await fixture();
   try {
@@ -572,5 +606,118 @@ it.each([
     expect(composition).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
+  }
+});
+
+it("renders a valid release using sign: gate.release only after its linked decision is durable", async () => {
+  const f = await fixture();
+  await f.gate.close();
+  const gate = daemon.createInboundGate(f.options);
+  const podRoot = "https://pod.example/";
+  const pod = createMemoryPod(podRoot);
+  const state = createMemoryState();
+  const ledger = new MemoryLedger();
+  const direct = createInMemoryDirectBinding({
+    tokens: f.tokens,
+    now: () => now().getTime(),
+    verify: gate.verifyOwn,
+  });
+  const render = vi.fn<typeof direct.send.render>(async (...args) => {
+    expect(ledger.entries().at(-1)?.record).toMatchObject({
+      type: "gate-decision",
+      direction: "out",
+      outcome: "go",
+      messageDigest: digestBytes(args[0].compactJws),
+    });
+    return direct.send.render(...args);
+  });
+  const project = execution.createOutboxProjector({
+    bindings: {
+      direct: {
+        ...direct,
+        send: {
+          ...direct.send,
+          render,
+          validate: (wire, { renderable, expected }) =>
+            direct.send.validate(wire, renderable, expected),
+        },
+      },
+    },
+    accounts: { direct: account },
+    sign: gate.release,
+  });
+  try {
+    await daemon
+      .createDaemon({
+        gate,
+        accounts: [
+          {
+            id: "fixture",
+            binding: {
+              id: "direct",
+              ingest: {
+                ...direct.ingest,
+                list: async () => ({ items: [{ id: f.inbound.id, raw: f.raw }], next: "one" }),
+              },
+            },
+            enabled: true,
+            category: "chat",
+          },
+        ],
+        workspace: new daemon.PodWorkspace({
+          io: pod.io,
+          storage: pod.storage,
+          root: podRoot,
+          ownerWebId: agent.party,
+          privateTypeIndex: `${podRoot}settings/privateTypeIndex.ttl`,
+        }),
+        notifications: { subscribe: vi.fn(), plan: vi.fn() },
+        executor: f.executor,
+        lease: state.lease,
+        checkpoints: state.checkpoints,
+        proposalResults: state.proposalResults,
+        gateway: {
+          reader: {
+            async extract(_input, schema) {
+              return {
+                data: schema.parse({ primary: "action", urgency: "not_urgent", confidence: 1 }),
+                calls: [],
+              };
+            },
+          },
+          proposer: {
+            async propose() {
+              return { proposals: [f.proposal], calls: [] };
+            },
+          },
+        },
+        memory: createTestMemory(),
+        proposerContext: {
+          pod: {
+            root: podRoot,
+            webId: agent.party,
+            read: vi.fn(),
+            write: vi.fn(),
+            delete: vi.fn(),
+            list: vi.fn(),
+          },
+          instructions: "Synthetic fixture",
+        },
+        isFlagged: async () => false,
+        project,
+        audit: {
+          append: async (record, at) => ledger.append(record, at),
+          entries: () => ledger.entries(),
+          sync: async () => {},
+        },
+        agentWebId: agent.actor,
+        ownerWebId: agent.party,
+        now: () => now().getTime(),
+      })
+      .once();
+    expect(render).toHaveBeenCalledOnce();
+    expect(pod.resources.has(f.proposal.id)).toBe(true);
+  } finally {
+    await f.close();
   }
 });

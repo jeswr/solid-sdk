@@ -14,6 +14,7 @@ import {
   auditHeadToTurtle,
   auditJsonLd,
   auditToTurtle,
+  GATE_AUDIT_LABELS,
   GENESIS,
   readAudit,
   readAuditHead,
@@ -365,4 +366,41 @@ it.each([
   expect(auditJsonLd([entry], `${BASE}audit/`)["@graph"][0]).toMatchObject({
     "prov:used": [{ "@id": record.modelCall }],
   });
+});
+
+it("reads seeded gate-decision and record-anchor Activity entries", async () => {
+  const seed = new Map(
+    ["gate-decision", "record-anchor"].map((kind, index) => [
+      `${BASE}audit/${index + 1}.ttl`,
+      readFileSync(
+        new URL(`../../../packages/agent-audit/test/fixtures/${kind}.ttl`, import.meta.url),
+        "utf8",
+      ),
+    ]),
+  );
+  seed.set(
+    `${BASE}audit/`,
+    `@prefix ldp: <http://www.w3.org/ns/ldp#>. <> ldp:contains <1.ttl>, <2.ttl>.`,
+  );
+  const client = clientFor(async (input) => {
+    const body = seed.get(String(input));
+    return new Response(body, {
+      status: body ? 200 : 404,
+      headers: { "Content-Type": "text/turtle" },
+    });
+  });
+  const rows = await readAudit(client);
+  const entries = rows.filter(isLoaded).map(({ record }) => record);
+  expect(entries.map(({ record }) => record)).toMatchObject([
+    { type: "record-anchor", seq: 1, hash: entries[1]?.hash },
+    { type: "gate-decision", outcome: "refuse", gateSeq: 42, reason: "bad-signature" },
+  ]);
+  expect(
+    entries.map(({ record }) =>
+      record.type === "gate-decision" || record.type === "record-anchor"
+        ? GATE_AUDIT_LABELS[record.type]
+        : undefined,
+    ),
+  ).toEqual(["Record sealed", "Checked a message"]);
+  expect(verifyRange([...entries].reverse()).ok).toBe(true);
 });

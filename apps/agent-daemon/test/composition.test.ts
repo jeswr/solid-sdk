@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 import { composeDaemon } from "../src/daemon.js";
 import { createMemoryState, createTestMemory } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
+import { testRecordPort } from "./record-port.js";
 
 const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(),
@@ -49,7 +50,11 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
       expect(workspace.storage).toBe((await mocks.storage.mock.results.at(-1)?.value)?.storage);
       return {
         accounts: [],
-        gate: { check: vi.fn() },
+        gate: {
+          ...testRecordPort("https://pod.example/agent#me", options.ownerWebId),
+          check: vi.fn(),
+          release: vi.fn(),
+        },
         ...state,
         agentWebId: "https://pod.example/agent#me",
         executor: {
