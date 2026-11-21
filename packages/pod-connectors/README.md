@@ -81,6 +81,14 @@ Deterministic document paths and Type Index bootstrap
 behavior are preserved. The runner
 retains read preconditions for subsequent writes; explicit write conditions override them.
 
+Demo imports automatically attribute newly written connector subjects to `DEMO_CONNECTOR`
+from `@jeswr/suite-vocab` (`suite:demo-connector`, labelled **Demo data**). Carried-forward
+subjects and unseen subjects retained by a merge keep their existing attribution. Live writes
+add no demo marker; replacing a demo description with live data removes its marker. The agent
+name is added only to documents where this run marks a subject. Hosts may override `demoAgent`
+with an absolute HTTPS IRI without credentials and a nonblank label; invalid values fail before
+Pod I/O. Live mode ignores this option.
+
 Entry points:
 
 - `.`: contracts, runners, catalog, config factory, fetch-backed and storage-backed writers, errors.

@@ -1,5 +1,10 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { demoResources } from "../src/apps/home/lib/connect/connection-state";
+import { provenanceOf } from "../src/apps/home/lib/model/provenance";
+import { parseResource } from "../src/apps/home/lib/model/rdf";
+import { createConnectorPreferences } from "../src/apps/home/state/connectors";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
@@ -89,6 +94,29 @@ it("completes rides-only Strava imports in Mobility without an empty Health dest
   expect(
     [...host.querySelectorAll(".hm-connect-actions a")].map((link) => link.getAttribute("href")),
   ).toEqual(["/home/mobility"]);
+  const connection = createConnectorPreferences(localStorage).read(DEMO_WEBID).strava;
+  if (!connection) throw new Error("Missing saved demo connection");
+  const urls = demoResources(connection);
+  expect(urls.length).toBeGreaterThan(0);
+  let imported = 0;
+  for (const url of urls) {
+    const dataset = await parseResource(
+      await (await session.fetch(url)).text(),
+      "text/turtle",
+      url,
+    );
+    const subjects = new Set(
+      [...dataset]
+        .map((quad) => quad.subject.value)
+        .filter((subject) => subject.startsWith(DEMO_ROOT) && subject !== url),
+    );
+    imported += subjects.size;
+    for (const subject of subjects)
+      expect(
+        provenanceOf(dataset, subject, url, { storage: DEMO_ROOT, documentUrl: url }).demo,
+      ).toBe(true);
+  }
+  expect(imported).toBe(1);
 });
 
 it.each([
