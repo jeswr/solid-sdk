@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { requirePodScopedUrl } from "./auth.js";
 import { fetchDocument } from "./fetch.js";
+import { strongWriteEtag } from "./generic-mutation.js";
 import { createMemoryTools, type MemoryClientInfo } from "./memory-tools.js";
 import { createPersonalTools } from "./personal-tools.js";
 import {
@@ -53,7 +54,7 @@ export function createPodToolRegistry(
         title: "Fetch a Solid resource",
         readOnly: true,
         description:
-          "Fetch a pod URL from search. Returns {id,title,text,url,metadata}: RDF as Turtle, text/* as text, binary metadata only; metadata.truncated flags the 1 MiB cap.",
+          "Fetch a pod URL from search. Returns {id,title,text,url,metadata}: RDF as Turtle, text/* as text, binary metadata only; metadata.etag is the resource version for conditional pod_write and metadata.truncated flags the 1 MiB cap.",
         inputSchema: z.object({ id: z.string().describe("Absolute resource URL within the pod.") }),
         async handler({ id }) {
           return toolText(JSON.stringify(await fetchDocument(pod, id)));
@@ -82,18 +83,26 @@ export function createPodToolRegistry(
         aliases: ["solid_read"],
         title: "Read a Solid resource",
         readOnly: true,
-        description: "Read an in-pod resource as Turtle, text, or base64 for binary data.",
+        description:
+          "Read an in-pod resource as Turtle, text, or base64 for binary data. A second text block supplies its ETag when available; pass that ETag as ifMatch to replace it with pod_write.",
         inputSchema: z.object({ url: z.string().describe("Resource URL within the pod.") }),
         async handler({ url }) {
           const target = requirePodScopedUrl({ podRoot: pod.root }, url);
           const bytes = await readResource(pod, target);
+          let text: string;
+          let etag = bytes.etag;
           if (bytes.contentType && RDF_MEDIA_TYPES.has(bytes.contentType)) {
-            return toolText((await readRdf(pod, target)).turtle);
+            const rdf = await readRdf(pod, target);
+            text = rdf.turtle;
+            etag = rdf.etag;
+          } else {
+            text =
+              bytes.text ??
+              `[binary ${bytes.contentType ?? "application/octet-stream"}, base64]\n${bytes.base64 ?? ""}`;
           }
-          return toolText(
-            bytes.text ??
-              `[binary ${bytes.contentType ?? "application/octet-stream"}, base64]\n${bytes.base64 ?? ""}`,
-          );
+          const result = toolText(text);
+          if (etag) result.content.push({ type: "text", text: `ETag: ${etag}` });
+          return result;
         },
       },
       readOnly,
@@ -124,10 +133,20 @@ export function createPodToolRegistry(
         aliases: ["solid_write"],
         title: "Write a Solid resource",
         readOnly: false,
-        description: "PUT a resource strictly below the pod root. Disabled unless readOnly:false.",
-        inputSchema: z.object({ url: z.string(), content: z.string(), contentType: z.string() }),
-        async handler({ url, content, contentType }) {
-          const result = await writeResource(pod, url, content, contentType);
+        description:
+          "Create a data resource strictly below the pod root with If-None-Match: *. To replace an existing resource, read it first and pass its strong ETag as ifMatch. Refuses access-control/description documents and fails closed if target or parent HEAD discovery is unavailable. Disabled unless readOnly:false.",
+        inputSchema: z.object({
+          url: z.string(),
+          content: z.string(),
+          contentType: z.string(),
+          ifMatch: z
+            .string()
+            .refine(strongWriteEtag, "Read the resource first and pass its strong ETag as ifMatch")
+            .optional()
+            .describe("Exact strong ETag from pod_read or fetch, required for replacement."),
+        }),
+        async handler({ url, content, contentType, ifMatch }) {
+          const result = await writeResource(pod, url, content, contentType, ifMatch);
           return toolText(`wrote ${result.url}${result.etag ? ` (etag ${result.etag})` : ""}`);
         },
       },

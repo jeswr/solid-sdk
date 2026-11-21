@@ -205,7 +205,8 @@ returns `0 | 1` and suppresses error details.
 Parser results include redacted `ChatConversation` values and local-only project
 locations. `runCapture` accepts injected home/cwd/env/stdin/HTTP transport and a
 shorter budget for embedding or tests; it always resolves to `0`.
-`./testing` exports an in-memory HTTP pod/token transport and a ZIP fixture builder.
+`./testing` exports an in-memory HTTP pod/token transport with versioned strong ETags
+and conditional create/update checks, plus a ZIP fixture builder.
 
 ```sh
 pnpm --filter @jeswr/agent-session-capture test

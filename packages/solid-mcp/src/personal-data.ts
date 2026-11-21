@@ -40,7 +40,7 @@ export function personalAclOptions(pod: PodPort) {
 }
 
 /** Check every decoding stage: backends may decode different numbers of times. */
-function pathAliases(url: URL): string[] {
+export function pathAliases(url: URL): string[] {
   let path = url.pathname;
   const aliases: string[] = [];
   for (let depth = 0; ; depth++) {

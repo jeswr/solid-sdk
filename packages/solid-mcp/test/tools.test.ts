@@ -15,6 +15,7 @@ function portablePod() {
   return {
     root: ROOT,
     webId: "",
+    head: vi.fn<NonNullable<PodPort["head"]>>(async () => ({ auxiliaryResources: [] })),
     read: vi.fn<PodPort["read"]>(async () => ({
       body: new TextEncoder().encode("hello"),
       contentType: "text/plain",
@@ -141,7 +142,7 @@ describe("tool registry over a fetch-free portable pod", () => {
     try {
       for (const name of ["pod_read", "solid_read"]) {
         expect(await client.callTool({ name, arguments: { url: FILE } })).toMatchObject({
-          content: [{ text: expect.stringContaining(' "Portable RDF"') }],
+          content: [{ text: expect.stringContaining(' "Portable RDF"') }, { text: 'ETag: "rdf"' }],
         });
       }
       expect(await client.readResource({ uri: FILE })).toMatchObject({
@@ -397,7 +398,7 @@ describe("tool registry over a fetch-free portable pod", () => {
           FILE,
           new TextEncoder().encode("hello"),
           "text/plain",
-          {},
+          { ifNoneMatch: "*" },
         );
         for (const url of [ROOT, ROOT.slice(0, -1)]) {
           expect(

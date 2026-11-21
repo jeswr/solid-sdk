@@ -14,7 +14,17 @@ import { ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
+import { requireContainerCreationBody } from "./container-mutation.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
+import {
+  AUXILIARY_MUTATION_DENIED,
+  MUTATION_DISCOVERY_UNAVAILABLE,
+  requireDataMutationMetadata,
+  requireDataMutationPath,
+  requireWriteConditions,
+  WRITE_CONFLICT,
+  WRITE_ETAG_REQUIRED,
+} from "./generic-mutation.js";
 import { PERSONAL_DATA_DENIED, requireGenericPodAccess } from "./personal-data.js";
 import type { PodChild, SearchMatch } from "./pod.js";
 import {
@@ -230,12 +240,44 @@ export class PodOutput {
 
   async write(url: string, body: Uint8Array, contentType: string, cond: PodConditions) {
     const target = this.target(url, true);
+    if (!this.personal) {
+      requireDataMutationPath(url);
+      const metadata = await this.mutationMetadata(target);
+      requireWriteConditions(cond);
+      if (cond.ifNoneMatch === "*" && metadata.exists === true)
+        throw new Error(WRITE_ETAG_REQUIRED);
+      await requireContainerCreationBody(target, body, contentType);
+    }
     return this.operation(() => this.pod.write(target, body, contentType, cond));
   }
 
   async delete(url: string, cond?: PodConditions): Promise<void> {
     const target = this.target(url, true);
+    if (!this.personal) {
+      requireDataMutationPath(url);
+      await this.mutationMetadata(target);
+    }
     return this.operation(() => this.pod.delete(target, cond));
+  }
+
+  private async mutationMetadata(target: string): Promise<PodHeadResult> {
+    requireDataMutationPath(target);
+    try {
+      return await withPodReadLimits(async () => {
+        const parent = new URL(new URL(target).pathname.endsWith("/") ? "../" : ".", target).href;
+        if (!this.pod.head) throw new Error();
+        // Use the current port and data-access context, including decorators.
+        const metadata = await this.operation(() => this.pod.head?.(target));
+        const parentMetadata = await this.operation(() => this.pod.head?.(this.target(parent)));
+        if (!metadata || !parentMetadata) throw new Error();
+        requireDataMutationMetadata(target, metadata);
+        requireDataMutationMetadata(target, parentMetadata);
+        return metadata;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === AUXILIARY_MUTATION_DENIED) throw error;
+      throw new Error(MUTATION_DISCOVERY_UNAVAILABLE);
+    }
   }
 
   /** A search name, snippet and URL are one authorized resource description. */
@@ -334,6 +376,16 @@ export function podOutputError(error: unknown): Error {
   if (message === PERSONAL_DATA_DENIED) return new Error(message);
   if (message === "Audit protection unavailable") return new Error(message);
   if (message === "Memory protection unavailable") return new Error(message);
+  if (message === "Chat protection unavailable") return new Error(message);
+  if (
+    [
+      AUXILIARY_MUTATION_DENIED,
+      MUTATION_DISCOVERY_UNAVAILABLE,
+      WRITE_ETAG_REQUIRED,
+      WRITE_CONFLICT,
+    ].includes(message)
+  )
+    return new Error(message);
   if (/purpose denied/i.test(message)) return new Error("purpose denied");
   if (/grant denied/i.test(message)) return new Error("grant denied");
   if (/pod-scope/i.test(message)) return new Error("pod-scope violation");

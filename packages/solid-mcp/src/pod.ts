@@ -20,6 +20,7 @@ import {
 } from "./auth.js";
 import { parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
+import { strongWriteEtag, WRITE_CONFLICT, WRITE_ETAG_REQUIRED } from "./generic-mutation.js";
 import { PodOutput } from "./output.js";
 import { requireGenericPodAccess } from "./personal-data.js";
 import { withPodDataAccess, withPodFetchLimits, withPodReadLimits } from "./pod-operation.js";
@@ -65,6 +66,8 @@ export interface ReadRdfResult {
   turtle: string;
   /** The parsed dataset, for callers that want to query it (e.g. search). */
   dataset: import("n3").Store;
+  /** Source version, omitted for projected container graphs. */
+  etag?: string;
 }
 
 /** A single search hit. */
@@ -182,19 +185,23 @@ export async function readRdf(source: PodSource, url: string): Promise<ReadRdfRe
     const read = await output.read(target, {
       accept: `${RDF_ACCEPT}, application/lws+json;q=0.8`,
     });
-    const dataset =
-      (await output.containerRdf(target, read)) ??
-      (await output.rdf(
-        target,
-        read,
-        await parseBoundedRdf(
-          new TextDecoder().decode(read.body),
-          mediaType(read.contentType || "text/turtle"),
-          read.url ?? target,
-        ),
-      ));
+    let dataset = await output.containerRdf(target, read);
+    let etag: string | undefined;
+    if (!dataset) {
+      const sourceDataset = await parseBoundedRdf(
+        new TextDecoder().decode(read.body),
+        mediaType(read.contentType || "text/turtle"),
+        read.url ?? target,
+      );
+      dataset = await output.rdf(target, read, sourceDataset);
+      if (dataset === sourceDataset) etag = read.etag;
+    }
     const turtle = await serializeTurtle(dataset);
-    return { turtle, dataset };
+    return {
+      turtle,
+      dataset,
+      ...(etag ? { etag } : {}),
+    };
   });
 }
 
@@ -558,18 +565,36 @@ async function typeIndexContainers(config: PodSource): Promise<string[]> {
 /**
  * Write `content` to `url` with `contentType` (pod-scoped) via PUT on the injected
  * fetch. GUARDED: throws if the server is read-only (the default). On a non-2xx
- * response it throws with the status.
+ * response it throws with the status. Creates use If-None-Match: *; replacements
+ * require the strong ETag returned by a read and use If-Match.
  */
 export async function writeResource(
   source: PodSource,
   url: string,
   content: string,
   contentType: string,
+  ifMatch?: string,
 ): Promise<{ url: string; etag?: string }> {
   const pod = asPodPort(source);
   const target = requirePodScopedWriteUrl({ podRoot: pod.root }, url);
   const output = new PodOutput(pod);
-  const result = await output.write(target, new TextEncoder().encode(content), contentType, {});
+  if (ifMatch !== undefined && !strongWriteEtag(ifMatch)) throw new Error(WRITE_ETAG_REQUIRED);
+  let result: { etag?: string };
+  try {
+    result = await output.write(
+      url,
+      new TextEncoder().encode(content),
+      contentType,
+      ifMatch === undefined ? { ifNoneMatch: "*" } : { ifMatch },
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (/(?:HTTP|status)\s*412/u.test(error.message) || ("status" in error && error.status === 412))
+    )
+      throw new Error(WRITE_CONFLICT);
+    throw error;
+  }
   // Mutation permission does not grant permission to describe the stored data.
   await output.read(target);
   return { url: target, ...(result.etag ? { etag: result.etag } : {}) };

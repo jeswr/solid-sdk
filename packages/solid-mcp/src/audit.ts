@@ -9,6 +9,7 @@ import {
 import { DataFactory as df, Store } from "n3";
 import { requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
+import { strongWriteEtag } from "./generic-mutation.js";
 import { MemoryNode, status } from "./memory-context.js";
 import { PodOutput } from "./output.js";
 import { auditContainer, personalAclOptions } from "./personal-data.js";
@@ -58,7 +59,7 @@ export async function auditSpecialRead(
   }
   function condition(existing?: PodReadResult): PodConditions {
     if (!existing) return { ifNoneMatch: "*" };
-    if (!existing.etag || !/^"[^"\r\n]*"(?![\s\S])/.test(existing.etag))
+    if (!existing.etag || !strongWriteEtag(existing.etag))
       throw new Error("Strong ETag required for audit");
     return { ifMatch: existing.etag };
   }

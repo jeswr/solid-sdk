@@ -146,6 +146,22 @@ async function messageId(message: ChatMessage): Promise<string> {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+/** Build the owner-only WAC dataset shared by ChatWriter and validating ports.
+ * Containers inherit Read, Write and Control through acl:default; files use only acl:accessTo.
+ * The caller must discover and validate the ACL association and enforce conditional persistence. */
+export function ownerOnlyChatAcl(acl: string, target: string, owner: string): Store {
+  const store = new Store();
+  const auth = new Authorization(`${acl}#owner`, store, DataFactory);
+  auth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+  auth.accessTo = target;
+  if (target.endsWith("/")) auth.default = target;
+  auth.agent.add(owner);
+  auth.canRead = true;
+  auth.canWrite = true;
+  auth.canReadWriteAcl = true;
+  return store;
+}
+
 /** Owner-only, create-only AS2 chat persistence, reusable by capture/import callers. */
 export class ChatWriter {
   private readonly base: string;
@@ -187,15 +203,7 @@ export class ChatWriter {
     } catch (error) {
       if (chatPortStatus(error) !== 404) throw error;
     }
-    const store = new Store();
-    const auth = new Authorization(`${acl}#owner`, store, DataFactory);
-    auth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
-    auth.accessTo = url;
-    if (url.endsWith("/")) auth.default = url;
-    auth.agent.add(this.owner);
-    auth.canRead = true;
-    auth.canWrite = true;
-    auth.canReadWriteAcl = true;
+    const store = ownerOnlyChatAcl(acl, url, this.owner);
     // No content is written until the owner-only ACL PUT succeeds. In particular,
     // never swallow ACL errors or fall back to inherited/public permissions.
     await this.pod.write(acl, encoder.encode(await storeToTurtle(store)), "text/turtle", {});
