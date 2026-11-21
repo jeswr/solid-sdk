@@ -178,7 +178,10 @@ export function sampledScenario(
   };
 }
 
-export async function captureModelCorpus(registry: VerifierRegistry): Promise<Corpus> {
+export async function captureModelCorpus(
+  registry: VerifierRegistry,
+  observeLedger?: (ledger: MemoryLedger) => void,
+): Promise<Corpus> {
   const root = new URL("../../", import.meta.url).pathname;
   const plan = samplePlan(root);
   const full = process.env.FULL_CORPUS === "1";
@@ -210,6 +213,7 @@ export async function captureModelCorpus(registry: VerifierRegistry): Promise<Co
     intents.set(digestOf(args[0]), copyData(args[0]));
     return authorise.apply(this, args);
   });
+  const ledgers = new Set<MemoryLedger>();
   const append = MemoryLedger.prototype.append;
   const ledgerSpy = vi.spyOn(MemoryLedger.prototype, "append").mockImplementation(function (
     this: MemoryLedger,
@@ -217,6 +221,7 @@ export async function captureModelCorpus(registry: VerifierRegistry): Promise<Co
     at,
   ) {
     ledgerSpy.mockClear();
+    if (observeLedger) ledgers.add(this);
     if (record.type === "agreement") {
       const agreement = record as Agreement;
       agreements.set(digestOf(agreement), copyData(agreement));
@@ -237,6 +242,8 @@ export async function captureModelCorpus(registry: VerifierRegistry): Promise<Co
         if (!full && !selected) continue;
         const input = full ? scenario : sampledScenario(scenario, configuration, selected!);
         const results = await runScenario(profile, input, { configuration, registry });
+        if (observeLedger) for (const ledger of ledgers) observeLedger(ledger);
+        ledgers.clear();
         paths += results.filter((result) => result.trace).length;
         for (const result of results)
           if (result.trace) {

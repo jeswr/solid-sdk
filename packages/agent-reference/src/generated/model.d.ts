@@ -103,6 +103,90 @@ export interface MessageAuthorshipEntity {
   ): Promise<MessageAuthorshipData | undefined>;
 }
 
+export interface RecordEntryData {
+  "at": Date;
+  "entryHash": string;
+  "previousEntry"?: string;
+  "previousEntryHash": string;
+  "record": string;
+  "recordDigest"?: string;
+  "recordType": string;
+  "sequence": number;
+}
+
+export interface RecordEntryWrapper extends EntityWrapper {
+  "at"?: Date;
+  "entryHash"?: string;
+  "previousEntry"?: string;
+  "previousEntryHash"?: string;
+  "record"?: string;
+  "recordDigest"?: string;
+  "recordType"?: string;
+  "sequence"?: number;
+}
+
+export interface RecordEntryEntity {
+  readonly name: "RecordEntry";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => RecordEntryWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: RecordEntryData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): RecordEntryData | undefined;
+  serialize(resourceUrl: string, data: RecordEntryData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<RecordEntryData | undefined>;
+}
+
+export interface WithheldRecordEntryData {
+  "at": Date;
+  "entryHash": string;
+  "previousEntry"?: string;
+  "previousEntryHash": string;
+  "record"?: string[];
+  "recordDigest"?: string;
+  "recordType"?: string[];
+  "sequence": number;
+}
+
+export interface WithheldRecordEntryWrapper extends EntityWrapper {
+  "at"?: Date;
+  "entryHash"?: string;
+  "previousEntry"?: string;
+  "previousEntryHash"?: string;
+  readonly "record": Set<string>;
+  "recordDigest"?: string;
+  readonly "recordType": Set<string>;
+  "sequence"?: number;
+}
+
+export interface WithheldRecordEntryEntity {
+  readonly name: "WithheldRecordEntry";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => WithheldRecordEntryWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: WithheldRecordEntryData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): WithheldRecordEntryData | undefined;
+  serialize(resourceUrl: string, data: WithheldRecordEntryData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<WithheldRecordEntryData | undefined>;
+}
+
 export declare const nodes: Readonly<Record<string, never>>;
 
 export interface GeneratedModel {
@@ -112,6 +196,8 @@ export interface GeneratedModel {
   readonly GrantRecord: GrantRecordEntity;
   readonly InvokeBodyChallenge: InvokeBodyChallengeEntity;
   readonly MessageAuthorship: MessageAuthorshipEntity;
+  readonly RecordEntry: RecordEntryEntity;
+  readonly WithheldRecordEntry: WithheldRecordEntryEntity;
   };
 }
 

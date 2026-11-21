@@ -29,6 +29,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const CLI = join(root, "dist", "pilot", "cli.js");
@@ -742,10 +743,8 @@ async function policyModuleChecks() {
   // Every authorisation decision the CLI agents recorded names the selected evaluator.
   const decided = {};
   for (const name of ["alice", "bob", "priya"]) {
-    const records = readFileSync(join(dir, name, "ledger.jsonl"), "utf8")
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => JSON.parse(l).record)
+    const records = readLedgerSegment(join(dir, name, "ledger.jsonl"))
+      .map(({ record }) => record)
       .filter((r) => r?.type === "authorisation-decision");
     const prefix = ENGINE === "sparq" ? "sparq-policy@" : "@jeswr/solid-odrl@";
     decided[name] = [

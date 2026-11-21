@@ -11,6 +11,7 @@ import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { digestBytes } from "@jeswr/agent-model";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
+import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -238,8 +239,10 @@ it("records an indeterminate check for a malformed verdict in the gate ledger", 
         message: { ...message, jsonLdBlocks: [encodeEnvelope("a.b.c")] },
       }),
     ).toMatchObject({ outcome: "refused", reason: "indeterminate" });
-    const lines = (await readFile(join(o.directory, "ledger.jsonl"), "utf8")).trimEnd().split("\n");
-    expect(lines.map((line) => JSON.parse(line).record)).toContainEqual(
+    const records = readLedgerSegment(join(o.directory, "ledger.jsonl")).map(
+      (entry) => entry.record,
+    );
+    expect(records).toContainEqual(
       expect.objectContaining({
         type: "binding-rejection",
         binding: "matrix",
@@ -247,7 +250,7 @@ it("records an indeterminate check for a malformed verdict in the gate ledger", 
         digest: `sha-256:${message.rawSha256}`,
       }),
     );
-    expect(JSON.parse(lines.at(-1) as string).record).toMatchObject({
+    expect(records.at(-1)).toMatchObject({
       type: "suite-gate-decision",
       outcome: "refuse",
       reason: "indeterminate",
@@ -301,11 +304,14 @@ it("keeps interrupted digests and refuses to open an altered ledger", async () =
     await gate.close();
   }
   const ledger = join(o.directory, "ledger.jsonl");
-  const lines = (await readFile(ledger, "utf8")).trimEnd().split("\n");
-  const entry = JSON.parse(lines[0] as string);
-  entry.record.reason = "altered";
-  lines[0] = JSON.stringify(entry);
-  await writeFile(ledger, `${lines.join("\n")}\n`);
+  // The ledger is held as RDF: change a digest recorded in a sealed record in place.
+  expect(JSON.stringify(readLedgerSegment(ledger).map((entry) => entry.record))).toContain(
+    rawSha256,
+  );
+  const text = await readFile(ledger, "utf8");
+  const altered = text.replace(rawSha256, "c".repeat(64));
+  expect(altered).not.toBe(text);
+  await writeFile(ledger, altered);
   await expect(daemon.openGate(o)).rejects.toThrow(/ledger/i);
 });
 

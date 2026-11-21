@@ -35,6 +35,7 @@ import { NORDWERK, NW_CONTRACT, nordwerkInternalRoles, ORBIS } from "./fixtures/
 import { AgentHost } from "./host.js";
 import { solidOdrlEngine } from "./mechanisms/policy-engine.js";
 import { PURPOSE } from "./profile/vocabulary.js";
+import { readLedgerSegment } from "./store/ledger.js";
 
 const NOW = "2026-10-19T08:00:00Z";
 const DEBUG = false;
@@ -477,11 +478,12 @@ describe("queued internal dataset releases are re-decided by the enforcement poi
     const restarted = await t.restart();
     await expectWithheld(restarted, t.diag, t.queued.id);
     // The re-decision is in the enforcement point's own ledger.
-    const log = readFileSync(
+    const entries = readLedgerSegment(
       join(env.root, "nordwerk-contracting", "nordwerk-data-store-ledger.jsonl"),
-      "utf8",
     );
-    expect(log).toMatch(/"access-recheck"[^\n]*"deny"/);
+    expect(entries.map(({ record }) => record)).toContainEqual(
+      expect.objectContaining({ type: "access-recheck", decision: "deny" }),
+    );
   }, 60_000);
 
   it("industrial: the pinned SPARQ policy module is replaced while the release is queued (generic usage decision indeterminate)", async () => {

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import type { VerificationResult } from "../src/core/types.js";
@@ -397,6 +397,38 @@ it("leaves credential references unresolved after a refused message and restores
   store.save(refusedState);
   const resumed = await open(store);
   expect(await resumed.receive(citingWire)).toEqual(baseline);
+
+  // Changing a recorded refusal without resealing it cannot restore the credential.
+  let readingRefusedMessage = false;
+  const tampered = ledger.entries().map((entry) => {
+    const { record } = entry;
+    if (record.type === "message-in") readingRefusedMessage = record.id === unaccepted.id;
+    if (
+      readingRefusedMessage &&
+      record.type === "gate-decision" &&
+      record.gate === "inbound-gate"
+    ) {
+      readingRefusedMessage = false;
+      expect(record.outcome).not.toBe("admit");
+      return { ...entry, record: { ...record, outcome: "admit" } };
+    }
+    return entry;
+  });
+  expect(tampered).not.toEqual(ledger.entries());
+  const readTampered = vi.spyOn(ledger, "entries").mockReturnValue(tampered);
+  try {
+    const tamperedStore = new MemoryStateStore();
+    tamperedStore.save(refusedState);
+    const tamperedRestart = await open(tamperedStore, ledger);
+    expect(await tamperedRestart.receive(citingWire)).toMatchObject({
+      disposition: "rejected",
+      reason: "record-unavailable",
+      detail: "A retained legacy credential has no matching recorded admission.",
+    });
+  } finally {
+    readTampered.mockRestore();
+  }
+
   const admitted = await resumed.receive(carryingWire);
   expect(admitted.disposition, `${admitted.reason}: ${admitted.detail}`).toBe("accepted");
   const oldState = store.load();
