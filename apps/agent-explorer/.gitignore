@@ -5,5 +5,6 @@ data/traces-*.js
 data/traces/
 dist-artifact/
 dist-public
-# AUTHORED-BY Claude Opus 5.5 — the walkthrough video is too large to commit
+# AUTHORED-BY Claude Opus 5.5 — only the 1280-pixel walkthrough is committed (the deploy workflow needs it)
 media/*.mp4
+!media/answerable-walkthrough.mp4
