@@ -42,6 +42,7 @@ export {
   isDeniedHostname,
   normalizeHostForClassification,
   type ResolvedAddress,
+  ResponseBodyTooLargeError,
   SsrfError,
 } from "./guard.js";
 export {

@@ -321,6 +321,8 @@ export type Disposition = "accepted" | "duplicate" | "rejected" | "pending-appro
 
 export interface StepResult {
   readonly disposition: Disposition;
+  /** Positive admission for this inbound message. Protocol dispositions also describe replies. */
+  readonly admitted?: true;
   readonly reason?: ReasonCode | string;
   readonly detail?: string;
   readonly messageId?: Iri;
@@ -4919,9 +4921,9 @@ export class AgentRuntime {
     this.retainedMessageViews.set(msg.id, msg);
     const outbound = await this.dispatch(msg);
     const record = this.state.recordMessages[msg.id];
-    const cacheCredentials =
+    const admitted =
       admission.admitted && outbound.disposition === "accepted" && outbound.reason === undefined;
-    if (cacheCredentials && rememberCredentials && record)
+    if (admitted && rememberCredentials && record)
       this.state.recordMessages[msg.id] = { ...record, credentialsAdmitted: true };
     const conv = this.state.conversations[msg.conversation];
     const recorded = this.state.seen[msg.id]?.responses ?? [];
@@ -4934,11 +4936,12 @@ export class AgentRuntime {
       conversation: msg.conversation,
     };
     this.persist();
-    if (cacheCredentials) rememberCredentials?.();
+    if (admitted) rememberCredentials?.();
     return this.result(outbound.disposition, {
       messageId: msg.id,
       kind: msg.kind,
       conversation: msg.conversation,
+      ...(admitted ? { admitted: true } : {}),
       ...(conv ? { phase: conv.phase } : {}),
       outbound: outbound.outbound,
       ...(outbound.reason ? { reason: outbound.reason } : {}),
@@ -4958,6 +4961,11 @@ export class AgentRuntime {
       msg.kind === "describe" ||
       msg.kind === "invoke" ||
       (msg.kind === "propose" && msg.body.round === 1);
+    const peerNotice =
+      msg.kind === "refuse" ||
+      msg.kind === "challenge" ||
+      msg.kind === "unsupported" ||
+      msg.kind === "indeterminate";
     let conv = this.state.conversations[msg.conversation];
     let created = false;
 
@@ -4998,6 +5006,8 @@ export class AgentRuntime {
         !isTerminal(conv.phase) &&
         Date.parse(this.now()) - Date.parse(conv.openedAt) > this.limits.conversationTtlMs
       ) {
+        if (peerNotice)
+          this.reject("conversation-closed", "conversation is expired", { conversation: conv.id });
         conv = this.apply(conv, { type: "expire", at: this.now() });
       }
     } else {
@@ -5048,6 +5058,7 @@ export class AgentRuntime {
       }
       this.reject(next.reason, next.detail, { conversation: conv.id });
     }
+    if (peerNotice) return this.onClosed(next.state, msg);
     conv = this.saveConversation(next.state);
     const declaredPurpose =
       msg.kind === "invoke"
@@ -5067,11 +5078,6 @@ export class AgentRuntime {
         return this.onPropose(conv, msg);
       case "accept":
         return this.onAccept(conv, msg);
-      case "refuse":
-      case "challenge":
-      case "unsupported":
-      case "indeterminate":
-        return this.onClosed(conv, msg);
       case "invoke":
         return this.onInvoke(conv, msg);
       case "deliver":
@@ -5405,7 +5411,15 @@ export class AgentRuntime {
     conv: ConversationState,
     msg: Extract<AnyMessage, { kind: "refuse" | "challenge" | "unsupported" | "indeterminate" }>,
   ) {
-    await this.admission?.complete(conv, msg);
+    const admission = await this.admission?.complete(conv, msg);
+    if (admission && !admission.ok)
+      return {
+        disposition: "rejected" as const,
+        outbound: [],
+        reason: admission.reason,
+        detail: admission.detail,
+      };
+    this.saveConversation(conv);
     if (msg.kind === "challenge") {
       this.setDomain(`_challenge:${conv.id}`, msg.body.needs as unknown as Json, conv.id);
       this.record({

@@ -6,6 +6,15 @@ export { configureCli, createCliHost, runCli, runConfiguredCli } from "./cli.js"
 export type { A2aRequest, CloudComposition, CloudContext, CloudFactory } from "./cloud.js";
 export { configureCloud, runCloud, runConfiguredCloud } from "./cloud.js";
 export { composeDaemon, createDaemon, HEARTBEAT_MS, POLL_MS, pollInterval } from "./daemon.js";
+export {
+  createInboundGate,
+  type Gate,
+  type GateOutcome,
+  type GateVerdict,
+  type InboundGatePort,
+  openGate,
+} from "./gate.js";
+export { initGate, pinPeer } from "./gate-setup.js";
 export { type ModelCallCounters, type TaskContext, TaskRecorder } from "./instrumentation.js";
 export { installLaunchd, launchdPlist } from "./launchd.js";
 export { createLocalState, createProcessLease } from "./local.js";

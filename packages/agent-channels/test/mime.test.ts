@@ -103,3 +103,20 @@ it("enforces aggregate byte, part, header and nesting caps", () => {
     }),
   ).toEqual({ ok: false, detail: "unparseable MIME" });
 });
+
+it("decodes only candidate media types during carrier discovery", () => {
+  const html = "Content-Type: text/html\r\n\r\n<p>Hello</p>";
+  const attachment = "Content-Type: application/octet-stream\r\n\r\nattachment";
+  const bounded = { ...limits, maxParts: 1 };
+  const scan = { carriersOnly: true };
+  expect(parseMime(multipart([html, attachment, html]), bounded, scan)).toMatchObject({
+    ok: true,
+    root: {
+      children: [
+        { type: "text/html", text: "<p>Hello</p>" },
+        { type: "application/octet-stream" },
+        { type: "text/html", text: "<p>Hello</p>" },
+      ],
+    },
+  });
+});

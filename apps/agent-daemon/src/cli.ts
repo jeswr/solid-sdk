@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import {
@@ -12,10 +13,14 @@ import {
 } from "@jeswr/agent-audit";
 import { type Deps, login } from "@jeswr/agent-credentials";
 import type { ControlStore } from "@jeswr/agent-executor";
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { existsSync } from "fs";
+import type { IntroductionCard } from "@jeswr/agent-reference";
+import { constants, existsSync } from "fs";
+import { open } from "fs/promises";
+import { join } from "path";
+import { readGateStatus } from "./gate.js";
+import { initGate, pinPeer } from "./gate-setup.js";
 import { installLaunchd } from "./launchd.js";
-import type { createLocalState } from "./local.js";
+import { type createLocalState, createProcessLease } from "./local.js";
 import { scrubLog } from "./logging.js";
 import type { AuthenticatedComposition, Daemon } from "./types.js";
 
@@ -40,6 +45,7 @@ export interface CliHost {
   stats(task?: string): Promise<TaskStatsReport>;
   audit(args: readonly string[], print: (line: string) => void): Promise<number>;
   install(confirm: CliIo["confirm"]): Promise<boolean>;
+  gate?(args: readonly string[], io: CliIo): Promise<number>;
 }
 export interface CliHostOptions {
   daemon: Daemon | (() => Promise<AuthenticatedComposition>);
@@ -52,6 +58,7 @@ export interface CliHostOptions {
   openLoginUrl: (url: string) => Promise<void>;
   ledger: EvidenceLedger;
   launchCommand: readonly string[];
+  gate?: { stateDirectory: string; agentWebId: string; ownerWebId: string };
 }
 export function createCliHost(o: CliHostOptions): CliHost {
   async function execute(mode: "run" | "once", signal?: AbortSignal) {
@@ -99,12 +106,64 @@ export function createCliHost(o: CliHostOptions): CliHost {
     },
     audit: (args, print) => runAuditCli(args, print),
     install: (confirm) => installLaunchd({ command: o.launchCommand, confirm }),
+    ...(o.gate ? { gate: gateCommand(o.gate) } : {}),
   };
 }
 const usage =
-  "Usage: awp run | once | halt | resume | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
+  "Usage: awp run | once | halt | resume | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd | gate";
 const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
+const gateUsage = "Usage: awp gate init --owner-dir <dir> | pin <card.json> | status";
 const compositionRequired = "awp requires a trusted composition module (Node --import)";
+
+async function readCard(path: string): Promise<IntroductionCard> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > 64 * 1024) throw new Error("Invalid introduction card");
+    return JSON.parse(await file.readFile("utf8"));
+  } finally {
+    await file.close();
+  }
+}
+
+function gateCommand(options: NonNullable<CliHostOptions["gate"]>): NonNullable<CliHost["gate"]> {
+  const directory = join(options.stateDirectory, "gate");
+  return async (args, io) => {
+    const [operation, value, ownerDir] = args;
+    let release: (() => Promise<void>) | undefined;
+    async function confirm(prompt: string) {
+      if (!(await io.confirm(prompt))) return false;
+      release = await createProcessLease(options.stateDirectory).acquire();
+      return true;
+    }
+    try {
+      if (operation === "status" && args.length === 1) {
+        const status = await readGateStatus(directory);
+        io.print(JSON.stringify(status));
+        return status.ledger.ok ? 0 : 1;
+      }
+      if (operation === "init" && value === "--owner-dir" && ownerDir && args.length === 3) {
+        const created = await initGate({ ...options, directory, ownerDir, confirm });
+        io.print(created ? "Inbound gate initialized" : "cancelled");
+        return 0;
+      }
+      if (operation === "pin" && value && args.length === 2) {
+        const pinned = await pinPeer({
+          directory,
+          card: await readCard(value),
+          confirm,
+          print: (line) => io.print(line),
+        });
+        io.print(pinned ? "Peer pinned" : "cancelled");
+        return 0;
+      }
+      io.print(gateUsage);
+      return 2;
+    } finally {
+      await release?.();
+    }
+  };
+}
 function readLedger(path: string): readonly LedgerEntry[] {
   const ledger = new FileLedger(path);
   if (!existsSync(path) && ledger.segments().length === 0) throw new Error("Missing ledger");
@@ -177,9 +236,17 @@ export async function runCli(
       return 0;
     }
     if (command === "stats") return await runStats(rest, host, io);
+    if (command === "gate" && rest.length === 1 && rest[0] === "--help") {
+      io.print(gateUsage);
+      return 0;
+    }
     if (!host) {
       io.print(compositionRequired);
       return 1;
+    }
+    if (command === "gate") {
+      if (!host.gate) throw new Error("Gate configuration required");
+      return await host.gate(rest, io);
     }
     if (rest.length && !["login", "stats", "audit"].includes(command ?? "")) {
       io.print(usage);

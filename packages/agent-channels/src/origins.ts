@@ -4,18 +4,13 @@ import {
   createGuardedFetch,
   type GuardOptions,
   type guardedFetch,
+  ResponseBodyTooLargeError,
   refuseRedirects,
-  SsrfError,
 } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { ResponseSizeRefusedError } from "./errors.js";
 
 const MAX_BODY_BYTES = 1024 * 1024;
-
-/** guarded-fetch currently shares SsrfError between size caps and other refusals. */
-function isResponseSizeRefusal(error: unknown): boolean {
-  return error instanceof SsrfError && /^Response body for .+ exceeds cap \(/.test(error.message);
-}
 
 /** Buffer only under the guard's deadline, without waiting for source cancellation. */
 async function bufferRequestBody(
@@ -103,7 +98,10 @@ export function createOriginScopedFetch(
   }
   // The outer guard is cheap and per request, so a nested size refusal is recorded locally:
   // guarded-fetch drops transport causes from its sanitised SsrfError.
-  function createGuard(singleHop: typeof guardedFetch, onSizeRefusal: () => void) {
+  function createGuard(
+    singleHop: typeof guardedFetch,
+    onSizeRefusal: (responseOk: boolean) => void,
+  ) {
     return createGuardedFetch({
       pinningFetch: async (input, init) => {
         // The guard always supplies init and its combined caller/deadline signal.
@@ -120,9 +118,9 @@ export function createOriginScopedFetch(
         try {
           return await singleHop(input, transportInit);
         } catch (error) {
-          if (isResponseSizeRefusal(error)) {
-            onSizeRefusal();
-            throw new ResponseSizeRefusedError();
+          if (error instanceof ResponseBodyTooLargeError) {
+            onSizeRefusal(error.responseOk);
+            throw new ResponseSizeRefusedError(error.responseOk);
           }
           // An inner guard may parse Location before refusal and retain it in its cause.
           // Replace the whole error rather than passing untrusted transport details outward.
@@ -141,7 +139,7 @@ export function createOriginScopedFetch(
     const beforeDispatch = init?.beforeDispatch;
     // Guard layers sanitize/wrap transport errors. Retain this request's exact fence refusal.
     let refusal: { error: unknown } | undefined;
-    let sizeRefused = false;
+    let nestedResponseOk: boolean | undefined;
     let fenced = false;
     const singleHop = beforeDispatch
       ? createSingleHop(() => {
@@ -154,8 +152,8 @@ export function createOriginScopedFetch(
           }
         })
       : defaultSingleHop;
-    const guarded = createGuard(singleHop, () => {
-      sizeRefused = true;
+    const guarded = createGuard(singleHop, (responseOk) => {
+      nestedResponseOk = responseOk;
     });
     // Snapshot mutable URL/Request inputs before any asynchronous work.
     // Request construction resets inherited referrer settings unless supplied explicitly.
@@ -197,7 +195,9 @@ export function createOriginScopedFetch(
     } catch (error) {
       if (refusal) throw refusal.error;
       // Guard layers sanitise transport errors; keep only the request-local size refusal type.
-      if (sizeRefused || isResponseSizeRefusal(error)) throw new ResponseSizeRefusedError();
+      const responseOk =
+        error instanceof ResponseBodyTooLargeError ? error.responseOk : nestedResponseOk;
+      if (responseOk !== undefined) throw new ResponseSizeRefusedError(responseOk);
       throw error;
     }
     // A transport that drops beforeDispatch (e.g. an older guarded-fetch) would dispatch

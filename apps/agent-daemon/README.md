@@ -9,7 +9,7 @@ Explicit `login` uses the credential package's PKCE loopback listener.
 `composeDaemon` obtains a client-credentials DPoP session through
 `@jeswr/pod-auth/node`, creates the storage client and notifications client using
 that session's fetch, and calls a trusted `prepare(workspace)` host factory.
-Credentials stay in pod-auth. The factory supplies explicit accounts, a gateway,
+Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, a gateway,
 an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
@@ -58,20 +58,23 @@ identity (the mandate subject) only from that resource.
 Each enabled account is processed serially, including accounts sharing a binding:
 
 1. List within item/byte bounds from its durable cursor.
-2. Import through M1 `importInbound`: owner-only ACL before raw bytes, provenance
+2. Parse each message once and check it against the inbound gate. Finish checking the
+   entire batch before starting the import.
+3. Import admitted messages and unstructured observations through M1 `importInbound`.
+   The owner-only ACL precedes raw bytes, the provenance
    graph and canonical chat data. Account inboxes are separated under
    `agent/inbox/<binding>/<opaque-account>/`.
-3. Run the gateway Reader's deterministic-first triage schema and persist the result.
-4. Call the Proposer only for independently owner-flagged threads or structured
-   JSON-LD envelopes. Neither condition establishes identity or authority. Its
+4. Give the gateway Reader the gate label and run deterministic-first triage.
+5. Call the Proposer only for independently owner-flagged threads or admitted
+   messages, with the gate verdict included in its input. Its
    context supplies the gateway's read-only pod and memory tools.
-5. Stamp and create proposals only inside `agent/proposals/`; an identical replay
+6. Stamp and create proposals only inside `agent/proposals/`; an identical replay
    is safe, but a conflicting rewrite fails. Save each stamped Proposer result in
    durable local `proposalResults` before outbox projection. Replace that cache with
    the trusted outbox's finalized proposals before pod publication or model counters,
    and reuse it when a batch retries, including empty results. Commit the ingest
    cursor only after the entire batch succeeds.
-6. Run the executor's outbox pass. It alone owns send capabilities and credentials.
+7. Run the executor's outbox pass. It alone owns send capabilities and credentials.
 
 Email polls every 120 seconds, chat every 30, social every 300. The control watcher
 subscribes to `agent/control/` and `agent/approvals/` through pod-notifications with
@@ -111,8 +114,8 @@ private credential-store directory whose parent already exists.
 
 The `awp` executable dispatches `run`, `once`, `halt`, `resume`, `status`, `accounts`,
 `login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
-`audit <artifact> [--at <instant>]`
-and `install-launchd`. `createCliHost` connects those commands to a daemon or lazy composition factory,
+`audit <artifact> [--at <instant>]`, `install-launchd` and `gate`.
+`createCliHost` connects those commands to a daemon or lazy composition factory,
 local state, credential helper and ledger. Prefer a lazy factory: local commands never
 authenticate, and run/once close the pod session after draining. Task statistics verify
 retained evidence and group records by explicit runtime-assigned task labels.
@@ -137,6 +140,42 @@ composition; they never authenticate or send. Preloads
 must be inert until a command needs their capabilities; keep secrets out of argv,
 logs, plist arguments and source control. No deployment module is downloaded or
 loaded from pod data.
+
+## Inbound gate
+
+`DaemonOptions.gate` is required for embedded and authenticated hosts. Configure
+`gate: createInboundGate({ directory: join(stateDirectory, "gate") })` and use
+`createProcessLease(stateDirectory)` for the daemon. Each run opens one reference
+runtime after acquiring the process lease and closes it after executor drain.
+Gate state, the reference ledger and body-free verdict files live under the
+private `gate/` directory. A failed gate startup or check aborts the account
+batch before inbox writes, model calls, or cursor advancement.
+
+For CLI composition, give `createCliHost` a `gate` object with `stateDirectory`,
+`agentWebId` and `ownerWebId`. The gate verifies that its stored actor and party
+match the configured WebIDs when the daemon starts.
+
+- `awp gate init --owner-dir <dir>` creates the actor key and a deny-all reference
+  mandate after confirmation. Keep the owner signing key outside the gate
+  directory. The executor independently enforces the owner's VC mandate.
+- `awp gate pin <card.json>` displays the public thumbprints and notice for
+  comparison with the peer through a separate trusted channel. Stop the daemon
+  before pinning because the command takes its process lease after confirmation.
+  The pin API also takes a per-gate lease and merges each confirmed card into
+  the latest trust store. The operator's pins supply the counterparty verification keys.
+- `awp gate status` displays pinned subjects and thumbprints, ledger integrity,
+  verdict counts and interrupted digests. Ask the sender for a new message
+  when a check for that digest was interrupted. Identical raw-byte retries
+  reuse their finalized verdicts when the verdict, commit record and post-sync
+  confirmation match. Earlier verdicts without a confirmation appear as
+  interrupted digests. The reference runtime checks replays across carriers.
+
+Refused content stays outside the inbox, models and suite audit. The reference
+ledger records the decision locally. Plain human mail and chat remain available
+for triage and can reach the Proposer when the owner flags a thread. They supply
+no admitted evidence. Pod inbox identity stays `unverified` because the channel
+handle is an observation. The daemon keeps reference-generated replies in the
+local runtime outbox during this phase.
 
 ## Stop and resume
 
