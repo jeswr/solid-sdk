@@ -1,11 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import {
   type CollectionErrorKind,
   type CollectionState,
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
   type DataColumn,
   DataTable,
+  type DataTableSorting,
   FileGrid,
   useSelection,
 } from "@jeswr/suite-ui";
@@ -81,12 +87,47 @@ export function CollectionFixture({ kind }: { kind: "data-table" | "file-grid" }
   const [message, setMessage] = useState("No file opened");
   const [statesOpen, setStatesOpen] = useState(false);
   const [state, setState] = useState("ready");
+  const [listing, setListing] = useState(false);
+  const [sorting, setSorting] = useState<DataTableSorting>([]);
+  const [manualSorting, setManualSorting] = useState(false);
+  const [selectionFollowsFocus, setSelectionFollowsFocus] = useState(false);
+  const [stickyHeader, setStickyHeader] = useState(true);
+  const [dropTarget, setDropTarget] = useState<string>();
   const filtered = useMemo(
     () => files.filter((file) => file.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())),
     [query],
   );
   const onOpen = (file: FixtureFile) => setMessage(`Opened ${file.name}`);
   const onDetails = (file: FixtureFile) => setMessage(`Details for ${file.name}`);
+  const listingColumns: DataColumn<FixtureFile>[] = [
+    ...columns.map((column) => ({
+      ...column,
+      ...(column.id === "owner"
+        ? { visibleFrom: 1024 }
+        : column.id !== "name"
+          ? { visibleFrom: 768 }
+          : {}),
+    })),
+    {
+      id: "actions",
+      header: "Actions",
+      accessor: getKey,
+      sortable: false,
+      hideable: false,
+      size: 140,
+      minSize: 140,
+      render: (file, context) => (
+        <button
+          type="button"
+          tabIndex={context?.active ? 0 : -1}
+          aria-label={`Inspect ${file.name}`}
+          onClick={() => setMessage(`Inspecting ${file.name}`)}
+        >
+          Inspect
+        </button>
+      ),
+    },
+  ];
   const shared = {
     getKey,
     getLabel,
@@ -136,7 +177,53 @@ export function CollectionFixture({ kind }: { kind: "data-table" | "file-grid" }
   ) {
     const props = { ...shared, items, label, ...stateProps };
     return kind === "data-table" ? (
-      <DataTable {...props} />
+      <DataTable
+        {...props}
+        {...(listing
+          ? {
+              columns: listingColumns,
+              sorting,
+              onSortingChange: setSorting,
+              manualSorting,
+              showSelectionCheckboxes: false,
+              showColumnOptions: false,
+              resizableColumns: false,
+              stickyHeader,
+              openOnDoubleClick: true,
+              selectionFollowsFocus,
+              getRowProps: (file: FixtureFile) => ({
+                draggable: true,
+                "data-drop": dropTarget === file.id,
+                onDragStart: (event: React.DragEvent<HTMLTableRowElement>) => {
+                  event.dataTransfer.setData("text/plain", file.name);
+                  setMessage(`Dragging ${file.name}`);
+                },
+                onDragOver: (event: React.DragEvent<HTMLTableRowElement>) => {
+                  if (!event.dataTransfer.types.includes("text/plain")) return;
+                  event.preventDefault();
+                  setDropTarget(file.id);
+                },
+                onDragLeave: () => setDropTarget(undefined),
+                onDrop: (event: React.DragEvent<HTMLTableRowElement>) => {
+                  event.preventDefault();
+                  setDropTarget(undefined);
+                  setMessage(`Dropped ${event.dataTransfer.getData("text/plain")} on ${file.name}`);
+                },
+                onDragEnd: () => setDropTarget(undefined),
+              }),
+              renderRow: (file: FixtureFile, row: React.ReactElement) => (
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onSelect={() => setMessage(`Inspecting ${file.name}`)}>
+                      Inspect {file.name}
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              ),
+            }
+          : {})}
+      />
     ) : (
       <FileGrid {...props} renderMetadata={(file) => `${file.modified} · ${file.size} KB`} />
     );
@@ -177,7 +264,62 @@ export function CollectionFixture({ kind }: { kind: "data-table" | "file-grid" }
             <option value="offline">Offline with saved copies</option>
           </select>
         </label>
+        {kind === "data-table" && (
+          <label>
+            <input
+              type="checkbox"
+              checked={listing}
+              onChange={(event) => setListing(event.target.checked)}
+            />
+            Use listing options
+          </label>
+        )}
       </div>
+      {kind === "data-table" && listing && (
+        <div className="suite-fixture-controls">
+          <label>
+            Listing sort
+            <select
+              aria-label="Listing sort"
+              value={sorting[0] ? `${sorting[0].id}:${sorting[0].desc ? "desc" : "asc"}` : ""}
+              onChange={(event) => {
+                const [id, direction] = event.target.value.split(":");
+                setSorting(id ? [{ id, desc: direction === "desc" }] : []);
+              }}
+            >
+              <option value="">Input order</option>
+              <option value="name:asc">Name ascending</option>
+              <option value="name:desc">Name descending</option>
+              <option value="size:asc">Size ascending</option>
+              <option value="size:desc">Size descending</option>
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={manualSorting}
+              onChange={(event) => setManualSorting(event.target.checked)}
+            />
+            Keep input order
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={selectionFollowsFocus}
+              onChange={(event) => setSelectionFollowsFocus(event.target.checked)}
+            />
+            Selection follows focus
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={stickyHeader}
+              onChange={(event) => setStickyHeader(event.target.checked)}
+            />
+            Sticky header
+          </label>
+        </div>
+      )}
       <section aria-label="Interactive files" data-testid="interactive-collection">
         {render(filtered, "Files", {
           state: activeState,

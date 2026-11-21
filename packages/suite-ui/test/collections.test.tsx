@@ -6,16 +6,29 @@ import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
   CollectionErrorKind,
   CollectionState,
   CollectionSurfaceProps,
 } from "../src/collections/collection-state.js";
-import { type DataColumn, DataTable } from "../src/collections/data-table.js";
+import {
+  type DataColumn,
+  DataTable,
+  type DataTableProps,
+  type DataTableSorting,
+} from "../src/collections/data-table.js";
 import { FileGrid } from "../src/collections/file-grid.js";
 import { useSelection } from "../src/collections/use-selection.js";
 import { DropZoneOverlay } from "../src/components/drop-zone-overlay.js";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../src/components/ui/context-menu.js";
 
 type Item = { id: string; name: string; size: number };
 const items: Item[] = [
@@ -814,4 +827,530 @@ it("renders an empty cell when a custom renderer deliberately returns null", () 
   );
   const cells = within(screen.getByRole("row", { name: "Alpha" })).getAllByRole("cell");
   expect(cells.at(-1)?.textContent).toBe("");
+});
+
+function ListingFixture(props: Partial<DataTableProps<Item>>) {
+  const selection = useSelection();
+  return (
+    <main>
+      <h1>Listing</h1>
+      <DataTable
+        items={items}
+        columns={columns}
+        getKey={getKey}
+        getLabel={getLabel}
+        label="Listing"
+        onOpen={onOpen}
+        selection={selection}
+        {...props}
+      />
+      <output aria-label="Selected IDs">{[...selection.selectedKeys].join(",")}</output>
+    </main>
+  );
+}
+
+describe("DataTable listing options", () => {
+  const order = () =>
+    within(screen.getByRole("grid"))
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => row.getAttribute("aria-label"));
+
+  it("controls sorting from a toolbar, reports header changes and leaves ownership with the caller", () => {
+    const change = vi.fn();
+    const { rerender } = render(
+      <ListingFixture sorting={[{ id: "size", desc: true }]} onSortingChange={change} />,
+    );
+    expect(order()).toEqual(["Delta", "Alpha", "Charlie", "Beta"]);
+    fireEvent.click(screen.getByRole("button", { name: "Size" }));
+    expect(change).toHaveBeenCalledWith([{ id: "size", desc: false }]);
+    expect(order()[0]).toBe("Delta");
+    rerender(<ListingFixture sorting={[{ id: "size", desc: false }]} onSortingChange={change} />);
+    expect(order()[0]).toBe("Beta");
+    expect(
+      screen.getByRole("button", { name: "Size" }).closest("th")?.getAttribute("aria-sort"),
+    ).toBe("ascending");
+  });
+
+  it("reports uncontrolled sort changes and preserves manual input order while displaying sort state", () => {
+    const change = vi.fn();
+    const { rerender } = render(<ListingFixture onSortingChange={change} />);
+    fireEvent.click(screen.getByRole("button", { name: "Size" }));
+    expect(change).toHaveBeenCalledWith([{ id: "size", desc: true }]);
+    expect(order()[0]).toBe("Delta");
+    rerender(<ListingFixture manualSorting sorting={[{ id: "size", desc: false }]} />);
+    expect(order()).toEqual(["Alpha", "Beta", "Charlie", "Delta"]);
+  });
+
+  it("only marks the sorted sortable header and keeps Shift-click sorting to one key", () => {
+    const change = vi.fn();
+    render(
+      <ListingFixture
+        onSortingChange={change}
+        columns={[
+          ...columns,
+          { id: "actions", header: "Actions", accessor: getKey, sortable: false },
+        ]}
+      />,
+    );
+    expect(document.querySelectorAll("th[aria-sort]")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Size" }));
+    fireEvent.click(screen.getByRole("button", { name: "Name" }), { shiftKey: true });
+    expect(change).toHaveBeenLastCalledWith([{ id: "name", desc: false }]);
+    expect(document.querySelectorAll("th[aria-sort]")).toHaveLength(1);
+    expect(document.querySelector("th[aria-sort]")?.textContent).toBe("Name");
+    expect(
+      screen.getByRole("button", { name: "Size" }).closest("th")?.hasAttribute("aria-sort"),
+    ).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Actions" }).closest("th")?.hasAttribute("aria-sort"),
+    ).toBe(false);
+  });
+
+  it("ranges in the caller's manual order and supports both Cmd and Ctrl toggles without checkboxes", () => {
+    render(
+      <ListingFixture
+        manualSorting
+        showSelectionCheckboxes={false}
+        items={[items[3] as Item, items[1] as Item, items[0] as Item, items[2] as Item]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("row", { name: "Delta" }));
+    fireEvent.click(screen.getByRole("row", { name: "Alpha" }), { shiftKey: true });
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("d,b,a");
+    fireEvent.click(screen.getByRole("row", { name: "Beta" }), { metaKey: true });
+    fireEvent.click(screen.getByRole("row", { name: "Charlie" }), { ctrlKey: true });
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("d,a,c");
+    expect(screen.queryByRole("checkbox", { name: /Select/ })).toBeNull();
+    expect(screen.getByRole("grid").getAttribute("aria-colcount")).toBe("2");
+    expect(document.activeElement).toBe(screen.getByRole("row", { name: "Charlie" }));
+  });
+
+  it("optionally selects on focus navigation; Shift, Space and Enter retain their meaning", () => {
+    render(
+      <ListingFixture
+        selectionFollowsFocus
+        showSelectionCheckboxes={false}
+        onDetails={onDetails}
+      />,
+    );
+    const alpha = screen.getByRole("row", { name: "Alpha" });
+    act(() => alpha.focus());
+    fireEvent.keyDown(alpha, { key: "ArrowDown" });
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b");
+    fireEvent.keyDown(document.activeElement as Element, { key: "ArrowDown", shiftKey: true });
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b,c");
+    fireEvent.keyDown(document.activeElement as Element, { key: " " });
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b");
+    fireEvent.keyDown(document.activeElement as Element, { key: "Enter" });
+    expect(onOpen).toHaveBeenCalledWith(items[2]);
+    fireEvent.keyDown(document.activeElement as Element, { key: "Enter", altKey: true });
+    expect(onDetails).toHaveBeenCalledWith(items[2]);
+    fireEvent.keyDown(document.activeElement as Element, { key: "Enter", isComposing: true });
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(document.querySelectorAll('[data-collection-item][tabindex="0"]')).toHaveLength(1);
+    fireEvent.keyDown(document.activeElement as Element, { key: "ArrowDown", ctrlKey: true });
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Delta");
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b");
+    fireEvent.keyDown(document.activeElement as Element, { key: " " });
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b,d");
+    fireEvent.keyDown(document.activeElement as Element, { key: "Home", metaKey: true });
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Alpha");
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b,d");
+  });
+
+  it.each([
+    "ctrlKey",
+    "metaKey",
+  ])("leaves %s+Left/Right to the browser while selection follows focus", (modifier) => {
+    render(<ListingFixture selectionFollowsFocus />);
+    const beta = screen.getByRole("row", { name: "Beta" });
+    fireEvent.click(beta);
+    for (const key of ["ArrowLeft", "ArrowRight"]) {
+      expect(fireEvent.keyDown(beta, { key, [modifier]: true })).toBe(true);
+      expect(document.activeElement).toBe(beta);
+      expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b");
+    }
+    for (const [key, name] of [
+      ["ArrowUp", "Alpha"],
+      ["End", "Delta"],
+      ["Home", "Alpha"],
+      ["ArrowDown", "Beta"],
+    ] as const) {
+      expect(fireEvent.keyDown(document.activeElement as Element, { key, [modifier]: true })).toBe(
+        false,
+      );
+      expect(document.activeElement).toBe(screen.getByRole("row", { name }));
+      expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("b");
+    }
+  });
+
+  it("keeps input keydowns out of row shortcuts while preserving checkbox navigation", () => {
+    const rowKeyDown = vi.fn();
+    render(
+      <ListingFixture
+        getRowProps={() => ({ onKeyDown: rowKeyDown })}
+        columns={[
+          columns[0] as DataColumn<Item>,
+          {
+            ...(columns[1] as DataColumn<Item>),
+            render: (item) => <input aria-label={`Rename ${item.name}`} />,
+          },
+        ]}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "Rename Alpha" });
+    act(() => input.focus());
+    for (const key of ["Backspace", "Enter", " "]) {
+      expect(fireEvent.keyDown(input, { key })).toBe(true);
+    }
+    expect(rowKeyDown).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(screen.getByRole("status", { name: "Selected IDs" }).textContent).toBe("");
+    // The selection checkbox acts for its row: navigation and row shortcuts both see it.
+    fireEvent.keyDown(screen.getByRole("checkbox", { name: "Select Alpha" }), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("row", { name: "Beta" }));
+    expect(rowKeyDown).toHaveBeenCalledOnce();
+    fireEvent.keyDown(screen.getByRole("row", { name: "Beta" }), { key: "Backspace" });
+    expect(rowKeyDown).toHaveBeenCalledTimes(2);
+  });
+
+  it("hides columns by collection width, keeps user choices across resizes and retains a fallback column", () => {
+    const responsive: DataColumn<Item>[] = [
+      columns[0] as DataColumn<Item>,
+      { ...(columns[1] as DataColumn<Item>), visibleFrom: 700 },
+    ];
+    const { rerender } = render(<ListingFixture columns={responsive} />);
+    const sizeHeader = () => screen.queryByRole("button", { name: "Size" });
+    expect(sizeHeader()).not.toBeNull();
+    act(() => {
+      viewportWidth = 400;
+      for (const callback of resizeCallbacks) callback();
+    });
+    expect(sizeHeader()).toBeNull();
+    const sizeOption = screen.getByRole("checkbox", { name: "Size", hidden: true });
+    const describedBy = sizeOption.getAttribute("aria-describedby");
+    expect(document.getElementById(describedBy ?? "")?.textContent).toContain(
+      "hidden at this width",
+    );
+    expect(screen.getByRole("grid").getAttribute("aria-colcount")).toBe("2");
+    fireEvent.click(screen.getByText("Columns", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Size" }));
+    act(() => {
+      viewportWidth = 800;
+      for (const callback of resizeCallbacks) callback();
+    });
+    expect(sizeHeader()).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Size" }));
+    expect(sizeHeader()).not.toBeNull();
+    rerender(
+      <ListingFixture columns={responsive.map((column) => ({ ...column, visibleFrom: 2000 }))} />,
+    );
+    expect(screen.getByRole("button", { name: "Name" })).toBeDefined();
+    expect(sizeHeader()).toBeNull();
+  });
+
+  it("offers a plain listing without built-in column controls and with a nonsticky header", () => {
+    render(
+      <ListingFixture
+        showColumnOptions={false}
+        resizableColumns={false}
+        showSelectionCheckboxes={false}
+        stickyHeader={false}
+      />,
+    );
+    expect(screen.queryByText("Columns", { selector: "summary" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Resize/ })).toBeNull();
+    expect(screen.getByRole("grid").parentElement?.dataset.stickyHeader).toBe("false");
+    expect(screen.getByRole("row", { name: "Alpha" }).style.gridTemplateColumns).toBe(
+      "620px 180px",
+    );
+  });
+
+  it("only opens a row on opted-in double click, respecting controls and prevented events", () => {
+    const { rerender } = render(<ListingFixture />);
+    fireEvent.doubleClick(screen.getByRole("row", { name: "Alpha" }));
+    expect(onOpen).not.toHaveBeenCalled();
+    rerender(<ListingFixture openOnDoubleClick />);
+    const alpha = screen.getByRole("row", { name: "Alpha" });
+    expect(within(alpha).queryByRole("button", { name: "Alpha" })).toBeNull();
+    fireEvent.click(within(alpha).getByText("Alpha"));
+    expect(alpha.getAttribute("aria-selected")).toBe("true");
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.doubleClick(screen.getByRole("row", { name: "Alpha" }));
+    expect(onOpen).toHaveBeenCalledOnce();
+    rerender(
+      <ListingFixture
+        openOnDoubleClick
+        columns={[
+          {
+            ...(columns[0] as DataColumn<Item>),
+            render: (item) => <button type="button">Action for {item.name}</button>,
+          },
+        ]}
+      />,
+    );
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Action for Alpha" }));
+    expect(onOpen).toHaveBeenCalledOnce();
+    rerender(
+      <ListingFixture
+        openOnDoubleClick
+        getRowProps={() => ({ onDoubleClick: (event) => event.preventDefault() })}
+      />,
+    );
+    fireEvent.doubleClick(screen.getByRole("row", { name: "Alpha" }));
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it("composes row events, exposes context and preserves table layout and keyboard ownership", () => {
+    const drag = vi.fn();
+    const drop = vi.fn();
+    const focus = vi.fn();
+    const blur = vi.fn();
+    const contexts = vi.fn();
+    render(
+      <ListingFixture
+        getRowProps={(item, context) => {
+          contexts(item.id, context);
+          return {
+            draggable: true,
+            onDragStart: drag,
+            onDrop: drop,
+            onFocus: focus,
+            onBlur: blur,
+            onKeyDown: (event) => {
+              if (event.key === "Enter") event.preventDefault();
+            },
+            onClick: (event) => {
+              if (event.shiftKey) event.preventDefault();
+            },
+            "data-drop": item.id === "a",
+            className: "custom-row",
+            style: { height: 999, color: "red" },
+          };
+        }}
+      />,
+    );
+    const alpha = screen.getByRole("row", { name: "Alpha" });
+    fireEvent.dragStart(alpha);
+    fireEvent.drop(alpha);
+    expect(drag).toHaveBeenCalledOnce();
+    expect(drop).toHaveBeenCalledOnce();
+    expect(alpha.dataset.drop).toBe("true");
+    expect(alpha.className).toBe("custom-row");
+    expect(alpha.style.height).toBe("44px");
+    expect(alpha.style.color).toBe("red");
+    act(() => alpha.focus());
+    expect(focus).toHaveBeenCalled();
+    fireEvent.keyDown(alpha, { key: "Enter" });
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.click(alpha, { shiftKey: true });
+    expect(alpha.getAttribute("aria-selected")).toBe("false");
+    fireEvent.click(alpha);
+    expect(contexts).toHaveBeenCalledWith("a", { selected: true, active: true });
+    act(() => screen.getByRole("row", { name: "Beta" }).focus());
+    expect(blur).toHaveBeenCalled();
+  });
+
+  it("wraps rows with context menus and ignores events from noninteractive portalled content", async () => {
+    const rowHandlers = {
+      onClick: vi.fn(),
+      onDoubleClick: vi.fn(),
+      onKeyDown: vi.fn(),
+      onContextMenu: vi.fn(),
+      onPointerDown: vi.fn(),
+      onDragStart: vi.fn(),
+      onDragOver: vi.fn(),
+      onDragLeave: vi.fn(),
+      onDragEnd: vi.fn(),
+      onDrop: vi.fn(),
+      onFocus: vi.fn(),
+      onBlur: vi.fn(),
+    };
+    const portalled = vi.fn();
+    const { container } = render(
+      <ListingFixture
+        openOnDoubleClick
+        getRowProps={() => rowHandlers}
+        renderRow={(item, row) => (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem>Inspect {item.name}</ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        )}
+        columns={[
+          columns[0] as DataColumn<Item>,
+          {
+            ...(columns[1] as DataColumn<Item>),
+            render: (item, context) => (
+              <>
+                <button type="button" tabIndex={context?.active ? 0 : -1}>
+                  Actions for {item.name}
+                </button>
+                {item.id === "a" &&
+                  createPortal(
+                    <div>
+                      <span>Portalled text</span>
+                      <button type="button" onClick={portalled}>
+                        Portalled action
+                      </button>
+                      <input aria-label="Portalled rename" />
+                    </div>,
+                    document.body,
+                  )}
+              </>
+            ),
+          },
+        ]}
+      />,
+    );
+    const text = screen.getByText("Portalled text");
+    const alpha = screen.getByRole("row", { name: "Alpha" });
+    const beta = screen.getByRole("row", { name: "Beta" });
+    // A plain span has no interactive ancestor: containment alone must reject it.
+    expect(alpha.contains(text)).toBe(false);
+    act(() => beta.focus());
+    for (const handler of Object.values(rowHandlers)) handler.mockClear();
+    fireEvent.click(text);
+    fireEvent.doubleClick(text);
+    for (const key of ["Enter", " "]) expect(fireEvent.keyDown(text, { key })).toBe(true);
+    expect(fireEvent.contextMenu(text)).toBe(true);
+    fireEvent.pointerDown(text);
+    fireEvent.dragStart(text);
+    fireEvent.dragOver(text);
+    fireEvent.dragLeave(text);
+    fireEvent.drop(text);
+    fireEvent.dragEnd(text);
+    fireEvent.focus(text);
+    fireEvent.blur(text);
+    const input = screen.getByRole("textbox", { name: "Portalled rename" });
+    expect(fireEvent.contextMenu(input)).toBe(true);
+    expect(fireEvent.pointerDown(input)).toBe(true);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(beta);
+    expect(beta.tabIndex).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Portalled action" }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Portalled action" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Portalled action" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Alpha" }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Actions for Alpha" }));
+    expect(portalled).toHaveBeenCalledOnce();
+    for (const handler of Object.values(rowHandlers)) expect(handler).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(screen.getByRole("row", { name: "Alpha" }).getAttribute("aria-selected")).toBe("false");
+    const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(
+      results.violations.filter(
+        (entry) => entry.impact === "serious" || entry.impact === "critical",
+      ),
+    ).toEqual([]);
+    fireEvent.contextMenu(screen.getByRole("row", { name: "Alpha" }));
+    expect(await screen.findByRole("menuitem", { name: "Inspect Alpha" })).toBeDefined();
+    expect(rowHandlers.onContextMenu).toHaveBeenCalledOnce();
+  });
+
+  it("lets portalled events keep propagating and pairs row enter/leave across portals", () => {
+    const outerKeyDown = vi.fn();
+    const windowKeyDown = vi.fn();
+    const portalledMouseDown = vi.fn();
+    const rowHandlers = {
+      onMouseDownCapture: vi.fn(),
+      onMouseEnter: vi.fn(),
+      onMouseLeave: vi.fn(),
+    };
+    window.addEventListener("keydown", windowKeyDown);
+    try {
+      render(
+        // biome-ignore lint/a11y/noStaticElementInteractions: probe for bubbling past the table.
+        <div onKeyDown={outerKeyDown}>
+          <ListingFixture
+            getRowProps={() => rowHandlers}
+            columns={[
+              columns[0] as DataColumn<Item>,
+              {
+                ...(columns[1] as DataColumn<Item>),
+                render: (item) =>
+                  item.id === "a" &&
+                  createPortal(
+                    <button type="button" onMouseDown={portalledMouseDown}>
+                      Portalled menu item
+                    </button>,
+                    document.body,
+                  ),
+              },
+            ]}
+          />
+        </div>,
+      );
+      const portalled = screen.getByRole("button", { name: "Portalled menu item" });
+      fireEvent.keyDown(portalled, { key: "Escape" });
+      fireEvent.mouseDown(portalled);
+      expect(outerKeyDown).toHaveBeenCalledOnce();
+      expect(windowKeyDown).toHaveBeenCalledOnce();
+      expect(portalledMouseDown).toHaveBeenCalledOnce();
+      expect(rowHandlers.onMouseDownCapture).not.toHaveBeenCalled();
+      const alpha = screen.getByRole("row", { name: "Alpha" });
+      fireEvent.mouseEnter(alpha);
+      fireEvent.mouseLeave(portalled, { relatedTarget: document.body });
+      expect(rowHandlers.onMouseEnter).toHaveBeenCalledOnce();
+      expect(rowHandlers.onMouseLeave).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener("keydown", windowKeyDown);
+    }
+  });
+
+  it("blocks the slotted touch long-press handler for portals and retains it on the row", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <ListingFixture
+          renderRow={(item, row) => (
+            <ContextMenu>
+              <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem>Inspect {item.name}</ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          )}
+          columns={[
+            {
+              ...(columns[0] as DataColumn<Item>),
+              render: (item) =>
+                item.id === "a" && createPortal(<span>Portalled long press</span>, document.body),
+            },
+          ]}
+        />,
+      );
+      fireEvent.pointerDown(screen.getByText("Portalled long press"), { pointerType: "touch" });
+      act(() => vi.advanceTimersByTime(750));
+      expect(screen.queryByRole("menu")).toBeNull();
+      fireEvent.pointerDown(screen.getByRole("row", { name: "Alpha" }), { pointerType: "touch" });
+      act(() => vi.advanceTimersByTime(750));
+      expect(screen.getByRole("menuitem", { name: "Inspect Alpha" })).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("displays controlled sorting without interactive headers when no change callback is supplied", () => {
+    render(<ListingFixture sorting={[{ id: "size", desc: true }]} />);
+    const header = screen.getByRole("button", { name: "Size" });
+    expect(header.hasAttribute("disabled")).toBe(true);
+    expect(header.closest("th")?.getAttribute("aria-sort")).toBe("descending");
+    expect(order()[0]).toBe("Delta");
+  });
+
+  it("uses a controlled sort in an interactive host without resetting selected IDs", () => {
+    function Controlled() {
+      const [sorting, setSorting] = useState<DataTableSorting>([]);
+      return <ListingFixture sorting={sorting} onSortingChange={setSorting} />;
+    }
+    render(<Controlled />);
+    fireEvent.click(screen.getByRole("row", { name: "Alpha" }));
+    fireEvent.click(screen.getByRole("button", { name: "Size" }));
+    expect(order()[0]).toBe("Delta");
+    expect(screen.getByRole("row", { name: "Alpha" }).getAttribute("aria-selected")).toBe("true");
+  });
 });

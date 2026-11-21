@@ -97,6 +97,7 @@ export function useCollectionNavigation({
   scrollToIndex,
   onOpen,
   onDetails,
+  selectionFollowsFocus = false,
 }: {
   keys: readonly string[];
   selection: SelectionModel;
@@ -104,6 +105,7 @@ export function useCollectionNavigation({
   scrollToIndex: (index: number) => void;
   onOpen: (key: string) => void;
   onDetails?: ((key: string) => void) | undefined;
+  selectionFollowsFocus?: boolean;
 }) {
   const [storedKey, setKey] = useState<string | undefined>(keys[0]);
   const activeKey = storedKey !== undefined && keys.includes(storedKey) ? storedKey : keys[0];
@@ -146,7 +148,7 @@ export function useCollectionNavigation({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>, key: string) {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return;
     const target = event.target as HTMLElement;
     if (isInteractiveDescendant(event) && !target.matches(".suite-selection-checkbox")) return;
     const index = keys.indexOf(key);
@@ -155,7 +157,13 @@ export function useCollectionNavigation({
       selection.selectAll(keys);
       return;
     }
-    if (event.ctrlKey || event.metaKey || (event.altKey && event.key !== "Enter")) return;
+    const focusOnly =
+      selectionFollowsFocus &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.shiftKey &&
+      ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key);
+    if (((event.ctrlKey || event.metaKey) && !focusOnly) || (event.altKey && event.key !== "Enter"))
+      return;
     const delta =
       event.key === "ArrowDown"
         ? columns
@@ -177,6 +185,8 @@ export function useCollectionNavigation({
       const nextKey = keys[next];
       if (event.shiftKey && nextKey !== undefined)
         selection.select(nextKey, keys, { range: true }, key);
+      else if (selectionFollowsFocus && !focusOnly && nextKey !== undefined)
+        selection.select(nextKey, keys);
       focus(next);
       return;
     }
