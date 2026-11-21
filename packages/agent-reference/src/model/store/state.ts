@@ -2,12 +2,14 @@
 // AUTHORED-BY Codex GPT-6
 import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { DataFactory, type Store } from "n3";
+import { digestBytes } from "../../core/canonical.js";
 import { isIsoInstant } from "../../core/schema.js";
 import type { Agreement, Json } from "../../core/types.js";
 import { entities } from "../../generated/model.js";
 import { AWP } from "../../profile/vocabulary.js";
 import type { RuntimeState } from "../../store/state.js";
 import {
+  assertCanonicalSnapshotBlock,
   assertLocalSnapshotSize,
   decodeSnapshotEntry,
   readLocalStoreRdf,
@@ -41,6 +43,7 @@ const ENTRY_KEY = AWP + "entryKey";
 const ENTRY_VALUE = AWP + "entryValue";
 const POSITION = SCHEMA + "position";
 const VERSION = AWP + "stateVersion";
+const CONTENTS_DIGEST = `${AWP}snapshotContentsDigest`;
 const PRESENT = AWP + "sectionPresent";
 const ITEM = AWP + "memoryItem";
 const INSTANT_LEXICAL = AWP + "instantLexical";
@@ -392,6 +395,11 @@ function header(): IndexedStore {
 }
 type LayoutBlock = { readonly bytes: string; verify(): void };
 
+function assertBlockBoundary(bytes: string): void {
+  if (!bytes.startsWith("<") || !bytes.endsWith(" .\n"))
+    throw new TypeError("Unterminated or invalid snapshot block");
+}
+
 function layoutBlock(dataset: Store): LayoutBlock {
   let pending = [...dataset];
   const bytes = writeNQuads(dataset);
@@ -399,13 +407,21 @@ function layoutBlock(dataset: Store): LayoutBlock {
     bytes,
     verify() {
       if (!pending.length) return;
-      if (!bytes.endsWith("\n")) throw new TypeError("Unterminated snapshot layout block");
+      assertBlockBoundary(bytes);
       const actual = readLocalStoreRdf(bytes, "application/n-quads");
       if (actual.size !== pending.length || pending.some((quad) => !actual.has(quad)))
         throw new TypeError("Invalid snapshot layout block");
+      assertCanonicalSnapshotBlock(bytes, actual);
       pending = [];
     },
   };
+}
+
+function contentsHeader(body: string): LayoutBlock {
+  const local = new IndexedStore();
+  const root = new StoreNode(ROOT, local, "RuntimeSnapshot");
+  root.put(CONTENTS_DIGEST, literal(digestBytes(body)));
+  return layoutBlock(local);
 }
 
 function sectionHeader(section: Section, present: boolean): LayoutBlock {
@@ -467,6 +483,8 @@ type VerifiedEntry = {
 };
 
 function verifyEntry(section: Section, key: string, row: EntryPayload): VerifiedEntry {
+  assertBlockBoundary(row.bytes);
+  for (const bytes of row.policies.values()) assertBlockBoundary(bytes);
   const dataset = readLocalStoreRdf(
     row.bytes + [...row.policies.values()].join(""),
     "application/n-quads",
@@ -492,6 +510,14 @@ function verifyEntry(section: Section, key: string, row: EntryPayload): Verified
     )
       throw new TypeError(`Noncanonical snapshot entry in ${section}`);
   }
+  // Canonical blocks contain one complete statement per line and no comments.
+  // Their exact bytes are also the input to the snapshot contents digest.
+  for (const [graph, bytes] of [[sectionIri(section), row.bytes] as const, ...row.policies]) {
+    assertCanonicalSnapshotBlock(
+      bytes,
+      new IndexedStore(dataset.getQuads(null, null, null, namedNode(graph))),
+    );
+  }
   row.authored = undefined;
   const subjects = new Set<string>();
   const links = new Set<string>();
@@ -515,7 +541,7 @@ function sectionValue(section: Section, pairs: ReadonlyArray<readonly [string, J
 /** Cache per entry, with positions separate from the payload. Cache only the most recent save. */
 export class SnapshotMemo {
   private entries = new Map<Section, Map<string, EntryMemo>>();
-  private output?: string;
+  private output?: { readonly bytes: string; readonly contents: LayoutBlock };
   private readonly verified = new WeakMap<EntryPayload, VerifiedEntry>();
   private readonly root = layoutBlock(header());
   private readonly present = new Map(
@@ -535,7 +561,7 @@ export class SnapshotMemo {
     )
       throw new TypeError("Unsupported native snapshot section or version");
     const next = new Map<Section, Map<string, EntryMemo>>();
-    const chunks = [this.root.bytes];
+    const chunks: string[] = [];
     const policies = new Map<string, string>();
     let encoded = 0;
     for (const section of sections) {
@@ -596,18 +622,21 @@ export class SnapshotMemo {
       }
     }
     for (const id of [...policies.keys()].sort()) chunks.push(policies.get(id)!);
-    const bytes = chunks.join("");
+    const body = chunks.join("");
+    const contents = contentsHeader(body);
+    const bytes = this.root.bytes + contents.bytes + body;
     assertLocalSnapshotSize(bytes);
     this.entries = next;
-    this.output = bytes;
+    this.output = { bytes, contents };
     this.encodedEntries = encoded;
     return bytes;
   }
 
   /** Decode the assembled output, reusing validation only for identical entry bytes. */
   decode(bytes: string): RuntimeState {
-    if (bytes !== this.output) return readStateSnapshot(bytes);
+    if (bytes !== this.output?.bytes) return readStateSnapshot(bytes);
     this.root.verify();
+    this.output.contents.verify();
     const result: Partial<Record<keyof RuntimeState, unknown>> = { version: 1 };
     for (const section of sections) {
       const entries = this.entries.get(section);
@@ -652,7 +681,11 @@ export function stateDataset(state: RuntimeState): Store {
 
 export class UnsupportedSnapshotVersion extends Error {}
 export function stateFromRdf(dataset: Store): RuntimeState {
+  const digest = readSnapshotHeader(dataset);
   const decoded = decodeState(dataset);
+  const canonical = stateDataset(decoded);
+  if (!canonical.has(DataFactory.quad(namedNode(ROOT), namedNode(CONTENTS_DIGEST), digest)))
+    throw new TypeError("Snapshot contents digest mismatch");
   // Earlier v2 writers tagged Agreement timestamps with xsd:dateTime even when
   // the runtime admitted a shorter lexical form. Compare those using today's term.
   const formedAt = namedNode(AWP + "formedAt");
@@ -673,11 +706,11 @@ export function stateFromRdf(dataset: Store): RuntimeState {
     normalized.removeQuad(quad);
     normalized.addQuad(quad.subject, formedAt, expected, agreementGraph);
   }
-  assertSameGraph(normalized ?? dataset, stateDataset(decoded));
+  assertSameGraph(normalized ?? dataset, canonical);
   return decoded;
 }
 
-function readSnapshotHeader(dataset: Store): void {
+function readSnapshotHeader(dataset: Store): ReturnType<typeof literal> {
   const root = new StoreNode(
     ROOT,
     new IndexedStore(dataset.getQuads(null, null, null, DataFactory.defaultGraph())),
@@ -698,6 +731,15 @@ function readSnapshotHeader(dataset: Store): void {
     sections.some((section) => !declared.has(sectionIri(section)))
   )
     throw new TypeError("Missing or unknown snapshot section header");
+  const digest = root.term(CONTENTS_DIGEST);
+  if (digest === undefined) throw new TypeError("Missing snapshot contents digest");
+  if (
+    digest.termType !== "Literal" ||
+    digest.datatype.value !== XSD + "string" ||
+    !/^sha-256:[0-9a-f]{64}$/.test(digest.value)
+  )
+    throw new TypeError("Invalid snapshot contents digest");
+  return literal(digest.value);
 }
 
 function sectionPresent(node: StoreNode, section: Section): boolean {
@@ -714,7 +756,6 @@ function sectionPresent(node: StoreNode, section: Section): boolean {
 }
 
 function decodeState(dataset: Store): RuntimeState {
-  readSnapshotHeader(dataset);
   const policy = readPolicy(dataset);
   const result: Partial<Record<keyof RuntimeState, unknown>> = { version: 1 };
   for (const section of sections) {

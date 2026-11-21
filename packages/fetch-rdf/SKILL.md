@@ -33,6 +33,8 @@ const etag = headers.get("etag");
   and streams require `parseRdf`. No transport or remote context loads occur.
   Use `onQuad` for document order (including duplicates); discard observations on
   failure. Iterating the returned store can reorder values and deduplicate quads.
+  Set `incremental: true` to apply the budgets while lexing, so a large body cannot
+  build a full token array before the quad and term limits run.
 - Inject the correct fetch explicitly at security boundaries. Do not assume a patched global when code can run before auth initialization or against a foreign origin.
 - Retain the returned ETag for conditional writes. Handle `null` for servers that do not supply one.
 - Branch on `RdfFetchError` and its structured status fields; do not string-match error messages.

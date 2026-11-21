@@ -180,7 +180,7 @@ it("preserves lone surrogates in an agreement's operation version", () => {
   expect(store.load().agreements).toEqual(state.agreements);
 });
 
-it("reopens earlier v2 Agreement timestamps with a legacy date-time datatype", () => {
+it("accepts the legacy Agreement timestamp datatype when the snapshot contents match", () => {
   const state = completeFixture();
   const [key, agreement] = Object.entries(state.agreements)[0]!;
   const formedAt = "2026-11-13T10:00Z";
@@ -252,6 +252,43 @@ it("accepts 32 levels of inherited item terms and refuses a 33rd before replacin
   dataset.addQuads([...inGraph(local, graph)]);
   writeFileSync(path, writeNQuads(dataset));
   expect(() => store.load()).toThrow(/inherited item terms exceed.*32/i);
+});
+
+it("bounds inherited item-term expansion across a chain of diamonds", () => {
+  const [key, fact] = Object.entries(completeFixture().precedenceHolds)[0]!;
+  const state = emptyState();
+  state.precedenceHolds[key] = { ...fact, terms: { policy: fact.terms!.policy } };
+  store.save(state);
+
+  const graph = "urn:awp:state:precedenceHolds";
+  const dataset = readLocalStoreRdf(readFileSync(path, "utf8"), "application/n-quads");
+  const local = graphContents(dataset, graph);
+  const [root] = local.getSubjects(
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    AWP + "ItemTerms",
+    null,
+  );
+  let parent = new StoreNode(root!, local, "ItemTerms");
+  const hasPolicy = "http://www.w3.org/ns/odrl/2/hasPolicy";
+  const policy = parent.term(hasPolicy)!;
+  for (let level = 0; level < 14; level++) {
+    const child = new StoreNode(`urn:example:diamond:${level}`, local, "ItemTerms");
+    child.types.add(AWP + "ItemTerms");
+    child.put(hasPolicy, policy);
+    const refs = ["left", "right"].map((branch) => {
+      const ref = new StoreNode(`${child.id}:${branch}`, local, "InheritedItemTerms");
+      ref.types.add(AWP + "InheritedItemTerms");
+      ref.setField("target", "urn:example:asset");
+      ref.put(AWP + "terms", DataFactory.namedNode(child.id));
+      return ref.id;
+    });
+    parent.putValue(AWP + "inheritedTerms", refs);
+    parent = child;
+  }
+  dataset.deleteMatches(undefined, undefined, undefined, DataFactory.namedNode(graph));
+  dataset.addQuads([...inGraph(local, graph)]);
+  writeFileSync(path, writeNQuads(dataset));
+  expect(() => store.load()).toThrow(/inherited item terms exceed the expanded reference limit/i);
 });
 
 it("rejects a local snapshot beyond the byte budget before buffering it", () => {
@@ -327,6 +364,30 @@ it("checks the RDF graph when the decoded entry matches the original JSON", () =
   expect(store.load()).toEqual(state);
 });
 
+it.each([
+  "unterminated",
+  "terminated",
+])("refuses a payload block with an injected %s comment before replacing the snapshot", (kind) => {
+  const state = emptyState();
+  store.save(state);
+  const before = readFileSync(path);
+  const write = writeNQuads;
+  const fault = kind === "unterminated" ? "# trailing comment" : "# trailing comment .\n";
+  const encoder = vi.spyOn(storeQuads, "writeNQuads").mockImplementation((dataset, maxBytes) => {
+    const bytes = write(dataset, maxBytes);
+    return maxBytes === Infinity && bytes.includes('"first"') ? bytes + fault : bytes;
+  });
+  try {
+    state.domain = { first: true, second: false };
+    expect(() => store.save(state)).toThrow(/invalid snapshot block|noncanonical snapshot block/i);
+    expect(readFileSync(path)).toEqual(before);
+  } finally {
+    encoder.mockRestore();
+  }
+  store.save(state);
+  expect(store.load()).toEqual(state);
+});
+
 it("checks the full section graph when a new entry can change the meaning of a saved link", () => {
   const state = emptyState();
   const collection = scopedId(scopedId("urn:awp:state:domain", "second"), AWP + "entryValue");
@@ -375,6 +436,53 @@ it("does not encode an unchanged entry again", () => {
   } finally {
     memo.mockRestore();
   }
+});
+
+it("refuses every entry-boundary truncation of a populated snapshot", () => {
+  const state = completeFixture();
+  store.save(state);
+  const lines = readFileSync(path, "utf8").trimEnd().split("\n");
+  const boundaries = lines.flatMap((line, index) =>
+    line.includes(`#stateEntry> `) ? [{ line, start: index - 1 }] : [],
+  );
+  expect(boundaries.length).toBeGreaterThan(1);
+  for (const { line, start } of boundaries) {
+    expect(lines[start]).toContain("<https://schema.org/position>");
+    writeFileSync(path, `${lines.slice(0, start).join("\n")}\n`);
+    expect(() => readRuntimeStateFile(path), line).toThrow(/snapshot is malformed/);
+
+    // Keep later sections and policy graphs, removing only this section's entry suffix.
+    const graph = line.slice(line.lastIndexOf(" <"));
+    let end = start;
+    while (lines[end]?.endsWith(graph)) end++;
+    writeFileSync(path, `${[...lines.slice(0, start), ...lines.slice(end)].join("\n")}\n`);
+    const reason = line.startsWith("<urn:awp:state:ledgerAuditHead>")
+      ? /invalid singleton section/i
+      : /snapshot contents digest mismatch/i;
+    expect(() => readRuntimeStateFile(path), line).toThrow(reason);
+  }
+  expect(boundaries.at(-1)?.line).toContain("urn:awp:state:usedApprovals");
+  expect(state.ledgerAuditHead).toBeDefined();
+});
+
+it("refuses an earlier RDF snapshot that has no contents digest", () => {
+  store.save(completeFixture());
+  const bytes = readFileSync(path, "utf8");
+  const legacy = bytes.replace(/^.*#snapshotContentsDigest>.*\n/m, "");
+  expect(legacy).not.toBe(bytes);
+  writeFileSync(path, legacy);
+  expect(() => readRuntimeStateFile(path)).toThrow(/missing snapshot contents digest/i);
+});
+
+it("refuses a validly shaped alteration with the original head and entry count", () => {
+  const state = emptyState();
+  state.domain.entry = "original";
+  store.save(state);
+  const bytes = readFileSync(path, "utf8");
+  const changed = bytes.replace('"original"', '"modified"');
+  expect(changed).not.toBe(bytes);
+  writeFileSync(path, changed);
+  expect(() => readRuntimeStateFile(path)).toThrow(/snapshot contents digest mismatch/i);
 });
 
 it.each([

@@ -199,6 +199,7 @@ awp:RuntimeSnapshotShape a sh:NodeShape;
     sh:targetClass awp:RuntimeSnapshot;
     sh:name "RuntimeSnapshot";
     sh:property [ sh:path awp:stateVersion; sh:name "stateVersion"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
+    sh:property [ sh:path awp:snapshotContentsDigest; sh:name "snapshotContentsDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
     sh:property [ sh:path awp:section; sh:name "section"; sh:minCount 1; sh:nodeKind sh:IRI ] .
 
 awp:StateSectionShape a sh:NodeShape;

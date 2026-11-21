@@ -10,7 +10,7 @@
   },
   "inputs": {
     "ontology.ttl": "76dc5d85ab9660e65cfae89ea5f6422d6df318dbf24c85d6bf0b5e12d0bbb089",
-    "shapes.shacl.ttl": "80bdeaeb0c43a18e221a3e7efb5ad5f7a6d834ef603c7d420a1fac5569426bab",
+    "shapes.shacl.ttl": "d30dfa97116ec859257ad167f7772cb726d295966a48d305ea984e02972487f1",
     "codegen.config.json": "da6c4b9830d1bd7b50e533ab96342daf9c25cdf75d6842225c8383033d684423"
   },
   "outputs": {

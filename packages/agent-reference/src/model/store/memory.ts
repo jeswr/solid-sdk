@@ -15,6 +15,7 @@ const termsLink = AWP + "terms";
 const grantLink = AWP + "dataUseGrant";
 const inheritedLink = AWP + "inheritedTerms";
 const MAX_TERMS_DEPTH = 32;
+const MAX_INHERITED_REFERENCES = 8_192;
 const { namedNode } = DataFactory;
 
 storeModel(
@@ -111,6 +112,7 @@ function readTerms(
   local: Store,
   policy: PolicyReader,
   ancestors = new Set<string>(),
+  budget = { remaining: MAX_INHERITED_REFERENCES },
 ): ItemTerms {
   if (ancestors.has(id)) throw new TypeError("Cyclic inherited item terms");
   checkTermsDepth(ancestors.size + 1);
@@ -119,11 +121,12 @@ function readTerms(
   const policyId = named(node, policyLink);
   if (!policyId) throw new TypeError("Missing item-terms policy");
   const inherited = node.valueAt(inheritedLink);
-  if (
-    inherited !== undefined &&
-    (!Array.isArray(inherited) || inherited.some((id) => typeof id !== "string"))
-  )
-    throw new TypeError("Invalid inherited item terms");
+  if (inherited !== undefined) {
+    if (!Array.isArray(inherited)) throw new TypeError("Invalid inherited item terms");
+    countInheritedReferences(budget, inherited.length);
+    if (inherited.some((id) => typeof id !== "string"))
+      throw new TypeError("Invalid inherited item terms");
+  }
   return {
     ...node.read(),
     policy: policy(policyId),
@@ -131,11 +134,21 @@ function readTerms(
       inherited: inherited.map((id) => {
         const ref = new StoreNode<{ target: string }>(id as string, local, "InheritedItemTerms");
         const termsId = named(ref, termsLink);
-        return { ...ref.read(), terms: termsId ? readTerms(termsId, local, policy, branch) : null };
+        return {
+          ...ref.read(),
+          terms: termsId ? readTerms(termsId, local, policy, branch, budget) : null,
+        };
       }),
     }),
   } as ItemTerms;
 }
+
+function countInheritedReferences(budget: { remaining: number }, count: number): void {
+  budget.remaining -= count;
+  if (budget.remaining < 0)
+    throw new TypeError("Inherited item terms exceed the expanded reference limit");
+}
+
 function checkTermsDepth(depth: number): void {
   if (depth > MAX_TERMS_DEPTH)
     throw new TypeError(`Inherited item terms exceed the maximum depth of ${MAX_TERMS_DEPTH}`);
@@ -147,12 +160,14 @@ function writeTerms(
   terms: ItemTerms,
   write: PolicyWriter,
   depth = 1,
+  budget = { remaining: MAX_INHERITED_REFERENCES },
 ): void {
   checkTermsDepth(depth);
   const { policy, inherited, ...fields } = terms;
   const node = makeNode("ItemTerms", fields, id, local) as StoreNode;
   node.put(policyLink, namedNode(write(policy)));
-  if (inherited !== undefined)
+  if (inherited !== undefined) {
+    countInheritedReferences(budget, inherited.length);
     node.putValue(
       inheritedLink,
       inherited.map(({ target, terms }, index) => {
@@ -161,11 +176,12 @@ function writeTerms(
         if (terms) {
           const termsId = scopedId(child, "terms");
           reference.put(termsLink, namedNode(termsId));
-          writeTerms(termsId, local, terms, write, depth + 1);
+          writeTerms(termsId, local, terms, write, depth + 1, budget);
         }
         return child;
       }) as Json,
     );
+  }
 }
 
 export function writeMemoryFact(

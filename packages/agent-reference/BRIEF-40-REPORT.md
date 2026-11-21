@@ -1240,3 +1240,68 @@ took 1.70 seconds in the full daemon run and 1.60 seconds in isolation, within i
 5-second limit. The full run passed 295 tests and hit 20 failures involving
 blocked loopback listeners or subprocess output. The packaged CLI's help and
 JSON and CSV exports passed when subprocess output was captured in files.
+
+## Review 40r5 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+- Saves check that each new layout, payload, and policy block starts with a
+  named subject and ends with a complete statement and newline. Each block must
+  match the canonical N-Quads of its parsed graph. The memo reuses those checks
+  for unchanged blocks. Regressions inject terminated and unterminated comments
+  and verify that the previous snapshot survives both faults.
+- The snapshot head carries a SHA-256 digest of the canonical section, entry,
+  and policy blocks. Startup and offline audit verify it before returning any
+  state. Tests truncate the populated fixture at all 40 entry boundaries, cut
+  each section at the same boundaries while preserving the later graphs, and
+  change a value while preserving the entry count. Older RDF snapshots without
+  a digest fail closed. Trusted version 1 JSON still opens and migrates on save.
+- N-Quads and Turtle readers apply their existing quad and term budgets while
+  N3 tokenizes. The regressions put too many small statements under the byte
+  cap and check that parsing stops before it reaches a malformed tail. Local
+  state and trust file reads also refuse invalid UTF-8.
+- Inherited item terms keep their 32-level depth limit. Each fact can now
+  expand at most 8,192 inherited references on read or write. A shallow chain
+  of diamonds exercises the expanded reference limit.
+
+With `AWP_STORE_RDF=1` on Node 24, each run performed 50 memory saves of the
+populated fixture. It changed one nested value on each save and added 25
+entries across the run. The before and after measurements used the same
+workload and four runs each.
+
+| Build | Four runs (ms) | Median (ms) |
+| --- | --- | ---: |
+| Before, `7a802d02e` | 468, 278, 318, 252 | 298 |
+| After | 497, 315, 284, 266 | 299 |
+
+The library compile and generated-file copy passed. All 97 agent-reference
+tests passed, including the store, state RDF, trust, ledger, durable capability,
+vocabulary and codegen drift tests. All 197 fetch-rdf tests and its test
+typecheck passed. The RDF pipeline check reported zero failures and 216
+existing allowances. The trace check matched both scenarios across five live
+paths and preserved the trace, outline and manifest contents.
+
+Daemon typecheck passed. The full daemon run passed 295 tests and reported 20
+failures, matching the previous sandbox run. The following 17 cases tried to
+bind to `127.0.0.1`. The first two reported `listen EPERM` directly, and all
+15 cloud cases timed out waiting for their test port reservation.
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A can propose while transfers and cumulative spending remain executor-gated.
+- `test/css.test.ts` — in-memory CSS pod and direct binding through signed halt.
+- `test/cloud.test.ts`
+  - Requires explicit dev configuration and a trusted host before opening a store or listener.
+  - Retains private persistent state and reads only explicit Key Vault injected model keys.
+  - Refuses local or unclassified bindings `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown` (five cases).
+  - Requires an A2A receiver and refuses a missing A2A binding.
+  - Exposes bounded A2A and probes, preserves authorization bytes and suppresses provider errors.
+  - Aborts the listener and waits for daemon drain before closing credentials.
+  - Closes the composition on daemon and listener startup failures.
+  - Retains the file lease through inbound cancellation and drain, including a released daemon lease.
+  - Releases startup leases after factory failure or cancellation during composition.
+  - Catches synchronous receiver failures and bounds receiver response bytes.
+  - Bounds concurrent A2A verification even for pipelined requests on one connection.
+
+The other three failures involved subprocess output. The packaged CLI received
+empty help output, the installer hit `spawnSync python3 EPERM` during plist
+validation, and the production package test received empty dependency JSON.
+All three passed on rerun with subprocess output captured in temporary files.

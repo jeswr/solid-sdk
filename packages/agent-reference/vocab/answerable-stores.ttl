@@ -591,6 +591,10 @@ awp:stateVersion a rdf:Property; rdfs:label "state version";
     rdfs:comment "Records the state version in a durable store projection.";
     rdfs:domain awp:RuntimeSnapshot; rdfs:range xsd:integer .
 
+awp:snapshotContentsDigest a rdf:Property; rdfs:label "snapshot contents digest";
+    rdfs:comment "Commits to the canonical ordered section, entry, and policy blocks of a runtime snapshot using SHA-256.";
+    rdfs:domain awp:RuntimeSnapshot; rdfs:range xsd:string .
+
 awp:section a rdf:Property; rdfs:label "section";
     rdfs:comment "Records the section in a durable store projection.";
     rdfs:domain awp:RuntimeSnapshot; rdfs:range rdfs:Resource .

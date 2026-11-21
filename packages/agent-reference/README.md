@@ -324,22 +324,28 @@ ledger in memory and builds record graphs only when a consumer requests them.
 ## Durable runtime state and trust
 
 `FileStateStore` keeps the configured filename and writes version 2 N-Quads.
-The default graph declares the snapshot and its sections. Each section graph
-retains native entry order, with ODRL item policies in named graphs.
+The default graph declares the snapshot and its sections and holds a SHA-256
+digest of the canonical section, entry, and policy blocks. Each section graph
+retains native entry order, with ODRL item policies in named graphs. The digest
+detects incomplete snapshots and content changes under the same head.
 On the next successful save, a version 1 JSON snapshot becomes version 2.
-An older reader fails when it tries to parse the version 2 file as JSON.
-An empty, malformed, or incomplete RDF snapshot prevents startup.
+Startup and offline audit refuse empty, malformed, or incomplete RDF snapshots,
+including earlier version 2 snapshots without a digest. Restore a trusted backup
+if you have one. A trusted version 1 JSON backup can still be opened and migrated.
 
 File saves compare each entry's JSON text with the previous save and reuse its
 N-Quads block when unchanged. Positions can change independently of payloads.
-The save verifies the outgoing RDF and compares the decoded state before the
-atomic replacement. Unchanged blocks reuse their validation. The file and
+The save verifies that each outgoing block contains complete canonical N-Quads
+statements and compares the decoded state before the atomic replacement.
+Unchanged blocks reuse their validation. The file and
 containing directory are synced around the replacement. Snapshots preserve
 runtime-admitted timestamp spellings and escape unpaired surrogates in RDF JSON
 literals. Open values can also use RDF JSON when they exceed the named-value
-projection limits. Inherited item terms can nest up to 32 levels.
+projection limits. Inherited item terms can nest up to 32 levels and expand at
+most 8,192 inherited references per item.
 
-Local snapshot files are capped at 256 MiB and one million quads. Trust files
+Local files must contain valid UTF-8. Local snapshot files are capped at 256 MiB
+and one million quads. Trust files
 are capped at 64 MiB. These budgets provide room for the expanded RDF of many
 accumulated conversations and signed records, and for a provisioned trust
 directory much larger than the pilot fixtures can exercise. Turtle trust parsing

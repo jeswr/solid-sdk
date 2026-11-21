@@ -1,8 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-
 import { type DatasetCore, parseRdfSync, type Quad } from "@jeswr/fetch-rdf";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { closeSync, fstatSync, openSync, readSync } from "fs";
 import { type Store, Writer } from "n3";
 import { IndexedStore } from "../model/indexed-store.js";
@@ -13,6 +12,7 @@ const LOCAL_SNAPSHOT_BYTES = 256 * 1024 * 1024;
 const LOCAL_SNAPSHOT_QUADS = 1_000_000;
 const LOCAL_TRUST_BYTES = 64 * 1024 * 1024;
 const LOCAL_TRUST_TERM_CHARS = 128 * 1024 * 1024;
+const LOCAL_STORE_UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 type LocalStoreFormat = "application/n-quads" | "text/turtle";
 // In Unicode mode, astral code points are matched whole. A match is unpaired.
 const UNPAIRED_SURROGATE = /[\ud800-\udfff]/u;
@@ -51,9 +51,14 @@ export function writeNQuads(dataset: DatasetCore, maxBytes = STORE_QUAD_BYTES): 
   return Buffer.concat(lines.sort(Buffer.compare), bytes).toString("utf8");
 }
 
+export function assertCanonicalSnapshotBlock(bytes: string, dataset: DatasetCore): void {
+  if (bytes !== writeNQuads(dataset, Infinity)) throw new TypeError("Noncanonical snapshot block");
+}
+
 export function readNQuads(text: string): IndexedStore {
   const parsed = parseRdfSync(text, {
     format: "application/n-quads",
+    incremental: true,
     maxBytes: STORE_QUAD_BYTES,
     maxTermLength: STORE_QUAD_BYTES,
   });
@@ -99,7 +104,7 @@ export function readLocalStoreFile(path: string, format: LocalStoreFormat): stri
     }
     if (readSync(fd, Buffer.alloc(1), 0, 1, null) !== 0)
       throw new Error("Local store file grew while it was being read");
-    return bytes.toString("utf8", 0, length);
+    return LOCAL_STORE_UTF8.decode(bytes.subarray(0, length));
   } finally {
     closeSync(fd);
   }
@@ -112,6 +117,7 @@ export function readLocalStoreRdf(text: string, format: LocalStoreFormat): Store
   const turtle = format === "text/turtle";
   const parsed = parseRdfSync(text, {
     format,
+    incremental: true,
     maxBytes: bytes,
     maxQuads: turtle ? 250_000 : LOCAL_SNAPSHOT_QUADS,
     maxTermLength: bytes,
