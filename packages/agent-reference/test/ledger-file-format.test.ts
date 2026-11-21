@@ -87,6 +87,32 @@ it("reuses only byte-identical prefixes and keeps decoded rows private", () =>
     expect(verifyLedgerAtHead(retained, trusted).ok).toBe(false);
   }));
 
+it.each(["jsonl", "nquads"] as const)("refuses invalid UTF-8 in a %s segment", (segmentFormat) =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat });
+    const first = ledger.append({ type: "event" }, now);
+    const prefix = readFileSync(path);
+    expect(readLedgerSegment(path)).toEqual([first]);
+    // N-Quads can reuse the already validated prefix when reading the new entry.
+    ledger.append({ type: "event", value: "value-\ufffd" }, now);
+    const suffix = readFileSync(path).subarray(prefix.length);
+    const replacement = Buffer.from("\ufffd");
+    const index = suffix.indexOf(replacement);
+    expect(index).toBeGreaterThanOrEqual(0);
+    writeFileSync(
+      path,
+      Buffer.concat([
+        prefix,
+        suffix.subarray(0, index),
+        Buffer.from([0xff]),
+        suffix.subarray(index + replacement.length),
+      ]),
+    );
+
+    expect(() => readLedgerSegment(path)).toThrow(/utf-8/i);
+    expect(() => new FileLedger(path)).toThrow(/utf-8/i);
+  }));
+
 it("keeps a legacy checkpointed segment in JSONL until rotation", () =>
   temp((path) => {
     for (const suffix of ["", ".seg-000002"])

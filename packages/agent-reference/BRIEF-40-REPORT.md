@@ -1305,3 +1305,71 @@ The other three failures involved subprocess output. The packaged CLI received
 empty help output, the installer hit `spawnSync python3 EPERM` during plist
 validation, and the production package test received empty dependency JSON.
 All three passed on rerun with subprocess output captured in temporary files.
+
+## Review round 6 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+- The snapshot reader checks that each memory payload, item, terms node, and
+  inherited reference uses the ID its writer assigns. It rejects a shared
+  chain in under 500 ms with either one or 40 entries. A separate case checks
+  sharing below a correctly scoped root.
+- The 8,192-reference limit now covers the whole RDF snapshot. The save path
+  counts both new and reused entries against that limit. Tests cover the
+  limit across memory sections, a successful round trip, and preservation of
+  the previous file when a save exceeds the limit.
+- The writer reuses the RDF graph for an identical ODRL policy within an
+  entry. The reader takes inherited reference IDs directly from the RDF
+  list. With 3,000 references sharing a policy, the measured file save went
+  from 7.19 s to 2.92 s and load went from 4.40 s to 2.29 s.
+- New and legacy ledger segments use the same fatal UTF-8 decoder as local
+  state and trust files. Tests cover both formats, including a bad append
+  after a cached N-Quads prefix.
+- The README explains that the unkeyed digest catches accidental damage,
+  anyone who can write the file can recompute it, and version 1 JSON has no
+  digest. It describes the ledger's role in tamper evidence.
+
+With Node 24 and `AWP_STORE_RDF=1`, four runs of 50 memory saves took
+466, 432, 448, and 460 ms. Each run used the populated fixture, updated one
+nested value per save, and appended 25 entries. The median total was
+454 ms against the 1 s target.
+
+The library compile and generated-file copy passed. The trace check passed
+across five scenario paths, with 278 manifest runs, zero disagreements, and
+five blocked paths. All 126 tests passed across the seven store, ledger,
+state RDF, and policy RDF test files. Daemon typecheck passed.
+
+The full daemon run passed 297 tests and reported 42 failures. Three passed
+on rerun with subprocess output captured in temporary files. These were
+packaged CLI help and JSON/CSV exports, launchd plist validation, and
+production dependency packaging. The remaining 39 failed to bind to
+`127.0.0.1` with `listen EPERM`:
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A proposals with
+  executor-gated transfers and cumulative spending.
+- `test/css.test.ts` — in-memory CSS pod and direct binding through signed halt.
+- `test/cloud.test.ts` — 37 cases
+  - Private persistent state and explicit Key Vault model keys.
+  - Refusal of `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown`
+    bindings (five cases).
+  - Missing A2A receiver and binding.
+  - Bounded A2A and probes, preserved authorization bytes, and suppressed
+    provider errors.
+  - Signed message admission on `/a2a` (compact), and on `/answerable`
+    (compact and document) (three cases).
+  - Empty 503 on decision commit failure on `/a2a` and `/answerable` (two cases).
+  - Direct HTTP route, media types, and byte limit before the gate.
+  - HTTP 200 admission and refusal at the A2A byte limit with default and
+    explicit receivers (two cases).
+  - Closing unfinished oversized chunked uploads on both routes at 415,
+    413, and the two 417 cases per route (eight cases).
+  - Replying and freeing a slot when final bytes and EOF arrive together
+    for fixed-length and chunked uploads on both routes (four cases).
+  - Reply after the client half-closes on either route (two cases).
+  - Shared upload slots and reclamation on disconnect.
+  - Listener abort, daemon drain, and credential close order.
+  - Composition close on daemon and listener startup failures.
+  - Retention of the file lease through inbound cancellation and drain.
+  - Release of startup leases after factory failure or cancellation.
+  - Synchronous receiver failures and response size bounds.
+  - Shared in-flight limit for pipelined requests.

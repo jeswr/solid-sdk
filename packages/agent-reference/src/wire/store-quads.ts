@@ -89,6 +89,10 @@ export function assertLocalSnapshotSize(text: string): void {
   }
 }
 
+export function decodeLocalStoreUtf8(bytes: Uint8Array): string {
+  return LOCAL_STORE_UTF8.decode(bytes);
+}
+
 /** Bound the file read itself, including a file that grows after opening it. */
 export function readLocalStoreFile(path: string, format: LocalStoreFormat): string {
   const fd = openSync(path, "r");
@@ -104,7 +108,7 @@ export function readLocalStoreFile(path: string, format: LocalStoreFormat): stri
     }
     if (readSync(fd, Buffer.alloc(1), 0, 1, null) !== 0)
       throw new Error("Local store file grew while it was being read");
-    return LOCAL_STORE_UTF8.decode(bytes.subarray(0, length));
+    return decodeLocalStoreUtf8(bytes.subarray(0, length));
   } finally {
     closeSync(fd);
   }

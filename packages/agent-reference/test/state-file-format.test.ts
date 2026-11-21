@@ -8,7 +8,7 @@ import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { scopedId } from "../src/model/named-values.js";
 import { graphContents, inGraph, StoreNode } from "../src/model/store/common.js";
-import { SnapshotMemo } from "../src/model/store/state.js";
+import { SnapshotMemo, stateDataset } from "../src/model/store/state.js";
 import { AWP } from "../src/profile/vocabulary.js";
 import {
   emptyState,
@@ -237,13 +237,13 @@ it("accepts 32 levels of inherited item terms and refuses a 33rd before replacin
     )
     .map((id) => new StoreNode(id, local, "ItemTerms"))
     .find((node) => node.term(AWP + "inheritedTerms") === undefined)!;
-  const child = new StoreNode("urn:example:33rd-terms", local, "ItemTerms");
+  const ref = new StoreNode(scopedId(leaf.id, "inherited:0"), local, "InheritedItemTerms");
+  const child = new StoreNode(scopedId(ref.id, "terms"), local, "ItemTerms");
   child.types.add(AWP + "ItemTerms");
   child.put(
     "http://www.w3.org/ns/odrl/2/hasPolicy",
     leaf.term("http://www.w3.org/ns/odrl/2/hasPolicy")!,
   );
-  const ref = new StoreNode("urn:example:33rd-reference", local, "InheritedItemTerms");
   ref.types.add(AWP + "InheritedItemTerms");
   ref.setField("target", "urn:example:asset");
   ref.put(AWP + "terms", namedNode(child.id));
@@ -254,11 +254,20 @@ it("accepts 32 levels of inherited item terms and refuses a 33rd before replacin
   expect(() => store.load()).toThrow(/inherited item terms exceed.*32/i);
 });
 
-it("bounds inherited item-term expansion across a chain of diamonds", () => {
-  const [key, fact] = Object.entries(completeFixture().precedenceHolds)[0]!;
+it.each([
+  [1, "root"],
+  [40, "root"],
+  [1, "nested"],
+] as const)("quickly refuses a shared chain of terms with %i entries and a %s link", (count, link) => {
+  const fact = Object.values(completeFixture().precedenceHolds)[0]!;
   const state = emptyState();
-  state.precedenceHolds[key] = { ...fact, terms: { policy: fact.terms!.policy } };
+  for (let index = 0; index < count; index++)
+    state.precedenceHolds[`urn:example:hold:${index}`] = {
+      ...fact,
+      terms: { policy: fact.terms!.policy },
+    };
   store.save(state);
+  expect(store.load()).toEqual(state);
 
   const graph = "urn:awp:state:precedenceHolds";
   const dataset = readLocalStoreRdf(readFileSync(path, "utf8"), "application/n-quads");
@@ -268,25 +277,77 @@ it("bounds inherited item-term expansion across a chain of diamonds", () => {
     AWP + "ItemTerms",
     null,
   );
-  let parent = new StoreNode(root!, local, "ItemTerms");
   const hasPolicy = "http://www.w3.org/ns/odrl/2/hasPolicy";
-  const policy = parent.term(hasPolicy)!;
-  for (let level = 0; level < 14; level++) {
-    const child = new StoreNode(`urn:example:diamond:${level}`, local, "ItemTerms");
+  const terms = AWP + "terms";
+  const { namedNode } = DataFactory;
+  const policy = new StoreNode(root!, local, "ItemTerms").term(hasPolicy)!;
+  let parent = new StoreNode(root!, local, "ItemTerms");
+  if (link === "root") {
+    parent = new StoreNode("urn:example:shared-terms", local, "ItemTerms");
+    parent.types.add(AWP + "ItemTerms");
+    parent.put(hasPolicy, policy);
+    const holds = local.getSubjects(terms, null, null);
+    expect(holds).toHaveLength(count);
+    for (const hold of holds)
+      new StoreNode(hold, local, "PrecedenceHold").put(terms, namedNode(parent.id));
+  }
+  for (let level = 0; level < 12; level++) {
+    const child = new StoreNode(
+      scopedId(scopedId(parent.id, "inherited:0"), "terms"),
+      local,
+      "ItemTerms",
+    );
     child.types.add(AWP + "ItemTerms");
     child.put(hasPolicy, policy);
-    const refs = ["left", "right"].map((branch) => {
-      const ref = new StoreNode(`${child.id}:${branch}`, local, "InheritedItemTerms");
+    const refs = [0, 1].map((index) => {
+      const ref = new StoreNode(
+        scopedId(parent.id, "inherited:" + index),
+        local,
+        "InheritedItemTerms",
+      );
       ref.types.add(AWP + "InheritedItemTerms");
       ref.setField("target", "urn:example:asset");
-      ref.put(AWP + "terms", DataFactory.namedNode(child.id));
+      ref.put(terms, namedNode(child.id));
       return ref.id;
     });
     parent.putValue(AWP + "inheritedTerms", refs);
     parent = child;
   }
-  dataset.deleteMatches(undefined, undefined, undefined, DataFactory.namedNode(graph));
+  dataset.deleteMatches(undefined, undefined, undefined, namedNode(graph));
   dataset.addQuads([...inGraph(local, graph)]);
+  writeFileSync(path, writeNQuads(dataset));
+  const start = performance.now();
+  expect(() => store.load()).toThrow(/invalid scoped item terms/i);
+  expect(performance.now() - start).toBeLessThan(500);
+});
+
+it("shares the inherited-reference budget across sections and cached entries", () => {
+  const fixture = completeFixture();
+  const [key, fact] = Object.entries(fixture.precedenceHolds)[0]!;
+  const [item] = Object.values(fixture.contextItems)[0]!;
+  const terms = (count: number) => ({
+    policy: fact.terms!.policy,
+    inherited: Array.from({ length: count }, () => ({ target: "urn:example:asset", terms: null })),
+  });
+  const state = emptyState();
+  state.contextItems.scope = [{ ...item!, terms: terms(2) }];
+  store.save(state);
+  const before = readFileSync(path);
+  expect(store.load()).toEqual(state);
+
+  state.precedenceHolds[key] = { ...fact, terms: terms(8_191) };
+  expect(() => store.save(state)).toThrow(
+    /inherited item terms exceed the expanded reference limit/i,
+  );
+  expect(readFileSync(path)).toEqual(before);
+
+  // Both sections are independently writable. Combine them to exercise the
+  // snapshot reader directly, before its final digest and graph checks.
+  const overLimit = stateDataset({ ...emptyState(), precedenceHolds: state.precedenceHolds });
+  const dataset = readLocalStoreRdf(before.toString(), "application/n-quads");
+  const graph = DataFactory.namedNode("urn:awp:state:precedenceHolds");
+  dataset.deleteMatches(undefined, undefined, undefined, graph);
+  dataset.addQuads(overLimit.getQuads(null, null, null, graph));
   writeFileSync(path, writeNQuads(dataset));
   expect(() => store.load()).toThrow(/inherited item terms exceed the expanded reference limit/i);
 });

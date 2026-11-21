@@ -327,8 +327,11 @@ ledger in memory and builds record graphs only when a consumer requests them.
 The default graph declares the snapshot and its sections and holds a SHA-256
 digest of the canonical section, entry, and policy blocks. Each section graph
 retains native entry order, with ODRL item policies in named graphs. The digest
-detects incomplete snapshots and content changes under the same head.
-On the next successful save, a version 1 JSON snapshot becomes version 2.
+is unkeyed and detects accidental truncation or corruption. Anyone who can
+write the file can edit its contents and recompute the digest. Local files
+are inside the trust boundary. The ledger provides tamper evidence for
+recorded events when verified against a trusted head. Version 1 JSON has
+no snapshot digest and becomes version 2 on the next successful save.
 Startup and offline audit refuse empty, malformed, or incomplete RDF snapshots,
 including earlier version 2 snapshots without a digest. Restore a trusted backup
 if you have one. A trusted version 1 JSON backup can still be opened and migrated.
@@ -342,7 +345,7 @@ containing directory are synced around the replacement. Snapshots preserve
 runtime-admitted timestamp spellings and escape unpaired surrogates in RDF JSON
 literals. Open values can also use RDF JSON when they exceed the named-value
 projection limits. Inherited item terms can nest up to 32 levels and expand at
-most 8,192 inherited references per item.
+most 8,192 inherited references across the whole RDF snapshot.
 
 Local files must contain valid UTF-8. Local snapshot files are capped at 256 MiB
 and one million quads. Trust files

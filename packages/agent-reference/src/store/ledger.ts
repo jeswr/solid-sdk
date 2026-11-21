@@ -34,7 +34,7 @@ import { DataFactory } from "n3";
 import { basename, dirname, join } from "path";
 import { digestOf } from "../core/canonical.js";
 import { recordEntryDataset, recordEntryFrom } from "../model/store/record.js";
-import { readNQuads, writeNQuads } from "../wire/store-quads.js";
+import { decodeLocalStoreUtf8, readNQuads, writeNQuads } from "../wire/store-quads.js";
 import { fsyncDir, writeFileDurable } from "./state.js";
 
 /** Any record with a `type`; stored as its JSON form. */
@@ -245,7 +245,7 @@ function readSegment(path: string) {
   forgetDecodedSegment(path);
   const prefix =
     cached && bytes.subarray(0, cached.bytes.length).equals(cached.bytes) ? cached : undefined;
-  const text = bytes.toString("utf8", prefix?.bytes.length ?? 0);
+  const text = decodeLocalStoreUtf8(bytes.subarray(prefix?.bytes.length ?? 0));
   const first = text.trimStart()[0];
   // Store RDF begins with a named subject (or a comment). Legacy JSON can begin with a scalar.
   const format: SegmentFormat | undefined =
@@ -370,7 +370,7 @@ export class FileLedger implements EvidenceLedger {
             tmp,
             kept.map(({ entry }) => entry),
           );
-        else writeFileDurable(tmp, bytes.toString("utf8").slice(0, tail.end), "wx");
+        else writeFileDurable(tmp, decodeLocalStoreUtf8(bytes).slice(0, tail.end), "wx");
         renameSync(tmp, path);
         forgetDecodedSegment(path);
         fsyncDir(dirname(this.path));

@@ -6,7 +6,7 @@ import type { AdmittedFact, ItemTerms } from "../../gates/common.js";
 import { AWP, ODRL, PROV } from "../../profile/vocabulary.js";
 import { makeNode } from "../core-node.js";
 import { evidenceItemSpec } from "../evidence-item.js";
-import { scopedId } from "../named-values.js";
+import { NamedValuesNode, SCHEMA, scopedId } from "../named-values.js";
 import { enumeration, exact, field, instant, link, RDFS, StoreNode, storeModel } from "./common.js";
 import { type NativePolicy, policyDataset, policyFromStore } from "./policy.js";
 
@@ -86,13 +86,20 @@ storeModel("DescriptionAddress", { value: field("iri", "descriptionAddress") });
 
 type PolicyReader = (id: string) => NativePolicy;
 type PolicyWriter = (policy: NativePolicy) => string;
-export const writePolicy =
-  (dataset: Store): PolicyWriter =>
-  (policy) => {
+export const writePolicy = (dataset: Store): PolicyWriter => {
+  const ids = new Map<string, string>();
+  return (policy) => {
+    // Policy graphs retain native field order. Cache exact JSON within this entry.
+    const key = JSON.stringify(policy);
+    const cached = ids.get(key);
+    if (cached !== undefined) return cached;
     const graph = policyDataset(policy, "memory");
     for (const quad of graph) dataset.addQuad(quad);
-    return graph.getGraphs(null, null, null)[0]!.value;
+    const id = graph.getGraphs(null, null, null)[0]!.value;
+    ids.set(key, id);
+    return id;
   };
+};
 export const readPolicy = (dataset: Store): PolicyReader => {
   const cached = new Map<string, NativePolicy>();
   return (id) => {
@@ -107,46 +114,65 @@ function named(node: StoreNode, term: string): string | undefined {
   if (value.termType !== "NamedNode") throw new TypeError("Expected a named memory link");
   return value.value;
 }
+
+function ownedTermsId(node: StoreNode): string | undefined {
+  const id = named(node, termsLink);
+  if (id !== undefined && id !== scopedId(node.id, "terms"))
+    throw new TypeError("Invalid scoped item terms");
+  return id;
+}
+
+export class InheritedTermsBudget {
+  private remaining = MAX_INHERITED_REFERENCES;
+
+  get used(): number {
+    return MAX_INHERITED_REFERENCES - this.remaining;
+  }
+
+  consume(count: number): void {
+    this.remaining -= count;
+    if (this.remaining < 0)
+      throw new TypeError("Inherited item terms exceed the expanded reference limit");
+  }
+}
+
 function readTerms(
   id: string,
   local: Store,
   policy: PolicyReader,
-  ancestors = new Set<string>(),
-  budget = { remaining: MAX_INHERITED_REFERENCES },
+  budget: InheritedTermsBudget,
+  depth = 1,
 ): ItemTerms {
-  if (ancestors.has(id)) throw new TypeError("Cyclic inherited item terms");
-  checkTermsDepth(ancestors.size + 1);
-  const branch = new Set(ancestors).add(id);
+  checkTermsDepth(depth);
   const node = new StoreNode<Omit<ItemTerms, "policy" | "inherited">>(id, local, "ItemTerms");
   const policyId = named(node, policyLink);
   if (!policyId) throw new TypeError("Missing item-terms policy");
-  const inherited = node.valueAt(inheritedLink);
-  if (inherited !== undefined) {
-    if (!Array.isArray(inherited)) throw new TypeError("Invalid inherited item terms");
-    countInheritedReferences(budget, inherited.length);
-    if (inherited.some((id) => typeof id !== "string"))
-      throw new TypeError("Invalid inherited item terms");
-  }
+  const fields = { ...node.read(), policy: policy(policyId) as ItemTerms["policy"] };
+  const list = named(node, inheritedLink);
+  if (list === undefined) return fields;
+  if (list !== scopedId(id, inheritedLink)) throw new TypeError("Invalid inherited item terms");
+  const values = new NamedValuesNode(list, local);
+  if (values.isObject || !values.types.has(SCHEMA + "ItemList"))
+    throw new TypeError("Invalid inherited item terms");
+  // Read reference IRIs directly. Generic value decoding would recurse into
+  // arbitrary named-value subgraphs before checking that the list holds IDs.
+  budget.consume(
+    local.countQuads(namedNode(list), namedNode(SCHEMA + "itemListElement"), null, null),
+  );
   return {
-    ...node.read(),
-    policy: policy(policyId),
-    ...(Array.isArray(inherited) && {
-      inherited: inherited.map((id) => {
-        const ref = new StoreNode<{ target: string }>(id as string, local, "InheritedItemTerms");
-        const termsId = named(ref, termsLink);
-        return {
-          ...ref.read(),
-          terms: termsId ? readTerms(termsId, local, policy, branch, budget) : null,
-        };
-      }),
+    ...fields,
+    inherited: values.entries.map((entry, index) => {
+      const value = entry.domainValue;
+      if (value.termType !== "NamedNode" || value.value !== scopedId(id, "inherited:" + index))
+        throw new TypeError("Invalid scoped inherited item reference");
+      const ref = new StoreNode<{ target: string }>(value, local, "InheritedItemTerms");
+      const termsId = ownedTermsId(ref);
+      return {
+        ...ref.read(),
+        terms: termsId === undefined ? null : readTerms(termsId, local, policy, budget, depth + 1),
+      };
     }),
-  } as ItemTerms;
-}
-
-function countInheritedReferences(budget: { remaining: number }, count: number): void {
-  budget.remaining -= count;
-  if (budget.remaining < 0)
-    throw new TypeError("Inherited item terms exceed the expanded reference limit");
+  };
 }
 
 function checkTermsDepth(depth: number): void {
@@ -159,15 +185,15 @@ function writeTerms(
   local: Store,
   terms: ItemTerms,
   write: PolicyWriter,
+  budget: InheritedTermsBudget,
   depth = 1,
-  budget = { remaining: MAX_INHERITED_REFERENCES },
 ): void {
   checkTermsDepth(depth);
   const { policy, inherited, ...fields } = terms;
   const node = makeNode("ItemTerms", fields, id, local) as StoreNode;
   node.put(policyLink, namedNode(write(policy)));
   if (inherited !== undefined) {
-    countInheritedReferences(budget, inherited.length);
+    budget.consume(inherited.length);
     node.putValue(
       inheritedLink,
       inherited.map(({ target, terms }, index) => {
@@ -176,7 +202,7 @@ function writeTerms(
         if (terms) {
           const termsId = scopedId(child, "terms");
           reference.put(termsLink, namedNode(termsId));
-          writeTerms(termsId, local, terms, write, depth + 1, budget);
+          writeTerms(termsId, local, terms, write, budget, depth + 1);
         }
         return child;
       }) as Json,
@@ -190,13 +216,14 @@ export function writeMemoryFact(
   id: string,
   local: Store,
   policy: PolicyWriter,
+  budget: InheritedTermsBudget,
 ): void {
   const { terms, dataUseGrant, ...fields } = value;
   const node = makeNode(name, fields, id, local) as StoreNode;
   if (terms) {
     const termsId = scopedId(id, "terms");
     node.put(termsLink, namedNode(termsId));
-    writeTerms(termsId, local, terms, policy);
+    writeTerms(termsId, local, terms, policy, budget);
   }
   if (dataUseGrant) {
     const grantId = policy(dataUseGrant);
@@ -208,12 +235,13 @@ export function writeMemoryFact(
 export function readMemoryFact<T extends AdmittedFact>(
   node: StoreNode<T>,
   policy: PolicyReader,
+  budget: InheritedTermsBudget,
 ): T {
-  const terms = named(node, termsLink);
+  const terms = ownedTermsId(node);
   const grant = named(node, grantLink);
   return {
     ...node.read(),
-    ...(terms && { terms: readTerms(terms, node.dataset, policy) }),
+    ...(terms && { terms: readTerms(terms, node.dataset, policy, budget) }),
     ...(grant && { dataUseGrant: policy(grant) }),
   } as T;
 }
