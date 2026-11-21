@@ -23,7 +23,23 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/notes",
 }));
 vi.mock("../src/apps/docs/lib/model/store", () => ({
-  createDocsStore: () => ({ create: mocks.createDoc }),
+  createDocsStore: () => ({
+    create: async (
+      input: { title: string; body: string; format: string },
+      _slug: unknown,
+      preparation: { prepare: (assets: string) => Promise<object> },
+    ) => {
+      const prepared = {
+        ...input,
+        ...(await preparation.prepare("https://pod.example/docs/converted-image/assets/")),
+      };
+      const document = await mocks.createDoc(prepared);
+      return {
+        ...document,
+        data: parseDocument(document.url, buildDocument(document.url, prepared)),
+      };
+    },
+  }),
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<typeof import("@jeswr/suite-ui")>()),
@@ -68,6 +84,10 @@ function button(text: string): HTMLButtonElement {
   );
   expect(found, text).toBeDefined();
   return found as HTMLButtonElement;
+}
+async function openDocs(mode = "Move to Docs") {
+  await click(button("More note actions"));
+  await click(button(mode));
 }
 async function fill(label: string, value: string) {
   const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
@@ -266,20 +286,20 @@ it.each([
   expect(mocks.context.move).not.toHaveBeenCalled();
 });
 
-it("confirms Open in Docs, holds the snapshot read-only during conversion, then trashes and navigates without Undo", async () => {
+it("confirms Move to Docs, holds the snapshot read-only during conversion, then trashes and navigates without Undo", async () => {
   const converting = deferred<{ url: string }>();
   mocks.createDoc.mockReturnValue(converting.promise);
   await mount(h(NoteDialog, { note: note() }));
   await fill("Note title", "Latest title");
-  await click(button("Open in Docs"));
+  await openDocs();
   expect(document.body.textContent).toContain(
     "This note moves to Trash in Notes, and you can restore it from there.",
   );
   expect(mocks.createDoc).not.toHaveBeenCalled();
   await click(button("Cancel"));
   expect(mocks.editor?.isEditable).toBe(true);
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(mocks.createDoc).toHaveBeenCalledExactlyOnceWith({
     title: "Latest title",
     body: "<p>Body</p>",
@@ -302,8 +322,8 @@ it("confirms Open in Docs, holds the snapshot read-only during conversion, then 
 it("unlocks the draft when document conversion fails", async () => {
   mocks.createDoc.mockRejectedValue(new Error("Offline"));
   await mount(h(NoteDialog, { note: note() }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.readOnly).toBe(
     false,
   );
@@ -318,15 +338,15 @@ it("reuses the created document after trashing fails, including after dismissing
   mocks.context.move = move;
   const original = note();
   await mount(h(NoteDialog, { note: original }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(move).toHaveBeenCalledTimes(1);
   expect(mocks.push).not.toHaveBeenCalled();
   expect(mocks.editor?.isEditable).toBe(true);
-  await click(button("Open in Docs"));
+  await openDocs();
   await click(button("Cancel"));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(mocks.createDoc).toHaveBeenCalledExactlyOnceWith({
     title: original.title,
     body: original.body,
@@ -417,15 +437,15 @@ it.each([
   const move = vi.fn().mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce(note());
   mocks.context.move = move;
   await mount(h(NoteDialog, { note: note() }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(mocks.editor?.isEditable).toBe(true);
   await fill("Note title", "Edited after conversion");
   await act(() =>
     mocks.editor?.commands.setContent("<p>More recent body</p>", { emitUpdate: true }),
   );
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
     first.url,
     expect.objectContaining({ method: "PUT" }),
@@ -463,17 +483,17 @@ it("retains the edited note and cached document validator if updating the conver
   const move = vi.fn().mockRejectedValueOnce(new Error("Offline")).mockResolvedValue(note());
   mocks.context.move = move;
   await mount(h(NoteDialog, { note: note() }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   await fill("Note title", "Latest");
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(move).toHaveBeenCalledOnce();
   expect(mocks.push).not.toHaveBeenCalled();
   expect(mocks.editor?.isEditable).toBe(true);
   fetchImpl.mockResolvedValue(new Response(null, { headers: { etag: '"doc-v2"' } }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(new Headers(fetchImpl.mock.calls[1]?.[1]?.headers).get("if-match")).toBe(first.etag);
   expect(move).toHaveBeenCalledTimes(2);
   expect(mocks.push).toHaveBeenCalledOnce();
@@ -526,7 +546,12 @@ it("offers Add to Tasks only for notes with unchecked checklist items", async ()
   ).toBe(false);
 });
 
-it("keeps pod image URLs when opening an image note in Docs", async () => {
+it("copies Notes images into the document assets before moving to Docs", async () => {
+  (mocks.context.session as { fetch: typeof fetch }).fetch = vi.fn(async (_input, init) =>
+    init?.method === "PUT"
+      ? new Response(null, { status: 201 })
+      : new Response("pixels", { headers: { "content-type": "image/png" } }),
+  );
   const original = {
     ...note(),
     body: '<p>Body</p><img src="https://pod.example/notes/media/bird.png" alt="A bird">',
@@ -534,11 +559,11 @@ it("keeps pod image URLs when opening an image note in Docs", async () => {
   const documentUrl = "https://pod.example/docs/converted-image.ttl";
   mocks.createDoc.mockResolvedValue({ url: documentUrl });
   await mount(h(NoteDialog, { note: original }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(mocks.createDoc).toHaveBeenCalledExactlyOnceWith({
     title: original.title,
-    body: original.body,
+    body: expect.stringMatching(/docs\/converted-image\/assets\/[a-f0-9-]+\.png/),
     format: "text/html",
   });
   expect(mocks.context.move).toHaveBeenCalledWith(
@@ -616,15 +641,15 @@ it.each([
   expect(button(label).disabled).toBe(false);
 });
 
-it("refuses Open in Docs before creating a copy of a shared note", async () => {
+it("refuses Move to Docs before creating a copy of a shared note", async () => {
   const original = note();
   const error = new NoteMoveBlockedError(original.url);
   (
     mocks.context.store as { assertMovable: ReturnType<typeof vi.fn> }
   ).assertMovable.mockRejectedValue(error);
   await mount(h(NoteDialog, { note: original }));
-  await click(button("Open in Docs"));
-  await click(button("Open in Docs?"));
+  await openDocs();
+  await click(button("Move to Docs?"));
   expect(mocks.createDoc).not.toHaveBeenCalled();
   expect(mocks.context.move).not.toHaveBeenCalled();
   expect(mocks.context.reportError).toHaveBeenCalledExactlyOnceWith(error);
@@ -677,4 +702,36 @@ it("empty trash reports refused notes and continues deleting the rest", async ()
   expect(alert?.querySelectorAll("button")).toHaveLength(2);
   await click(alert?.querySelector("button") as HTMLButtonElement);
   expect(mocks.context.openShare).toHaveBeenCalledExactlyOnceWith(shared.url);
+});
+
+it.each([
+  "editor",
+  "card",
+])("copies to Docs from the %s menu, keeps the note and offers an Open document link", async (surface) => {
+  const original = note();
+  const document = createdDocument();
+  mocks.createDoc.mockResolvedValue(document);
+  mocks.context.attempt = (work: () => Promise<unknown>) => {
+    void work();
+  };
+  await mount(h(surface === "editor" ? NoteDialog : NoteCard, { note: original }));
+  await openDocs("Copy to Docs");
+  expect(mocks.createDoc).toHaveBeenCalledExactlyOnceWith({
+    title: original.title,
+    body: original.body,
+    format: "text/html",
+  });
+  expect((mocks.context.store as { assertMovable: unknown }).assertMovable).not.toHaveBeenCalled();
+  expect(mocks.context.move).not.toHaveBeenCalled();
+  expect(mocks.push).not.toHaveBeenCalled();
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    "Copied to Docs",
+    expect.objectContaining({ action: expect.anything() }),
+  );
+  const action = mocks.toast.success.mock.calls[0]?.[1].action;
+  await mount(action);
+  const link = window.document.querySelector<HTMLAnchorElement>('a[href^="/docs/d/"]');
+  expect(link?.textContent).toBe("Open document");
+  expect(link?.getAttribute("href")).toBe(`/docs/d/${encodeRef(document.url)}`);
+  if (surface === "editor") expect(mocks.editor?.isEditable).toBe(true);
 });
