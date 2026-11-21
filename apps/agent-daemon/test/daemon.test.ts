@@ -42,8 +42,11 @@ import {
 } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
-import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
-import { Cast, craftSigned, mandateOf } from "@jeswr/agent-reference/scenarios/common";
+import { fakeFetch } from "@jeswr/agent-model-gateway/testing";
+import { CONFIG_ED25519, introduce, PILOT_PROFILE } from "@jeswr/agent-reference";
+import { testKey } from "@jeswr/agent-reference/reference/keys";
+import { Cast, craftSigned, mandateOf, signClaim } from "@jeswr/agent-reference/scenarios/common";
+import { addSourceRule, pinIssuer, saveTrust } from "@jeswr/agent-reference/setup";
 import { parseEmail } from "@jeswr/agentic-legacy-bridge";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
@@ -62,10 +65,16 @@ import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js"
 import * as teams from "../../../packages/agent-channels/test/fixtures/teams.js";
 import { createCliHost, runCli } from "../src/cli.js";
 import { createDaemon, pollInterval } from "../src/daemon.js";
-import { createInboundGate } from "../src/gate.js";
+import { createInboundGate, openGate, readGate } from "../src/gate.js";
 import { initGate } from "../src/gate-setup.js";
 import { createLocalState } from "../src/local.js";
-import { createMemoryPod, createMemoryState, createTestGate } from "../src/testing.js";
+import { createRuntimeMemory } from "../src/memory.js";
+import {
+  createMemoryPod,
+  createMemoryState,
+  createTestGate,
+  createTestMemory,
+} from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
 
@@ -227,6 +236,7 @@ function harness() {
         })),
       },
     },
+    memory: createTestMemory(),
     proposerContext: {
       pod: {
         root: ROOT,
@@ -236,7 +246,6 @@ function harness() {
         delete: vi.fn(),
         list: vi.fn(),
       },
-      memoryRecall: async () => [],
       instructions: "Synthetic fixture",
     },
     isFlagged: vi.fn(async () => false),
@@ -1128,7 +1137,7 @@ it.each([
   if (outcome === "admitted") {
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledWith(
       [expect.objectContaining({ gate: verdict })],
-      h.options.proposerContext,
+      { ...h.options.proposerContext, memoryRecall: expect.any(Function) },
     );
   }
   const resources = [...h.pod.resources.keys()];
@@ -1323,7 +1332,7 @@ it("drops a genuinely bad signature and admits the valid signed message down the
     );
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledExactlyOnceWith(
       [expect.objectContaining({ gate: verdict })],
-      h.options.proposerContext,
+      { ...h.options.proposerContext, memoryRecall: expect.any(Function) },
     );
     expect([...h.pod.resources.values()].filter(({ body }) => body === good)).toHaveLength(1);
     expect(h.ledger.entries().filter(({ record }) => record.type === "ingest")).toHaveLength(1);
@@ -1970,4 +1979,264 @@ it("holds its process lease through a failed watcher close and delayed executor 
   finish();
   await failed;
   expect(h.state.held()).toBe(false);
+});
+
+const memoryPurpose = "urn:test:personalisation";
+const memoryOperation = { id: "urn:test:provide-assessment", version: "1" };
+const memoryIssuer = "urn:test:assessor";
+const memoryAt = new Date(AT).toISOString();
+const assessment = {
+  id: "urn:test:assessment",
+  claimType: "assessment",
+  issuer: memoryIssuer,
+  subject: "urn:test:subject",
+  asOf: memoryAt,
+  method: "recorded-by-authority",
+  value: "Appointment confirmed",
+  terms: {
+    policy: {
+      id: "urn:test:assessment-terms",
+      permissions: [{ type: "permission", action: "use" }],
+    },
+  },
+};
+const recalledAssessment = {
+  kind: "admitted-fact",
+  id: assessment.id,
+  subject: assessment.subject,
+  statement: assessment,
+  provenance: {
+    source: memoryIssuer,
+    asOf: memoryAt,
+    method: assessment.method,
+    digest: digestOf(assessment),
+    terms: assessment.terms,
+    admittedPurpose: memoryPurpose,
+  },
+};
+const memoryAdmission = {
+  taskId: "urn:test:personalisation-task",
+  reliance: {
+    id: "urn:test:reliance",
+    rules: [
+      {
+        id: "urn:test:fitness",
+        claimType: "assessment",
+        methods: ["recorded-by-authority"],
+        maxAgeDays: 30,
+        text: "Require the accepted assessor's recent record.",
+      },
+    ],
+  },
+  handlers: [
+    {
+      description: {
+        ...memoryOperation,
+        label: "Receive assessment",
+        access: "public" as const,
+        pattern: "invoke" as const,
+        roles: ["responder"] as const,
+        models: [],
+        effects: [],
+        outcomes: [],
+      },
+      requiresRepresentation: false,
+      onInvoke: () => ({ type: "none" as const }),
+    },
+  ],
+};
+
+async function memoryGateFixture(
+  root: string,
+  variant: "valid" | "bad-signature" | "unknown-source" | "plain",
+) {
+  const directory = join(root, "gate");
+  const now = () => new Date(AT);
+  await initGate({
+    directory,
+    ownerDir: join(root, "owner"),
+    agentWebId: AGENT_ID,
+    ownerWebId: OWNER,
+    now,
+    confirm: async () => true,
+  });
+  const cast = new Cast(now);
+  const peer = await cast.add(
+    {
+      name: "peer",
+      actor: "https://peer.example/agent#id",
+      party: "https://peer.example/owner#id",
+    },
+    mandateOf("memory-fixture", []),
+    [],
+  );
+  const issuerKey = await testKey("daemon-memory:issuer");
+  const stored = await readGate(directory);
+  let trust = pinIssuer(introduce(stored.trust, peer.card), memoryIssuer, issuerKey);
+  if (variant !== "unknown-source") {
+    trust = addSourceRule(trust, {
+      id: "urn:test:source-rule",
+      version: "1",
+      source: memoryIssuer,
+      claimTypes: ["assessment"],
+      subjects: "any",
+    });
+  }
+  saveTrust(root, "gate", trust);
+  const options = { directory, now, admission: memoryAdmission };
+  const { jws } = await craftSigned(peer, {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_ED25519,
+    id: "urn:uuid:00000000-0000-4000-8000-000000000061",
+    conversation: "urn:uuid:00000000-0000-4000-8000-100000000061",
+    kind: "invoke",
+    from: { actor: peer.identity.actor },
+    to: { actor: AGENT_ID },
+    createdAt: memoryAt,
+    expiresAt: new Date(AT + 3_600_000).toISOString(),
+    body: {
+      operation: memoryOperation,
+      input: {},
+      purpose: memoryPurpose,
+      basis: { kind: "public" },
+    },
+    evidence: [
+      { role: "credential", format: "jws-compact", value: await signClaim(issuerKey, assessment) },
+    ],
+  });
+  const [header, payload, proof] = jws.split(".") as [string, string, string];
+  const signature = Buffer.from(proof, "base64url");
+  signature[0] = (signature[0] as number) ^ 1;
+  const raw =
+    variant === "plain"
+      ? JSON.stringify(assessment)
+      : encodeEnvelope(
+          variant === "bad-signature"
+            ? `${header}.${payload}.${signature.toString("base64url")}`
+            : jws,
+        );
+  return { options, raw };
+}
+
+it.each([
+  "valid",
+  "bad-signature",
+  "unknown-source",
+  "plain",
+] as const)("exposes only admitted evidence to the Proposer's memory_recall tool (%s)", async (variant) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-"));
+  try {
+    const { options, raw } = await memoryGateFixture(root, variant);
+    const h = harness();
+    const gate = createInboundGate(options);
+    const memory = createRuntimeMemory({
+      facts: () => gate.facts(),
+      owner: { recall: async () => [] },
+      purpose: memoryPurpose,
+    });
+    const usage = { input_tokens: 10, output_tokens: 10 };
+    const provider = fakeFetch([
+      Response.json({
+        status: "completed",
+        usage,
+        output: [
+          {
+            type: "function_call",
+            call_id: "memory-test",
+            name: "memory_recall",
+            arguments: JSON.stringify({ query: "assessment" }),
+          },
+        ],
+      }),
+      Response.json({ status: "completed", usage, output: [] }),
+    ]);
+    const { proposer } = createGateway({
+      provider: "openai",
+      model: "synthetic",
+      maxTokens: 100,
+      tokens: { read: async () => "synthetic-token" },
+      account: "synthetic",
+      fetch: provider.fetch,
+    });
+    h.ingest.parse.mockImplementation(
+      variant === "plain"
+        ? () => ({
+            ...h.message,
+            textBody: raw,
+            rawSha256: digestBytes(raw).slice(8),
+            rawByteLength: Buffer.byteLength(raw),
+            jsonLdBlocks: [],
+          })
+        : createDirectReader(
+            { inboxes: new Map(), accepted: new Map() },
+            new RecordingTokenProvider(),
+          ).ingest.parse,
+    );
+    h.ingest.list.mockResolvedValue({ items: [{ id: "fixture", raw }], next: "one" });
+    await createDaemon({
+      ...h.options,
+      memory,
+      gate,
+      gateway: { ...h.options.gateway, proposer },
+      isFlagged: async () => variant === "plain",
+    }).once();
+    expect(h.state.cursors.get("fixture")).toBe("one");
+    if (variant === "bad-signature") {
+      expect(provider.requests).toHaveLength(0);
+      const reopened = await openGate(options);
+      try {
+        expect(reopened.facts()).toEqual([]);
+      } finally {
+        await reopened.close();
+      }
+    } else {
+      expect(provider.requests).toHaveLength(2);
+      const body = JSON.parse(String(provider.requests[1]?.init?.body));
+      const output = body.input.find(
+        (item: { type?: string }) => item.type === "function_call_output",
+      );
+      expect(JSON.parse(output.output)).toMatchObject({
+        items: variant === "valid" ? [recalledAssessment] : [],
+        withheld: 0,
+      });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("recalls the same admitted fact after reopening its gate directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-restart-"));
+  try {
+    const { options, raw } = await memoryGateFixture(root, "valid");
+    const message = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    ).ingest.parse({ id: "fixture", raw });
+    const gate = await openGate(options);
+    try {
+      expect(await gate.check({ account: "fixture", binding: "direct", message })).toMatchObject({
+        outcome: "admitted",
+      });
+      expect(gate.facts()).toMatchObject([expect.objectContaining({ id: assessment.id })]);
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      const memory = createRuntimeMemory({
+        facts: () => reopened.facts(),
+        owner: { recall: async () => [] },
+        purpose: memoryPurpose,
+      });
+      expect(await memory.recall("assessment")).toMatchObject({
+        items: [recalledAssessment],
+        withheld: 0,
+      });
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

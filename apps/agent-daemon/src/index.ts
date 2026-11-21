@@ -19,5 +19,6 @@ export { type ModelCallCounters, type TaskContext, TaskRecorder } from "./instru
 export { installLaunchd, launchdPlist } from "./launchd.js";
 export { createLocalState, createProcessLease } from "./local.js";
 export { scrubLog } from "./logging.js";
+export { createRuntimeMemory, type RecallResult, type RuntimeMemoryOptions } from "./memory.js";
 export type * from "./types.js";
 export { PodWorkspace } from "./workspace.js";

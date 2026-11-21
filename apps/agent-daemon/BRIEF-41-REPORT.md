@@ -263,3 +263,82 @@ fixtures failed in the sandbox. Both offline subsets passed, and Graph Mail
 reached 100% coverage in its focused run. Biome and both project typechecks
 passed. The offline full workspace gate stopped at missing dependencies in
 `@jeswr/solid-webauthn-reauth`.
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+## Phase 2 (41g)
+
+The Proposer's `memory_recall` uses durable gate facts and owner-scoped PKG
+recall. The host supplies its purpose IRI and the owner memory's verified
+mandate loader. The daemon installs the gateway callback and provisions
+`memory/` and `memory/pending/` under the inherited workspace ACL.
+
+### Files changed
+
+- `packages/agent-reference/src/runtime/agent.ts` shares the existing task
+  admission filter between `admittedStatements()` and the new detached
+  `admittedFacts()` read. `test/admitted-facts.test.ts` covers the filter and
+  detached provenance.
+- `apps/agent-daemon/src/gate.ts` exposes the facts from the gate under its
+  existing lease. Optional trusted admission configuration supplies a named
+  reference task, reliance rules and operation handlers. Phase 1 initialized
+  the reference runtime with an empty handler list and no reliance rules.
+- `src/memory.ts`, `src/daemon.ts`, `src/types.ts` and `src/index.ts` implement
+  and expose bounded runtime recall. `src/workspace.ts` provisions both
+  containers. `src/testing.ts` composes the real agent-memory recall with a
+  memory pod and an in-memory approval queue for offline tests.
+- `package.json` and `pnpm-lock.yaml` add the existing agent-memory workspace
+  dependency. The daemon README, SKILL and this report document composition.
+  `packages/agent-model-gateway/README.md` shows the direct gateway callback.
+- Daemon `test/memory.test.ts`, `test/daemon.test.ts`, `test/workspace.test.ts`
+  and `test/exports.test.ts` cover the recall path. The composition, CSS,
+  polling-executor and gate fixtures and the D-2 demo use the new interfaces.
+
+### Red and green checks
+
+| Case | Before the change | After the change |
+| --- | --- | --- |
+| Reference facts | `TypeError: runtime.admittedFacts is not a function`. | The current task's admitted statement and provenance are returned as a detached copy. Rejected, stale and other-task entries are excluded. |
+| 1. Signed statement through the Proposer tool | `expected [] to match object { items: [...], withheld: +0 }` with a configured reference fixture. | The actual gateway tool returns the statement, source, time, method, digest, terms and purpose. |
+| 2. Bad signature, issuer without a source rule, plain observation | The signature case hit `reopened.facts is not a function`. The other two tool calls returned the bare Phase 1 `[]`. | The signature refusal never calls the Proposer, and the reopened gate has zero facts. The other two return an empty recall result, including for owner-flagged plain text. |
+| 3. Purpose and supersession | `Cannot find module '/src/memory.js'`. | Other-purpose and superseded facts contribute to the withheld count, independent of the query. |
+| 4. Literal model input and bounds | `Cannot find module '/src/memory.js'`. | Literal wildcard, foreign IRI and 4096-character queries keep the owner request fixed. Case folding, newest-first order, ID ties and UTF-8 byte and item limits pass. |
+| 5. Owner memory | `Cannot find module '/src/memory.js'`. | A signed approval and real SHACL validation make the preference recallable with all four graphs. Pending content and provenance-only matches are excluded. |
+| 6. Restart | `TypeError: gate.facts is not a function` after the real gate admitted the signed message. | Closing and reopening the same gate directory recovers the same statement and provenance through recall. |
+| 7. Workspace privacy | `expected -1 to be greater than 1` because the memory create request was absent. | The owner-only ACL precedes both container creates and content writes. |
+| 8. Composition | `TS2578: Unused '@ts-expect-error' directive`. | The test project typechecks with the expected error on the old host field. |
+
+### Invariants and follow-up
+
+- **M1.** Gate recall reads accepted statements that still match the gate's
+  retained digest. Owner recall uses agent-memory's approved-resource and
+  verified-mandate boundary.
+- **M2.** Facts retain the gate's available labels, including original digest
+  for mapped evidence. Owner items preserve the four graphs as RDF/JS quads
+  and include nanopublication metadata.
+- **M3.** The model's only input is the substring. The trusted purpose and
+  `limit: 50` are the only inputs to owner recall. The output defaults to
+  20 items and 64 KiB of JSON.
+- **M4.** Reopening the gate's existing `FileStateStore` recovers the fact and
+  its labels. The restart test passed.
+- **M5.** The refusal and unstructured tests contribute zero facts to recall.
+
+Pairing signed owner approvals with staged remember proposals and calling
+`approveRemember` is the owner-memory write-path follow-up already tracked
+in `sst-ans.31`.
+
+### Verification
+
+Checks used Node 24.22.3 and Vitest with `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| Reference library-only build | `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` passed. |
+| Reference tests | All four tests passed across `admitted-facts`, `oracle` and `oracle-snapshot`. Git status for `traces`, `outlines` and `scenario-runs.json` was empty. |
+| Daemon typechecks | Both the source and test projects passed. |
+| Daemon full Vitest | 225 passed and 20 failed. CSS and the D-2 demo hit `listen EPERM`. Fifteen cloud cases timed out during loopback setup. The host plist case hit `spawnSync python3 EPERM`. The packaged CLI and production fixtures received empty child stdout. |
+| Daemon offline Vitest | 225 passed with three cases filtered. The cloud, CSS and production fixture files were excluded. |
+| Direct offline packaging | The pruned workspace installed 177 cached packages with zero downloads. The packaged runtime-memory export, recall fixture and CLI help passed under plain Node. |
+| Biome and root guards | Biome exited successfully with existing warnings in the reference runtime. SDK and agent layers, RDF discipline, app duplication and `git diff --check` passed. |
+
+Changes are in the working tree.

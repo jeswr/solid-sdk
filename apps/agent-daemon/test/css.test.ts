@@ -34,7 +34,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { expect, it, vi } from "vitest";
 import { createDaemon } from "../src/daemon.js";
-import { createMemoryState } from "../src/testing.js";
+import { createMemoryState, createTestMemory } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
 
@@ -335,9 +335,9 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
         stores.entries.set(proposal.id, entry);
         return entry;
       },
+      memory: createTestMemory(),
       proposerContext: {
         instructions: "Synthetic test",
-        memoryRecall: async () => [],
         pod: { root, webId: owner, read: vi.fn(), list: vi.fn(), write: vi.fn(), delete: vi.fn() },
       },
     };

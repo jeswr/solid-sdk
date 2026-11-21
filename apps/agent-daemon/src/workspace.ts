@@ -212,6 +212,8 @@ export class PodWorkspace {
       "conversations/",
       "outbox/",
       "audit/",
+      "memory/",
+      "memory/pending/",
     ])
       await this.container(this.url(path));
     await this.register();

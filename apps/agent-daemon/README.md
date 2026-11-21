@@ -9,7 +9,7 @@ Explicit `login` uses the credential package's PKCE loopback listener.
 `composeDaemon` obtains a client-credentials DPoP session through
 `@jeswr/pod-auth/node`, creates the storage client and notifications client using
 that session's fetch, and calls a trusted `prepare(workspace)` host factory.
-Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, a gateway,
+Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, runtime memory, a gateway,
 an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
@@ -176,6 +176,42 @@ for triage and can reach the Proposer when the owner flags a thread. They supply
 no admitted evidence. Pod inbox identity stays `unverified` because the channel
 handle is an observation. The daemon keeps reference-generated replies in the
 local runtime outbox during this phase.
+
+## Runtime memory
+
+Supply `DaemonOptions.memory` from the trusted host factory. The daemon uses it
+for the Proposer's `memory_recall` tool. Supply `pod` and `instructions` in
+`proposerContext`. Workspace initialization creates `agent/memory/` and
+`agent/memory/pending/` under the inherited owner-only ACL before writing content.
+
+```ts
+const gate = createInboundGate({
+  directory: join(stateDirectory, "gate"),
+  admission: { taskId, reliance, handlers },
+});
+const memory = createRuntimeMemory({
+  facts: gate.facts,
+  owner: ownerMemory,
+  purpose,
+});
+```
+
+The factory passes both `gate` and `memory` to the daemon. `gate.facts` reads
+the reference runtime opened under the daemon's lease. The optional `admission`
+configuration gives the runtime a trusted task ID, reliance rules and operation
+handlers for evidence-bearing messages. The reference trust store supplies issuer
+pins and source authority rules. Reopening the same gate directory with the same
+task configuration recovers admitted facts and their labels.
+
+Construct `ownerMemory` with `createAgentMemory`, using the authenticated
+workspace storage and a mandate loader that verifies owner, revocation, signed
+memory scope and purpose policy. Select the purpose IRI in the host. The tool
+treats the model query as a case-insensitive substring of admitted fact fields or
+owner assertion terms. Results are ordered by time and ID and default to 20 items
+and 64 KiB of JSON. Superseded facts and facts admitted for another purpose
+contribute only to the withheld count. Gate facts carry their provenance labels.
+Owner memory carries the four approved graphs as RDF/JS quads plus nanopublication
+metadata.
 
 ## Stop and resume
 

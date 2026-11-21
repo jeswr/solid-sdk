@@ -9,6 +9,7 @@ import {
 import { digestBytes } from "@jeswr/agent-model";
 import {
   AgentRuntime,
+  type AgentRuntimeOptions,
   CONFIG_ED25519,
   FileLedger,
   FileStateStore,
@@ -45,7 +46,15 @@ export type ParseRefusal = {
   reason: ChannelParseRefusalReason;
 } & ({ raw: string | Uint8Array } | { digest: string });
 type ParseRefusalInput = { binding: string; account: string } & ParseRefusal;
-type GateOptions = { directory: string; now?: () => Date };
+type GateOptions = {
+  directory: string;
+  now?: () => Date;
+  /** Trusted host configuration for operations that admit evidence into a named task. */
+  admission?: Pick<NonNullable<AgentRuntimeOptions["gates"]>, "reliance"> & {
+    taskId: string;
+    handlers: AgentRuntimeOptions["handlers"];
+  };
+};
 const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const time = z.iso.datetime();
@@ -163,7 +172,7 @@ function inboundDecision(step: StepResult): Decision {
   }
 }
 
-type GateRuntime = Pick<AgentRuntime, "receive" | "commitBindingEvent" | "close">;
+type GateRuntime = Pick<AgentRuntime, "receive" | "commitBindingEvent" | "admittedFacts" | "close">;
 
 export function createGate(
   rt: GateRuntime,
@@ -263,6 +272,10 @@ export function createGate(
   return {
     check: (input: CheckInput) => enqueue(input),
     recordParseRefusal: (input: ParseRefusalInput) => enqueue(input),
+    facts() {
+      if (closed) throw new Error("Inbound gate is closed");
+      return rt.admittedFacts();
+    },
     async status() {
       await pending;
       return gateStatus(verdicts, ledger, peers);
@@ -324,13 +337,13 @@ export async function readGateStatus(directory: string) {
   );
 }
 
-export async function openGate({ directory, now = () => new Date() }: GateOptions): Promise<Gate> {
-  return openStoredGate(await readGate(directory), now);
+export async function openGate(options: GateOptions): Promise<Gate> {
+  return openStoredGate(await readGate(options.directory), options);
 }
 
 async function openStoredGate(
   stored: Awaited<ReturnType<typeof readGate>>,
-  now = () => new Date(),
+  { now = () => new Date(), admission }: GateOptions,
 ): Promise<Gate> {
   const trust = await TrustStore.load(stored.trust);
   const store = new FileStateStore(join(stored.dir, "state.json"));
@@ -345,7 +358,8 @@ async function openStoredGate(
       mandateJws: stored.mandateJws,
       representationJws: stored.representationJws,
       accepted: [CONFIG_ED25519],
-      handlers: [],
+      handlers: admission?.handlers ?? [],
+      ...(admission && { gates: { taskId: admission.taskId, reliance: admission.reliance } }),
       store,
       ledger,
       now,
@@ -358,16 +372,32 @@ async function openStoredGate(
 }
 
 /** The daemon opens the durable gate under its existing process lease. */
-export function createInboundGate(options: GateOptions): InboundGatePort {
+export function createInboundGate(options: GateOptions): InboundGatePort & Pick<Gate, "facts"> {
+  let active: Gate | undefined;
   return {
     async check() {
       throw new Error("Inbound gate requires an active daemon lease");
+    },
+    facts() {
+      if (!active) throw new Error("Inbound gate requires an active daemon lease");
+      return active.facts();
     },
     async open(identity) {
       const stored = await readGate(options.directory);
       if (stored.identity.actor !== identity.actor || stored.identity.party !== identity.party)
         throw new Error("Inbound gate identity does not match daemon configuration");
-      return openStoredGate(stored, options.now);
+      const gate = await openStoredGate(stored, options);
+      active = gate;
+      return {
+        ...gate,
+        async close() {
+          try {
+            await gate.close();
+          } finally {
+            if (active === gate) active = undefined;
+          }
+        },
+      };
     },
   };
 }

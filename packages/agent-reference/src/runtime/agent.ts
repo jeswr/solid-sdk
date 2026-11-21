@@ -62,6 +62,7 @@ import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/ve
 import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
 import {
+  type AdmittedFact,
   alternativeInstalled,
   type ContextItem,
   type GateContext,
@@ -3297,15 +3298,26 @@ export class AgentRuntime {
 
   /** Factual statements available to a core, copied from gate-held task memory only. */
   admittedStatements(): readonly JsonObject[] {
+    return this.admittedStatementItems().map((item) => copyData(item.statement));
+  }
+
+  /** Detached facts and provenance for the same gate-held statements shown to the core. */
+  admittedFacts(): readonly AdmittedFact[] {
+    const facts = new Map<string, AdmittedFact>();
+    for (const { kind: _kind, accepted: _accepted, ...fact } of this.admittedStatementItems())
+      facts.set(fact.id, copyData(fact));
+    return [...facts.values()];
+  }
+
+  private admittedStatementItems(): readonly (ContextItem & { statement: JsonObject })[] {
     return this.gateMemory
       .context(this.options.gates?.taskId ?? "*")
       .filter(
-        (item) =>
+        (item): item is ContextItem & { statement: JsonObject } =>
           item.accepted === true &&
           this.gateMemory.facts.get(item.id)?.digest === item.digest &&
           !!item.statement,
-      )
-      .map((item) => copyData(item.statement!));
+      );
   }
   /**
    * The agreement this agent formed in one conversation, named by its terms digest, with

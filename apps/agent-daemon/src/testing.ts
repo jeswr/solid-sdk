@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createAgentMemory } from "@jeswr/agent-memory";
+import { createMemoryApprovalQueue } from "@jeswr/agent-memory/testing";
 import { Cast, craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
@@ -7,6 +9,7 @@ import { createAt } from "@jeswr/storage-client/helpers";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { createGate, type StoredVerdict } from "./gate.js";
 import { denyAllMandate } from "./gate-setup.js";
+import { createRuntimeMemory } from "./memory.js";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
 import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
 
@@ -53,6 +56,26 @@ export async function createTestGate(now = () => new Date("2026-10-19T08:00:00Z"
   }
   const sign = async (message: object) => (await craftSigned(peer, message)).jws;
   return { ...(await open()), open, peer, receiver, sign, now };
+}
+
+/** An empty runtime memory for offline daemon fixtures without an owner mandate. */
+export function createTestMemory() {
+  const root = "https://pod.example/";
+  const { queueApproval } = createMemoryApprovalQueue();
+  const owner = createAgentMemory({
+    storage: createMemoryPod(root).storage,
+    container: `${root}agent/memory/`,
+    ownerWebId: `${root}profile/card#me`,
+    agentId: `${root}profile/agent#me`,
+    loadMandate: async () => undefined,
+    queueApproval,
+    webIdKeyResolver: {
+      resolveKey: async () => undefined,
+      isControlledBy: async () => false,
+    },
+    shapes: "# This recall-only fixture has no owner write path.",
+  });
+  return createRuntimeMemory({ facts: () => [], owner, purpose: "urn:test:daemon-memory" });
 }
 
 /** Ephemeral test state; never substitutes for a durable deployment lease. */

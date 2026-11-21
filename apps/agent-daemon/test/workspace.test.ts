@@ -187,3 +187,26 @@ it("publishes exactly the agent's introduction at descriptors/agent.ttl and keep
     await expect(workspace.introduce(unsafe)).rejects.toThrow("Unsafe");
   expect(pod.requests.filter((r) => r.method === "PUT")).toHaveLength(writes);
 });
+
+it("provisions memory and pending under the owner-only ACL before content", async () => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({
+    io: pod.io,
+    storage: pod.storage,
+    root,
+    ownerWebId,
+    privateTypeIndex,
+  });
+  await workspace.initialize();
+  const creations = pod.requests.filter(({ method }) => method === "PUT" || method === "POST");
+  const acl = creations.findIndex(({ url }) => url === `${root}agent/.acl`);
+  const memory = creations.findIndex(({ url }) => url === `${root}agent/memory/`);
+  const pending = creations.findIndex(({ url }) => url === `${root}agent/memory/pending/`);
+  expect(acl).toBeGreaterThanOrEqual(0);
+  expect(memory).toBeGreaterThan(acl);
+  expect(pending).toBeGreaterThan(memory);
+  expect(pending).toBeLessThan(creations.findIndex(({ url }) => url === privateTypeIndex));
+  expect(creations[acl]?.body).toContain(ownerWebId);
+  expect(creations[acl]?.body).toContain("default");
+  expect(creations[acl]?.body).not.toContain("AgentClass");
+});
