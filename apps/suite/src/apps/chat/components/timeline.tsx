@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -31,7 +32,10 @@ import { type Outgoing, useChat, useChatActions } from "../state/chat-context";
 import { useProfile } from "./chat-app";
 import { MessageText } from "./message-text";
 
-type TimelineMessage = Message & { status?: "sending" | "failed" | undefined };
+type TimelineMessage = Message & {
+  status?: "sending" | "failed" | undefined;
+  unsaved?: true | undefined;
+};
 const REACTION_EMOJI = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀"];
 function ReactionChoices({ react }: { react: (emoji: string) => void }) {
   return REACTION_EMOJI.map((emoji) => (
@@ -172,7 +176,11 @@ function MessageArticle({
         {message.status === "sending" && <p className="chat-delivery">Sending…</p>}
         {message.status === "failed" && (
           <div className="chat-send-failure" role="status">
-            <span>Couldn't send message.</span>
+            <span>
+              {message.unsaved
+                ? "Couldn't send message. It wasn't saved for offline sending."
+                : "Couldn't send message."}
+            </span>
             <Button size="sm" variant="outline" onClick={() => retry(message.id)}>
               Retry
             </Button>

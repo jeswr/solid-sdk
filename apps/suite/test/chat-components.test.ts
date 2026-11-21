@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -610,6 +611,28 @@ it("hides reaction controls on deleted and pending messages", async () => {
   );
   expect(view.host.querySelector(".chat-reactions")).toBeNull();
   expect(view.host.querySelector('[aria-label="Add reaction"]')).toBeNull();
+});
+it("says a failed message held only in memory was not saved for offline sending", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const failed = {
+    ...message("away"),
+    localId: "away",
+    at: new Date(),
+    room: ROOM,
+    draft: "away",
+    status: "failed" as const,
+  };
+  const render = (unsaved?: true) =>
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(Timeline, { ...timelineProps, messages: [], outgoing: [{ ...failed, unsaved }] }),
+    });
+  const view = await mount(render());
+  const failure = () => view.host.querySelector(".chat-send-failure span")?.textContent;
+  expect(failure()).toBe("Couldn't send message.");
+  await view.render(render(true));
+  expect(failure()).toBe("Couldn't send message. It wasn't saved for offline sending.");
+  expect(view.host.querySelectorAll(".chat-send-failure button")).toHaveLength(2);
 });
 it("composer sends on Enter, preserves Shift+Enter, cancels edits and exposes the last-message shortcut", async () => {
   const pod = createDemoPod({ root: ROOT });

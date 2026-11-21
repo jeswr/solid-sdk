@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
@@ -26,6 +27,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__chat-test-reset");
+  await seedDemoSession(page);
   // Observe clipboard writes without requiring a platform clipboard in CI.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
