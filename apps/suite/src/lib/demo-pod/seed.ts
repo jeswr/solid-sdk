@@ -17,6 +17,7 @@ import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
 import { buildHomeSeed } from "./seed-home";
+import { seedPermissionApp } from "./seed-permission-app";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
 
@@ -133,6 +134,7 @@ export async function buildDemoSeed(
   const files: DemoSeedFile[] = [
     ...(await buildHomeSeed(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
+    ...seedPermissionApp(now),
     ...(await buildAgentSeed(now)),
     {
       path: "profile/card",
