@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
@@ -20,7 +22,7 @@ import type {
   WrittenBinary,
   WrittenDoc,
 } from "./types.js";
-import { safeIri } from "./vocab.js";
+import { safeIri, VOCAB_PREFIXES } from "./vocab.js";
 
 const RUNS = "_provenance.ttl";
 /** Connector containers with a run in progress in this process. */
@@ -72,6 +74,9 @@ export function createImportSession(
       : undefined;
     reads.set(writer.resolve(slug), existing);
     return existing ? copyDataset(existing.dataset) : undefined;
+  }
+  function releaseRead(slug: string): void {
+    reads.delete(writer.resolve(slug));
   }
   async function write(input: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc> {
     const url = writer.resolve(input.slug);
@@ -129,6 +134,15 @@ export function createImportSession(
       item.generatedBy.clear();
       item.generatedBy.add(activityUrl);
       if (used.size < maxRunSources) used.add(origin);
+    }
+    if (
+      input.maxSerializedBytes !== undefined &&
+      new TextEncoder().encode(await serialize([...dataset], { prefixes: { ...VOCAB_PREFIXES } }))
+        .length > input.maxSerializedBytes
+    ) {
+      const error = new Error("Document exceeds its serialized byte cap.");
+      error.name = "DocumentTooLargeError";
+      throw error;
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     let registered = result;
@@ -222,6 +236,7 @@ export function createImportSession(
   }
   return {
     read,
+    releaseRead,
     write,
     writeBinary,
     remove,

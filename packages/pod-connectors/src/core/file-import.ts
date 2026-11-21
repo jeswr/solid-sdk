@@ -70,6 +70,7 @@ export interface FileImportContext {
   resolve(slug: string): string;
   /** Read existing RDF, retaining write preconditions (as on ImportContext). */
   read: ImportContext["read"];
+  releaseRead?: ImportContext["releaseRead"];
   /** Serialise + PUT a normalised document into the pod. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /** Store a non-RDF resource (see `ImportContext.writeBinary`). */
@@ -117,7 +118,7 @@ export interface FileImportAdapter {
   importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome>;
 }
 
-export interface FileImportOutcome extends Pick<ImportOutcome, "skipped"> {
+export interface FileImportOutcome extends Pick<ImportOutcome, "skipped" | "errors"> {
   readonly unsupported?: readonly string[];
 }
 
@@ -180,6 +181,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
         opts.onProgress?.(p);
       },
       read: checked(session.read),
+      releaseRead: session.releaseRead,
       skip: () => skipped++,
       write: checked(session.write),
       writeBinary: checked(session.writeBinary),
@@ -218,6 +220,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       skipped: skipped || undefined,
       state,
       unsupported: outcome?.unsupported,
+      errors: outcome?.errors,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the
