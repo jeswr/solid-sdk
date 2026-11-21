@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 /**
  * The popup IS the account UI — sign in / out, switch WebID, pod shortcuts, theme —
  * built with @jeswr/solid-elements (`jeswr-login-panel` + `jeswr-account-menu` +
@@ -17,11 +18,14 @@
 // Side-effect import: registers <jeswr-login-panel>, <jeswr-account-menu>, <jeswr-theme-toggle>, etc.
 import '@jeswr/solid-elements';
 import { mountAccountSurface, resolveAccountSurfaceElements } from './account-surface';
+import { mountAgentSignIn } from './agent-sign-in-view';
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 // Wire the shared account surface (busy → signed-in / signed-out, all the auth invariants).
 mountAccountSurface(resolveAccountSurfaceElements());
+const agentSignIn = document.getElementById('agent-sign-in');
+if (agentSignIn) mountAgentSignIn(agentSignIn);
 
 // First-run pin nudge (extensions can't self-pin) — popup-only onboarding.
 const pinNudge = el('pin-nudge');

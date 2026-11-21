@@ -1,0 +1,196 @@
+// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
+// Matching an ActionRequest to a flow (preferred) or an operation of the site model.
+
+import type {
+  ActionRequest,
+  EffectClass,
+  Flow,
+  Operation,
+  Parameter,
+  SiteModel,
+} from "@jeswr/site-model";
+import { normaliseIri, resolveParameter, validateValue } from "./values.js";
+
+export interface Target {
+  kind: "flow" | "operation";
+  id: string;
+  label: string;
+  actionType: string;
+}
+
+export type MatchResult =
+  | {
+      kind: "match";
+      target: Target;
+      flow?: Flow;
+      operation?: Operation;
+      inputs: Record<string, string>;
+    }
+  | { kind: "ambiguous"; candidates: string[] }
+  | { kind: "no-path"; missing: string[] };
+
+interface Candidate {
+  target: Target;
+  flow?: Flow;
+  operation?: Operation;
+  inputs: Record<string, string>;
+  matched: number;
+}
+
+/**
+ * Resolve available parameters and retain required names that could not resolve.
+ * Optional inputs without defaults are left out of the record.
+ */
+function inspectInputs(
+  params: readonly Parameter[],
+  request: ActionRequest,
+): { inputs: Record<string, string>; matched: number; missing: string[] } {
+  const inputs: Record<string, string> = {};
+  let matched = 0;
+  const missing: string[] = [];
+  for (const param of params) {
+    const { value, fromRequest } = resolveParameter(param, request);
+    if (value === undefined) {
+      if (param.required) missing.push(param.name);
+      continue;
+    }
+    validateValue(param, value);
+    inputs[param.name] = value;
+    if (fromRequest) matched++;
+  }
+  return { inputs, matched, missing };
+}
+
+export function resolveInputs(
+  params: readonly Parameter[],
+  request: ActionRequest,
+): { inputs: Record<string, string>; matched: number } | undefined {
+  const result = inspectInputs(params, request);
+  return result.missing.length ? undefined : { inputs: result.inputs, matched: result.matched };
+}
+
+function pick(candidates: Candidate[]): MatchResult | undefined {
+  if (candidates.length === 0) return undefined;
+  const best = Math.max(...candidates.map((c) => c.matched));
+  const top = candidates.filter((c) => c.matched === best);
+  if (top.length > 1) return { kind: "ambiguous", candidates: top.map((c) => c.target.label) };
+  const [only] = top as [Candidate];
+  return {
+    kind: "match",
+    target: only.target,
+    inputs: only.inputs,
+    ...(only.flow ? { flow: only.flow } : {}),
+    ...(only.operation ? { operation: only.operation } : {}),
+  };
+}
+
+export function matchRequest(model: SiteModel, request: ActionRequest): MatchResult {
+  const types = new Set(request.types.map(normaliseIri));
+  const selected = request.values(["https://jeswr.org/ns/site-action#operation"]);
+  const permits = (id: string) =>
+    !selected.length || selected.some((value) => value === id || value === id.split("#").at(-1));
+  const flows: Candidate[] = [];
+  const incomplete: { missing: string[]; matched: number }[] = [];
+  for (const flow of model.flows) {
+    if (!types.has(normaliseIri(flow.actionType)) || !permits(flow.id)) continue;
+    const r = inspectInputs(flow.inputs, request);
+    if (r.missing.length) {
+      incomplete.push(r);
+      continue;
+    }
+    flows.push({
+      target: {
+        kind: "flow",
+        id: flow.id,
+        label: flow.label,
+        actionType: normaliseIri(flow.actionType),
+      },
+      flow,
+      inputs: r.inputs,
+      matched: r.matched,
+    });
+  }
+  const flowMatch = pick(flows);
+  if (flowMatch) return flowMatch;
+  const ops: Candidate[] = [];
+  for (const operation of model.operations) {
+    if (!types.has(normaliseIri(operation.actionType)) || !permits(operation.id)) continue;
+    // Explicit requested object classes distinguish otherwise identical list/search actions.
+    const objectTypes = request
+      .values(["https://schema.org/object", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"])
+      .map(normaliseIri);
+    if (
+      operation.effect === "read" &&
+      objectTypes.length &&
+      (!operation.extraction || !objectTypes.includes(normaliseIri(operation.extraction.itemType)))
+    )
+      continue;
+    const r = inspectInputs(operation.inputs, request);
+    if (r.missing.length) {
+      incomplete.push(r);
+      continue;
+    }
+    ops.push({
+      target: {
+        kind: "operation",
+        id: operation.id,
+        label: operation.label,
+        actionType: normaliseIri(operation.actionType),
+      },
+      operation,
+      inputs: r.inputs,
+      matched: r.matched,
+    });
+  }
+  const closest = incomplete.sort(
+    (a, b) => a.missing.length - b.missing.length || b.matched - a.matched,
+  )[0];
+  return (
+    pick(ops) ?? {
+      kind: "no-path",
+      missing: (closest?.missing ?? []).filter((name) =>
+        /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/.test(name),
+      ),
+    }
+  );
+}
+
+const EFFECT_RANK: Readonly<Record<EffectClass, number>> = {
+  read: 0,
+  "reversible-write": 1,
+  "irreversible-write": 2,
+  payment: 3,
+};
+
+/** An effect class as given, or payment when the model carries an unknown value (fail closed). */
+export function normaliseEffect(effect: string): EffectClass {
+  return Object.hasOwn(EFFECT_RANK, effect) ? (effect as EffectClass) : "payment";
+}
+
+/** The stronger of two effect classes. */
+export function maxEffect(a: EffectClass, b: EffectClass): EffectClass {
+  const x = normaliseEffect(a);
+  const y = normaliseEffect(b);
+  return EFFECT_RANK[x] >= EFFECT_RANK[y] ? x : y;
+}
+
+/**
+ * The effect the gate sees for a flow: the strongest of the flow's declared effect
+ * and every step's operation, so a model that under-declares a flow cannot slip a
+ * payment step past the gate.
+ */
+export function effectiveEffect(
+  model: SiteModel,
+  flow: Flow | undefined,
+  operation: Operation | undefined,
+  operations: readonly Operation[] = model.operations,
+): EffectClass {
+  if (operation) return normaliseEffect(operation.effect);
+  let effect = normaliseEffect((flow as Flow).effect);
+  for (const step of (flow as Flow).steps) {
+    const op = operations.find((o) => o.id === step.operation);
+    effect = maxEffect(effect, op ? op.effect : "payment");
+  }
+  return effect;
+}

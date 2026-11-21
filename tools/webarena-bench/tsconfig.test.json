@@ -1,0 +1,6 @@
+// AUTHORED-BY Claude Opus 5.5
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "rootDir": "." },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,1009 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import {
+  captureOrigin,
+  NATIVE_MESSAGE_LIMIT,
+  type NativeResult,
+  nativeResultSchema,
+} from '@jeswr/agent-vault/browser';
+import {
+  type CaptureChoices,
+  type CaptureView,
+  captureIntent,
+  type VaultRequest,
+} from '../shared/agent-capture';
+import {
+  CAPTURE_PERMISSION_PORT,
+  captureOriginPermission,
+  capturePermissions,
+  releaseCapturePermissions,
+} from '../shared/agent-capture-permissions';
+import {
+  captureCleanupPending,
+  clearCaptureCleanup,
+  markCaptureCleanup,
+} from './agent-capture-cleanup';
+import { captureCookies } from './agent-capture-cookies';
+
+const unavailable = 'Sign-in sharing unavailable. Review the site and try again.';
+const siteAccess =
+  "Allow this extension on this site from Chrome's extension menu first, then try again.";
+const busy = 'Another sharing is in progress.';
+const finishing = 'Finishing the previous sharing.';
+const contested = 'Another sharing started. Try again.';
+const browserTimeout = 10000;
+const acquisitionQuietPeriod = 1000;
+
+/** One deadline for browser work, including nested waits and late continuations. */
+async function bounded<T>(
+  work: (check: () => void, signal: AbortSignal) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let expired = false;
+  const controller = new AbortController();
+  let timer!: ReturnType<typeof setTimeout>;
+  let interrupt!: () => void;
+  const check = () => {
+    if (expired || signal?.aborted) throw new Error(unavailable);
+  };
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    interrupt = () => {
+      expired = true;
+      controller.abort();
+      reject(new Error(unavailable));
+    };
+    timer = setTimeout(interrupt, browserTimeout);
+    signal?.addEventListener('abort', interrupt, { once: true });
+  });
+  try {
+    check();
+    return await Promise.race([work(check, controller.signal), interrupted]);
+  } finally {
+    expired = true;
+    controller.abort();
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', interrupt);
+  }
+}
+type Tab = { id: number; site: string; url: string };
+interface Owner {
+  port: chrome.runtime.Port;
+  closed: boolean;
+  pending: AbortController;
+  loadQueued: boolean;
+  view: CaptureView;
+  tab?: Tab;
+  lastLease?: Lease;
+}
+interface Lease {
+  id: number;
+  expiresAt: number;
+  owner: Owner;
+  tab: Tab;
+  phase: 'reviewing' | 'acquiring' | 'confirming' | 'sending' | 'cleaning' | 'orphaned';
+  expectsCookies: boolean;
+  authorizationInvalid: boolean;
+  contested: boolean;
+  quietUntil: number;
+  choices: CaptureChoices;
+  count?: number;
+  persona: string;
+  profile: string;
+  // Ingress latches interrupt pending Chrome/native work without waiting for the mutex.
+  cancelled: boolean;
+  stop(): void;
+  signal: AbortSignal;
+  permission?: {
+    pending: boolean;
+    settled: Promise<boolean | undefined>;
+    settle(allowed: boolean | undefined): void;
+  };
+  orphaned?: { expired: boolean; checked: boolean; removals: Set<Promise<boolean>> };
+  cleanup?: Promise<boolean>;
+  timer: ReturnType<typeof setTimeout>;
+  token?: string;
+}
+type Cleanup = Pick<Lease, 'id' | 'timer' | 'orphaned'>;
+
+/** One worker, one lease, one queue for bounded Chrome/native work.
+ * Cancellation, authorization and prompt ingress latches run outside the mutex.
+ * An orphaned prompt wakes settlement waits and retains a sixty-second fence.
+ * All idempotent revocations bypass the queue; no reads or sends are allowed.
+ * Revocations and verification are bounded; failures retain a recoverable fence.
+ */
+export function installAgentCapture(
+  browser: typeof chrome,
+  transport: (request: VaultRequest) => Promise<NativeResult>,
+): void {
+  let tail = Promise.resolve();
+  const enqueue = (work: () => Promise<unknown>) => {
+    tail = tail
+      .then(async () => {
+        await work();
+      })
+      .catch(() => {
+        /* Errors are rendered without browser diagnostics. */
+      });
+  };
+  let active: Lease | undefined;
+  let pendingPrompt: Lease | undefined;
+  // Prompt ownership is singular; cleanup ownership survives independently by lease id.
+  const cleanups = new Map<number, Cleanup>();
+  const revocations = new Set<Promise<boolean>>();
+  const occupied = () =>
+    active !== undefined ||
+    pendingPrompt !== undefined ||
+    cleanups.size > 0 ||
+    revocations.size > 0;
+  const revoking = (work: () => Promise<boolean>) => {
+    const pending = work();
+    revocations.add(pending);
+    return pending.finally(() => {
+      revocations.delete(pending);
+      // A disconnected caller may already have left the queue. Completion still
+      // owns releasing its barrier; it cannot strand an otherwise clean lease.
+      releaseVerified();
+    });
+  };
+  let nextId = 0;
+  // Display only: each lease owns its cleanup result; notices never skip cleanup.
+  let cleanupNotice: 'cleaning' | 'failed' | undefined;
+  const busyMessage = () =>
+    cleanupNotice === 'failed'
+      ? 'Remove cookie access before sharing a sign-in.'
+      : cleanups.size ||
+          revocations.size ||
+          pendingPrompt ||
+          active?.cancelled ||
+          active?.authorizationInvalid ||
+          active?.phase === 'cleaning'
+        ? finishing
+        : busy;
+  const owners = new Set<Owner>();
+  const emit = (owner: Owner, update: Partial<CaptureView>) => {
+    owner.view = {
+      ...owner.view,
+      ...update,
+      warning: cleanupNotice !== undefined,
+      cleanupFailed: cleanupNotice === 'failed',
+    };
+    owner.view.armedLease =
+      active?.owner === owner &&
+      active.expectsCookies &&
+      active.phase === 'reviewing' &&
+      !active.authorizationInvalid &&
+      !active.cancelled &&
+      !revocations.size &&
+      owner.view.phase === 'permission' &&
+      !cleanupNotice
+        ? active.id
+        : undefined;
+    owner.view.expiresAt = active?.owner === owner ? active.expiresAt : undefined;
+    if (!owner.closed) {
+      try {
+        owner.port.postMessage(owner.view);
+      } catch {
+        /* onDisconnect owns cleanup. */
+      }
+    }
+  };
+  const warnings = () => {
+    for (const owner of owners)
+      emit(
+        owner,
+        (cleanups.size || active?.cancelled || active?.phase === 'cleaning') &&
+          owner !== active?.owner &&
+          !['failed', 'cancelled', 'shared'].includes(owner.view.phase)
+          ? { phase: 'busy', message: busyMessage() }
+          : {},
+      );
+  };
+  const cleanupStatus = (failed: boolean) => {
+    cleanupNotice = failed ? 'failed' : undefined;
+    warnings();
+    void browser.action.setBadgeText({ text: failed ? '!' : '' }).catch(() => {});
+  };
+  const cookieAccess = async (signal?: AbortSignal) => {
+    try {
+      return await bounded(() => browser.permissions.contains(capturePermissions()), signal);
+    } catch {
+      return undefined;
+    } // Unknown authority is neither confirmed absent nor granted.
+  };
+  const cookieWindow = () =>
+    active &&
+    !active.cancelled &&
+    !active.contested &&
+    !active.authorizationInvalid &&
+    ['acquiring', 'confirming', 'sending'].includes(active.phase);
+  const orphanedLease = () => [...cleanups.values()].find((lease) => lease.orphaned);
+  let cleanupReset = new AbortController();
+  let cleanupVersion = 0;
+  const cleanupAttempt = async (work: (check: () => void) => Promise<void>, drained = false) => {
+    const version = ++cleanupVersion;
+    const signal = cleanupReset.signal;
+    // Recovery remains actionable during retries, including concurrent onAdded
+    // revocations. A new removal cannot hide a fence's elapsed final deadline.
+    if (cleanupNotice !== 'failed') cleanupNotice = 'cleaning';
+    warnings();
+    let cleaned = false;
+    try {
+      await bounded(work, signal);
+      cleaned = true;
+    } catch {
+      // The notice remains until a subsequent bounded attempt verifies absence.
+    }
+    if (drained && [...cleanups.values()].some((lease) => lease.orphaned?.removals.size))
+      cleaned = false;
+    if (!signal.aborted && (version === cleanupVersion || drained)) {
+      if (version === cleanupVersion) ++cleanupVersion;
+      cleanupStatus(!cleaned);
+    }
+    return cleaned;
+  };
+  const removeWork = async (check: () => void) => {
+    // Persistence explains interrupted cleanup, but never controls revocation.
+    const marker = markCaptureCleanup(browser.storage).catch(() => {});
+    check();
+    const removal = releaseCapturePermissions({
+      remove: async (input) => {
+        check();
+        const removed = await browser.permissions.remove(input);
+        check();
+        return removed;
+      },
+      contains: async (input) => {
+        check();
+        const present = await browser.permissions.contains(input);
+        check();
+        return present;
+      },
+    });
+    const [, result] = await Promise.allSettled([marker, removal]);
+    check();
+    if (result.status === 'rejected') throw result.reason;
+    await clearCaptureCleanup(browser.storage);
+    check();
+  };
+  const remove = () => revoking(() => cleanupAttempt(removeWork));
+  const recoverWork = async (check: () => void) => {
+    // Marker reads cannot delay revocation, even if storage never responds.
+    const marker = captureCleanupPending(browser.storage)
+      .then((pending) => {
+        check();
+        if (pending && cleanupNotice !== 'failed') {
+          cleanupNotice = 'cleaning';
+          warnings();
+        }
+        return pending;
+      })
+      .catch(() => false);
+    check();
+    let present: boolean | undefined;
+    try {
+      present = await browser.permissions.contains(capturePermissions());
+    } catch {
+      /* Unknown authority must be removed. */
+    }
+    check();
+    if (present !== false) {
+      cleanupNotice = 'cleaning';
+      warnings();
+      await removeWork(check);
+    } else {
+      const pending = await marker;
+      check();
+      if (pending && cleanupNotice !== 'failed') {
+        cleanupNotice = 'cleaning';
+        warnings();
+      }
+      await clearCaptureCleanup(browser.storage);
+      check();
+    }
+  };
+  const recover = () =>
+    cookieWindow()
+      ? Promise.resolve(true)
+      : revoking(async () => {
+          // Avoid a transient cleanup warning on an ordinary idle absence check.
+          const version = ++cleanupVersion;
+          try {
+            await bounded(recoverWork, cleanupReset.signal);
+            if (version === cleanupVersion) cleanupStatus(false);
+            return true;
+          } catch {
+            if (version === cleanupVersion) cleanupStatus(true);
+            return false;
+          }
+        });
+  const removeOrphaned = (lease: Cleanup) => {
+    const orphaned = lease.orphaned!;
+    const recovering = cleanupNotice === 'failed';
+    // Never queue behind a settlement wait or another removal. In this state
+    // authority can only be revoked, and the fence prevents a new capture.
+    const removal = remove();
+    orphaned.removals.add(removal);
+    void removal.then((cleaned) => {
+      if (cleaned && recovering && !cleanupNotice) {
+        // Verified recovery supersedes older revocations, including their queue
+        // waits. Raw Chrome promises may finish later but cannot resume work.
+        cleanupReset.abort();
+        cleanupReset = new AbortController();
+        for (const other of cleanups.values()) other.orphaned?.removals.clear();
+        releaseVerified();
+      }
+      // Retain completed revocations until the drain joins them. A grant and its
+      // failed removal can both finish during an older absence check; that older
+      // observation must not release the fence without another verification.
+      // A successful retry can release every expired fence, regardless of which
+      // lease triggered it. A failed final attempt waits for an explicit retry.
+      if (cleaned)
+        for (const other of cleanups.values()) if (other.orphaned) other.orphaned.checked = false;
+      enqueue(drainExpired);
+    });
+  };
+  const current = (signal?: AbortSignal): Promise<Tab> =>
+    bounded(async (check) => {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      check();
+      if (!tab?.url || tab.id === undefined || tab.incognito) throw new Error(unavailable);
+      const window = await browser.windows.get(tab.windowId ?? browser.windows.WINDOW_ID_CURRENT);
+      check();
+      if (!window.focused || window.incognito) throw new Error(unavailable);
+      const url = new URL(tab.url);
+      if (url.username || url.password) throw new Error(unavailable);
+      const site = captureOrigin(url.origin);
+      return { id: tab.id, site, url: `${site}${url.pathname}` };
+    }, signal);
+  const host = async (tab: Tab, signal?: AbortSignal) => {
+    if (
+      !(await bounded(
+        () => browser.permissions.contains(captureOriginPermission(tab.site)),
+        signal,
+      ))
+    )
+      throw new Error(siteAccess);
+  };
+  const alive = (lease: Lease) => {
+    if (
+      active !== lease ||
+      lease.cancelled ||
+      lease.contested ||
+      lease.authorizationInvalid ||
+      lease.signal.aborted ||
+      lease.owner.closed ||
+      revocations.size
+    )
+      throw new Error(unavailable);
+  };
+  const wait = async <T>(lease: Lease, work: () => Promise<T>): Promise<T> => {
+    alive(lease);
+    const value = await bounded(() => work(), lease.signal);
+    alive(lease);
+    return value;
+  };
+  const mutate = async <T>(lease: Lease, work: () => Promise<T>): Promise<T> => {
+    alive(lease);
+    const value = await bounded(() => work(), lease.owner.pending.signal);
+    alive(lease);
+    return value;
+  };
+  const validate = async (lease: Lease) => {
+    alive(lease);
+    const tab = await wait(lease, () => current(lease.signal));
+    // Validate the CURRENT active tab before checking its existing host grant.
+    await wait(lease, () => host(tab, lease.signal));
+    if (tab.id !== lease.tab.id || tab.site !== lease.tab.site) throw new Error(unavailable);
+    return tab;
+  };
+  const request = async (input: VaultRequest, signal?: AbortSignal) => {
+    const result = nativeResultSchema.safeParse(await bounded(() => transport(input), signal));
+    if (!result.success || result.data.type !== input.type) throw new Error(unavailable);
+    return result.data;
+  };
+  const release = (lease: Cleanup) => {
+    clearTimeout(lease.timer);
+    cleanups.delete(lease.id);
+    if (pendingPrompt === lease) pendingPrompt = undefined;
+    if (active === lease) active = undefined;
+  };
+  const resume = () => {
+    if (!occupied() && !cleanupNotice)
+      for (const owner of owners)
+        if (owner.view.phase === 'busy') {
+          emit(owner, { phase: 'loading', lease: undefined, message: 'Loading sign-in sharing…' });
+          queueLoad(owner);
+        }
+  };
+  const queueLoad = (owner: Owner) => {
+    if (owner.closed || owner.loadQueued) return;
+    owner.loadQueued = true;
+    enqueue(async () => {
+      owner.loadQueued = false;
+      await load(owner);
+    });
+  };
+  const releaseVerified = () => {
+    if (active || pendingPrompt || cleanupNotice || revocations.size) return;
+    if ([...cleanups.values()].some((lease) => lease.orphaned?.removals.size)) return;
+    for (const lease of cleanups.values())
+      if (!lease.orphaned || lease.orphaned.expired) release(lease);
+    resume();
+  };
+  const drainExpired = async () => {
+    if (cookieWindow()) return;
+    // Drain the entire collection, never just the fence whose timer/removal woke us.
+    const expired = [...cleanups.values()].filter(
+      (lease) => lease.orphaned?.expired && !lease.orphaned.checked,
+    );
+    if (!expired.length) return;
+    // Joining pending bounded revocations and the final check share ONE deadline.
+    // Expiry failure cannot enqueue another automatic final attempt indefinitely.
+    for (const lease of expired) lease.orphaned!.checked = true;
+    const cleaned = await cleanupAttempt(async (check) => {
+      do {
+        const joined = [...cleanups.values()].flatMap((lease) =>
+          lease.orphaned ? [{ state: lease.orphaned, removals: [...lease.orphaned.removals] }] : [],
+        );
+        await Promise.all(joined.flatMap(({ removals }) => removals));
+        check();
+        for (const { state, removals } of joined)
+          for (const removal of removals) state.removals.delete(removal);
+        await removeWork(check);
+        check();
+      } while ([...cleanups.values()].some((lease) => lease.orphaned?.removals.size));
+    }, true);
+    // One final attempt per expiry. Failure stays visible with the retry button;
+    // queued completions cannot silently retry forever or leave a hidden busy state.
+    if (cleaned) releaseVerified();
+    resume();
+  };
+  const recoverIdle = async () => {
+    if (await recover()) releaseVerified();
+    await drainExpired();
+    resume();
+  };
+  const revokeIdle = async () => {
+    if (await remove()) releaseVerified();
+    await drainExpired();
+    resume();
+  };
+  const finish = async (
+    lease: Lease,
+    phase: 'failed' | 'shared' | 'cancelled',
+    message: string,
+  ) => {
+    if (lease.orphaned) {
+      await drainExpired();
+      return;
+    }
+    if (active !== lease) return;
+    cleanups.set(lease.id, lease);
+    lease.phase = 'cleaning';
+    emit(lease.owner, {
+      phase: lease.cancelled ? 'cancelled' : 'cleaning',
+      message: lease.cancelled ? 'Sharing cancelled.' : message,
+      preview: undefined,
+    });
+    // Mutating work retains the mutex until settlement or worker-owned abandonment.
+    await lease.permission?.settled;
+    if (lease.orphaned) {
+      await drainExpired();
+      return;
+    }
+    lease.cleanup = recover();
+    const cleaned = await lease.cleanup;
+    // A foreign gesture can move a cleaning lease into a fenced contest while
+    // its original cleanup awaits Chrome. That completion cannot end the fence.
+    if (lease.orphaned) {
+      await drainExpired();
+      return;
+    }
+    clearTimeout(lease.timer);
+    if (pendingPrompt === lease) pendingPrompt = undefined;
+    // Cancel can arrive while removal is pending. Never publish an older completion.
+    emit(lease.owner, {
+      phase: lease.cancelled ? 'cancelled' : phase,
+      message: lease.cancelled ? 'Sharing cancelled.' : message,
+    });
+    if (active === lease) active = undefined;
+    if (cleaned) releaseVerified();
+    await drainExpired();
+    resume();
+  };
+  const abandon = (lease: Lease) => {
+    if (lease.orphaned) return;
+    lease.phase = 'orphaned';
+    lease.orphaned = { expired: false, checked: false, removals: new Set() };
+    cleanups.set(lease.id, lease);
+    if (active === lease) active = undefined;
+    if (pendingPrompt === lease) pendingPrompt = undefined;
+    clearTimeout(lease.timer);
+    lease.timer = setTimeout(() => {
+      lease.orphaned!.expired = true;
+      enqueue(drainExpired);
+    }, 60000);
+    // Undefined is abandonment, never an authorization result. It wakes both
+    // the prompt handler and cleanup even when the popup can never report back.
+    lease.permission?.settle(undefined);
+    removeOrphaned(lease);
+  };
+  const fenceForeignPrompt = () => {
+    const cleanup: Cleanup = {
+      id: ++nextId,
+      orphaned: { expired: false, checked: false, removals: new Set() },
+      timer: setTimeout(() => {
+        cleanup.orphaned!.expired = true;
+        enqueue(drainExpired);
+      }, 60000),
+    };
+    cleanups.set(cleanup.id, cleanup);
+    removeOrphaned(cleanup);
+  };
+  const cancel = (lease: Lease, abandoned = false) => {
+    if (active !== lease && !(abandoned && pendingPrompt === lease)) return;
+    const heldCookies = ['acquiring', 'confirming', 'sending'].includes(lease.phase);
+    lease.cancelled = true;
+    lease.stop();
+    if (abandoned && lease.permission?.pending) abandon(lease);
+    else if (heldCookies) void revokeIdle();
+    emit(lease.owner, { phase: 'cancelled', message: 'Sharing cancelled.', preview: undefined });
+    warnings();
+    enqueue(() => finish(lease, 'cancelled', 'Sharing cancelled.'));
+  };
+  const run = async (lease: Lease, work: () => Promise<void>) => {
+    try {
+      alive(lease);
+      await work();
+    } catch (error) {
+      lease.stop();
+      await finish(
+        lease,
+        'failed',
+        lease.contested
+          ? contested
+          : error instanceof Error && error.message === siteAccess
+            ? siteAccess
+            : unavailable,
+      );
+    }
+  };
+  const load = async (owner: Owner) => {
+    if (owner.closed) return;
+    try {
+      await bounded(async (check, signal) => {
+        // Cookie checking precedes even invalid-tab/withheld-site validation on EVERY load.
+        const present = await cookieAccess(signal);
+        check();
+        if (occupied()) {
+          emit(owner, { phase: 'busy', message: busyMessage() });
+          return;
+        }
+        const pending = await captureCleanupPending(browser.storage).catch(() => false);
+        check();
+        if (!cleanupNotice && (present !== false || pending)) await remove();
+        check();
+        emit(owner, {
+          phase: 'loading',
+          message: 'Loading sign-in sharing…',
+          lease: undefined,
+          choices: undefined,
+          preview: undefined,
+        });
+        const tab = await current(signal);
+        check();
+        await host(tab, signal);
+        check();
+        if (occupied()) {
+          emit(owner, { phase: 'busy', message: busyMessage() });
+          return;
+        }
+        if (cleanupNotice) {
+          emit(owner, {
+            phase: 'failed',
+            message: 'Remove cookie access before sharing a sign-in.',
+          });
+          return;
+        }
+        if (owner.closed) return;
+        const choices = await request({ type: 'list', site: tab.site }, signal);
+        check();
+        if (occupied() || cleanupNotice) {
+          emit(owner, { phase: 'busy', message: busyMessage() });
+          return;
+        }
+        if (choices.type !== 'list') throw 0;
+        owner.tab = tab;
+        emit(owner, {
+          phase: 'ready',
+          site: tab.site,
+          choices,
+          message: 'Sign in on this site, then choose your vault profile and persona.',
+        });
+      }, owner.pending.signal);
+    } catch (error) {
+      if (owner.closed) return;
+      emit(owner, {
+        phase: 'failed',
+        message:
+          error instanceof Error && error.message === siteAccess
+            ? siteAccess
+            : 'Open a signed-in HTTPS site and install the agent vault native host to share its sign-in.',
+      });
+    }
+  };
+  const start = async (owner: Owner, profile: string, persona: string) => {
+    if (owner.closed) return;
+    if (occupied()) {
+      emit(owner, { phase: 'busy', message: busyMessage() });
+      return;
+    }
+    const choices = owner.view.choices;
+    if (
+      owner.view.phase !== 'ready' ||
+      !owner.tab ||
+      !choices?.personas.some((p) => p.id === persona && p.profile === profile) ||
+      !choices.profiles.some((p) => p.id === profile)
+    )
+      return;
+    const controller = new AbortController();
+    const lease: Lease = {
+      id: ++nextId,
+      expiresAt: Date.now() + 120000,
+      owner,
+      tab: owner.tab,
+      phase: 'reviewing',
+      expectsCookies: false,
+      authorizationInvalid: false,
+      contested: false,
+      quietUntil: 0,
+      choices,
+      persona,
+      profile,
+      cancelled: false,
+      signal: controller.signal,
+      stop: () => controller.abort(),
+      timer: setTimeout(() => cancel(lease, true), 120000),
+    };
+    active = lease;
+    owner.lastLease = lease;
+    emit(owner, { phase: 'reviewing', lease: lease.id, message: 'Checking the current site…' });
+    await run(lease, async () => {
+      const present = await wait(lease, () => cookieAccess(lease.signal));
+      const pending = await wait(lease, () =>
+        captureCleanupPending(browser.storage).catch(() => false),
+      );
+      if (cleanupNotice) throw new Error(unavailable);
+      if (present !== false || pending) {
+        await mutate(lease, remove);
+        if (cleanupNotice) throw new Error(unavailable);
+      }
+      await validate(lease);
+      lease.expectsCookies = true;
+      emit(owner, {
+        phase: 'permission',
+        message: 'Click Allow cookies and review to grant temporary cookie access.',
+      });
+    });
+  };
+  const granted = async (lease: Lease, allowed: boolean | undefined) => {
+    if (lease.orphaned) {
+      await finish(lease, 'cancelled', 'Sharing cancelled.');
+      return;
+    }
+    if (active !== lease) {
+      // A stale result cannot claim a newer lease's authority.
+      if (!active) await recoverIdle();
+      return;
+    }
+    if (lease.phase !== 'acquiring') return;
+    await run(lease, async () => {
+      if (!allowed) throw 0;
+      // onAdded and request settlement each restart the quiet acquisition window.
+      while (Date.now() < lease.quietUntil) {
+        let timer!: ReturnType<typeof setTimeout>;
+        try {
+          await wait(
+            lease,
+            () =>
+              new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, Math.max(0, lease.quietUntil - Date.now()));
+              }),
+          );
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      alive(lease);
+      if (pendingPrompt === lease) pendingPrompt = undefined;
+      lease.phase = 'confirming';
+      if (!allowed || (await wait(lease, cookieAccess)) !== true) throw 0;
+      await validate(lease); // Access withdrawn DURING the prompt cannot reach beginLogin.
+      alive(lease);
+      const begun = await mutate(lease, () =>
+        request({
+          type: 'beginLogin',
+          site: lease.tab.site,
+          persona: lease.persona,
+          profile: lease.profile,
+        }),
+      );
+      if (begun.type !== 'beginLogin') throw 0;
+      lease.token = begun.token;
+      const tab = await validate(lease);
+      const cookies = captureCookies(
+        tab.site,
+        await wait(lease, () => browser.cookies.getAll({ url: tab.url })),
+        lease.choices.cookieDomains,
+        Date.now(),
+      );
+      await validate(lease);
+      if (!cookies.length) throw 0;
+      lease.count = cookies.length;
+      emit(lease.owner, {
+        phase: 'confirming',
+        message: 'Review, then confirm to send to your local vault.',
+        preview: {
+          count: cookies.length,
+          persona: lease.choices.personas.find(
+            (p) => p.id === lease.persona && p.profile === lease.profile,
+          )!.label,
+          profile: lease.choices.profiles.find((p) => p.id === lease.profile)!.label,
+        },
+      });
+    });
+  };
+  const confirm = async (lease: Lease) =>
+    run(lease, async () => {
+      if (lease.phase !== 'confirming' || !lease.token || pendingPrompt === lease) throw 0;
+      lease.phase = 'sending';
+      emit(lease.owner, { phase: 'sending', message: 'Sharing sign-in…' });
+      if ((await wait(lease, cookieAccess)) !== true) throw 0;
+      const tab = await validate(lease);
+      const cookies = captureCookies(
+        tab.site,
+        await wait(lease, () => browser.cookies.getAll({ url: tab.url })),
+        lease.choices.cookieDomains,
+        Date.now(),
+      );
+      // Fresh snapshot must still match the reviewed count; recheck site/access after reading.
+      if (!cookies.length || cookies.length !== lease.count) throw 0;
+      await validate(lease);
+      const input = {
+        type: 'capture' as const,
+        token: lease.token,
+        message: { site: tab.site, account: lease.persona, cookies, capturedAt: Date.now() },
+      };
+      if (new TextEncoder().encode(JSON.stringify(input)).byteLength > NATIVE_MESSAGE_LIMIT - 100)
+        throw 0;
+      alive(lease); // No await between this authorization latch and native dispatch.
+      await mutate(lease, () => request(input));
+      await finish(lease, 'shared', 'Sign-in shared.');
+    });
+
+  const invalidate = (revoke = true) => {
+    const lease = active;
+    if (!lease || lease.phase === 'cleaning' || lease.cancelled || lease.authorizationInvalid)
+      return;
+    const reviewing = lease.phase === 'reviewing' || lease.phase === 'acquiring';
+    lease.authorizationInvalid = true;
+    lease.stop();
+    if (revoke && ['acquiring', 'confirming', 'sending'].includes(lease.phase)) void revokeIdle();
+    emit(lease.owner, {
+      phase: 'failed',
+      preview: undefined,
+      message: 'Site access changed. Review sign-in sharing again.',
+    });
+    enqueue(async () => {
+      await finish(lease, 'failed', 'Site access changed. Review sign-in sharing again.');
+      if (reviewing && !lease.cancelled && !lease.owner.closed && !occupied() && !cleanupNotice)
+        await load(lease.owner);
+    });
+  };
+  const contest = (owner: Owner) => {
+    const lease = active;
+    if (lease) {
+      lease.contested = true;
+      lease.authorizationInvalid = true;
+      lease.stop();
+      // Foreign gestures may already have dispatched a prompt. Fence and revoke
+      // immediately, without waiting for either popup's settlement report.
+      abandon(lease);
+      emit(lease.owner, { phase: 'failed', message: contested, preview: undefined });
+    } else {
+      // Every observed foreign request owns a full window from NOW, even if
+      // another prompt's fence is about to expire. Never inherit its deadline.
+      fenceForeignPrompt();
+    }
+    if (owner !== lease?.owner)
+      emit(owner, { phase: 'failed', lease: undefined, message: contested, preview: undefined });
+  };
+  browser.tabs.onActivated.addListener(() => invalidate());
+  browser.tabs.onUpdated.addListener((tabId, change) => {
+    if (tabId === active?.tab.id && change.url !== undefined) invalidate();
+  });
+  browser.windows.onFocusChanged.addListener(() => invalidate());
+  browser.permissions.onRemoved.addListener(() => invalidate());
+  browser.permissions.onAdded.addListener((permissions) => {
+    const cookies = permissions.permissions?.includes('cookies');
+    const orphaned = orphanedLease();
+    if (cookies && orphaned) {
+      removeOrphaned(orphaned);
+      return;
+    }
+    // Only the current armed gesture may acquire authority. Every permission change
+    // during confirmation/sending invalidates the authorization latch.
+    if (
+      cookies &&
+      permissions.permissions?.length === 1 &&
+      !permissions.origins?.length &&
+      active?.phase === 'acquiring' &&
+      cookieWindow() &&
+      pendingPrompt === active
+    ) {
+      active.quietUntil = Date.now() + acquisitionQuietPeriod;
+      return;
+    }
+    invalidate(false);
+    // Revocation never waits behind tab/storage/native work in the queue.
+    // Ingress invalidation prevents that work from reading or dispatching.
+    if (cookies) void revokeIdle();
+    else void recoverIdle();
+  });
+
+  // Start recovery immediately, then join it before processing the initial queue.
+  const startup = recoverIdle();
+  enqueue(() => startup);
+  browser.runtime.onStartup.addListener(() => {
+    void recoverIdle();
+  });
+  browser.runtime.onInstalled.addListener(() => {
+    void recoverIdle();
+  });
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== CAPTURE_PERMISSION_PORT) return;
+    if (
+      port.sender?.id !== browser.runtime.id ||
+      port.sender.tab ||
+      port.sender.url !== browser.runtime.getURL('popup/popup.html')
+    ) {
+      port.disconnect();
+      return;
+    }
+    const owner: Owner = {
+      port,
+      closed: false,
+      pending: new AbortController(),
+      loadQueued: false,
+      view: {
+        phase: 'loading',
+        message: 'Loading sign-in sharing…',
+        warning: cleanupNotice !== undefined,
+        cleanupFailed: cleanupNotice === 'failed',
+      },
+    };
+    owners.add(owner);
+    emit(owner, occupied() ? { phase: 'busy', message: busyMessage() } : {});
+    port.onDisconnect.addListener(() => {
+      void browser.runtime.lastError;
+      owner.closed = true;
+      owner.pending.abort();
+      owners.delete(owner);
+      const lease =
+        active?.owner === owner
+          ? active
+          : pendingPrompt?.owner === owner
+            ? pendingPrompt
+            : undefined;
+      if (lease) cancel(lease, true);
+    });
+    port.onMessage.addListener((input: unknown) => {
+      const intent = captureIntent(input);
+      if (!intent || owner.closed) return;
+      if (intent.type === 'load') {
+        emit(owner, occupied() ? { phase: 'busy', message: busyMessage() } : {});
+        queueLoad(owner);
+        return;
+      }
+      if (intent.type === 'start') {
+        if (occupied()) {
+          emit(owner, { phase: 'busy', message: busyMessage() });
+          return;
+        }
+        enqueue(() => start(owner, intent.profile, intent.persona));
+        return;
+      }
+      if (intent.type === 'removeCookieAccess') {
+        const orphaned = orphanedLease();
+        if (orphaned) {
+          removeOrphaned(orphaned);
+          return;
+        }
+        // Explicit recovery also bypasses stalled popup work.
+        void (async () => {
+          if (
+            active &&
+            !active.cancelled &&
+            !active.authorizationInvalid &&
+            active.phase !== 'cleaning'
+          ) {
+            emit(owner, { phase: 'busy', message: busyMessage() });
+            return;
+          }
+          emit(owner, { phase: 'loading', message: 'Removing cookie access…' });
+          await remove();
+          if (cleanupNotice)
+            emit(owner, {
+              phase: 'failed',
+              message: "Remove cookie access from Chrome's extension settings before sharing.",
+            });
+          else {
+            releaseVerified();
+            await drainExpired();
+            queueLoad(owner);
+            resume();
+          }
+        })();
+        return;
+      }
+      if (!('lease' in intent)) return;
+      const lease = owner.lastLease?.id === intent.lease ? owner.lastLease : undefined;
+      if (!lease && intent.type !== 'requesting') return;
+      if (intent.type === 'cancel') {
+        cancel(lease!);
+        return;
+      }
+      if (intent.type === 'requesting') {
+        // A popup posts this BEFORE its synchronous Chrome request. Rejection
+        // cannot retract that gesture, so every non-admitted ingress is a contest.
+        if (
+          !lease ||
+          pendingPrompt ||
+          cleanups.size ||
+          active !== lease ||
+          !lease.expectsCookies ||
+          lease.phase !== 'reviewing' ||
+          lease.cancelled ||
+          lease.authorizationInvalid ||
+          cleanupNotice ||
+          Date.now() >= lease.expiresAt
+        ) {
+          contest(owner);
+          return;
+        }
+        lease.expectsCookies = false;
+        let settle!: (allowed: boolean | undefined) => void;
+        const settled = new Promise<boolean | undefined>((resolve) => {
+          settle = resolve;
+        });
+        const permission = {
+          pending: true,
+          settled,
+          settle: (allowed: boolean | undefined) => {
+            if (!permission.pending) return;
+            permission.pending = false;
+            lease.quietUntil = Date.now() + acquisitionQuietPeriod;
+            settle(allowed);
+          },
+        };
+        lease.permission = permission;
+        pendingPrompt = lease;
+        // Synchronous ingress: onAdded can arrive before the queued prompt update.
+        lease.phase = 'acquiring';
+        enqueue(async () => {
+          if (!lease.cancelled && !lease.authorizationInvalid && active === lease)
+            emit(owner, { phase: 'prompt', message: 'Waiting for cookie permission…' });
+          // Result ingress or worker-owned abandonment wakes this wait. onAdded
+          // never authorizes a request or releases an orphaned lease's fence.
+          await granted(lease, await settled);
+        });
+        return;
+      }
+      if (intent.type === 'permission') {
+        lease?.permission?.settle(intent.granted);
+        return;
+      }
+      if (intent.type === 'confirm' && lease && lease === active && lease.phase === 'confirming')
+        enqueue(() => confirm(lease));
+    });
+  });
+}
