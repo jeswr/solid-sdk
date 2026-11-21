@@ -5,6 +5,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { TermAs } from "@rdfjs/wrapper";
+import { DataFactory } from "n3";
 import { classificationForType, classifySubject, hasProfileContactDetails } from "./classify";
 import { DiscoveryBudget, type DiscoveryBudgetOptions } from "./discovery-budget";
 import { type Classification, type DataCategory, DOMAINS, UNCATEGORISED } from "./domains";
@@ -22,6 +23,27 @@ export interface DomainItem extends Classification {
   etag: string | null;
 }
 
+/** Multiple records can share a document; profile views can also share a subject. */
+export function domainItemKey(item: DomainItem): string {
+  // Blank-node labels belong to one parse, so these cards keep document/type identity.
+  // Binary listing subjects may also be URL aliases for the same file.
+  const subject =
+    item.subject.termType === "NamedNode" && item.dataType?.id !== "files"
+      ? item.subject.value
+      : undefined;
+  return JSON.stringify([resourceUrl(item.url), subject, item.dataType?.id]);
+}
+
+export const MAX_RECORDS_PER_DOCUMENT = 200;
+export const MAX_RECORDS_PER_REFRESH = 1_000;
+
+interface ClassifiedDocument {
+  dataset: DatasetCore;
+  etag: string | null;
+  items: DomainItem[];
+  truncated: boolean;
+}
+
 export interface DiscoveryOptions extends DiscoveryBudgetOptions {
   fetch: typeof globalThis.fetch;
   storage: string;
@@ -30,12 +52,14 @@ export interface DiscoveryOptions extends DiscoveryBudgetOptions {
   webId?: string;
   /** Allows a profile hosted outside storage without forwarding credentials there. */
   profile?: DatasetCore;
+  /** Shared only within one refresh, so overlapping domain scans classify each document once. */
+  documentCache?: Map<string, ClassifiedDocument>;
 }
 
 export interface DomainItems {
   items: DomainItem[];
   failures: DiscoveryFailure[];
-  /** True when discovery stopped at its request budget or deadline. Failures also imply partial data. */
+  /** True when discovery reached its request, record or time budget. Failures also imply partial data. */
   truncated: boolean;
   etags: ReadonlyMap<string, string | null>;
   /** Listing membership is independent of whether child contents were visited. */
@@ -69,12 +93,61 @@ interface Visit {
 }
 
 /** Normalize HTTP resource identities without rewriting RDF subject identifiers. */
-function resourceUrl(value: string): string {
+export function resourceUrl(value: string): string {
   return (httpUrl(value)?.href ?? value).split("#")[0] as string;
 }
 
 /**
- * Merge Type Index hits and suite containers, classify actual primary subjects, dedupe URLs.
+ * The records a document's cards show, in order: named local records stamped with
+ * provenance by a connector, then the document's own primary record unless it is one of
+ * those or connector scaffolding (a provenance activity). Blank-node collections keep
+ * primary-subject discovery. Deletion protection uses the same list, so a card's delete
+ * never removes a sibling card's record.
+ */
+export function documentRecords(
+  dataset: DatasetCore,
+  url: string,
+  webId?: string,
+  limit = Number.POSITIVE_INFINITY,
+): { node: ReturnType<typeof subjectOf>; classification: Classification }[] {
+  const records: { node: ReturnType<typeof subjectOf>; classification: Classification }[] = [];
+  const imported = new Set<string>();
+  const scaffolding = new Set<string>();
+  const generatedBy = DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`);
+  const profile = webId !== undefined && url === resourceUrl(webId);
+  for (const { subject, object } of dataset.match(null, generatedBy)) {
+    scaffolding.add(object.value);
+    // One past the limit lets the caller report truncation.
+    if (records.length > limit) break;
+    if (
+      profile ||
+      subject.termType !== "NamedNode" ||
+      subject.value === url ||
+      resourceUrl(subject.value) !== url ||
+      imported.has(subject.value)
+    )
+      continue;
+    const node = subjectOf(dataset, subject);
+    const classification = classifySubject(node, webId);
+    if (!classification.dataType) continue;
+    imported.add(subject.value);
+    records.push({ node, classification });
+  }
+  const primary = profile && webId ? subjectOf(dataset, webId) : primarySubject(dataset, url);
+  if (primary) {
+    const term = TermAs.term(primary);
+    if (
+      dataset.match(term).size > 0 &&
+      !imported.has(term.value) &&
+      !(imported.size && scaffolding.has(term.value))
+    )
+      records.push({ node: primary, classification: classifySubject(primary, webId) });
+  }
+  return records;
+}
+
+/**
+ * Merge Type Index hits and suite containers, classify records, dedupe document/subject/type.
  * Known folders may not exist (404); permission, network and parse failures are retained.
  * Integrations are walked recursively; ordinary folders contribute direct non-container children.
  * Results carry validators so the later SDK adapter can cache by container ETag.
@@ -94,6 +167,7 @@ export async function discoverDomainItems(
   if (!inStorage(storage, storage) || new URL(storage).hash)
     throw new TypeError("Expected a storage root ending in /");
   const budget = options.budget ?? new DiscoveryBudget(options);
+  const documents = options.documentCache ?? new Map<string, ClassifiedDocument>();
   const listings = new Map<string, ReadonlySet<string>>();
   const result: DomainItems = {
     items: [],
@@ -109,31 +183,51 @@ export async function discoverDomainItems(
   const listedModified = new Map<string, string>();
 
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
-    const node =
-      webId && url === resourceUrl(webId)
-        ? subjectOf(dataset, webId)
-        : primarySubject(dataset, url);
-    if (!node || dataset.match(TermAs.term(node)).size === 0) return;
-    const classified = classifySubject(node, webId);
-    const modifiedAt = node.modified;
-    const item: DomainItem = {
-      ...classified,
-      url,
-      subject: TermAs.term(node),
-      dataset,
-      etag,
-      containerUrl: parent,
-      title: node.name ?? nameFromUrl(url),
-      ...(modifiedAt ? { modified: modifiedAt } : {}),
-    };
-    result.items.push(item);
-    if (hasProfileContactDetails(node, webId)) {
-      result.items.push({
-        ...item,
-        ...classificationForType("contact-details"),
-        title: "Contact details",
-      });
+    let document = documents.get(url);
+    if (!document) {
+      const remaining =
+        MAX_RECORDS_PER_REFRESH -
+        [...documents.values()].reduce((count, entry) => count + entry.items.length, 0);
+      const limit = Math.min(MAX_RECORDS_PER_DOCUMENT, remaining);
+      const items: DomainItem[] = [];
+      let truncated = false;
+      const add = (node: ReturnType<typeof subjectOf>, classified: Classification) => {
+        if (items.length >= limit) {
+          truncated = true;
+          return;
+        }
+        const modifiedAt = node.modified;
+        const item: DomainItem = {
+          ...classified,
+          url,
+          subject: TermAs.term(node),
+          dataset,
+          etag,
+          containerUrl: parent,
+          title: node.name ?? nameFromUrl(url),
+          ...(modifiedAt ? { modified: modifiedAt } : {}),
+        };
+        items.push(item);
+        if (hasProfileContactDetails(node, webId)) {
+          if (items.length >= limit) truncated = true;
+          else
+            items.push({
+              ...item,
+              ...classificationForType("contact-details"),
+              title: "Contact details",
+            });
+        }
+      };
+      for (const { node, classification } of documentRecords(dataset, url, webId, limit)) {
+        add(node, classification);
+        if (truncated) break;
+      }
+      document = { dataset, etag, items, truncated };
+      documents.set(url, document);
     }
+    result.truncated ||= document.truncated;
+    // Listing dates and parents belong to the current scan, not the shared cache.
+    result.items.push(...document.items.map((item) => ({ ...item, containerUrl: parent })));
   };
 
   for (const location of options.typeIndex ?? []) {
@@ -193,6 +287,12 @@ export async function discoverDomainItems(
       continue;
     }
     try {
+      const cached = documents.get(url);
+      if (cached && !visit.container && !visit.files) {
+        etags.set(url, cached.etag);
+        addDataset(cached.dataset, url, visit.parent, cached.etag);
+        continue;
+      }
       const resource = await budget.read(fetch, url);
       if (!resource) break;
       const { dataset, etag } = resource;
@@ -256,14 +356,14 @@ export async function discoverDomainItems(
         result.failures.push({ url, error });
     }
   }
-  result.truncated = budget.truncated;
+  result.truncated = budget.truncated || result.truncated;
   const unique = new Map<string, DomainItem>();
   for (const item of result.items) {
     // A direct registration may have been read before its container listing.
     const modified = item.modified ?? listedModified.get(item.url);
     if (modified) item.modified = modified;
     if (category.id === "all" || item.domain.id === category.id)
-      unique.set(`${item.url}|${item.dataType?.id}`, item);
+      unique.set(domainItemKey(item), item);
   }
   let fileCount = 0;
   result.items = sortItems([...unique.values()]).filter(
