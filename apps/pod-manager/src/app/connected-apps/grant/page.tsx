@@ -29,6 +29,7 @@ import { categoryById, CATEGORIES, type DataCategory } from "@/lib/categories";
 import {
   describeModes,
   fetchAppIdentity,
+  roleForModes,
   type AccessMode,
   type AppIdentity,
 } from "@/lib/permissions";
@@ -83,6 +84,22 @@ function GrantScreen() {
         icon={AppWindow}
         title="This access request is incomplete"
         description="The link that brought you here doesn't say which app is asking. Nothing has been shared. You can review your connected apps instead."
+        action={
+          <Button variant="outline" asChild>
+            <Link href="/connected-apps">Review connected apps</Link>
+          </Button>
+        }
+      />
+    );
+  }
+  if (!roleForModes(modes)) {
+    // Only role-shaped requests (see / change / manage) can be granted; a
+    // partial set such as add-only is refused rather than widened to a role.
+    return (
+      <EmptyState
+        icon={AppWindow}
+        title="This access request can't be granted here"
+        description={`The app asked to ${describeModes(modes)} your data, a combination Pod Manager can't grant safely. Nothing has been shared.`}
         action={
           <Button variant="outline" asChild>
             <Link href="/connected-apps">Review connected apps</Link>
