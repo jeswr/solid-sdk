@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
@@ -20,7 +21,6 @@ import {
   IconButton,
   Skeleton,
 } from "@jeswr/suite-ui";
-import { OnlineGate } from "@jeswr/suite-ui/sync";
 import type { Quad } from "@rdfjs/types";
 import {
   ArrowLeft,
@@ -30,6 +30,7 @@ import {
   FileText,
   Info,
   Star,
+  Table2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -50,12 +51,14 @@ import { decodePreviewText } from "../lib/files/text";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useOpenWithDocs } from "../state/open-with-docs";
+import { useOpenWithSheets } from "../state/open-with-sheets";
 import { useLiveResource, useResourceVersion } from "../state/resource";
 import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
 import { NativePdfHandoff } from "./native-pdf";
+import { OpenWithButton } from "./open-with-button";
 import { ProtectionBanner } from "./protection-banner";
 import { type PreviewText, TextPreview } from "./text-preview";
 
@@ -387,33 +390,6 @@ export function PreviewBody({
   }
 }
 
-/** Google Drive's "Open with Docs": opens a Docs document or converts the file into one. */
-function OpenWithDocsButton({ item }: { item: DriveItem }) {
-  const control = useOpenWithDocs(item);
-  if (!control) return null;
-  const reason = control.kind === "convert" ? control.disabledReason : undefined;
-  const button = (
-    <Button
-      variant="outline"
-      size="sm"
-      className="drv-open-with"
-      disabled={reason !== undefined || control.pending}
-      aria-busy={control.pending || undefined}
-      onClick={() => void control.run()}
-    >
-      <FileText aria-hidden="true" size={16} />
-      <span>Open with Docs</span>
-    </Button>
-  );
-  return reason ? (
-    <OnlineGate online={false} reason={reason}>
-      {button}
-    </OnlineGate>
-  ) : (
-    button
-  );
-}
-
 function PreviewHeader({
   item,
   leading,
@@ -430,13 +406,24 @@ function PreviewHeader({
   const actions = useDriveActions();
   const ui = useDriveUi();
   const starred = actions.starred.has(item.url);
+  const docs = useOpenWithDocs(item);
+  const sheets = useOpenWithSheets(item);
   return (
     <header className="drv-preview-header">
       {leading}
       <ItemIcon item={item} size={24} />
       <span className="drv-preview-title">{item.name}</span>
       <div className="drv-preview-actions">
-        <OpenWithDocsButton item={item} />
+        <OpenWithButton
+          control={docs}
+          name="Docs"
+          icon={<FileText aria-hidden="true" size={16} />}
+        />
+        <OpenWithButton
+          control={sheets}
+          name="Sheets"
+          icon={<Table2 aria-hidden="true" size={16} />}
+        />
         <IconButton label="Download" variant="ghost" onClick={() => void actions.download(item)}>
           <Download aria-hidden="true" size={18} />
         </IconButton>

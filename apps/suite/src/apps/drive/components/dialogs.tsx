@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
@@ -262,7 +263,7 @@ function MoveDialog({
         setNodes((current) => ({
           ...current,
           [url]: children
-            .filter((child) => child.kind === "folder" && !isHidden(child))
+            .filter((child) => child.kind === "folder" && !child.workbook && !isHidden(child))
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((child) => ({ url: child.url, name: child.name })),
         }));

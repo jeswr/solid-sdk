@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
@@ -440,10 +441,15 @@ export function FileBrowser(props: FileBrowserProps) {
         return ui.setDetailsOpen((open) => !open);
       case (event.key === "F2" || (event.key === "n" && !mod)) &&
         targets.length === 1 &&
-        writable(targets):
+        writable(targets) &&
+        !targets.some((item) => item.workbook):
         event.preventDefault();
         return ui.openDialog({ kind: "rename", item: targets[0] as DriveItem });
-      case event.key === "m" && !mod && targets.length > 0 && writable(targets):
+      case event.key === "m" &&
+        !mod &&
+        targets.length > 0 &&
+        writable(targets) &&
+        !targets.some((item) => item.workbook):
         event.preventDefault();
         return ui.openDialog({ kind: "move", items: [...targets] });
       case event.key === "s" && !mod && targets.length > 0:
@@ -469,7 +475,7 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onDragStart = (event: DragEvent, item: BrowserItem) => {
     const targets = targetsFor(item);
-    if (!writable(targets)) {
+    if (!writable(targets) || targets.some((target) => target.workbook)) {
       event.preventDefault();
       return;
     }
@@ -484,7 +490,7 @@ export function FileBrowser(props: FileBrowserProps) {
     );
 
   const folderDropProps = (item: BrowserItem) =>
-    item.kind === "folder" && isOwnStorage(item.url, session.storageUrl)
+    item.kind === "folder" && !item.workbook && isOwnStorage(item.url, session.storageUrl)
       ? {
           onDragOver: (event: DragEvent) => {
             const types = [...event.dataTransfer.types];
@@ -761,7 +767,7 @@ export function FileBrowser(props: FileBrowserProps) {
                       ? 0
                       : -1
                   }
-                  draggable={Boolean(folder)}
+                  draggable={Boolean(folder) && !item.workbook}
                   onDragStart={(event) => onDragStart(event, item)}
                   onDragEnd={() => clearDragItems(client)}
                   onClick={(event) => onItemClick(event, item)}
@@ -779,9 +785,11 @@ export function FileBrowser(props: FileBrowserProps) {
                     ) : null}
                   </span>
                   <span className="drv-card-meta">
-                    {item.kind === "folder"
-                      ? "Folder"
-                      : `Modified ${formatModified(item.modified)}`}
+                    {item.workbook
+                      ? "Spreadsheet"
+                      : item.kind === "folder"
+                        ? "Folder"
+                        : `Modified ${formatModified(item.modified)}`}
                   </span>
                 </button>
                 {menuButton}
@@ -847,7 +855,7 @@ export function FileBrowser(props: FileBrowserProps) {
                     aria-selected={isSelected}
                     data-drop={dropTarget === item.url || undefined}
                     tabIndex={isActive ? 0 : -1}
-                    draggable={Boolean(folder)}
+                    draggable={Boolean(folder) && !item.workbook}
                     onDragStart={(event) => onDragStart(event, item)}
                     onDragEnd={() => clearDragItems(client)}
                     onClick={(event) => onItemClick(event, item)}
