@@ -1,0 +1,74 @@
+# AUTHORED-BY Claude Opus 5.5
+name: answerable-explorer
+
+# Deploys the public Answerable explorer (answerableagents.org, Vercel project
+# answerable-explorer) whenever main changes the site, the Errand app it hosts at app/, or the
+# specs it renders. Jesse approved production deploys of this project on every site change
+# (21 Nov 2026). The site is static: scripts/build-public.mjs writes it (leaving out the
+# internal roadmap), and the Vercel CLI deploys it as a prebuilt static output.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/agent-explorer/**
+      - apps/agent-chat/**
+      - packages/agent-consent/**
+      - docs/specs/agent/**
+      - .github/workflows/answerable-explorer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs queue rather than cancel, so a deployment in progress is never interrupted.
+concurrency:
+  group: answerable-explorer
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: team_gEDQJDOVUapnHCzWwvyxaIB2
+  VERCEL_PROJECT_ID: prj_9r9z3AMuYPM8S5WtCRLG33i2EyIz
+  VERCEL_CLI: vercel@65.4.0
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install the Errand app and its workspace dependencies
+        run: pnpm install --frozen-lockfile --filter "@jeswr/app-agent-chat..."
+      - name: Build the Errand app as one self-contained page
+        run: |
+          pnpm exec turbo run build --filter="@jeswr/app-agent-chat^..."
+          pnpm --filter @jeswr/app-agent-chat run build:artifact
+      - name: Build the public site
+        run: |
+          site="$RUNNER_TEMP/answerable-site"
+          AX_APP_DIR="$PWD/apps/agent-chat/dist-artifact" node apps/agent-explorer/scripts/build-public.mjs "$site"
+          test -f "$site/index.html" && test -f "$site/app/index.html" && test -f "$site/paper/index.html"
+          test -f "$site/media/answerable-walkthrough.mp4"
+          if grep -q '"roadmap"' "$site/data/bundle.js"; then echo "the public bundle must not carry the roadmap"; exit 1; fi
+          echo "SITE=$site" >> "$GITHUB_ENV"
+      # The build runs above without the token; only the CLI steps below see it.
+      - name: Pull the project settings and build the static output
+        working-directory: ${{ env.SITE }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx --yes "$VERCEL_CLI" pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx --yes "$VERCEL_CLI" build --prod --token "$VERCEL_TOKEN"
+      - name: Deploy to production
+        working-directory: ${{ env.SITE }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz \
+            --meta "explorerCommitSha=$GITHUB_SHA" --token "$VERCEL_TOKEN")
+          echo "Deployed $GITHUB_SHA to answerableagents.org: $url" | tee -a "$GITHUB_STEP_SUMMARY"
