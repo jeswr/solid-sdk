@@ -81,6 +81,7 @@ it("requires a positive inbound admission even when the protocol result is accep
         decisions: [],
       }),
       commitBindingEvent: vi.fn(),
+      admittedFacts: () => [],
       close: vi.fn(),
     },
     {

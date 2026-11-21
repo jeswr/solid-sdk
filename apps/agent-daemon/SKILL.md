@@ -63,7 +63,17 @@ the importer can write an ACL. A failed startup/check prevents inbox writes,
 model calls and cursor advancement. Store verdicts locally and keep pod inbox
 identity unverified. Plain observations may be triaged and require an owner flag
 for Proposer access. Preserve the independent executor mandate and keep the
-reference mandate deny-all in Phase 1.
+reference mandate deny-all through Phase 2.
+
+Compose `DaemonOptions.memory` with `createRuntimeMemory`, the leased gate's
+`facts` method, scoped `createAgentMemory` recall and a trusted purpose IRI. The
+daemon installs the Proposer's `memoryRecall` callback. Model text is a literal
+substring filter after authorization. Keep complete provenance, count
+superseded and other-purpose facts without exposing their content, and bound
+the final JSON. Provision memory and pending containers under the workspace's
+owner-only ACL. The reference task, reliance policy, source rules and handlers
+come from trusted host configuration. Preserve the gate's own persistent state
+across restarts. Use `createTestMemory` for fixtures that have no owner mandate.
 
 `awp gate init --owner-dir <dir>` confirms creation and keeps the owner key in
 separate custody. `awp gate pin <card.json>` checks both declared thumbprints and

@@ -9,7 +9,7 @@ Explicit `login` uses the credential package's PKCE loopback listener.
 `composeDaemon` obtains a client-credentials DPoP session through
 `@jeswr/pod-auth/node`, creates the storage client and notifications client using
 that session's fetch, and calls a trusted `prepare(workspace)` host factory.
-Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, a gateway,
+Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, runtime memory, a gateway,
 an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
@@ -38,6 +38,10 @@ and cannot be detected from the daemon's side; recover it by reconciling the out
 Only a taken name reported as Solid's remapped
 412 permits proposal replay or index-create retry; a real 409 remains a write failure.
 After a container-create conflict, a fresh HEAD must confirm the container exists.
+The workspace root and both memory containers must advertise a unique WAC ACL
+document within the configured storage root via `Link: <...>; rel="acl"` on HEAD.
+The daemon replaces those documents with owner-only grants before writing content.
+Missing, ambiguous or out-of-scope links stop initialization.
 Read bounds and existing CLI error messages are retained.
 `createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
 that state, with request records and resource snapshots for offline assertions.
@@ -176,6 +180,55 @@ for triage and can reach the Proposer when the owner flags a thread. They supply
 no admitted evidence. Pod inbox identity stays `unverified` because the channel
 handle is an observation. The daemon keeps reference-generated replies in the
 local runtime outbox during this phase.
+
+## Runtime memory
+
+Supply `DaemonOptions.memory` from the trusted host factory. The daemon uses it
+for the Proposer's `memory_recall` tool. Supply `pod` and `instructions` in
+`proposerContext`. Workspace initialization installs owner-only WAC ACLs on
+`agent/memory/` and `agent/memory/pending/` before writing content. It replaces
+existing ACLs on both containers and sets the owner-only default inherited by
+descendants that lack their own ACL.
+
+```ts
+const gate = createInboundGate({
+  directory: join(stateDirectory, "gate"),
+  admission: { taskId, reliance, handlers },
+});
+const memory = createRuntimeMemory({
+  facts: gate.facts,
+  owner: ownerMemory,
+  purpose,
+});
+```
+
+The factory passes both `gate` and `memory` to the daemon. `gate.facts` reads
+the reference runtime opened under the daemon's lease. The optional `admission`
+configuration gives the runtime a trusted task ID, reliance rules and operation
+handlers for evidence-bearing messages. The reference trust store supplies issuer
+pins and source authority rules. Gate recall selects the latest eligible revision of
+each statement ID whose delivery has a confirmed final `admitted` verdict. A
+precedence successor also needs a confirmed `admitted` verdict to supersede an
+earlier fact in recall. This applies both live and after reopening the same gate
+directory with the same task configuration.
+
+Construct `ownerMemory` with `createAgentMemory`, using the authenticated
+workspace storage and a mandate loader that verifies owner, revocation, signed
+memory scope and purpose policy. Select the purpose IRI in the host. The tool
+treats the model query as a case-insensitive substring of admitted fact fields or
+owner assertion terms. Results are ordered by time and ID and default to 20 items
+and 64 KiB of JSON. Superseded facts with confirmed admissions, facts with an
+absent or different admitted purpose, and facts subject to the interaction-only
+default terms all contribute to the withheld count independently of the query.
+For a derived fact, recall checks inherited terms and the exact recorded input
+revisions recursively. A withheld or unavailable input also withholds the
+derived fact.
+Reopening preserves an absent admitted purpose. Returned facts carry their
+recorded purpose, supplier terms and other provenance.
+Owner recall verifies the stored, unexpired owner-signed approval against the
+exact TriG bytes and destination and validates the resource against the promotion
+SHACL shapes. It skips resources that fail either check. Owner memory results
+carry the four permitted graphs as RDF/JS quads and nanopublication metadata.
 
 ## Stop and resume
 

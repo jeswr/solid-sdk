@@ -77,6 +77,11 @@ export async function composeDaemon(options: {
 /** Serial account passes keep shared bindings and durable cursors ordered. */
 export function createDaemon(o: DaemonOptions): Daemon {
   if (!o.gate || typeof o.gate.check !== "function") throw new Error("Missing inbound gate");
+  if (typeof o.memory?.recall !== "function") throw new Error("Missing runtime memory");
+  const proposerContext = {
+    ...o.proposerContext,
+    memoryRecall: (query: string) => o.memory.recall(query),
+  };
   const now = o.now ?? Date.now;
   const timers = o.timers ?? systemTimers;
   const accounts = o.accounts.map((account) => ({ ...account }));
@@ -276,7 +281,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
         try {
           generated = await o.gateway.proposer.propose(
             [{ source, message, triage, gate: verdict }],
-            o.proposerContext,
+            proposerContext,
           );
         } catch (error) {
           if (error instanceof GatewayError) await calls(error.calls, task);

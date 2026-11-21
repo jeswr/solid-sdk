@@ -478,7 +478,7 @@ it.each([
   }
 });
 
-it.each([2, 3])("refuses retries when verdict directory sync %i fails", async (failure) => {
+it.each([2, 3, 5])("refuses retries when verdict directory sync %i fails", async (failure) => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();

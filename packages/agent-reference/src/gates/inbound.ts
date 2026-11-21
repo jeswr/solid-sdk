@@ -2075,6 +2075,12 @@ export class InboundGate {
     }
     const fact: AdmittedFact = {
       ...(original ? { original } : {}),
+      ...(this.deps.memory.receivingReceipt && {
+        admittingDelivery: {
+          receipt: this.deps.memory.receivingReceipt,
+          task: this.deps.gate.taskId ?? need.taskId ?? need.task,
+        },
+      }),
       admittedPurpose: need.purpose,
       statement: c as JsonObject,
       identifiers: identifiersIn(c),

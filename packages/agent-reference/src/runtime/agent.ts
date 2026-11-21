@@ -62,6 +62,7 @@ import type { DerivedRequest, FixedJointSession, ProofBinds } from "../derive/ve
 import { checkApprovalRelease } from "../gates/approval-release.js";
 import { checkOrganisationApprovals, organisationApprovalSchema } from "../gates/approvals.js";
 import {
+  type AdmittedFact,
   alternativeInstalled,
   type ContextItem,
   type GateContext,
@@ -313,6 +314,8 @@ export interface OutboundMessage {
 
 interface ReceiveMetadata {
   readonly binding?: string;
+  /** Locally assigned receipt for correlation with the host's durable final verdict. */
+  readonly admissionReceipt?: string;
   /** Trusted email adapter hook, run only after integrity succeeds and before dispatch. */
   readonly checkEmailParity?: (message: AnyMessage) => string | undefined;
 }
@@ -722,14 +725,7 @@ export class AgentRuntime {
       const message = peekWire(entry.wire);
       if (message) memory.rememberIdentifiers(entry.conversation, message);
     }
-    for (const items of Object.values(memory.contexts))
-      for (const item of items) {
-        if (
-          (item.kind === "statement" && item.accepted !== false) ||
-          (item.kind === "reading" && item.accepted === true)
-        )
-          memory.facts.set(item.id, item);
-      }
+    memory.restoreFacts();
     // Brief 31 §2.2: a register this agent reads from signed answers sees only the entries
     // of answers its own inbound gate admitted (never a local table).
     gate.resolver?.bindAnswers(() =>
@@ -3304,15 +3300,82 @@ export class AgentRuntime {
 
   /** Factual statements available to a core, copied from gate-held task memory only. */
   admittedStatements(): readonly JsonObject[] {
+    return this.admittedStatementItems().map((item) => copyData(item.statement));
+  }
+
+  /** Detached task facts. Hosts can restrict revisions to deliveries they finally admitted. */
+  admittedFacts({
+    includeSuperseded = false,
+    isAdmittedReceipt,
+  }: {
+    includeSuperseded?: boolean;
+    isAdmittedReceipt?: (receipt: string) => boolean;
+  } = {}): readonly AdmittedFact[] {
+    const task = this.options.gates?.taskId ?? "*";
+    const context = this.gateMemory.context(task);
+    const facts = new Map<string, AdmittedFact>();
+    const confirmed = (fact: AdmittedFact) =>
+      fact.admittingDelivery !== undefined &&
+      isAdmittedReceipt?.(fact.admittingDelivery.receipt) === true;
+    const items = this.admittedStatementItems(isAdmittedReceipt ? confirmed : undefined);
+    const ordered = [...items].sort((a, b) => (a.admissionOrder ?? 0) - (b.admissionOrder ?? 0));
+    for (const { kind: _kind, accepted: _accepted, admissionOrder: _order, ...fact } of ordered) {
+      facts.set(fact.id, fact);
+    }
+    if (includeSuperseded || isAdmittedReceipt) {
+      for (const fact of Object.values(this.gateMemory.precedenceHolds)) {
+        if (
+          fact.supersededBy &&
+          (isAdmittedReceipt
+            ? !facts.has(fact.id) && confirmed(fact)
+            : !this.gateMemory.facts.has(fact.id)) &&
+          (fact.admittingDelivery?.task === task ||
+            context.some(
+              (item) => item.id === fact.id && item.digest === fact.digest && item.supersededBy,
+            ))
+        )
+          facts.set(fact.id, fact);
+      }
+    }
+    const recalled: AdmittedFact[] = [];
+    for (const fact of facts.values()) {
+      const { supersededBy, ...prior } = fact;
+      if (isAdmittedReceipt && supersededBy !== undefined) {
+        // Check the gate's successor revision. A different revision selected for recall
+        // under the same statement ID cannot confirm this precedence decision.
+        const successor =
+          this.gateMemory.facts.get(supersededBy) ?? this.gateMemory.precedenceHolds[supersededBy];
+        if (
+          !successor ||
+          !confirmed(successor) ||
+          successor.admittedPurpose !== fact.admittedPurpose ||
+          successor.claimType !== fact.claimType ||
+          successor.subject !== fact.subject ||
+          digestOf(successor.statement?.period ?? null) !== digestOf(fact.statement?.period ?? null)
+        ) {
+          recalled.push(copyData(prior));
+          continue;
+        }
+        if (!includeSuperseded) continue;
+      }
+      recalled.push(copyData(fact));
+    }
+    return recalled;
+  }
+
+  private admittedStatementItems(
+    matchesRevision: (item: ContextItem, current: AdmittedFact) => boolean = (item, current) =>
+      current.digest === item.digest &&
+      current.admittingDelivery?.receipt === item.admittingDelivery?.receipt,
+  ): readonly (ContextItem & { statement: JsonObject })[] {
     return this.gateMemory
       .context(this.options.gates?.taskId ?? "*")
-      .filter(
-        (item) =>
-          item.accepted === true &&
-          this.gateMemory.facts.get(item.id)?.digest === item.digest &&
-          !!item.statement,
-      )
-      .map((item) => copyData(item.statement!));
+      .filter((item): item is ContextItem & { statement: JsonObject } => {
+        const current = this.gateMemory.facts.get(item.id);
+        return (
+          item.accepted === true && !!item.statement && !!current && matchesRevision(item, current)
+        );
+      });
   }
   /**
    * The agreement this agent formed in one conversation, named by its terms digest, with
@@ -4670,6 +4733,7 @@ export class AgentRuntime {
   }
 
   private async receiveGuarded(wire: unknown, meta: ReceiveMetadata): Promise<StepResult> {
+    this.gateMemory.receivingReceipt = meta.admissionReceipt;
     try {
       return await this.receiveInner(wire, meta);
     } catch (error) {
@@ -4691,6 +4755,7 @@ export class AgentRuntime {
       }
       throw error;
     } finally {
+      this.gateMemory.receivingReceipt = undefined;
       this.admission = undefined;
     }
   }

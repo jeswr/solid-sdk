@@ -39,6 +39,7 @@
     "@jeswr/agent-channels": "workspace:*",
     "@jeswr/agent-credentials": "workspace:*",
     "@jeswr/agent-executor": "workspace:*",
+    "@jeswr/agent-memory": "workspace:*",
     "@jeswr/agent-model": "workspace:*",
     "@jeswr/agent-model-gateway": "workspace:*",
     "@jeswr/agent-reference": "workspace:*",

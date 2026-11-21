@@ -11,7 +11,9 @@ const gateway = createGateway({
 });
 const { data, calls } = await gateway.reader.extract(message, schema);
 const { proposals, calls: proposalCalls } = await gateway.proposer.propose(turns, {
-  pod, memoryRecall, instructions: "Prepare drafts for review.",
+  pod,
+  memoryRecall: (query) => runtimeMemory.recall(query),
+  instructions: "Prepare drafts for review.",
 });
 ```
 
@@ -36,7 +38,10 @@ Anthropic Reader uses Messages; OpenAI uses Responses with `store: false`.
 
 Proposer uses the Claude Agent SDK for Anthropic and a bounded Responses loop for OpenAI.
 It exposes exactly `pod_read`, `pod_search` (the Solid MCP registry's read-only tools),
-`memory_recall` (injected until agent-memory is implemented), and `propose`. The SDK has no
+`memory_recall` (provided by the caller's read-only runtime memory), and `propose`.
+The daemon supplies this callback from its gate facts and owner-scoped agent-memory
+recall. When calling the gateway directly, compose `runtimeMemory` in trusted host
+code and use the model query only as a literal filter. The SDK has no
 built-in tools, external MCP configuration, inherited credentials, project settings or persisted
 session. Its home and working directory are temporary and removed after the run.
 Prompts are delivered verbatim, disabling SDK file/resource mention expansion and command

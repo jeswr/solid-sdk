@@ -46,7 +46,8 @@ export interface DaemonOptions {
   readonly checkpoints: Checkpoints;
   readonly proposalResults: ProposalResults;
   readonly gateway: Gateway;
-  readonly proposerContext: ProposerContext;
+  readonly proposerContext: Omit<ProposerContext, "memoryRecall">;
+  readonly memory: { recall(query: string): Promise<unknown> };
   /** Read trusted owner selections, never flags supplied by channel content. */
   readonly isFlagged: (account: string, thread: string) => Promise<boolean>;
   /**

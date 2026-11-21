@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createAgentMemory } from "@jeswr/agent-memory";
+import { createMemoryApprovalQueue } from "@jeswr/agent-memory/testing";
 import { Cast, craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
@@ -7,6 +9,7 @@ import { createAt } from "@jeswr/storage-client/helpers";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { createGate, type StoredVerdict } from "./gate.js";
 import { denyAllMandate } from "./gate-setup.js";
+import { createRuntimeMemory } from "./memory.js";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
 import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
 
@@ -55,6 +58,26 @@ export async function createTestGate(now = () => new Date("2026-10-19T08:00:00Z"
   return { ...(await open()), open, peer, receiver, sign, now };
 }
 
+/** An empty runtime memory for offline daemon fixtures without an owner mandate. */
+export function createTestMemory() {
+  const root = "https://pod.example/";
+  const { queueApproval } = createMemoryApprovalQueue();
+  const owner = createAgentMemory({
+    storage: createMemoryPod(root).storage,
+    container: `${root}agent/memory/`,
+    ownerWebId: `${root}profile/card#me`,
+    agentId: `${root}profile/agent#me`,
+    loadMandate: async () => undefined,
+    queueApproval,
+    webIdKeyResolver: {
+      resolveKey: async () => undefined,
+      isControlledBy: async () => false,
+    },
+    shapes: "# This recall-only fixture has no owner write path.",
+  });
+  return createRuntimeMemory({ facts: () => [], owner, purpose: "urn:test:daemon-memory" });
+}
+
 /** Ephemeral test state; never substitutes for a durable deployment lease. */
 export function createMemoryState() {
   const cursors = new Map<string, string>();
@@ -91,6 +114,11 @@ export function createMemoryState() {
 /** SDK memory storage plus a fetch adapter for SDKs that still accept a transport. */
 export function createMemoryPod(root = "https://pod.example/") {
   const memory = createMemoryStorage({ protocol: "solid", root });
+  const aclLinks = new Map<string, string | null>();
+  const aclLink = (url: string) => {
+    const target = aclLinks.get(url);
+    return target === undefined ? (url.endsWith("/") ? ".acl" : `${url}.acl`) : target;
+  };
   const resources = new Map<string, { body: string; type: string; etag: string }>();
   const requests: { url: string; method: string; body: string; headers: Headers }[] = [];
   const record = (url: string, method: string, body = "", headers = new Headers()) =>
@@ -107,7 +135,15 @@ export function createMemoryPod(root = "https://pod.example/") {
     ...memory,
     async head(url, options) {
       record(url, "HEAD");
-      return memory.head(url, options);
+      const result = await memory.head(url, options);
+      const target = aclLink(url);
+      if (target === null) return result;
+      return {
+        ...result,
+        links: new Map(result.links).set("acl", [
+          { target: new URL(target, url).href, params: {} },
+        ]),
+      };
     },
     async read(url, options) {
       record(url, "GET");
@@ -122,7 +158,10 @@ export function createMemoryPod(root = "https://pod.example/") {
       return result;
     },
     async create(parent, body, options = {}) {
-      const url = `${parent}${encodeURIComponent(options.name ?? "")}${options.kind === "container" ? "/" : ""}`;
+      const { name, ...rest } = options;
+      const url =
+        options.exactUrl ??
+        `${parent}${encodeURIComponent(name ?? "")}${options.kind === "container" ? "/" : ""}`;
       record(
         url,
         "PUT",
@@ -132,7 +171,12 @@ export function createMemoryPod(root = "https://pod.example/") {
           "if-none-match": "*",
         }),
       );
-      const result = await memory.create(parent, body, options);
+      // A Solid named create uses exact PUT, which can also create missing parent containers.
+      const result = await memory.create(
+        parent,
+        body,
+        name !== undefined && options.exactUrl === undefined ? { ...rest, exactUrl: url } : options,
+      );
       await snapshot(result.url);
       return result;
     },
@@ -170,11 +214,12 @@ export function createMemoryPod(root = "https://pod.example/") {
         return new Response(null, { status: 204 });
       }
       const current = await (method === "HEAD" ? storage.head(url) : storage.read(url));
+      const target = aclLink(url);
       return new Response(method === "HEAD" ? null : await current.text(), {
         headers: {
           "content-type": current.contentType ?? "text/turtle",
           etag: current.etag ?? "",
-          ...(url.endsWith("/") ? { link: '<.acl>; rel="acl"' } : {}),
+          ...(target === null ? {} : { link: `<${target}>; rel="acl"` }),
         },
       });
     } catch (error) {
@@ -182,5 +227,5 @@ export function createMemoryPod(root = "https://pod.example/") {
       return new Response(null, { status: error.status });
     }
   };
-  return { io, storage, requests, resources };
+  return { io, storage, requests, resources, aclLinks };
 }

@@ -198,6 +198,9 @@ importers:
       '@jeswr/agent-executor':
         specifier: workspace:*
         version: link:../../packages/agent-executor
+      '@jeswr/agent-memory':
+        specifier: workspace:*
+        version: link:../../packages/agent-memory
       '@jeswr/agent-model':
         specifier: workspace:*
         version: link:../../packages/agent-model
