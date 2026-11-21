@@ -16,6 +16,9 @@ on:
       - packages/agent-consent/**
       - packages/agent-model/**
       - docs/specs/agent/**
+      - pnpm-lock.yaml
+      - tsconfig.base.json
+      - turbo.json
       - .github/workflows/answerable-explorer.yml
   workflow_dispatch:
 
@@ -24,7 +27,7 @@ permissions:
 
 # Runs queue rather than cancel, so a deployment in progress is never interrupted.
 concurrency:
-  group: answerable-explorer
+  group: answerable-explorer-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -58,8 +61,8 @@ jobs:
           for f in index.html data/bundle.js app/index.html paper/index.html media/answerable-walkthrough.mp4; do
             test -s "$site/$f" || { echo "missing $f"; exit 1; }
           done
-          node apps/agent-explorer/scripts/check-public-bundle.mjs "$site/data/bundle.js"
-      - uses: actions/upload-artifact@v4
+          node apps/agent-explorer/scripts/check-public-bundle.mjs "$site"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: answerable-site
           path: ${{ runner.temp }}/answerable-site
@@ -76,19 +79,22 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: answerable-site
           path: answerable-site
-      - name: Pull the project settings and build the static output
-        working-directory: answerable-site
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      # The built files are uploaded as they are: the deploy job never runs `vercel build`, so
+      # nothing in the artifact (a vercel.json, a package.json, an api/ folder) can choose a
+      # command to run with the token.
+      - name: Stage the files as a static prebuilt output
         run: |
-          npx --yes "$VERCEL_CLI" pull --yes --environment=production --token "$VERCEL_TOKEN"
-          npx --yes "$VERCEL_CLI" build --prod --token "$VERCEL_TOKEN"
+          mkdir -p deploy/.vercel/output
+          mv answerable-site deploy/.vercel/output/static
+          printf '{"version":3}\n' > deploy/.vercel/output/config.json
+          printf '{"target":"production","builds":[]}\n' > deploy/.vercel/output/builds.json
+          test -s deploy/.vercel/output/static/index.html
       - name: Deploy to production
-        working-directory: answerable-site
+        working-directory: deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |

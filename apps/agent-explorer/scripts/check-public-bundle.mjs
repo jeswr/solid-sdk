@@ -1,16 +1,16 @@
 // AUTHORED-BY Claude Opus 5.5
-// Fails when a public data bundle carries any of the roadmap's longest texts. The roadmap is the
-// team's working plan and is never published; checking its text, not a key name, also catches a
-// copy that arrived another way (for example inside a spec). Usage:
-// node scripts/check-public-bundle.mjs <site>/data/bundle.js
-import { readFileSync } from 'node:fs';
+// Fails when any file of a public site build carries one of the roadmap's longest texts, or when
+// the build holds a symbolic link (an upload would follow it). The roadmap is the team's working
+// plan and is never published; checking its text, not a key name, also catches a copy that
+// arrived another way (for example inside a spec or under media/). Usage:
+// node scripts/check-public-bundle.mjs <site-dir or file>
+import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const bundlePath = process.argv[2];
-if (!bundlePath) throw new Error('usage: check-public-bundle.mjs <bundle.js>');
-const bundle = readFileSync(bundlePath, 'utf8');
+const target = process.argv[2];
+if (!target) throw new Error('usage: check-public-bundle.mjs <site-dir or file>');
 const roadmap = JSON.parse(readFileSync(join(root, 'data/roadmap.json'), 'utf8'));
 
 const texts = [];
@@ -24,9 +24,27 @@ const texts = [];
 texts.sort((a, b) => b.length - a.length);
 const probes = texts.slice(0, 5);
 if (probes.length < 3) throw new Error('the roadmap has too few long texts to check against');
-const found = probes.filter((t) => bundle.includes(t) || bundle.includes(JSON.stringify(t).slice(1, -1)));
-if (found.length) {
-  console.error(`${bundlePath} carries ${found.length} of ${probes.length} roadmap texts; the roadmap must not be published`);
+const needles = probes.flatMap((t) => [t, JSON.stringify(t).slice(1, -1)]).map((t) => Buffer.from(t, 'utf8'));
+
+const problems = [];
+let files = 0;
+(function scan(path) {
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink()) {
+    problems.push(`${path} is a symbolic link`);
+  } else if (stat.isDirectory()) {
+    for (const name of readdirSync(path)) scan(join(path, name));
+  } else if (stat.isFile()) {
+    files += 1;
+    const bytes = readFileSync(path);
+    if (needles.some((n) => bytes.includes(n))) problems.push(`${path} carries roadmap text`);
+  } else {
+    problems.push(`${path} is not a regular file`);
+  }
+})(target);
+if (problems.length) {
+  for (const p of problems) console.error(p);
+  console.error('the roadmap must not be published, and the site must hold only regular files');
   process.exit(1);
 }
-console.log(`${bundlePath}: no roadmap text (${probes.length} probes)`);
+console.log(`${target}: ${files} files, no roadmap text (${probes.length} probes), no links`);
