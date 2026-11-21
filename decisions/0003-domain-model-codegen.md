@@ -96,3 +96,13 @@ Two follow-ups are recorded rather than decided here: `model-runtime` serialises
 `n3.Writer` directly instead of through `@jeswr/rdf-serialize`, and it carries its own http(s)
 IRI filter alongside rdf-serialize's `safeHttpIri`. Both are second occurrences and should
 converge on rdf-serialize (sst-ild.4.8) once the bookmark flip proves behaviour is identical.
+
+## Supported constructs
+
+Admission is closed; this table records constructs added after the import. The package
+READMEs hold the full inventory.
+
+| Construct | Projection | Bounds |
+|---|---|---|
+| `sh:pattern "^[A-Z]{3}$"` on an `xsd:string` literal (ISO 4217 code shape) | shape-derived `guards.stringPattern: "upper-alpha-3"`: exactly three ASCII `A`-`Z` | Exact pattern text only; any other pattern, datatype, IRI field or `sh:flags` stays rejected. No regex is compiled from shape text. |
+| `xsd:decimal` with config `"decimal": "exact"` (opt-in, per field) | manifest `decimal: "exact"`; TS `string` holding the exact lexical, scale preserved | Closed grammar `[+-]?[0-9]+(\.[0-9]+)?`, at most 64 characters. Not available on integer subtypes or with `sh:in`/numeric bounds. Unconfigured decimals keep the JS number mapping and byte-identical output. |

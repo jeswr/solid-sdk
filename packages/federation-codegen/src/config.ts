@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The per-domain CODEGEN CONFIG — the committed, hashed input that supplies the
  * guard flags a SHACL profile cannot express (design §7.2): the subject
@@ -38,6 +39,13 @@ export interface FieldConfig {
   requiredFailClosed?: boolean;
   /** Force the http(s) scheme filter (usually derived from an `^https?://` pattern). */
   iriScheme?: "http-https" | "https";
+  /**
+   * Opt-in exact mapping for an `xsd:decimal` field: the TS type becomes `string`
+   * holding the exact decimal lexical (scale preserved), never a JS number. Absent ⇒
+   * the default number mapping. Rejected on any other datatype (including the integer
+   * subtypes) and alongside `sh:in` / numeric bounds.
+   */
+  decimal?: "exact";
 }
 
 export interface EntityConfig {
@@ -140,4 +148,5 @@ export const FIELD_CONFIG_GUARD_KEYS = [
   "sanitizeText",
   "requiredFailClosed",
   "iriScheme",
+  "decimal",
 ] as const;
