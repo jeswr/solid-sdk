@@ -9,10 +9,13 @@
     "'": "&#39;",
     "\r": "&#13;",
   };
-  const escapeHtml = (text) => text.replace(/[&<>"'\r]/g, (char) => entities[char]);
+  const escapeHtml = (text) =>
+    text.length === 1
+      ? (entities[text] ?? text)
+      : text.replace(/[&<>"'\r]/g, (char) => entities[char]);
 
   const jsonTokens =
-    /"(?:[^"\\\r\n]*\\[^\r\n])*[^"\\\r\n]*"|"|[{}[\]:,]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\b(?:true|false|null)\b|[&<>'\r]/g;
+    /"(?:[^"\\\r\n]*\\[^\r\n])*[^"\\\r\n]*"|"|[{}[\]:,]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\b(?:true|false|null)\b/g;
   const jsonKeyEnd = /\s*:/y;
   const ldKeys = new Set(
     (
@@ -49,15 +52,15 @@
       "readonly return satisfies static super switch this throw try type typeof var void while yield"
     ).split(" "),
   );
-  const shellTokens =
-    /(?<!\S)#[^\r\n]*|["']|\$(?:\{[^}\r\n]*\}|\w+)|[a-z_][\w-]*|\b\d+\b|[;|&()<>]+/gi;
+  const shellTokens = /(?<!\S)#[^\r\n]*|["']|\$(?:\{|\w+)|[a-z_][\w-]*|\b\d+\b|[;|&()<>]+/gi;
+  const shellParameterBoundary = /[}\r\n]/g;
   const shellKeywords = new Set(
     "case cd curl do done echo elif else esac exit export fi for function if in local node npm pnpm printf read return set then unset until while".split(
       " ",
     ),
   );
   const httpTokens =
-    /^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|CONNECT|TRACE)(?=[ \t])|^\s*#[^\r\n]*|^[\w-]+(?=:)|\bHTTP\/\d(?:\.\d)?\b|\b\d{3}\b|"|:/gm;
+    /^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|CONNECT|TRACE)(?=[ \t])|^[^\S\r\n\u2028\u2029]*#[^\r\n]*|^[\w-]+(?=:)|\bHTTP\/\d(?:\.\d)?\b|\b\d{3}\b|"|:/gm;
 
   function detect(text) {
     if (/^\s*[{[]/.test(text)) {
@@ -93,6 +96,7 @@
   }
 
   function readIri(text, start) {
+    if (text[start] === "<") return -1;
     iriEnd.lastIndex = start;
     for (let match = iriEnd.exec(text); match; match = iriEnd.exec(text)) {
       if (match[0] === ">") return iriEnd.lastIndex;
@@ -109,7 +113,8 @@
   }
 
   // A classifier may extend a match (quotes and IRIs) or shorten it (a Turtle name
-  // followed by a dot). Unmatched gaps and uncoloured tokens still pass through escape.
+  // followed by a dot). Unmatched gaps and uncoloured tokens also pass through escape.
+  // Finish each token before searching again, so a malformed string can stop the scan.
   function lex(text, pattern, classify) {
     let html = "";
     let offset = 0;
@@ -117,46 +122,44 @@
     for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
       const start = match.index;
       const token = match[0];
-      const [kind, end = pattern.lastIndex] = classify(token, pattern.lastIndex, start);
+      const matchEnd = pattern.lastIndex;
+      const [kind, end = matchEnd] = classify(token, matchEnd, start);
       if (end < 0) return escapeHtml(text);
-      if (end !== pattern.lastIndex) pattern.lastIndex = end;
+      if (end !== matchEnd) pattern.lastIndex = end;
       if (!kind) continue;
       if (start > offset) html += escapeHtml(text.slice(offset, start));
-      html += span(kind, escapeHtml(text.slice(start, end)));
+      html += span(kind, escapeHtml(end === matchEnd ? token : text.slice(start, end)));
       offset = end;
     }
     return html + escapeHtml(text.slice(offset));
   }
 
   function json(text, linked) {
-    return text.replace(jsonTokens, (token, start) => {
+    return lex(text, jsonTokens, (token, end) => {
       const first = token[0];
       if (first === '"') {
-        if (token.length === 1) throw new SyntaxError("Unterminated JSON string");
-        const end = start + token.length;
+        // Stop on the first unclosed string before trying any of its escaped quotes.
+        if (token.length === 1) return [null, -1];
         jsonKeyEnd.lastIndex = end;
         const key = text[end] === ":" || jsonKeyEnd.test(text);
+        if (!linked) return [key ? "key" : "string"];
         const value = token.slice(1, -1);
-        let kind = key ? "key" : "string";
-        if (linked) {
-          if (value.startsWith("@") || value.startsWith("\\u0040")) {
-            const name = value.includes("\\") ? JSON.parse(token) : value;
-            if (ldKeys.has(name)) kind = "keyword";
-          }
-          if (
-            !key &&
-            (iriValue.test(value) ||
-              (value.includes("\\/") && iriValue.test(value.replaceAll("\\/", "/"))))
-          ) {
-            kind = "iri";
-          }
+        if (value.startsWith("@") || value.startsWith("\\u0040")) {
+          const name = value.includes("\\") ? JSON.parse(token) : value;
+          if (ldKeys.has(name)) return ["keyword"];
         }
-        return span(kind, `&quot;${escapeHtml(value)}&quot;`);
+        if (
+          !key &&
+          (iriValue.test(value) ||
+            (value.includes("\\/") && iriValue.test(value.replaceAll("\\/", "/"))))
+        ) {
+          return ["iri"];
+        }
+        return [key ? "key" : "string"];
       }
-      if (Object.hasOwn(entities, token)) return entities[token];
-      if ("{}[]:,".includes(first)) return span("punctuation", token);
-      if (first === "-" || (first >= "0" && first <= "9")) return span("number", token);
-      return span("literal", token);
+      if ("{}[]:,".includes(first)) return ["punctuation"];
+      if (first === "-" || (first >= "0" && first <= "9")) return ["number"];
+      return ["literal"];
     });
   }
 
@@ -186,6 +189,7 @@
   }
 
   function script(text, shell) {
+    let parameterBoundary = -1;
     return lex(text, shell ? shellTokens : scriptTokens, (token, end) => {
       if (token === '"' || token === "'" || token === "\x60") {
         return ["string", quotedEnd(text, end, token, !shell || token !== "'")];
@@ -196,6 +200,14 @@
       }
       if (token.startsWith("//")) return ["comment"];
       if (shell && token[0] === "#") return ["comment"];
+      if (shell && token === "${") {
+        // Look ahead once per stretch up to a closing brace or a line break.
+        if (parameterBoundary < end) {
+          shellParameterBoundary.lastIndex = end;
+          parameterBoundary = shellParameterBoundary.exec(text)?.index ?? text.length;
+        }
+        return text[parameterBoundary] === "}" ? ["variable", parameterBoundary + 1] : [null];
+      }
       if (shell && token[0] === "$") return ["variable"];
       if ((shell ? shellKeywords : scriptKeywords).has(token)) return ["keyword"];
       if (/^(?:true|false|null|undefined)$/.test(token)) return ["literal"];

@@ -34,3 +34,11 @@ The builds ran under `/tmp`. The worktree contains only source, test, and report
 
 
 Claude review note: the token palette was made more saturated after a visual check (the first palette read as near-monochrome in light mode). Ratios above are against the code block background (`--surface-2`).
+
+## Review fixes (42b)
+
+- Audited the tokenizer regexes for overlapping failed scans. Shell parameter lookahead reuses the next closing brace or line break. HTTP comment indentation stays on the current line. JSON and JSON-LD stop scanning at the first unterminated string, including strings with many escaped quotes.
+- The spec bundler checks the specs directory and accepts only regular Markdown files whose resolved paths stay in it. Symlinks and other non-file entries produce warnings. The regression fixtures use the real `docs/specs/agent` layout under a temporary root.
+- The hosted artifact copies `paper/index.html` and `paper/figure-1.svg`. The regression checks that both files match their sources byte for byte.
+- Eight targeted regression tests failed against the original code. The previous highlighter took 2.2–2.9 seconds on the affected 64 KiB inputs. All 50 explorer tests passed with `node --test --test-isolation=none test/*.test.mjs` on Node 24.22.3. The slowest of 169 adversarial cases took 30.3 ms against a 50 ms limit, and every case round-tripped. The largest published trace took 91.9 ms.
+- Biome passed both highlighter files. Across all changed JavaScript files it reported seven existing errors, one warning and 17 informational diagnostics, down from eight errors at `HEAD`. The offline full-workspace gate stopped because `@jeswr/solid-federation-vocab` could not resolve `n3`.

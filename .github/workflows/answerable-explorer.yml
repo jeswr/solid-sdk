@@ -5,7 +5,8 @@ name: answerable-explorer
 # answerable-explorer) whenever main changes the site, the Errand app it hosts at app/, or the
 # specs it renders. Jesse approved production deploys of this project on every site change
 # (21 Nov 2026). The site is static: scripts/build-public.mjs writes it (leaving out the
-# internal roadmap), and the Vercel CLI deploys it as a prebuilt static output.
+# internal roadmap) in a job without secrets, and a second job deploys the built files with the
+# Vercel CLI as a prebuilt static output.
 on:
   push:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - apps/agent-explorer/**
       - apps/agent-chat/**
       - packages/agent-consent/**
+      - packages/agent-model/**
       - docs/specs/agent/**
       - .github/workflows/answerable-explorer.yml
   workflow_dispatch:
@@ -31,7 +33,8 @@ env:
   VERCEL_CLI: vercel@65.4.0
 
 jobs:
-  deploy:
+  # Builds the site with repository code and no secrets.
+  build:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -52,20 +55,40 @@ jobs:
         run: |
           site="$RUNNER_TEMP/answerable-site"
           AX_APP_DIR="$PWD/apps/agent-chat/dist-artifact" node apps/agent-explorer/scripts/build-public.mjs "$site"
-          test -f "$site/index.html" && test -f "$site/app/index.html" && test -f "$site/paper/index.html"
-          test -f "$site/media/answerable-walkthrough.mp4"
-          if grep -q '"roadmap"' "$site/data/bundle.js"; then echo "the public bundle must not carry the roadmap"; exit 1; fi
-          echo "SITE=$site" >> "$GITHUB_ENV"
-      # The build runs above without the token; only the CLI steps below see it.
+          for f in index.html data/bundle.js app/index.html paper/index.html media/answerable-walkthrough.mp4; do
+            test -s "$site/$f" || { echo "missing $f"; exit 1; }
+          done
+          node apps/agent-explorer/scripts/check-public-bundle.mjs "$site/data/bundle.js"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: answerable-site
+          path: ${{ runner.temp }}/answerable-site
+          if-no-files-found: error
+          retention-days: 3
+
+  # Deploys the built files. No repository code runs in this job, so nothing the build ran can
+  # reach the token.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: answerable-site
+          path: answerable-site
       - name: Pull the project settings and build the static output
-        working-directory: ${{ env.SITE }}
+        working-directory: answerable-site
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           npx --yes "$VERCEL_CLI" pull --yes --environment=production --token "$VERCEL_TOKEN"
           npx --yes "$VERCEL_CLI" build --prod --token "$VERCEL_TOKEN"
       - name: Deploy to production
-        working-directory: ${{ env.SITE }}
+        working-directory: answerable-site
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |

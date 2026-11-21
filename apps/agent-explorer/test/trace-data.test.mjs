@@ -1,14 +1,25 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2 Sol
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFile, spawnSync } from 'node:child_process';
+import {
+  closeSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import vm from 'node:vm';
-import test from 'node:test';
 import traceData from '../js/trace-data.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -147,14 +158,85 @@ test('overview views render from the index without fetching event data', () => {
 });
 
 function bundleFixture(t) {
-  const dir = mkdtempSync(join(tmpdir(), 'explorer-bundle-test-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  for (const name of ['scripts', 'js', 'data', 'traces']) mkdirSync(join(dir, name));
+  const repo = mkdtempSync(join(tmpdir(), 'explorer-bundle-test-'));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const dir = join(repo, 'apps/agent-explorer');
+  for (const name of ['scripts', 'js', 'data', 'traces']) {
+    mkdirSync(join(dir, name), { recursive: true });
+  }
   for (const name of ['scripts/bundle-data.mjs', 'scripts/site-files.mjs', 'js/trace-data.js', 'data/model.json']) {
     copyFileSync(root + name, join(dir, name));
   }
   return dir;
 }
+
+function buildPublicBundle(dir) {
+  const log = join(dir, 'warnings.log');
+  const stderr = openSync(log, 'w');
+  try {
+    const child = spawnSync(process.execPath, [join(dir, 'scripts/bundle-data.mjs')], {
+      env: { ...process.env, AX_PUBLIC: '1' },
+      stdio: ['ignore', 'ignore', stderr],
+    });
+    assert.ifError(child.error);
+    const warnings = readFileSync(log, 'utf8');
+    assert.equal(child.status, 0, warnings);
+    const output = readFileSync(join(dir, 'data/bundle.js'), 'utf8');
+    return { output, warnings };
+  } finally {
+    closeSync(stderr);
+  }
+}
+
+test('the public bundle reads regular spec Markdown and skips spec symlinks', (t) => {
+  const dir = bundleFixture(t);
+  const specsDir = join(dir, '../../docs/specs/agent');
+  mkdirSync(specsDir, { recursive: true });
+  const markdown = '# Public spec\n\nPublic content.\n';
+  writeFileSync(join(specsDir, 'public.md'), markdown);
+  const roadmap = join(dir, 'data/roadmap.json');
+  writeFileSync(roadmap, JSON.stringify({ text: 'private roadmap fixture' }));
+  symlinkSync(roadmap, join(specsDir, 'external.md'));
+  symlinkSync('public.md', join(specsDir, 'internal.md'));
+
+  const { output, warnings } = buildPublicBundle(dir);
+  assert.equal(output.includes('private roadmap fixture'), false, 'the roadmap leaked into the bundle');
+  const bundle = { window: {} };
+  vm.runInNewContext(output, bundle);
+  assert.deepEqual(structuredClone(bundle.window.AGENT_EXPLORER_DATA.specs), [
+    { id: 'public', title: 'Public spec', markdown },
+  ]);
+  assert.match(warnings, /external\.md.*symlink/);
+  assert.match(warnings, /internal\.md.*symlink/);
+});
+
+test('the public bundle skips dangling spec symlinks and non-file entries', (t) => {
+  const dir = bundleFixture(t);
+  const specsDir = join(dir, '../../docs/specs/agent');
+  mkdirSync(specsDir, { recursive: true });
+  symlinkSync('missing.md', join(specsDir, 'dangling.md'));
+  mkdirSync(join(specsDir, 'directory.md'));
+
+  const { output, warnings } = buildPublicBundle(dir);
+  assert.match(output, /"specs":\[\]/);
+  assert.match(warnings, /dangling\.md.*symlink/);
+  assert.match(warnings, /directory\.md.*regular file/);
+});
+
+test('the public bundle skips a specs directory reached through an outside ancestor', (t) => {
+  const dir = bundleFixture(t);
+  const docs = join(dir, '../../docs');
+  const outside = join(dir, 'outside');
+  mkdirSync(docs);
+  mkdirSync(join(outside, 'agent'), { recursive: true });
+  writeFileSync(join(outside, 'agent/outside.md'), '# Private spec');
+  symlinkSync(outside, join(docs, 'specs'), 'dir');
+
+  const { output, warnings } = buildPublicBundle(dir);
+  assert.equal(output.includes('Private spec'), false, 'the outside spec leaked into the bundle');
+  assert.match(output, /"specs":\[\]/);
+  assert.match(warnings, /docs\/specs\/agent.*outside/);
+});
 
 test('bundler rejects oversized traces, unsafe keys and duplicate keys before replacing output', async (t) => {
   const dir = bundleFixture(t);
@@ -348,9 +430,19 @@ test('Explore uses one step count, shows recorded branch decisions and keeps the
   E.unmount();
 });
 
-test('the static page and hosted fragment put UTF-8 before the title', async (t) => {
+test('the hosted artifact keeps the UTF-8 meta and includes the Paper link targets', async (t) => {
   const dir = bundleFixture(t);
-  for (const name of ['index.html', 'styles.css', 'scripts/build-artifact.mjs']) copyFileSync(root + name, join(dir, name));
+  mkdirSync(join(dir, 'paper'));
+  const paperAssets = ['figure-1.svg', 'index.html'];
+  for (const name of [
+    'index.html',
+    'styles.css',
+    'scripts/build-artifact.mjs',
+    'paper/paper.md',
+    ...paperAssets.map((file) => `paper/${file}`),
+  ]) {
+    copyFileSync(join(root, name), join(dir, name));
+  }
   writeFileSync(join(dir, 'data/bundle.js'), '');
   mkdirSync(join(dir, 'data/traces'));
   const out = join(dir, 'artifact');
@@ -358,5 +450,9 @@ test('the static page and hosted fragment put UTF-8 before the title', async (t)
   for (const file of [join(dir, 'index.html'), join(out, 'index.html')]) {
     const head = readFileSync(file, 'utf8').slice(0, 200);
     assert.match(head, /<meta charset="utf-8">\s*<title>Answerable Agent Explorer<\/title>/);
+  }
+  assert.deepEqual(readdirSync(join(out, 'paper')).sort(), paperAssets);
+  for (const file of paperAssets) {
+    assert.deepEqual(readFileSync(join(out, 'paper', file)), readFileSync(join(dir, 'paper', file)));
   }
 });
