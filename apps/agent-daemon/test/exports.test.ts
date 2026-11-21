@@ -41,6 +41,7 @@ it.each(entries)("resolves implemented %s exports", (subpath, target) => {
           "configureCloud",
           "createCliHost",
           "createDaemon",
+          "createGateReceiver",
           "createInboundGate",
           "createLocalState",
           "createProcessLease",

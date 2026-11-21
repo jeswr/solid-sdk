@@ -1,8 +1,11 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { CredentialStore } from "@jeswr/agent-credentials";
+import { DOCUMENT_MEDIA_TYPE, LEGACY_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
 import { createServer, type IncomingMessage, type Server } from "http";
 import { isAbsolute } from "path";
+import { createDirectHttpReceiver, createGateReceiver } from "./cloud-receivers.js";
+import type { Gate } from "./gate.js";
 import { createLocalState, createProcessLease } from "./local.js";
 import type { Daemon } from "./types.js";
 
@@ -38,14 +41,23 @@ export interface A2aRequest {
   readonly headers: IncomingMessage["headers"];
   readonly signal: AbortSignal;
 }
-export interface CloudComposition {
+export type CloudReceiver = (
+  request: A2aRequest,
+) => Promise<{ status: number; body: string; headers?: Readonly<Record<string, string>> }>;
+export type CloudComposition = {
   readonly daemon: Daemon;
   /** All ingest and executor binding IDs in the trusted composition. */
   readonly bindings: readonly string[];
-  /** Verify peer authentication and signed envelopes before durable ingestion. Never send here. */
-  readonly a2a: (request: A2aRequest) => Promise<{ status: number; body: string }>;
   close(): Promise<void>;
-}
+} & (
+  | {
+      /** Use the same leased gate as the daemon for both HTTP entrances. */
+      readonly gate: Pick<Gate, "receiveCarriage">;
+      /** Optional trusted receive-only A2A adapter, subject to the same ingress bounds. */
+      readonly a2a?: CloudReceiver;
+    }
+  | { readonly gate?: undefined; readonly a2a: CloudReceiver }
+);
 export type CloudFactory = (context: CloudContext) => Promise<CloudComposition>;
 
 function configuration(env: NodeJS.ProcessEnv) {
@@ -64,22 +76,31 @@ function configuration(env: NodeJS.ProcessEnv) {
   return { directory, port };
 }
 
-/** TLS terminates at ACA ingress; this server exposes only the explicit A2A receiver and probes. */
-function listener(composition: CloudComposition, signal: AbortSignal) {
+/** TLS terminates at ACA ingress. Both receiver paths share the same bounds and drain. */
+function listener(a2a: CloudReceiver, gate: CloudComposition["gate"], signal: AbortSignal) {
   const pending = new Set<Promise<void>>();
   const server = createServer({ maxHeaderSize: 8192, requestTimeout: 15_000 }, (req, res) => {
-    const respond = (status: number, body = "") => {
+    const respond = (status: number, body = "", headers?: Readonly<Record<string, string>>) => {
       if (res.destroyed || res.writableEnded) return;
+      for (const name of ["A2A-Version", "A2A-Extensions"]) {
+        const value = headers?.[name];
+        if (value !== undefined) res.setHeader(name, value);
+      }
       res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(body);
     };
     if (signal.aborted) return respond(503);
     if (req.method === "GET" && (req.url === "/livez" || req.url === "/readyz"))
       return respond(200, '{"ready":true}');
-    if (req.url !== "/a2a") return respond(404);
+    const direct = req.url === "/answerable" && gate;
+    if (req.url !== "/a2a" && !direct) return respond(404);
     if (req.method !== "POST") return respond(405);
-    if (req.headers["content-type"]?.split(";")[0]?.trim() !== "application/json")
-      return respond(415);
+    const mediaType = req.headers["content-type"]?.split(";")[0]?.trim().toLowerCase();
+    let receive = a2a;
+    if (direct) {
+      if (mediaType !== DOCUMENT_MEDIA_TYPE && mediaType !== LEGACY_MEDIA_TYPE) return respond(415);
+      receive = createDirectHttpReceiver(direct, mediaType);
+    } else if (mediaType !== "application/json") return respond(415);
     const length = Number(req.headers["content-length"] ?? 0);
     if (!Number.isFinite(length) || length > MAX_BODY) return respond(413);
     const chunks: Buffer[] = [];
@@ -103,7 +124,7 @@ function listener(composition: CloudComposition, signal: AbortSignal) {
       }
       if (pending.size >= MAX_INFLIGHT) return respond(503);
       const task = Promise.resolve()
-        .then(() => composition.a2a({ body: Buffer.concat(chunks), headers: req.headers, signal }))
+        .then(() => receive({ body: Buffer.concat(chunks), headers: req.headers, signal }))
         .then((result) => {
           if (
             !Number.isInteger(result.status) ||
@@ -112,7 +133,7 @@ function listener(composition: CloudComposition, signal: AbortSignal) {
             Buffer.byteLength(result.body) > MAX_BODY
           )
             return respond(500);
-          respond(result.status, result.body);
+          respond(result.status, result.body, result.headers);
         })
         .catch(() => respond(503))
         .finally(() => pending.delete(task));
@@ -184,14 +205,17 @@ async function cloudSession(
   };
   signal.addEventListener("abort", stop, { once: true });
   try {
+    const { gate } = composition;
+    const a2a = composition.a2a ?? (gate && createGateReceiver(gate));
     if (
       composition.bindings.some((id) => !cloudBindings.has(id)) ||
       !composition.bindings.includes("a2a") ||
-      typeof composition.a2a !== "function"
+      typeof a2a !== "function" ||
+      (gate !== undefined && typeof gate?.receiveCarriage !== "function")
     )
       throw new Error("Cloud requires A2A and cloud-capable bindings");
     if (signal.aborted) return;
-    const inbound = listener(composition, controller.signal);
+    const inbound = listener(a2a, gate, controller.signal);
     server = inbound.server;
     drain = inbound.drain;
     await new Promise<void>((resolve, reject) => {

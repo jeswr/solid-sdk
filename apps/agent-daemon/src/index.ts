@@ -5,6 +5,7 @@ export type { CliHost, CliHostOptions, CliIo } from "./cli.js";
 export { configureCli, createCliHost, runCli, runConfiguredCli } from "./cli.js";
 export type { A2aRequest, CloudComposition, CloudContext, CloudFactory } from "./cloud.js";
 export { configureCloud, runCloud, runConfiguredCloud } from "./cloud.js";
+export { createGateReceiver } from "./cloud-receivers.js";
 export { composeDaemon, createDaemon, HEARTBEAT_MS, POLL_MS, pollInterval } from "./daemon.js";
 export {
   createInboundGate,

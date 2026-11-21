@@ -718,3 +718,40 @@ No replay change or passing regression is claimed for finding 4. The legacy-chec
 | `pnpm exec biome check` on all changed TypeScript, `VITEST_MAX_WORKERS=2 pnpm run lint:root` and `git diff --check` | Passed. Root Biome emitted its six existing warnings in `scripts/vercel-production.mjs`. |
 
 Agent-reference source and committed traces match `662d72a8f` byte for byte. The worktree is uncommitted.
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+## Phase 5, daemon (41v)
+
+- `src/cloud-receivers.ts:54` supplies `createGateReceiver(gate)` for A2A. It passes
+  the original body bytes and HTTP header values to the leased gate as
+  `a2a-request` carriage. The response uses `a2aResponse` to carry a receipt or
+  a reason code. A request with invalid JSON-RPC framing returns `malformed`.
+- `src/cloud.ts:80` adds `POST /answerable` for gate-backed cloud compositions
+  under the existing dev opt-in. It accepts the two reference media types and
+  shares the 64 KiB body and 64 in-flight request bounds with A2A. Under TR-8,
+  admission and refusal both return HTTP 200 after transport receipt.
+- `src/gate.ts:510` routes both transports through the gate's serialized check
+  and durable decision path. Verdict keys cover the carriage metadata used by
+  the reference runtime. HTTP replays return `replay-conflict`. The receivers
+  hold only the inbound capability and leave runtime replies in its internal
+  outbox.
+- `README.md:420` documents trusted composition, accepted requests and refusal
+  responses. The existing custom A2A composition still works.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Daemon dependency builds and `pnpm --filter @jeswr/app-agent-daemon run build` | Passed on Node 24.22.3. Agent-reference used `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs`. |
+| `pnpm --filter @jeswr/app-agent-daemon run typecheck` | Passed for the source and tests. |
+| Focused daemon Vitest with `--maxWorkers=2` | 289 passed across 16 offline files. Two existing packaged CLI and launchd subprocess checks were filtered after failures in this sandbox. A direct Node invocation of `awp --help` passed. The production packaging and CSS loopback fixtures were outside this selection. |
+| `pnpm exec vitest run --root apps/agent-daemon --maxWorkers=2 test/cloud.test.ts` | The dev configuration test passed. At the loopback setup, 18 tests hit `listen EPERM`. A temporary in-process HTTP harness passed all 19 tests and reproduced five ingress failures against the baseline listener. The built receivers also passed replay checks against the real synthetic gate without sockets. |
+| `pnpm exec biome check apps/agent-daemon`, `node scripts/check-agent-layers.mjs`, `pnpm run check:rdf-discipline`, `git diff --check` | Passed. The RDF guard found zero daemon violations. |
+
+The loopback cases cover compact A2A and direct HTTP, signed document direct
+HTTP, exact bounded bytes and A2A headers, tampered proofs with reason-only
+responses, replays, and the shared in-flight limit. The valid discovery
+messages cause the reference runtime to prepare replies locally. The tests
+check for zero transmissions and zero outbound gate calls. All tracked edits
+are in the daemon. Temporary test fixtures were removed.
