@@ -15,6 +15,7 @@ import {
   FileStateStore,
   normaliseState,
   type RuntimeState,
+  readRuntimeStateFile,
 } from "../src/store/state.js";
 import * as storeQuads from "../src/wire/store-quads.js";
 import { readLocalStoreRdf, writeNQuads } from "../src/wire/store-quads.js";
@@ -30,6 +31,12 @@ beforeEach(() => {
 afterEach(() => {
   store.close();
   rmSync(dir, { recursive: true, force: true });
+});
+
+it("treats a missing snapshot as empty and propagates other read errors", () => {
+  expect(readRuntimeStateFile(path)).toEqual(emptyState());
+  writeFileSync(path, JSON.stringify(emptyState()));
+  expect(() => readRuntimeStateFile(join(path, "state.json"))).toThrow(/ENOTDIR/);
 });
 
 it("reads a legacy snapshot and writes deterministic version 2 RDF on the next save", () => {

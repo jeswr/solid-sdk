@@ -1214,3 +1214,29 @@ Agent-reference was compiled with `tsc -p tsconfig.build.json` and
 The full personal-agent run reported 520 passed, 77 failed, four skipped, and
 two unhandled loopback errors. Its failing test names matched the 40n sandbox
 run, which hit loopback and subprocess restrictions and dependent timeouts.
+
+## Merge fixes (40q)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+In all four failures, `localAudit` printed `BREACH gate ledger integrity failure`.
+Main's offline audit parsed `state.json` as JSON. Phase 2 writes N-Quads to that
+same path, so parsing failed on the first `<`. The two retention cases had
+already started the daemon successfully by the time they ran the offline audit.
+
+The offline audit now uses the same read-only snapshot decoder as startup. It
+uses the saved head to verify the committed prefix, retention checkpoints and
+witnesses. The decoder treats only a missing file as empty and propagates other
+read errors. The crash test runs the same assertions against RDF and legacy JSON
+checkpoints, including byte-for-byte preservation of the snapshot and ledger.
+
+The reference compile and generated-file copy passed, as did all 47 requested
+store tests and the daemon typecheck. The trace check passed against the committed
+artifacts in a temporary copy. The worktree run flagged its trace index, which
+already lacked 273 committed rows.
+
+All four reported daemon cases passed. The refused-successor-revision restart
+took 1.70 seconds in the full daemon run and 1.60 seconds in isolation, within its
+5-second limit. The full run passed 295 tests and hit 20 failures involving
+blocked loopback listeners or subprocess output. The packaged CLI's help and
+JSON and CSV exports passed when subprocess output was captured in files.

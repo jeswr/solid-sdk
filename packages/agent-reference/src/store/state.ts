@@ -23,7 +23,6 @@
 import { randomUUID } from "crypto";
 import {
   closeSync,
-  existsSync,
   fsyncSync,
   linkSync,
   mkdirSync,
@@ -442,8 +441,13 @@ export function writeFileDurable(path: string, content: string, flags: string): 
 
 /** Read one atomic snapshot without acquiring a writer lease. */
 export function readRuntimeStateFile(path: string): RuntimeState {
-  if (!existsSync(path)) return emptyState();
-  const text = readLocalStoreFile(path, "application/n-quads");
+  let text: string;
+  try {
+    text = readLocalStoreFile(path, "application/n-quads");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyState();
+    throw error;
+  }
   return text.trimStart().startsWith("{")
     ? normaliseState(JSON.parse(text))
     : readStateSnapshot(text);

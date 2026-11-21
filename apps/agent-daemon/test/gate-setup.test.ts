@@ -13,6 +13,7 @@ import { digestBytes } from "@jeswr/agent-model";
 import { CONFIG_ED25519, PILOT_PROFILE, readAgent } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
+import { readRuntimeStateFile } from "@jeswr/agent-reference/store/state";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
@@ -890,7 +891,10 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
   expect(print).toHaveBeenCalledWith(expect.stringContaining("witnessed head"));
 });
 
-it("excludes a witness fsynced beyond the saved gate checkpoint from offline audit", async () => {
+it.each([
+  "RDF",
+  "legacy JSON",
+])("excludes a witness fsynced beyond the saved gate checkpoint from offline audit (%s)", async (format) => {
   const o = options();
   await daemon.initGate(o);
   const gate = await daemon.openGate(o);
@@ -909,7 +913,10 @@ it("excludes a witness fsynced beyond the saved gate checkpoint from offline aud
       reason: "malformed",
       digest: digestBytes("fixture"),
     });
-    saved = await readFile(statePath);
+    saved =
+      format === "legacy JSON"
+        ? Buffer.from(JSON.stringify(readRuntimeStateFile(statePath)))
+        : await readFile(statePath);
     const jws = await gate.anchor({ seq, hash });
     ledger.append(
       { ...identity, type: "record-anchor", id: "urn:anchor:unsaved", seq, hash, jws },
@@ -933,6 +940,7 @@ it("excludes a witness fsynced beyond the saved gate checkpoint from offline aud
   expect(await readFile(gatePath)).toEqual(suffix);
   expect(await readFile(statePath)).toEqual(saved);
   expect(await readdir(o.directory)).toEqual(paths);
+
   const reopened = await daemon.openGate(o);
   try {
     expect(reopened.evidence().witnessedHeads).toEqual([]);

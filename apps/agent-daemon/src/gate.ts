@@ -36,10 +36,10 @@ import {
   type LedgerHead,
   verifyLedgerAtHead,
 } from "@jeswr/agent-reference/store/ledger";
-import { normaliseState } from "@jeswr/agent-reference/store/state";
+import { readRuntimeStateFile } from "@jeswr/agent-reference/store/state";
 import { randomUUID } from "crypto";
 import { constants } from "fs";
-import { lstat, mkdir, open, readdir, readFile, rename, unlink } from "fs/promises";
+import { lstat, mkdir, open, readdir, rename, unlink } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
 import { readPrivate, syncDirectory, writePrivate } from "./local.js";
@@ -745,13 +745,7 @@ function savedGateLedger(ledger: FileLedger, saved: LedgerHead | undefined) {
 
 /** Read the saved gate prefix without taking the runtime lock or rolling back the files. */
 export async function readSavedGateEvidence(directory: string, identity: Partial<GateIdentity>) {
-  const raw = await readFile(join(directory, "state.json"), "utf8").catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") throw error;
-      return undefined;
-    },
-  );
-  const saved = raw === undefined ? undefined : normaliseState(JSON.parse(raw)).ledgerAuditHead;
+  const saved = readRuntimeStateFile(join(directory, "state.json")).ledgerAuditHead;
   const { entries, check } = savedGateLedger(
     new FileLedger(join(directory, "ledger.jsonl")),
     saved,
