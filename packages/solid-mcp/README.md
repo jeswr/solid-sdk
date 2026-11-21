@@ -204,7 +204,11 @@ the fetch capability while pod operations use the supplied port.
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
 discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
-HTTP 404 for resources not yet created. HEAD refuses redirects. Optional
+HTTP 404 for resources not yet created, and `PodHeadResult.describedby`, the absolute
+URLs from all unanchored `rel="describedby"` Links. HEAD refuses redirects and throws
+on failed responses other than 404 or malformed/ambiguous Link metadata. Valid responses
+without auxiliary Links return an empty result; memory and audit still require `acl`.
+Optional
 `PodReadOptions.accept` selects a representation; generic reads keep
 the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
@@ -230,16 +234,39 @@ receipts share this boundary. A write receipt requires read authorization after
 the write; the write can succeed even if that receipt is denied.
 
 Generic access reserves the personal-data subtree `private/pkg/`, derived from
-`NanopubStore`'s storage layout. It includes nanopublications, policy, locks, audit
-logs and their local ACLs. Only the internal personal-tool and audit path can
-access this area; personal reads still require the current purpose policy and,
-for sensitive data, a verified audit append. Generic reads and mutations return
-the fixed diagnostic `Personal data requires a purpose-limited tool`, without
+`NanopubStore`'s storage layout, and the owner-only agent containers
+`agent/context/`, `agent/memory/` (including `health/`) and `agent/accounts/`.
+The agent prefixes share one layout definition with the shared-context path.
+Generic writes and deletes of an ACL, ACR or `.meta` resource that governs a protected
+area (the pod root's, an ancestor's, or the area's own, in `/.acl` and slashless `.acl`
+forms) are refused, because a protected area inherits its ancestors' access rules.
+Before each otherwise-allowed generic write/delete, the server also uses the current
+`PodPort.head` to discover `rel="acl"` and `rel="describedby"` associations for the pod
+root, every protected area (including the in-pod configured WebID profile document and
+the separately governed `agent/memory/health/` container) and all their ancestor containers. Advertised auxiliary URLs are protected even at
+unconventional locations, including ACR query URLs. Shared ancestors are inspected
+once per mutation; associations are never cached across calls. Target and final URL
+aliases receive the same case, percent-decoding, path and slashless checks.
+Missing HEAD capability or auxiliary metadata, network failures, non-2xx responses other than 404,
+malformed/ambiguous Links (including multiple ACLs) and off-pod associations refuse
+the mutation with `Personal data requires a purpose-limited tool`. Associations on
+404 responses are included; missing associations fail closed even on 404.
+Custom ports enabling generic writes must supply this metadata and throw on discovery
+errors. Generic reads are unchanged and do not require HEAD.
+The personal-data area includes nanopublications, policy, locks, audit
+logs and their local ACLs. `context_read` is the only read path for the shared
+context and applies card-number redaction. The internal personal-tool and audit
+path retains access to personal data; personal reads still require the current
+purpose policy and, for sensitive data, a verified audit append. Generic reads
+and mutations return the fixed diagnostic `Personal data requires a purpose-limited tool`, without
 echoing a URL. Generic writes/deletes also refuse ancestors of the reserved area.
 Listings, search candidates/results, Type Index hints, container projections and
-MCP resource enumeration omit protected children before reading them. Redirect
-hops and returned aliases receive the same checks, including slashless containers,
-query/fragment aliases, case variants, percent decoding and normalized `..` paths.
+MCP resource enumeration omit protected children before reading them. Listings
+of ancestors such as the pod root, `agent/` and `private/` remain available,
+with protected members and their containment/metadata triples removed. Listings
+inside protected areas are refused. Redirect hops and returned aliases receive
+the same checks, including slashless containers, query/fragment aliases, case
+variants, percent decoding and normalized `..` paths.
 
 Container representations are rebuilt from authorized children through typed
 RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,

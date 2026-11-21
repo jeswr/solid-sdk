@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { AsyncLocalStorage } from "node:async_hooks";
 import { limitedBody, mediaType, RDF_MEDIA_TYPES } from "./content.js";
-import { requireGenericPodAccess } from "./personal-data.js";
+import { requireAuxiliaryMutationAccess, requireGenericPodAccess } from "./personal-data.js";
 import type { PodPort } from "./pod-port.js";
 
 // Limits travel through the normal PodPort methods, including decorators. Only
@@ -9,19 +9,25 @@ import type { PodPort } from "./pod-port.js";
 const operations = new AsyncLocalStorage<(fetcher: typeof fetch) => typeof fetch>();
 type ReadMode = "complete" | "fetch" | "fetch-complete" | "authorization";
 const readModes = new AsyncLocalStorage<ReadMode>();
-const dataAccess = new AsyncLocalStorage<(url: string, mutation?: boolean) => void>();
+const dataAccess = new AsyncLocalStorage<
+  (url: string, mutation?: boolean, mutationAlias?: boolean) => void
+>();
 
 /** Personal access is internal; profile discovery still excludes the memory area. */
 export function withPodDataAccess<T>(
   pod: PodPort,
   personal: boolean | "profile-discovery",
   operation: () => T,
+  auxiliaries?: ReadonlySet<string>,
 ): T {
   return dataAccess.run(
     personal === true
       ? () => {}
-      : (url, mutation) =>
-          requireGenericPodAccess(pod, url, mutation, personal === "profile-discovery"),
+      : (url, mutation, mutationAlias) => {
+          requireGenericPodAccess(pod, url, mutation, personal === "profile-discovery");
+          if ((mutation || mutationAlias) && auxiliaries)
+            requireAuxiliaryMutationAccess(url, auxiliaries);
+        },
     operation,
   );
 }
@@ -130,7 +136,7 @@ export function podOperationFetch(fetcher: typeof fetch): typeof fetch {
       if (response.status >= 300 && response.status < 400 && location)
         // Mutations never follow redirects. Ancestor mutation checks apply to
         // actual requests; still refuse a redirect advertising protected data.
-        check(new URL(location, response.url || url).href);
+        check(new URL(location, response.url || url).href, false, mutation);
     } catch (error) {
       void response.body?.cancel().catch(() => {});
       throw error;
