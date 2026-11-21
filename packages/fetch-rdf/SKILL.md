@@ -60,6 +60,13 @@ Those tests live in `tools/fetch-rdf-engine-tests`, a private workspace that
 depends on both packages; keep the engine dependency out of fetch-rdf's manifest
 to avoid the `fetch-rdf → rdf-engine → solid-odrl → fetch-rdf` workspace cycle.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+The default parser accepts an optional RDF/JS `factory` and `storeFactory`, which must
+return a fresh empty N3 Store. Supply matching factories when term spelling must
+survive store reads. Construction budgets still wrap the supplied term factory;
+discard any partially populated custom store after failure. Both hooks also work
+with `parseRdfSync` and are ignored by the opt-in engine path.
+
 ### Agent persona
 
 When this work is delegated to a sub-agent, spawn the `solid-data-modeler` persona from

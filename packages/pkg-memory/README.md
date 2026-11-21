@@ -274,3 +274,119 @@ assertion would invalidate its content-derived identifier. The reference builder
 implicit `health:` and `core:` prefixes in `parseAssertion` stay legacy for the
 same reason. Use typed templates or explicitly declare canonical prefixes when
 authoring new Turtle assertions. Existing Python fixture identifiers remain valid.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`readNanopubProvenance(value, np)` is a read-only, graph-scoped projection of
+publication time, agent/label, batch, attribution, referenced source metadata and
+evidence. It resolves message evidence through the batch sources graph to its parent
+conversation, retaining the message IRI, quote, locator, dateSent and sender. Source
+records expose kind, title, threadId, model, created and URL where available. Unused
+batch sources are excluded; absent metadata stays optional, and ambiguous/wrongly
+typed scalar fields throw a fixed error without values. Direct non-message evidence
+has no persisted per-evidence timestamp/speaker; these stay absent. This does not
+change builder output, parser behavior or hashing. `NanopubStore.ownerWebId` exposes
+the explicit construction-time owner identity without I/O for owner-checked consumers.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+Tolerant import is opt-in: `parseNanopublicationsTolerant(text, { baseIRI? })`
+returns `Promise<TolerantNanopublications>` without overload ambiguity. The compatible
+`parseNanopublications(text, { invalid: "skip", baseIRI? })` overload remains available.
+Both return the usual dataset/nanopubs plus `skipped: [{ id, errorClass }]` and
+`affected: string[]`. Existing calls,
+including the string baseIRI overload, retain atomic behaviour. Each complete
+head/assertion/provenance/pubinfo envelope is validated once per graph; invalid shared
+assertions drop every user. Referenced batch source/entity graphs must also validate,
+including retraction context declared by `pkg:correspondenceBatch`, read with the
+same typed helper as the store. Malformed correspondence declarations still throw.
+Only graphs referenced by retained nanopubs survive, including their batch graphs.
+Envelopes referencing a skipped nanopub ID as any graph name are also dropped with
+`SharedGraphWithSkipped`, transitively. No skipped head survives via sharing, so a
+nonempty retained result round-trips through the atomic serializer/parser.
+All-skipped input returns an empty dataset and nanopub list. Malformed TriG, absent
+heads and malformed metadata still throw. Reports contain only nanopub IDs and error
+class names, never rejected values, datatypes or diagnostic messages. The
+validation error name defaults to `Error` for a non-Error throw or a falsy Error name.
+The supported literal parity set is unchanged (double/dateTimeStamp remain excluded).
+
+For each skipped envelope, only IRI objects of `prov:wasRevisionOf` and
+`pkg:contradicts` in its head/provenance/pubinfo graphs are collected; literals and
+blank nodes never supply targets. Contradiction targets always count. Revision
+targets resolve like `classifyNanopublications`: when a skipped nanopub names kept
+envelopes, only those envelopes count; otherwise its assertion targets (including
+the store's retraction links) resolve to every retained nanopub carrying that
+assertion. `affected` lists each retained ID once. `classifyNanopublications`
+never changes a `past` claim (a readable retraction or replacement is final), lowers
+`definitely` to `might`, keeps `might` and `mentioned`, and sets
+`affectedBySkipped: true` on every non-past affected claim, so a skipped update can
+never revive an old fact as definite. Consumers can display “a later update to this could not be read”. Preserve
+the optional `Nanopublications.affected` field through filtering/projection. It is
+derived context and is not serialized into RDF; serializing only retained graphs
+loses it. All-skipped input has an empty `affected` list.
+
+`createNanopubProvenanceReader(value)` returns a provenance lookup with a per-invocation
+batch graph cache. Use it when projecting many nanopubs; the uncached
+`readNanopubProvenance(value, np)` remains available. Neither caches across reads or
+changes graph-scoped evidence semantics.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Parsing constructs one reference-aware N3 store through fetch-rdf, preserving language
+spelling without replaying the document. When tolerant import drops any graph, it
+returns a new compact store holding only the retained graphs (N3's term index would
+otherwise keep skipped terms); otherwise it returns the parsed store unchanged. Read paths use `readNamedGraph(dataset, name)`: a read-only
+snapshot with compact subject and object indexes (an object-only match, such as
+finding the records that link to a node, does not scan the graph), retaining the
+original graph names. Nested
+matches share its quads; `add` and `delete` throw. Take a fresh snapshot after edits.
+The parsed store uses N3's insertion hook to keep numeric indexes sparse on V8;
+this changes index allocation only, and retains the N3 Store API and reference
+language deduplication. No RDF terms, canonicalization or hash inputs change.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`parseReferenceRdf(body, "text/turtle" | "application/trig", baseIRI?)` exposes the existing
+suite parser without requiring nanopub envelopes or applying literal/term validation.
+It preserves the parser's reference language-tag spelling. Structured importers can
+validate separate records with `validateAssertionTerms(quads)` before passing generated
+assertions to `buildNanopublications`; unvalidated parser output must never be stored or
+displayed. `validateAssertionTerms` runs exactly canonicalization's per-quad term-safety
+and literal-parity checks, linearly. Do not call `canonicalizeAssertion` on untrusted
+records to validate them: canonical labelling of many tied blank nodes is
+super-polynomial, so a few kilobytes of input can take minutes.
+This export adds no parsing, normalization, canonicalization or hashing behavior.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Merging
+
+`mergeNanopublications(a, b)` unions two parsed `Nanopublications` values. Use it
+instead of concatenating TriG, which merges unrelated blank nodes that share a label
+and lets one input add records to the other's batch graphs: batch graph names derive
+from the batch ID alone, so a foreign export that reuses a batch ID could otherwise
+rewrite a source's kind or thread ID, or make its provenance ambiguous. The helper:
+
+- keeps only graphs that some nanopub in the result reads; undeclared graphs and
+  default-graph data are dropped, so data planted for a guessable future batch ID cannot
+  block a later merge;
+- keeps one copy of a graph present in both inputs (the first argument's) only when the
+  copies are identical. Blank-free graphs compare as quad sets. Otherwise, after a
+  linear shape check, at most `MAX_SHARED_GRAPH_BLANK_NODES` (1024) blank nodes are
+  labelled by their neighbourhoods for at most `MAX_SHARED_GRAPH_ROUNDS` (32) linear
+  passes; every blank node must get a distinct label, and the induced mapping must carry
+  every quad onto the other copy. Tied blank nodes (for example many interchangeable
+  `[]` objects), long blank chains or more blank nodes are refused. No canonical
+  labelling runs, so comparison cost is linear per pass whatever the input;
+- refuses a graph that one input's nanopubs read (head, assertion, provenance, pubinfo,
+  or a batch source/entity graph, including `pkg:correspondenceBatch` context) when only
+  the other input supplies it;
+- refuses a private envelope graph (head, provenance or pubinfo) claimed by two
+  nanopub IDs, and a dropped duplicate whose blank nodes are referenced elsewhere;
+- relabels blank nodes per input and returns nanopubs sorted by ID with `affected` as
+  the union of both lists.
+
+Every refusal throws `Error("Conflicting nanopublication merge")`, with no values.
+Splitting one batch across two exports therefore requires identical batch graphs in
+both. The result is an ordinary value that serializes and parses atomically.
+
+`buildNanopublications` writes into a compact store and keeps per-claim state small
+(assertion quads and provenance written straight into its named graph), so large
+batches do not hold an N3 store per claim. Terms, hashes and serialized output are
+unchanged.

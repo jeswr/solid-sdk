@@ -98,3 +98,27 @@ it("bounds individuation work on symmetric assertions", async () => {
   );
   expect(() => canonicalizeAssertion(graph, { maxWork: 1 })).toThrow("work limit");
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("validates terms and literals linearly, without canonicalizing tied blank nodes", async () => {
+  const { validateAssertionTerms } = await import("../src/index.js");
+  const { parseReferenceRdf } = await import("../src/rdf.js");
+  const blanks = Array.from({ length: 2000 }, () => "[]").join(", ");
+  const tied = await parseReferenceRdf(
+    `<https://example.org/fictional> <https://example.org/p> ${blanks} .`,
+    "text/turtle",
+  );
+  const started = performance.now();
+  expect(() => validateAssertionTerms(tied)).not.toThrow();
+  expect(performance.now() - started).toBeLessThan(1000);
+  const invalid = await parseReferenceRdf(
+    `<https://example.org/fictional> <https://example.org/p> "not-a-number"^^<http://www.w3.org/2001/XMLSchema#decimal> .`,
+    "text/turtle",
+  );
+  expect(() => validateAssertionTerms(invalid)).toThrow(UnsupportedLiteralLexicalFormError);
+  const date = await parseReferenceRdf(
+    `<https://example.org/fictional> <https://example.org/p> "2026-02-30T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`,
+    "text/turtle",
+  );
+  expect(() => validateAssertionTerms(date)).toThrow("Invalid dateTime");
+});

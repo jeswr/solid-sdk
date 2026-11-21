@@ -3,19 +3,44 @@
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Literal, NamedNode } from "@rdfjs/types";
+import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
 import { expect, it } from "vitest";
 import {
   buildNanopublications,
   canonicalizeAssertion,
+  createFactAssertion,
   parseAssertion,
   parseNanopublications,
   serializeNanopublications,
 } from "../src/index.js";
-import { graph, NS, ReferenceStore } from "../src/rdf.js";
+import { graph, NS, RdfNode, ReferenceStore } from "../src/rdf.js";
 import { exampleBuildOptions } from "../src/testing.js";
 
 const options = exampleBuildOptions();
+it("treats quoted LANGTAG-looking text as ordinary text", async () => {
+  const value = await buildNanopublications(
+    {
+      batch_id: "fictional-quoted-tag",
+      worker: { agent_id: "https://example.org/agent", agent_label: "Fictional" },
+      claims: [
+        {
+          id: "one",
+          assertion: createFactAssertion(options.owner, {
+            template: "preference",
+            value: { propertyID: "Fictional", value: 'Fictional "@EN text' },
+          }),
+          epistemic: "Mentioned",
+        },
+      ],
+    },
+    options,
+  );
+  const parsed = await parseNanopublications(await serializeNanopublications(value));
+  expect(parsed.nanopubs).toEqual(value.nanopubs);
+  expect([...parsed.dataset].every((quad) => value.dataset.has(quad))).toBe(true);
+  expect(parsed.dataset.size).toBe(value.dataset.size);
+});
 function taggedLiteral(value: string, language: string): Literal {
   const literal = df.literal(value, language);
   Object.defineProperty(literal, "language", { value: language });
@@ -23,6 +48,27 @@ function taggedLiteral(value: string, language: string): Literal {
   Object.defineProperty(literal, "id", { value: `"${value}"@${language}` });
   return literal;
 }
+
+it("retains reference language deduplication when editing a previously untagged parse", async () => {
+  const parsed = await parseNanopublications(
+    await readFile(new URL("./fixtures/synthetic.expected.trig", import.meta.url), "utf8"),
+  );
+  const graphId = parsed.nanopubs[0]!.assertionId;
+  const subject = "https://example.org/fictional-language-edit";
+  const predicate = `${NS.schema}name`;
+  const before = parsed.dataset.size;
+  const node = new RdfNode(
+    subject,
+    new NamedGraphDataset(df.namedNode(graphId), parsed.dataset, df),
+  );
+  node.add(predicate, taggedLiteral("Fictional", "EN-us"));
+  node.add(predicate, taggedLiteral("Fictional", "en-US"));
+  expect(parsed.dataset).toBeInstanceOf(ReferenceStore);
+  expect(parsed.dataset.size).toBe(before + 1);
+  expect(parsed.dataset.getQuads(subject, predicate, null, graphId)[0]!.object).toMatchObject({
+    language: "EN-us",
+  });
+});
 
 const review: {
   languages: { tags: string[]; single: string; assertion: string; id: string; graph: string }[];
