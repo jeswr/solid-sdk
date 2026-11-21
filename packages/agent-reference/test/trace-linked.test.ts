@@ -11,8 +11,8 @@ import { join } from "path";
 import { expect, it } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import type { PathResult } from "../src/engine/run.js";
-import { traceFileSchema } from "../src/trace/schema.js";
-import { outlineOf, type TraceFile } from "../src/trace/types.js";
+import { traceFileSchema, traceFileSchemaWithLinkedTable } from "../src/trace/schema.js";
+import { outlineOf, type TraceFile, type TraceLinkedView } from "../src/trace/types.js";
 import { storeDocumentLoader } from "../src/wire/store-contexts.js";
 
 const root = new URL("../", import.meta.url);
@@ -20,11 +20,11 @@ const committed = (stem: string, configuration: string): TraceFile & { "x-author
   JSON.parse(readFileSync(new URL(`traces/${stem}--${configuration}.json`, root), "utf8"));
 
 function withoutLinked(trace: TraceFile): TraceFile {
-  const { linked: _table, events, ...rest } = trace;
+  const { linked: _table, linkedTable: _reference, events, ...rest } = trace;
   return { ...rest, events: events.map(({ linked: _keys, ...event }) => event) };
 }
 
-function run(scenario: string, mode: "plain" | "linked", configuration: string): PathResult[] {
+function run(scenario: string, mode: "plain" | "linked", configuration: string) {
   const directory = mkdtempSync(join(tmpdir(), "trace-linked-"));
   const file = join(directory, "trace.json");
   const log = join(directory, "run.log");
@@ -45,7 +45,24 @@ function run(scenario: string, mode: "plain" | "linked", configuration: string):
     }
     if (child.status !== 0 || child.error)
       throw new Error(`Scenario run failed: ${child.error ?? readFileSync(log, "utf8")}`);
-    return JSON.parse(readFileSync(file, "utf8"));
+    const paths: PathResult[] = JSON.parse(readFileSync(file, "utf8"));
+    const written = new Map<string, string>();
+    for (const { path, trace } of paths) {
+      if (trace)
+        written.set(
+          path,
+          readFileSync(
+            join(directory, "traces", `${trace.scenario.id}--${configuration}.json`),
+            "utf8",
+          ),
+        );
+    }
+    const reference = `linked/${scenario}.json`;
+    const table: Record<string, TraceLinkedView> | undefined =
+      mode === "linked"
+        ? JSON.parse(readFileSync(join(directory, "traces", reference), "utf8"))
+        : undefined;
+    return { paths, written, reference, table };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -60,12 +77,16 @@ for (const [scenario, configuration] of [
 ] as const) {
   it(`adds valid store views to ${scenario} (${configuration}) with the switch and preserves trace bytes`, async () => {
     const baseline = committed(scenario, configuration);
-    const linkedPaths = run(scenario, "linked", configuration);
-    const plainPaths = run(scenario, "plain", configuration);
+    const linked = run(scenario, "linked", configuration);
+    const plainRun = run(scenario, "plain", configuration);
     const categories = new Set<string>();
-    for (const [index, path] of linkedPaths.entries()) {
+    const sharedKeys = new Set<string>();
+    const sharedSchema = traceFileSchemaWithLinkedTable((reference) =>
+      reference === linked.reference ? linked.table : undefined,
+    );
+    for (const [index, path] of linked.paths.entries()) {
       const trace = path.trace;
-      const plain = plainPaths[index]?.trace;
+      const plain = plainRun.paths[index]?.trace;
       if (path.blocked?.includes("sparq-zk-result/5") && scenario === "age-check") {
         expect(path.path).toBe("main");
         expect(plain).toBeUndefined();
@@ -73,6 +94,15 @@ for (const [scenario, configuration] of [
       }
       if (!trace?.linked || !plain) throw new Error(`Missing trace for ${path.path}`);
       expect(traceFileSchema.safeParse(trace).success).toBe(true);
+      const sharedBytes = linked.written.get(path.path);
+      if (!sharedBytes) throw new Error(`Missing shared trace for ${path.path}`);
+      const shared: TraceFile = JSON.parse(sharedBytes);
+      expect(shared.linkedTable).toBe(linked.reference);
+      expect(shared.linked).toBeUndefined();
+      expect(shared.events).toEqual(trace.events);
+      expect(sharedSchema.safeParse(shared).success).toBe(true);
+      expect(bytes(withoutLinked(shared))).toBe(bytes(plain));
+      expect(plainRun.written.get(path.path)).toBe(`${JSON.stringify(plain, null, 2)}\n`);
       const views = trace.linked;
       for (const event of trace.events) {
         const kinds = event.linked?.map((key) => views[key]?.what) ?? [];
@@ -103,9 +133,12 @@ for (const [scenario, configuration] of [
         if (event.kind === "check") expect(kinds).not.toContain("record-entry");
       }
       const keys = trace.events.flatMap((event) => event.linked ?? []);
+      for (const key of keys) sharedKeys.add(key);
       expect(new Set(keys)).toEqual(new Set(Object.keys(views)));
       for (const [key, view] of Object.entries(views)) {
         expect(key).toBe(digestBytes(view.jsonld));
+        expect(JSON.parse(view.jsonld)["@context"]).toEqual(view.context);
+        expect(linked.table?.[key]?.jsonld).toBe(view.jsonld);
         const json = await parseRdf(view.jsonld, "application/ld+json", {
           documentLoader: storeDocumentLoader,
         });
@@ -132,6 +165,7 @@ for (const [scenario, configuration] of [
       });
       expect(bytes(emitted), `${scenario}/${path.path}`).toBe(bytes(expected));
     }
+    expect(Object.keys(linked.table ?? {})).toEqual([...sharedKeys].sort());
     expect(categories).toEqual(new Set(["memory-item", "record-entry", "policy", "trust-entry"]));
   });
 }

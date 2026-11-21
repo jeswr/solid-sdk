@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { z } from "zod";
 import { domainProfileSchema, scenarioSchema } from "../dist/engine/schema.js";
-import { traceFileSchema } from "../dist/trace/schema.js";
+import { traceFileShapeSchema } from "../dist/trace/schema.js";
 import { SCENARIO_CONTEXT } from "../dist/wire/store-contexts.js";
 
 // Keep the runtime schemas on 0.1. The authoring files add a pinned JSON-LD envelope.
@@ -15,9 +15,9 @@ const authoringSchema = (schema, kind) =>
   });
 
 // The runtime trace schema passes through optional event fields.
-const exportedTraceSchema = traceFileSchema.safeExtend({
+const exportedTraceSchema = traceFileShapeSchema.extend({
   events: z.array(
-    traceFileSchema.shape.events.element.extend({
+    traceFileShapeSchema.shape.events.element.extend({
       fault: z
         .string()
         .regex(/^[a-z0-9][a-z0-9-]*$/)
@@ -34,6 +34,7 @@ for (const [name, schema, version] of [
   const path = new URL(`../schemas/${name}.schema.json`, import.meta.url);
   const value = {
     ...z.toJSONSchema(schema, { target: "draft-2020-12" }),
+    ...(name === "agent-trace" ? { not: { required: ["linked", "linkedTable"] } } : {}),
     "x-authored-by": "Codex GPT-6",
     ["$id"]: `urn:agent-reference:schema:${name}:${version}`,
   };

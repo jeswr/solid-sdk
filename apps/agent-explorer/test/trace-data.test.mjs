@@ -165,7 +165,7 @@ function bundleFixture(t) {
   for (const name of ['scripts', 'js', 'data', 'traces']) {
     mkdirSync(join(dir, name), { recursive: true });
   }
-  for (const name of ['scripts/bundle-data.mjs', 'scripts/site-files.mjs', 'js/trace-data.js', 'data/model.json']) {
+  for (const name of ['scripts/bundle-data.mjs', 'scripts/site-files.mjs', 'js/linked.js', 'js/trace-data.js', 'data/model.json']) {
     copyFileSync(root + name, join(dir, name));
   }
   const contextPath = 'packages/agent-reference/vocab/context';
@@ -266,6 +266,42 @@ test('bundler rejects oversized traces, unsafe keys and duplicate keys before re
   await fails(/duplicate trace key/);
 });
 
+test('the bundle copies only referenced tables and validates their size and event keys', async (t) => {
+  const dir = bundleFixture(t);
+  const reference = 'linked/test.json';
+  const key = `sha-256:${'a'.repeat(64)}`;
+  const trace = { schema: 'agent-trace/0.1', scenario: { id: 'test' }, configuration: { id: 'baseline' }, linkedTable: reference, events: [{ step: 1, kind: 'record', linked: [key] }] };
+  const table = JSON.stringify({ [key]: { what: 'record-entry', context: 'urn:context', jsonld: '{}', turtle: '<urn:s> a <urn:t> .' } }) + '\n';
+  const input = join(dir, 'traces/a.json');
+  const source = join(dir, 'traces', reference);
+  const output = join(dir, 'data/traces', reference);
+  mkdirSync(join(dir, 'traces/linked'));
+  writeFileSync(input, JSON.stringify(trace));
+  writeFileSync(source, table);
+  writeFileSync(join(dir, 'traces/linked/unused.json'), '{}');
+  const bundle = buildPublicBundle(dir);
+  assert.doesNotMatch(bundle.output, /linkedTable|linked\/test\.json/);
+  assert.deepEqual(readdirSync(join(dir, 'data/traces/linked')), ['test.json']);
+  assert.equal(readFileSync(output, 'utf8'), table);
+  const deployed = JSON.parse(readFileSync(join(dir, 'data/traces/test--baseline.json'), 'utf8'));
+  assert.equal(deployed.linkedTable, reference);
+  assert.deepEqual(deployed.events[0].linked, [key]);
+
+  async function fails(pattern) {
+    await assert.rejects(promisify(execFile)(process.execPath, [join(dir, 'scripts/bundle-data.mjs')]), (e) => {
+      assert.match(e.stderr, pattern);
+      return true;
+    });
+    assert.equal(readFileSync(output, 'utf8'), table);
+  }
+  writeFileSync(source, ' '.repeat(12_000_001));
+  await fails(/linked table is .*limit is 12000000 bytes/);
+  writeFileSync(source, '{}');
+  await fails(/linked view is missing/);
+  writeFileSync(input, JSON.stringify({ ...trace, linkedTable: '../roadmap.json' }));
+  await fails(/Invalid linked table reference/);
+});
+
 // A small DOM seam for asynchronous state tests; browser layout is checked separately.
 function exploreDOM(setup) {
   const nodes = new Map();
@@ -327,6 +363,31 @@ test('Explore reports a plain loading error and permits an explicit retry', asyn
   E.unmount();
 });
 
+test('Explore keeps the inspector open when a shared table is unavailable', async (t) => {
+  const file = 'age-check--baseline.json';
+  const trace = JSON.parse(readFileSync(join(root, 'traces', file), 'utf8'));
+  delete trace.linked;
+  delete trace.linkedTable;
+  const dir = bundleFixture(t);
+  writeFileSync(join(dir, 'traces', file), JSON.stringify(trace));
+  const bundle = { window: {} };
+  vm.runInNewContext(buildPublicBundle(dir).output, bundle);
+  trace.linkedTable = 'linked/age-check.json';
+  const traceUrl = `data/traces/${file}`;
+  const requests = [];
+  const setup = browser(async (url) => {
+    requests.push(url);
+    return url === traceUrl ? { ok: true, json: async () => trace } : { ok: false, status: 404 };
+  }, bundle.window.AGENT_EXPLORER_DATA);
+  for (const name of ['diagram', 'phone']) vm.runInContext(readFileSync(root + 'js/' + name + '.js', 'utf8'), setup.context);
+  const { E, container, node } = exploreDOM(setup);
+  await E.mount(container, { scenario: 'age-check' });
+  assert.deepEqual(requests, [traceUrl, 'data/traces/linked/age-check.json']);
+  assert.match(node('#inspector').innerHTML, /The linked RDF views could not be loaded\./);
+  assert.match(node('#inspector').innerHTML, /Step 1 of /);
+  E.unmount();
+});
+
 test('Home shows the model layer count and seeks the current walkthrough chapters', () => {
   const setup = browser(() => { throw new Error('unexpected fetch'); });
   setup.AX.views = [{ id: 'layers' }];
@@ -362,7 +423,15 @@ test('Explore uses one step count, shows recorded branch decisions and keeps the
   const dir = bundleFixture(t);
   const keys = ['mortgage-main--baseline', 'mortgage-core--baseline', 'mortgage-over-ask--baseline',
     'mortgage-injected-fee--baseline', 'mortgage-main--fee-payee-differs--baseline'];
-  for (const key of keys) copyFileSync(root + 'traces/' + key + '.json', join(dir, 'traces', key + '.json'));
+  for (const key of keys) {
+    const source = join(root, 'traces', key + '.json');
+    copyFileSync(source, join(dir, 'traces', key + '.json'));
+    const { linkedTable } = JSON.parse(readFileSync(source, 'utf8'));
+    if (linkedTable) {
+      mkdirSync(join(dir, 'traces/linked'), { recursive: true });
+      copyFileSync(join(root, 'traces', linkedTable), join(dir, 'traces', linkedTable));
+    }
+  }
   await promisify(execFile)(process.execPath, [join(dir, 'scripts/bundle-data.mjs')]);
   const bundle = { window: {} };
   vm.runInNewContext(readFileSync(join(dir, 'data/bundle.js'), 'utf8'), bundle);

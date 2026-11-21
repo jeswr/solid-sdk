@@ -34,6 +34,80 @@
     );
   }
 
+  function tablePath(trace) {
+    const path = trace.linkedTable;
+    const match = typeof path === "string" && /^linked\/([a-zA-Z0-9_-]+)\.json$/.exec(path);
+    const id = trace.scenario.id;
+    if (
+      !match ||
+      trace.linked !== undefined ||
+      (id !== match[1] && !id.startsWith(`${match[1]}--`))
+    ) {
+      throw new Error("Invalid linked table reference.");
+    }
+    return path;
+  }
+
+  function validateTable(table) {
+    const isText = (value) => typeof value === "string" && value.length > 0;
+    if (!table || typeof table !== "object" || Array.isArray(table))
+      throw new Error("Invalid linked view table.");
+    for (const [key, view] of Object.entries(table)) {
+      const contexts = Array.isArray(view?.context) ? view.context : [view?.context];
+      if (
+        !/^sha-256:[a-f0-9]{64}$/.test(key) ||
+        !["policy", "trust-entry", "record-entry", "memory-item"].includes(view?.what) ||
+        !contexts.length ||
+        !contexts.every(isText) ||
+        !isText(view.jsonld) ||
+        !isText(view.turtle)
+      )
+        throw new Error("Invalid linked view table.");
+    }
+    return table;
+  }
+
+  function checkKeys(trace, table) {
+    for (const event of trace.events) {
+      if (event.linked === undefined) continue;
+      if (
+        !Array.isArray(event.linked) ||
+        !event.linked.every((key) => typeof key === "string" && Object.hasOwn(table, key))
+      ) {
+        throw new Error(`A linked view is missing from ${trace.linkedTable}.`);
+      }
+    }
+  }
+
+  const tableLoads = new Map();
+  async function load(trace, traceUrl) {
+    if (trace.linkedTable === undefined) return;
+    try {
+      const path = tablePath(trace);
+      const url = traceUrl.slice(0, traceUrl.lastIndexOf("/") + 1) + path;
+      if (!tableLoads.has(url)) {
+        tableLoads.set(
+          url,
+          fetch(url)
+            .then((response) => {
+              if (!response.ok) throw new Error("Linked view table unavailable");
+              return response.json();
+            })
+            .then(validateTable)
+            .catch((error) => {
+              tableLoads.delete(url);
+              throw error;
+            }),
+        );
+      }
+      const table = await tableLoads.get(url);
+      checkKeys(trace, table);
+      trace.linked = table;
+    } catch {
+      trace.linkedTableUnavailable = true;
+    }
+  }
+
   function jsonDocument(value, fallback, expanded) {
     if (value == null) return {};
     let doc = value;
@@ -181,7 +255,7 @@
     dialog.addEventListener("keydown", (e) => e.stopPropagation());
   }
 
-  const api = { bind, entries, html, packet };
+  const api = { bind, checkKeys, entries, html, load, packet, tablePath, validateTable };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.AX.linked = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -3,7 +3,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // Bundles data/model.json, data/scenarios.json, data/roadmap.json (if present), traces/*.json,
 // tours/*.json and the spec documents in ../../docs/specs/agent/*.md (if present) into
-// data/bundle.js (metadata and summaries), plus one fetchable JSON file per trace.
+// data/bundle.js (metadata and summaries), plus fetchable traces and their shared tables.
 // Usage: node scripts/bundle-data.mjs
 import {
   copyFileSync,
@@ -18,6 +18,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import linked from '../js/linked.js';
 import traceData from '../js/trace-data.js';
 import { printSizeReport } from './site-files.mjs';
 
@@ -42,12 +43,30 @@ const baselineLayers = Object.fromEntries([...model.layers, ...(model.settlement
   .map((l) => [l.id, (l.suites.find((s) => s.baseline) || l.suites[0]).id]));
 const traces = [];
 const traceFiles = [];
+const linkedTables = new Map();
 const outlines = new Map();
 const stories = new Map();
 const seen = new Set();
 const outPath = process.env.AX_BUNDLE_OUT ?? join(root, 'data/bundle.js');
 const traceDir = join(dirname(outPath), 'traces');
 const MAX_TRACE_BYTES = 12_000_000;
+const MAX_LINKED_TABLE_BYTES = 12_000_000;
+function linkedTable(reference) {
+  if (!linkedTables.has(reference)) {
+    const source = join(root, 'traces', reference);
+    const stat = lstatSync(source);
+    if (!lstatSync(dirname(source)).isDirectory() || !stat.isFile()) {
+      throw new Error(`${reference}: linked table must be a regular file in traces/linked`);
+    }
+    const bytes = stat.size;
+    if (bytes > MAX_LINKED_TABLE_BYTES) {
+      throw new Error(`${reference}: linked table is ${bytes} bytes; limit is ${MAX_LINKED_TABLE_BYTES} bytes`);
+    }
+    const text = readFileSync(source, 'utf8');
+    linkedTables.set(reference, { text, table: linked.validateTable(JSON.parse(text)) });
+  }
+  return linkedTables.get(reference).table;
+}
 function outline(events) {
   return events.filter((e) => /^(check|decision|message-in|message-out|ask-principal)$/.test(e.kind))
     .map((e) => [e.agent, e.part, e.kind, e.check || '', e.verdict || '', e.reason || ''].join('|')).join('\n');
@@ -88,6 +107,9 @@ for (const file of readdirSync(join(root, 'traces')).filter((f) => f.endsWith('.
   if (bytes > MAX_TRACE_BYTES) throw new Error(`${key}: trace file is ${bytes} bytes; limit is ${MAX_TRACE_BYTES} bytes`);
   traceFiles.push({ name: key + '.json', text });
   const t = traceData.restore(packed);
+  if (t.linkedTable !== undefined) {
+    linked.checkKeys(t, linkedTable(linked.tablePath(t)));
+  }
   const summary = { eventCount: t.events.length, checkCounts: {}, parts: {}, checks: {}, segments: {}, requirements: {} };
   const grouped = {};
   const story = [];
@@ -234,6 +256,8 @@ mkdirSync(dirname(outPath), { recursive: true });
 rmSync(traceDir, { recursive: true, force: true });
 mkdirSync(traceDir, { recursive: true });
 for (const { name, text } of traceFiles) writeFileSync(join(traceDir, name), text);
+if (linkedTables.size) mkdirSync(join(traceDir, 'linked'));
+for (const [reference, { text }] of linkedTables) writeFileSync(join(traceDir, reference), text);
 for (const f of readdirSync(dirname(outPath))) {
   if (/^traces-\d+\.js$/.test(f)) rmSync(join(dirname(outPath), f));
 }

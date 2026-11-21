@@ -5,7 +5,7 @@ import jsonld from "jsonld";
 import { DataFactory, Store } from "n3";
 import { scopedId } from "../model/named-values.js";
 import { AWP, ODRL, PROV, SCHEMA } from "../profile/vocabulary.js";
-import { ODRL_CONTEXT, VC_CONTEXT } from "./contexts.js";
+import { ODRL_CONTEXT } from "./contexts.js";
 import { STORE_CONTEXT, storeJsonLdLoader } from "./store-contexts.js";
 import { writeNQuads } from "./store-quads.js";
 
@@ -105,12 +105,9 @@ export async function linkedViewOfProjection<Kind extends string>(
         predicate.value.startsWith(prefix) ||
         (object.termType === "NamedNode" && object.value.startsWith(prefix)),
     );
-  const contexts = [
-    ...(uses(prefixes.odrl) ? [ODRL_CONTEXT] : []),
-    ...(uses(prefixes.vc) ? [VC_CONTEXT] : []),
-    STORE_CONTEXT,
-  ];
-  const context = contexts.length === 1 ? STORE_CONTEXT : contexts;
+  // The store context already aliases credential terms such as issuer. Adding the
+  // VC context can redefine protected terms such as kid. Other terms keep their IRIs.
+  const context = uses(prefixes.odrl) ? [ODRL_CONTEXT, STORE_CONTEXT] : STORE_CONTEXT;
   const expanded = await jsonld.fromRDF(writeNQuads(projected), { format: "application/n-quads" });
   const compacted = await jsonld.compact(
     expanded,
@@ -118,5 +115,5 @@ export async function linkedViewOfProjection<Kind extends string>(
     { documentLoader: storeJsonLdLoader },
   );
   const turtle = await serialize([...projected], { format: "text/turtle", prefixes });
-  return { what, context, jsonld: JSON.stringify(compacted), turtle };
+  return { what, context, jsonld: JSON.stringify({ ...compacted, "@context": context }), turtle };
 }

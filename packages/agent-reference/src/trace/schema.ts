@@ -48,7 +48,8 @@ const linkedView = z.strictObject({
   jsonld: z.string().min(1),
   turtle: z.string().min(1),
 });
-export const traceFileSchema = z
+export const traceLinkedTableSchema = z.record(linkedKey, linkedView);
+export const traceFileShapeSchema = z
   .object({
     schema: z.literal(TRACE_SCHEMA),
     events: z.array(
@@ -56,13 +57,36 @@ export const traceFileSchema = z
         .object({ packet: packetViewSchema.optional(), linked: z.array(linkedKey).optional() })
         .passthrough(),
     ),
-    linked: z.record(linkedKey, linkedView).optional(),
+    linked: traceLinkedTableSchema.optional(),
+    linkedTable: z
+      .string()
+      .regex(/^linked\/[a-zA-Z0-9_-]+\.json$/)
+      .optional(),
   })
-  .passthrough()
-  .superRefine((trace, ctx) => {
+  .passthrough();
+
+/** Validate references with the caller's table lookup. The schema does no I/O. */
+export function traceFileSchemaWithLinkedTable(resolve?: (reference: string) => unknown) {
+  return traceFileShapeSchema.superRefine((trace, ctx) => {
+    let table = trace.linked;
+    if (trace.linkedTable !== undefined) {
+      const resolved = traceLinkedTableSchema.safeParse(resolve?.(trace.linkedTable));
+      if (table !== undefined || !resolved.success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["linkedTable"],
+          message:
+            table !== undefined
+              ? "Trace has both linked tables"
+              : "Invalid or unavailable linked table",
+        });
+        return;
+      }
+      table = resolved.data;
+    }
     for (const [eventIndex, event] of trace.events.entries()) {
       event.linked?.forEach((key, keyIndex) => {
-        if (!trace.linked || !Object.hasOwn(trace.linked, key))
+        if (!table || !Object.hasOwn(table, key))
           ctx.addIssue({
             code: "custom",
             path: ["events", eventIndex, "linked", keyIndex],
@@ -71,3 +95,6 @@ export const traceFileSchema = z
       });
     }
   });
+}
+
+export const traceFileSchema = traceFileSchemaWithLinkedTable();

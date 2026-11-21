@@ -749,6 +749,7 @@
     h += '<h2>' + esc(AX.stepTitle(t, step)) + '</h2>';
     h += '<p class="who"><span class="chip">' + esc(traceAgent(e.agent).name) + '</span><span class="chip">' + esc(AX.partName(e.part)) + '</span><span class="chip quiet">' + esc(AX.kindLabels[e.kind] || e.kind) + '</span></p></header>';
     h += omittedAttachmentsHtml(e);
+    if (t.linkedTableUnavailable) h += '<p class="rdf-note">The linked RDF views could not be loaded.</p>';
     if (S.level === 'steps') h += stepSummaryHtml(step);
     if (e.kind === 'check') h += checkHtml(e);
     else if (e.kind === 'decision') {

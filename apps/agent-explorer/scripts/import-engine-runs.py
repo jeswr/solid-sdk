@@ -15,10 +15,25 @@
 # explorerCopy.values; explorerCopy.refs holds [path, value index] in dependency order.
 # The bundle reader and browser's async trace accessor restore independent copies
 # before using any events. This is lossless, including packet JSON-LD and RDF strings.
+# Shared linked tables keep their original keys and view text.
 import json, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
+MAX_LINKED_TABLE_BYTES = 12_000_000
+
+def copy_linked_table(src, dest, scenario, reference):
+    if not re.fullmatch(r'linked/[a-zA-Z0-9_-]+\.json', reference) or reference != f'linked/{scenario}.json':
+        raise ValueError(f'{scenario}: invalid linked table reference')
+    with open(os.path.join(src, reference), encoding='utf-8') as source:
+        table = json.load(source)
+    text = json.dumps(table, ensure_ascii=False, separators=(',', ':')) + '\n'
+    data = text.encode('utf-8')
+    if len(data) > MAX_LINKED_TABLE_BYTES:
+        raise ValueError(f'{reference}: linked table is {len(data)} bytes; limit is {MAX_LINKED_TABLE_BYTES} bytes')
+    os.makedirs(os.path.join(dest, 'linked'), exist_ok=True)
+    with open(os.path.join(dest, reference), 'wb') as output:
+        output.write(data)
 
 def readable(agent_id):
     words = agent_id.replace('-', ' ').split()
@@ -86,9 +101,15 @@ def main():
 
     commit = sys.argv[3] if len(sys.argv) > 3 else None
     n = 0
+    tables = set()
+    dest = os.path.join(ROOT, 'traces')
     for p in m['paths']:
         if p['status'] == 'blocked': continue
         t = json.load(open(os.path.join(src, p['trace'])))
+        reference = t.get('linkedTable')
+        if reference is not None and reference not in tables:
+            copy_linked_table(src, dest, p['scenario'], reference)
+            tables.add(reference)
         u = U.get(p.get('useCase') or p['scenario'])
         if u and not t.get('useCase'):
             run = [r for r in u.get('runs', []) if r['path'] == p['path']][0]
@@ -102,7 +123,7 @@ def main():
         omit_attachment_bytes(t)
         intern_event_values(t)
         text = json.dumps(t, ensure_ascii=False, separators=(',', ':'))
-        open(os.path.join(ROOT, 'traces', p['trace']), 'w').write(text + '\n')
+        open(os.path.join(dest, p['trace']), 'w').write(text + '\n')
         n += 1
     print(n, 'traces imported')
     subprocess.check_call(['node', os.path.join(HERE, 'bundle-data.mjs')])

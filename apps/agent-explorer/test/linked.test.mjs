@@ -9,10 +9,11 @@ const window = {};
 vm.runInNewContext(readFileSync(new URL("../js/highlight.js", import.meta.url), "utf8"), {
   window,
 });
-const linked = () => {
+const linked = (fetch) => {
   const module = { exports: {} };
   vm.runInNewContext(readFileSync(new URL("../js/linked.js", import.meta.url), "utf8"), {
     window,
+    fetch,
     module,
   });
   return module.exports;
@@ -79,4 +80,54 @@ test("restoring an explorer copy preserves linked views", () => {
   });
   assert.equal(entries(trace, trace.events[0])[0], tableEntry);
   assert.deepEqual(trace.events[0].fact, { label: "fact" });
+});
+
+test("the scenario table is requested on demand and shared across traces", async () => {
+  const key = "sha-256:" + "a".repeat(64);
+  const requests = [];
+  const { load, entries } = linked(async (url) => {
+    requests.push(url);
+    return { ok: true, json: async () => ({ [key]: tableEntry }) };
+  });
+  const main = {
+    scenario: { id: "test" },
+    linkedTable: "linked/test.json",
+    events: [{ linked: [key] }],
+  };
+  const branch = { ...main, scenario: { id: "test--branch-1" } };
+  await load({ events: [] }, "data/traces/plain.json");
+  assert.deepEqual(requests, []);
+  await Promise.all([
+    load(main, "data/traces/test--baseline.json"),
+    load(branch, "data/traces/test--branch-1--baseline.json"),
+  ]);
+  assert.deepEqual(requests, ["data/traces/linked/test.json"]);
+  assert.equal(main.linked, branch.linked);
+  assert.equal(entries(branch, branch.events[0])[0], tableEntry);
+});
+
+test("unavailable or invalid shared tables leave the trace usable", async () => {
+  const key = "sha-256:" + "a".repeat(64);
+  const requests = [];
+  const { load, entries } = linked(async (url) => {
+    requests.push(url);
+    return requests.length === 1
+      ? { ok: false, status: 404 }
+      : { ok: true, json: async () => ({}) };
+  });
+  const trace = {
+    scenario: { id: "test" },
+    linkedTable: "linked/test.json",
+    events: [{ linked: [key] }],
+  };
+  const missing = { ...trace };
+  await load(missing, "data/traces/test.json");
+  assert.equal(missing.linkedTableUnavailable, true);
+  assert.equal(entries(missing, missing.events[0]).length, 0);
+  await load(trace, "data/traces/test.json");
+  assert.equal(trace.linkedTableUnavailable, true);
+  const unsafe = { ...trace, linkedTable: "../roadmap.json" };
+  await load(unsafe, "data/traces/test.json");
+  assert.equal(unsafe.linkedTableUnavailable, true);
+  assert.equal(requests.length, 2);
 });

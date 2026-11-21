@@ -716,6 +716,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "linkedTable": {
+      "type": "string",
+      "pattern": "^linked\\/[a-zA-Z0-9_-]+\\.json$"
     }
   },
   "required": [
@@ -723,6 +727,12 @@
     "events"
   ],
   "additionalProperties": {},
+  "not": {
+    "required": [
+      "linked",
+      "linkedTable"
+    ]
+  },
   "x-authored-by": "Codex GPT-6",
   "$id": "urn:agent-reference:schema:agent-trace:0.1"
 }

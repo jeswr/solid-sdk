@@ -98,6 +98,11 @@ try {
     const regenerated = new Set(files(copy, dir));
     for (const file of new Set([...committed, ...regenerated])) {
       if (file === indexFile) continue;
+      // --no-linked replaces the selected scenarios' linked traces with plain traces.
+      if ([...scenarios].some((scenario) => file === `traces/linked/${scenario}.json`)) {
+        if (regenerated.has(file)) differences.push(`${file}: table retained after plain runs`);
+        continue;
+      }
       if (!committed.has(file) || !regenerated.has(file)) {
         differences.push(`${file}: ${committed.has(file) ? "missing from copy" : "added in copy"}`);
       } else if (selected.has(file)) {
@@ -105,6 +110,7 @@ try {
         const actual = json(copy, file);
         delete expected.generated?.commit;
         delete expected.linked;
+        delete expected.linkedTable;
         for (const event of expected.events) delete event.linked;
         delete actual.generated?.commit;
         compare(file, actual, expected);

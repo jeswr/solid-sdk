@@ -31,6 +31,7 @@ if (appDir) {
   cpSync(appDir, join(out, 'app'), { recursive: true });
   console.log(`copied the app from ${appDir} to app/`);
 }
+// The bundler writes the fetchable traces and their referenced tables under data/traces/.
 execFileSync(process.execPath, [join(root, 'scripts/bundle-data.mjs')], {
   env: { ...process.env, AX_PUBLIC: '1', AX_BUNDLE_OUT: join(out, 'data/bundle.js') },
   stdio: 'inherit',

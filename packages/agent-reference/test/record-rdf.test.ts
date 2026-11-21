@@ -233,9 +233,10 @@ it("projects only reachable subjects and renders the same RDF via Turtle and JSO
   }
   const subject = dataset.getObjects(root, awp + "record", root)[0]!;
   const p = namedNode(awp + "related");
+  const issuer = namedNode("https://www.w3.org/2018/credentials#issuer");
   const child = namedNode("urn:child");
   dataset.addQuad(subject, p, child, namedNode("urn:other-graph"));
-  dataset.addQuad(child, p, namedNode(root));
+  dataset.addQuad(child, issuer, namedNode(root));
   dataset.addQuad(namedNode("urn:unreachable"), p, child);
   const expected = storeProjection(dataset, root);
   expect(expected.size).toBe(projection.size + 2);

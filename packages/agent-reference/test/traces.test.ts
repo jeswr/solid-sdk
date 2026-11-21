@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { describe, expect, it } from "vitest";
+import { digestBytes } from "../src/core/canonical.js";
 import { runReference, SCENARIOS, type ScenarioId } from "../src/reference/mortgage.js";
 import { BASELINE } from "../src/suites/baseline.js";
+import { traceFileSchemaWithLinkedTable, traceLinkedTableSchema } from "../src/trace/schema.js";
 import { INBOUND_CHECKS, OUTBOUND_CHECKS, outlineOf, type TraceFile } from "../src/trace/types.js";
 
 const root = join(import.meta.dirname, "..");
@@ -27,6 +29,43 @@ const run = (s: ScenarioId) => {
   }
   return p;
 };
+
+it("all committed linked views are resolvable and used", () => {
+  const directory = join(root, "traces");
+  const shared = join(directory, "linked");
+  const read = (file: string) => JSON.parse(readFileSync(join(directory, file), "utf8"));
+  const tables = new Map(
+    (existsSync(shared) ? readdirSync(shared) : []).map((file) => {
+      const reference = `linked/${file}`;
+      const table = traceLinkedTableSchema.parse(read(reference));
+      for (const [key, view] of Object.entries(table)) expect(digestBytes(view.jsonld)).toBe(key);
+      return [reference, table] as const;
+    }),
+  );
+  const schema = traceFileSchemaWithLinkedTable((path) => tables.get(path));
+  const used = new Map<string, Set<string>>();
+  const manifest: { paths: { scenario: string; trace?: string }[] } = JSON.parse(
+    readFileSync(join(root, "scenario-runs.json"), "utf8"),
+  );
+  const scenariosByFile = new Map(manifest.paths.map((row) => [row.trace, row.scenario]));
+  for (const file of readdirSync(directory)) {
+    if (!file.endsWith(".json") || file === "index.json") continue;
+    const trace: TraceFile = read(file);
+    const keys = trace.events.flatMap((event) => event.linked ?? []);
+    if (keys.length || trace.linked || trace.linkedTable !== undefined) schema.parse(trace);
+    if (trace.linkedTable === undefined) continue;
+    expect(trace.linkedTable, file).toBe(
+      `linked/${scenariosByFile.get(file) ?? trace.scenario.id}.json`,
+    );
+    const references = used.get(trace.linkedTable) ?? new Set<string>();
+    for (const key of keys) references.add(key);
+    used.set(trace.linkedTable, references);
+  }
+  for (const [reference, table] of tables) {
+    expect(used.has(reference), reference).toBe(true);
+    expect(Object.keys(table), reference).toEqual([...(used.get(reference) ?? [])].sort());
+  }
+});
 
 describe("reference traces follow their committed outlines", () => {
   for (const scenario of scenarios) {

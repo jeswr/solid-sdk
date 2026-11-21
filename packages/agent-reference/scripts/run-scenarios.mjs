@@ -19,6 +19,7 @@ import { assertPublishable } from "../dist/engine/publication.js";
 import { runScenario } from "../dist/engine/run.js";
 import { outlineOf } from "../dist/trace/types.js";
 import { jointPaths, recordedJoint, traceHash } from "./recorded-joint.mjs";
+import { ScenarioTraceWriter } from "./write-scenario-traces.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const linked = !process.argv.includes("--no-linked");
@@ -44,7 +45,7 @@ try {
 } catch {}
 mkdirSync(join(root, "traces"), { recursive: true });
 mkdirSync(join(root, "outlines"), { recursive: true });
-// Write each configuration before running the next. The full matrix includes large traces.
+// Stage each configuration before running the next. The full matrix includes large traces.
 async function* pathsFor(profile, scenario) {
   const configurations =
     selectedConfiguration === "baseline"
@@ -70,6 +71,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   const id = file.slice(0, -5);
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
+  using writer = new ScenarioTraceWriter(join(root, "traces"), id);
   for await (const path of pathsFor(profile, scenario)) {
     assertPublishable(path);
     if (!path.configuration && jointPaths.has(`${id}/${path.path}`)) {
@@ -88,7 +90,7 @@ for (const file of readdirSync(join(root, "scenarios"))
     const stem = path.pathKind === "main" ? id : `${id}--${path.path}`;
     const suffix = path.configuration ?? "baseline";
     const traceBytes = path.trace
-      ? `${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...path.trace }, null, 2)}\n`
+      ? writer.write(`${stem}--${suffix}.json`, { "x-authored-by": "Codex GPT-6", ...path.trace })
       : undefined;
     status.paths.push({
       scenario: id,
@@ -136,7 +138,6 @@ for (const file of readdirSync(join(root, "scenarios"))
       if (path.pathKind === "main") scenario.expect = outline;
       else scenario.branches.find((b) => b.id === path.path).outline = outline;
     }
-    writeFileSync(join(root, "traces", `${stem}--${suffix}.json`), traceBytes);
     const outlinePath = join(root, "outlines", `${stem}--${suffix}.json`);
     let legacyArray = false;
     try {
@@ -153,6 +154,7 @@ for (const file of readdirSync(join(root, "scenarios"))
       events: path.trace.events.length,
     });
   }
+  writer.publish();
   if (record && (!selectedConfiguration || selectedConfiguration === "baseline")) {
     // Update expectations on the authoring object, preserving its 0.2 envelope and omissions.
     const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));

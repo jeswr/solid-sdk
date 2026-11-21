@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // A fresh process for each switch setting, as in run-scenarios.mjs.
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { dirname, join } from "path";
 import { availableAdapters } from "../../dist/derive/adapters/index.js";
 import { SPARQ_ZK_RESULT } from "../../dist/derive/adapters/sparq-zk-result.js";
 import { loadCase } from "../../dist/engine/load.js";
 import { runScenario } from "../../dist/engine/run.js";
+import { ScenarioTraceWriter } from "../../scripts/write-scenario-traces.mjs";
 
 const [id, file, mode, configuration] = process.argv.slice(2);
 const baseline = JSON.parse(readFileSync(`traces/${id}--${configuration}.json`, "utf8"));
@@ -33,4 +36,11 @@ const paths = await runScenario(profile, scenario, {
   configuration: configuration === "baseline" ? undefined : configuration,
   linked: mode === "linked",
 });
+const directory = join(dirname(file), "traces");
+mkdirSync(directory);
+using writer = new ScenarioTraceWriter(directory, id);
+for (const path of paths) {
+  if (path.trace) writer.write(`${path.trace.scenario.id}--${configuration}.json`, path.trace);
+}
+writer.publish();
 writeFileSync(file, JSON.stringify(paths));

@@ -13,6 +13,7 @@ import { fileURLToPath } from "url";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { promisify } from "util";
 import { generateTraces } from "../dist/reference/generate.js";
+import { ScenarioTraceWriter } from "./write-scenario-traces.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let commit = "unknown";
@@ -21,16 +22,20 @@ try {
 } catch {}
 const outDir = join(root, "traces");
 mkdirSync(outDir, { recursive: true });
-const traces = await generateTraces(commit, true);
+const traces = await generateTraces(commit, !process.argv.includes("--no-linked"));
 const index = [];
-for (const [file, trace] of traces) {
-  writeFileSync(join(outDir, `${file}.json`), `${JSON.stringify(trace, null, 2)}\n`);
-  index.push({
-    file: `${file}.json`,
-    scenario: trace.scenario,
-    configuration: trace.configuration.id,
-    events: trace.events.length,
-  });
+for (const [scenario, runs] of Map.groupBy(traces, ([, trace]) => trace.scenario.id)) {
+  using writer = new ScenarioTraceWriter(outDir, scenario);
+  for (const [file, trace] of runs) {
+    writer.write(`${file}.json`, trace);
+    index.push({
+      file: `${file}.json`,
+      scenario: trace.scenario,
+      configuration: trace.configuration.id,
+      events: trace.events.length,
+    });
+  }
+  writer.publish();
 }
 writeFileSync(join(outDir, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
 console.log(`wrote ${traces.size} traces to ${outDir}`);

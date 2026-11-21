@@ -1647,3 +1647,62 @@ The browser layout still needs a visual check at 360, 700 and 1280 pixels.
 Open an inspector view with long lines, scroll each pane with the keyboard,
 toggle the context, move to another event and open the wide dialog. Check that
 Escape and Close restore focus to the opener.
+
+## Shared tables (40x)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Both corpus writers now put a scenario's linked views in `traces/linked/<scenario>.json`.
+The trace keeps `linkedTable` and the event key lists. Keys are still SHA-256
+digests of the JSON-LD text. The runtime schema validates inline tables and
+uses a caller-supplied lookup for shared tables. The corpus test checks every
+trace reference, table digest, and unused key. The writer sorts the keys and
+keeps the entries still used when a run replaces just one configuration.
+
+Each view keeps JSON-LD and Turtle. JSON-LD uses the bundled store and, when
+needed, ODRL context IRIs. The legacy generator exposed a protected-term
+conflict when it combined the credential and store contexts. The store
+context supplies its existing credential aliases, and other credential
+terms keep their full IRIs. The RDF round-trip test covers that case.
+
+| Hand-run file | Engine bytes before | Engine bytes with shared tables |
+| --- | ---: | ---: |
+| `age-check--baseline.json` | 281,049 | 283,737 |
+| `age-check--branch-1--baseline.json` | 80,773 | 81,889 |
+| `mortgage-core--baseline.json` | 783,379 | 790,471 |
+| `mortgage-core--authenticity-data-integrity.json` | 574,061 | 581,153 |
+| `linked/age-check.json` (31 keys) | — | 403,438 |
+| `linked/mortgage-core.json` (67 keys) | — | 819,497 |
+
+The two mortgage traces reference 43 keys each and share 19. The engine
+directory starts at 678,116,725 bytes, including its index. The four samples
+and two tables add 1,240,923 bytes. Applying the sample's average trace
+increase to 272 live traces and its average table size to 72 scenarios gives
+about **723 MB** for the engine and **209 MB** for the explorer. The six
+joint recordings are held fixed. Both estimates use decimal MB and two
+scenarios, so the size depends on the mix of views in the full corpus.
+
+Both `run-scenarios.mjs` hand runs produced two paths and reported 278 runs,
+zero disagreements, and five blocked paths. The live age run used
+`ANSWERABLE_SPARQ_ZK_RESULT` with the extracted offline 0.1.8 package from
+40w. The byte comparison replays the recorded prover output at the boundary
+so it compares the same inputs. With linked views off, the four traces match
+the committed bytes. With views on, stripping the table reference and event
+keys gives the same bytes. The linked table's keys resolve and cover all
+entries. Repeating just the mortgage baseline configuration left both table
+hashes and both mortgage trace files byte-identical.
+
+`check-no-trace-change.mjs` passed with the mortgage table present and after
+restoration. All six joint traces matched their recorded SHA-256 digests.
+The tracked outlines and run manifest matched HEAD. The worktree's Git index
+is read-only, so `git checkout` could not take its lock. Changed tracked
+artifacts were restored from `git show HEAD:<path>` and the two temporary
+tables were removed. The final artifact diff was empty.
+
+On Node 24, the library compile and generated-file copy, schema export
+check, and typecheck passed. The seven requested Vitest files passed all 50
+tests. Vitest used a temporary `.sparq` symlink to resolve the same offline
+package at its literal import path. Biome and the agent layer guard passed.
+The RDF pipeline reported zero failures and 216 existing allowances.
+`generate-traces.mjs` also wrote all five reference traces with their tables
+in a disposable directory.
