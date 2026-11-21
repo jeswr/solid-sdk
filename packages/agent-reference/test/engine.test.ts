@@ -216,6 +216,7 @@ describe("data contracts", () => {
         readFileSync(join(root, "schemas", `${name}.schema.json`), "utf8"),
       );
       const runtime = z.toJSONSchema(validator, { target: "draft-2020-12" });
+      expect(validator.shape, name).not.toHaveProperty("@context");
       const schemaProperty = runtime.properties?.schema;
       if (typeof schemaProperty !== "object") throw new Error(`${name} lacks a schema property`);
       expect(published).toEqual({

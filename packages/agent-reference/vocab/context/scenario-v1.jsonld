@@ -114,9 +114,9 @@
                   "@type": "xsd:dateTime"
                 },
                 "framework": "awp:framework",
+                "claimTypes": "awp:claimType",
                 "subjects": {
                   "@id": "awp:subjects",
-                  "@container": "@list",
                   "@type": "@vocab",
                   "@context": {
                     "any": "awp:anySubject"
@@ -142,6 +142,7 @@
                           "@id": "awp:party",
                           "@type": "@id"
                         },
+                        "claimTypes": "awp:claimType",
                         "status": "awps:registerStatus"
                       }
                     }

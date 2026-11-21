@@ -15,7 +15,7 @@ export const STORE_CONTEXT_SHA256 =
   "89cd3147ed2ff3a784eb13d1e6e831711e1546f56c091cbbc85bc803a37792d4";
 export const SCENARIO_CONTEXT = "https://w3id.org/jeswr/awp/context/scenario/v1";
 export const SCENARIO_CONTEXT_SHA256 =
-  "ea6a39eb634eed02739b8b9348dee13735eab3c0dc422273708544ee4ed63017";
+  "0a095d1e86357ff134a0bb62187668951a7487efaaf8ecba71deaea91c6d9290";
 
 let storeContext: Record<string, unknown> | undefined;
 let scenario: Record<string, unknown> | undefined;

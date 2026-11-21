@@ -9,10 +9,17 @@ keys. `readCaseGraph` adds the RDF root IRI and class in memory, assigning
 whether a nested `id` is an IRI, a slug, or a status-list entry key.
 
 Ordered fields use RDF lists, including the pairs in `trust.introductions` and
-`trust.pins`. The actor keys in `termsAcceptance` identify the corresponding RDF nodes.
+`trust.pins`. A source rule's `subjects` is an ordered IRI list or the direct
+`awp:anySubject` IRI for `"any"`. Trust `claimTypes` use repeated `awp:claimType`
+values. The actor keys in `termsAcceptance` identify the corresponding RDF nodes.
 `ownLists`, trust `sources`, `vocabulary`, `notificationRecipients`,
 `handlerImplementations` and `answeredRegisters` carry their authored keys on
 `awps:key`. `answeredRegisters` indexes register IRIs directly.
+
+Profile action claims, derivation `inputsFrom` lists and effect `adapter` fields
+accept both IRIs and local names. The graph reader emits IRI values as links and
+local names as literals. Labels, email addresses, digests and qualified fixture
+references are textual values.
 
 ## JSON literals
 

@@ -641,3 +641,37 @@ or error, including nested contexts and context values inside opaque JSON.
 | `node scripts/check-fixtures-jsonld.mjs` and `node scripts/migrate-fixtures-jsonld.mjs --check` | All 145 fixture graphs and all 145 engine-object digests passed. |
 | Focused Vitest with `--maxWorkers=2` | 68 tests passed across `fixtures-jsonld`, `load-envelope`, `whole-message-fixtures`, `wire`, `wire-proof-graphs`, and `context-pins`. |
 | `node scripts/check-no-trace-change.mjs` | Both runs preserved the traces, outlines, and manifest rows. Each reported 278 runs, zero disagreements, and five blocked paths. |
+
+## Phase 3 review fixes (40m)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+### Changes and failing-first tests
+
+| Finding | Change | Regression |
+| --- | --- | --- |
+| Trust rule mapping | Source rules emit `awp:anySubject` directly and express explicit subjects as RDF lists. Trust claim types emit repeated `awp:claimType` literals. Updated the scenario context pin and documented the mapping. [scenario-v1.jsonld:117](vocab/context/scenario-v1.jsonld#L117), [scenario-v1.jsonld:145](vocab/context/scenario-v1.jsonld#L145), [load.ts:48](src/engine/load.ts#L48), [store-contexts.ts:17](src/wire/store-contexts.ts#L17), [scenario-v1.README.md:12](vocab/context/scenario-v1.README.md#L12) | The mortgage rule returned a blank list node for the wildcard before the fix. The test now checks the wildcard IRI, repeated claim type literals, and an explicit subject list. [fixtures-jsonld.test.ts:148](test/fixtures-jsonld.test.ts#L148) |
+| IRI-valued fields | The graph projection links profile action claims through `odrl:action`. The corpus scan also found literal source IRIs in derivation rules, including scenario scripts and query grants, and literal adapter IRIs in effect steps. Those fields retain support for local names. The adapter vocabulary now describes both forms. [load.ts:73](src/engine/load.ts#L73), [scenario.ttl:83](vocab/scenario.ttl#L83), [scenario-v1.README.md:20](vocab/context/scenario-v1.README.md#L20) | The recycled-content join failed because its action was a literal. The profile and scenario corpus checks also failed on derivation sources and adapters. The tests distinguish semantic links from textual labels, email addresses, digests, and qualified local references. [fixtures-jsonld.test.ts:79](test/fixtures-jsonld.test.ts#L79), [fixtures-jsonld.test.ts:184](test/fixtures-jsonld.test.ts#L184) |
+| Optional jsonld internals | The graph reader imports the optimized resolver on demand and caches the outcome. If the private module is unavailable, the same pinned loader runs with jsonld's default resolver. [fixture-context-resolver.ts:25](src/engine/fixture-context-resolver.ts#L25), [load.ts:132](src/engine/load.ts#L132) | Simulating an unexported resolver originally prevented package import. The test now verifies that the root and native loader work before the first resolver attempt and compares the exact N-Quads from both resolvers. [fixtures-jsonld.test.ts:257](test/fixtures-jsonld.test.ts#L257) |
+| Order-sensitive fixture digests | The snapshot hashes the loaded object's JSON serialization, including JavaScript property enumeration order. This detects keyed-list patch reorderings and conservatively detects other object member reorderings. Recomputed the 145 entries from the pre-migration fixtures in local `origin/main` after verifying every legacy object against the previous canonical snapshot. All migrated fixtures match those ordered digests. [migrate-fixtures-jsonld.mjs:25](scripts/migrate-fixtures-jsonld.mjs#L25), [fixture-digests.json:3](test/fixtures/fixture-digests.json#L3) | Swapping two keyed step additions changed their append order while the original digest stayed equal. The test checks the engine patch order and requires distinct digests. [fixtures-jsonld.test.ts:33](test/fixtures-jsonld.test.ts#L33) |
+| Runtime schema drift | The existing export test now asserts directly that both runtime validator shapes lack `@context`, then checks the published envelope delta. [engine.test.ts:219](test/engine.test.ts#L219) | Temporarily declaring an optional runtime `@context` triggered the new assertion. The validator sources were restored before verification. |
+
+### Verification
+
+The isolated scenarios corpus test passed in **7.56 s** on the final run and
+**8.23 s** on the first passing run. Vitest reported **12.39 s** and **13.39 s**
+respectively including transformation and module import. Phase 40l measured
+**6.28 s** for the test before the corpus IRI assertion. Both 40m runs used
+`pnpm exec vitest run --maxWorkers=2 --reporter=verbose test/fixtures-jsonld.test.ts -t 'checks every scenarios document'`.
+
+| Check | Result |
+| --- | --- |
+| `pnpm exec tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Compile-only passed on Node 24.22.3. |
+| `pnpm run typecheck`, `pnpm run lint`, and `node scripts/check-rdf-pipeline.mjs` | Passed. Biome reported 647 warnings and 614 informational diagnostics, matching 40l. The RDF guard reported zero failures and 217 existing allowances. |
+| Workspace `pnpm run check:codegen` | Passed for eight generated projects. |
+| `node scripts/export-schemas.mjs --check`, `node scripts/migrate-fixtures-jsonld.mjs --check`, and `node scripts/check-fixtures-jsonld.mjs` | Passed. The 145 engine digests match and all 145 fixture graphs parse. |
+| Node loader probe with the internal resolver path blocked | Both resolvers produced the same N-Quads SHA-256 for all 145 fixture graphs. |
+| `node scripts/check-no-trace-change.mjs` | The two runs reproduced five paths and preserved the traces, outlines, and manifest rows. The manifest still records 283 paths, 278 runs, zero disagreements, and five blocked paths. |
+| `recordedJoint` | Verified all six recorded trace hashes across `cohort-count`, `platform-income`, and `salary-benchmark`. |
+| The ten 40i Vitest files with `--maxWorkers=2` | All 88 tests passed in 618.31 s, including both oracle files and the full engine suite with `.sparq` present. Phase 40i established that five runnable paths require that adapter. |
+| `git diff --check` and protected-path comparison against `d257ed2da` | Fixture files, runtime schema source, message context and reader, oracle data, manifest, traces, and outlines match the reviewed head. |

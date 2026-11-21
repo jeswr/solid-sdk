@@ -82,9 +82,9 @@ awps:actual a rdf:Property;
     rdfs:range rdf:JSON.
 awps:adapter a rdf:Property;
     rdfs:label "adapter";
-    rdfs:comment "Records adapter in the authored fixture.";
+    rdfs:comment "Records an adapter IRI or local adapter name in the authored fixture.";
     rdfs:domain rdfs:Resource;
-    rdfs:range xsd:string.
+    rdfs:range rdfs:Resource.
 awps:added a rdf:Property;
     rdfs:label "added";
     rdfs:comment "Records added in the authored fixture.";

@@ -4,7 +4,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { fileURLToPath } from "url";
-import { digestOf } from "../dist/core/canonical.js";
+import { digestBytes } from "../dist/core/canonical.js";
 import { loadProfile, loadScenario } from "../dist/engine/load.js";
 import { SCENARIO_CONTEXT } from "../dist/wire/store-contexts.js";
 
@@ -22,10 +22,18 @@ function fixtures(directory) {
     .map((file) => `${directory}/${file}`);
 }
 
+export function engineDigest(document) {
+  // Keyed patches append new array entries in object enumeration order.
+  return digestBytes(JSON.stringify(document));
+}
+
 function engineDigests() {
   return Object.fromEntries(
     groups.flatMap(([directory, load]) =>
-      fixtures(directory).map((file) => [file, digestOf(load(fileURLToPath(new URL(file, root))))]),
+      fixtures(directory).map((file) => [
+        file,
+        engineDigest(load(fileURLToPath(new URL(file, root)))),
+      ]),
     ),
   );
 }

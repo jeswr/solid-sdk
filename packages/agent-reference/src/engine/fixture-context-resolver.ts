@@ -1,6 +1,4 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
-// @ts-expect-error The internal resolver is outside the @types/jsonld API.
-import ContextResolver from "jsonld/lib/ContextResolver.js";
 
 interface ActiveContext {
   clone(): ActiveContext;
@@ -12,10 +10,29 @@ interface ResolveOptions {
   activeCtx: ActiveContext;
 }
 
+type ContextResolverConstructor = new (options: {
+  sharedCache: Map<string, unknown>;
+}) => {
+  resolve(options: ResolveOptions): Promise<unknown>;
+};
+
 const emptyMappings = new Map<string, unknown>();
 // Only the pinned loader's contexts and their finite set of scopes enter this cache.
 const sharedCache = new Map<string, unknown>();
 let cloneForFixture: ActiveContext["clone"] | undefined;
+let resolverConstructor: Promise<ContextResolverConstructor | undefined> | undefined;
+
+function loadResolver() {
+  // @ts-expect-error The internal resolver is outside the @types/jsonld API.
+  resolverConstructor ??= import("jsonld/lib/ContextResolver.js").then(
+    ({ default: Resolver }: { default?: ContextResolverConstructor }) =>
+      typeof Resolver === "function" && typeof Resolver.prototype?.resolve === "function"
+        ? Resolver
+        : undefined,
+    () => undefined,
+  );
+  return resolverConstructor;
+}
 
 function hasNonStringContext(document: unknown): boolean {
   const pending = [document];
@@ -46,13 +63,13 @@ function shallowClone(original: ActiveContext["clone"]): ActiveContext["clone"] 
 }
 
 /** Keep jsonld's per-read resolver and share immutable term definitions when cloning. */
-export function fixtureContextResolver(document: unknown) {
+export async function fixtureContextResolver(document: unknown) {
   // Opaque JSON can contain arbitrary inline contexts. Use jsonld's default
   // resolver for those documents as well as authoring files with context arrays.
   if (hasNonStringContext(document)) return undefined;
-  const resolver: { resolve(options: ResolveOptions): Promise<unknown> } = new ContextResolver({
-    sharedCache,
-  });
+  const ContextResolver = await loadResolver();
+  if (!ContextResolver) return undefined;
+  const resolver = new ContextResolver({ sharedCache });
 
   return {
     resolve(options: ResolveOptions) {

@@ -5,6 +5,7 @@ import { readFileSync } from "fs";
 import jsonld from "jsonld";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
+import { isIri } from "../core/canonical.js";
 import { validateRules } from "../derive/rules.js";
 import { checkDocumentTerms } from "../wire/contexts.js";
 import { SCENARIO_CONTEXT, scenarioContext, scenarioJsonLdLoader } from "../wire/store-contexts.js";
@@ -49,12 +50,51 @@ function typeTrustEntries(trust: Scenario["trust"]): void {
   for (const entries of Object.values(trust.ownLists))
     for (const entry of entries) Object.assign(entry, { "@type": "awp:OwnListEntry" });
   for (const rules of Object.values(trust.sources))
-    for (const rule of rules) Object.assign(rule, { "@type": "awp:SourceAuthorityRule" });
+    for (const rule of rules)
+      Object.assign(rule, {
+        "@type": "awp:SourceAuthorityRule",
+        subjects: rule.subjects === "any" ? "any" : { "@list": rule.subjects },
+      });
   if (!trust.root) return;
   Object.assign(trust.root, { "@type": "awp:TrustRoot" });
   for (const register of trust.root.delegates) {
     Object.assign(register, { "@type": "awp:Register" });
     for (const entry of register.entries) Object.assign(entry, { "@type": "awp:RegisterEntry" });
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function fixtureRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function iriReference(value: unknown) {
+  return typeof value === "string" && isIri(value) ? { "@id": value } : value;
+}
+
+function linkRuleInputs(rules: unknown): void {
+  for (const rule of fixtureRecords(rules))
+    if (Array.isArray(rule.inputsFrom)) rule.inputsFrom = rule.inputsFrom.map(iriReference);
+}
+
+function linkProfileReferences(document: Record<string, unknown>): void {
+  // The same authoring fields also accept local action names and source aliases.
+  for (const rule of fixtureRecords(document.actionClaims))
+    if ("action" in rule) rule.action = iriReference(rule.action);
+  linkRuleInputs(document.rules);
+}
+
+function linkScenarioReferences(document: Record<string, unknown>): void {
+  for (const step of fixtureRecords(document.script)) {
+    if ("adapter" in step) step.adapter = iriReference(step.adapter);
+    if (isRecord(step.protocol)) linkRuleInputs(step.protocol.rules);
+  }
+  for (const grant of fixtureRecords(document.queryGrants)) {
+    if (!isRecord(grant.value)) continue;
+    for (const protocol of fixtureRecords(grant.value.protocol)) linkRuleInputs(protocol.rules);
   }
 }
 
@@ -79,14 +119,17 @@ export async function readCaseGraph(path: string) {
     document["@id"] = root;
     document["@type"] = profile ? "DomainProfile" : "Scenario";
     checkDocumentTerms(document, { allowJson: true, resolveContext: scenarioContext });
-    if (!profile) {
+    if (profile) {
+      linkProfileReferences(document);
+    } else {
       // Check the trust shape before adding RDF types to the authored nodes.
       scenarioSchema.shape.trust.parse(document.trust);
       typeTrustEntries(document.trust as Scenario["trust"]);
+      linkScenarioReferences(document);
     }
     // The streaming parser drops entries from property-indexed arrays of objects.
     // Expand with the same offline JSON-LD processor used by the message reader.
-    const contextResolver = fixtureContextResolver(document);
+    const contextResolver = await fixtureContextResolver(document);
     const options = {
       format: "application/n-quads" as const,
       documentLoader: scenarioJsonLdLoader,
