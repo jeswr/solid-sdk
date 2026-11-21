@@ -25,6 +25,9 @@
     "./scenarios/*.json": "./scenarios/*.json",
     "./schemas/*.json": "./schemas/*.json",
     "./outlines/*.json": "./outlines/*.json",
+    "./vocab/answerable-stores.ttl": "./vocab/answerable-stores.ttl",
+    "./vocab/answerable-stores.shacl.ttl": "./vocab/answerable-stores.shacl.ttl",
+    "./vocab/context/store-v1.jsonld": "./vocab/context/store-v1.jsonld",
     "./vocab/*": "./vocab/*",
     "./wire": {
       "types": "./dist/wire/index.d.ts",

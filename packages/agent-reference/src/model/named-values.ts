@@ -5,7 +5,7 @@ import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { RequiredAs, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { digestBytes, isIri } from "../core/canonical.js";
-import { assertJsonBounds, DEFAULT_LIMITS } from "../core/limits.js";
+import { assertJsonBounds, DEFAULT_LIMITS, type PilotLimits } from "../core/limits.js";
 import type { Json, JsonObject } from "../core/types.js";
 import { AWP } from "../profile/vocabulary.js";
 import { attachmentGraph, attachmentTerm } from "./attachments.js";
@@ -157,16 +157,17 @@ export class NamedValuesNode extends RdfNode {
     value: JsonObject | readonly Json[],
     id: string,
     dataset = new Store(),
+    limits?: PilotLimits,
   ): NamedValuesNode {
     // Object construction is distinct from wire admission. Still bound work and
     // cycles here; the selected carriage limits apply when the graph is written/read.
-    assertJsonBounds(value, { ...DEFAULT_LIMITS, maxStringLength: 1_048_576 });
+    assertJsonBounds(value, limits ?? { ...DEFAULT_LIMITS, maxStringLength: 1_048_576 });
     const node = new NamedValuesNode(id, dataset);
     node.types.add(Array.isArray(value) ? SCHEMA + "ItemList" : AWP + "NamedValueCollection");
     for (const [index, [name, item]] of Object.entries(value).entries()) {
       const entry = new NamedValueNode(scopedId(id, "entry:" + index), dataset);
       entry.initialise(name, index);
-      entry.domainValue = writeValue(item, scopedId(entry.id, "value"), dataset);
+      entry.domainValue = writeValue(item, scopedId(entry.id, "value"), dataset, limits);
       dataset.addQuad(
         node as never,
         DataFactory.namedNode(SCHEMA + "itemListElement"),
@@ -177,13 +178,14 @@ export class NamedValuesNode extends RdfNode {
   }
 }
 
-export function writeValue(value: Json, id: string, dataset: Store): Term {
+export function writeValue(value: Json, id: string, dataset: Store, limits?: PilotLimits): Term {
   if (value === null) {
     const node = new RdfNode(id, dataset);
     node.types.add(AWP + "NullValue");
     return TermAs.term(node);
   }
-  if (typeof value === "object") return TermAs.term(NamedValuesNode.from(value, id, dataset));
+  if (typeof value === "object")
+    return TermAs.term(NamedValuesNode.from(value, id, dataset, limits));
   if (typeof value === "string")
     return isIri(value) && isSafeAbsoluteIri(value)
       ? DataFactory.namedNode(value)

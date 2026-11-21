@@ -155,6 +155,184 @@ const manifest = {
           }
         }
       ]
+    },
+    {
+      "name": "RecordEntry",
+      "typeIris": [
+        "https://w3id.org/jeswr/awp#RecordEntry"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "at",
+          "predicate": "http://www.w3.org/ns/prov#generatedAtTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "entryHash",
+          "predicate": "https://w3id.org/jeswr/awp#entryHash",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "previousEntry",
+          "predicate": "https://w3id.org/jeswr/awp#previousEntry",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "previousEntryHash",
+          "predicate": "https://w3id.org/jeswr/awp#previousEntryHash",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "record",
+          "predicate": "https://w3id.org/jeswr/awp#record",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "recordDigest",
+          "predicate": "https://w3id.org/jeswr/awp#recordDigest",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "recordType",
+          "predicate": "https://w3id.org/jeswr/awp#recordType",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "sequence",
+          "predicate": "https://w3id.org/jeswr/awp#sequence",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "WithheldRecordEntry",
+      "typeIris": [
+        "https://w3id.org/jeswr/awp#WithheldRecordEntry"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "at",
+          "predicate": "http://www.w3.org/ns/prov#generatedAtTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "entryHash",
+          "predicate": "https://w3id.org/jeswr/awp#entryHash",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "previousEntry",
+          "predicate": "https://w3id.org/jeswr/awp#previousEntry",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "previousEntryHash",
+          "predicate": "https://w3id.org/jeswr/awp#previousEntryHash",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "record",
+          "predicate": "https://w3id.org/jeswr/awp#record",
+          "kind": "iri",
+          "collection": "set",
+          "maxCount": 0,
+          "guards": {}
+        },
+        {
+          "name": "recordDigest",
+          "predicate": "https://w3id.org/jeswr/awp#recordDigest",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "recordType",
+          "predicate": "https://w3id.org/jeswr/awp#recordType",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 0,
+          "guards": {}
+        },
+        {
+          "name": "sequence",
+          "predicate": "https://w3id.org/jeswr/awp#sequence",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
     }
   ]
 };

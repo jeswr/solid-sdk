@@ -7,7 +7,7 @@ Brief 22d runs complete pinned JSON-LD messages, with content-addressed attachme
 JCS/JWS or RDFC/Data Integrity authenticity, live message/intent views and full-document
 packet inspection. The two mortgage journeys also run under Data Integrity. Core model
 types alias their wrappers' live surfaces; `check:rdf-pipeline` reports **0 hard failures**
-and **213 existing function/signature allowances**. This is still a partial migration:
+and **216 explicit allowances**. This is still a partial migration:
 legacy input compatibility and remaining policy/store adapters are visible in those allowances;
 action approvals that precede message construction retain their original intent bindings.
 Message-release approvals retain the document and attachment bytes and bind the selected
@@ -296,3 +296,19 @@ it remains linkable and uses the existing local disclosure mechanism. Origin obs
 are unsigned, fetched only at register-bound addresses and cannot be forwarded as evidence.
 The two recorded branch disagreements and the supported protocol subsets are explained in
 [ENGINE-REPORT.md](ENGINE-REPORT.md#brief-26d).
+
+## Durable evidence ledger
+
+`FileLedger` writes new segments as N-Quads. Each entry occupies a named graph
+identified by its existing chain hash. The hash still seals canonical JSON.
+Existing JSONL segments are read as JSONL, including appends to an existing
+current segment until its normal rotation. The configured file name can keep
+its `.jsonl` suffix. Use `readLedgerSegment(path)` for one file or
+`FileLedger.entries()` for the retained ledger. The `segmentFormat: "jsonl"`
+constructor option creates legacy segments for compatibility tests and hosts
+holding a rollout.
+
+The store ontology and SHACL shapes are published in `vocab/answerable-stores.ttl`
+and `vocab/answerable-stores.shacl.ttl`. The separately pinned
+`vocab/context/store-v1.jsonld` context is for display. The engine keeps the scenario
+ledger in memory and builds record graphs only when a consumer requests them.

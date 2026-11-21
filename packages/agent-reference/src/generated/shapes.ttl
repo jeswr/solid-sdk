@@ -19,8 +19,21 @@ awp:MessageAuthorshipShape a sh:NodeShape;
     sh:name "MessageAuthorship";
     sh:property shapes:d1f994c4f5a32b35e4d996e56a69057b6ecda3cb74cd2a97dc6f9c567c6c7aca-MessageAuthorship-actedOnBehalfOf, shapes:d441007c8ef9c38f4bf74cfe9c1fcbca34ed9f1bf34e635a7dfbf954eeab1d13-MessageAuthorship-method;
     sh:targetClass awp:MessageAuthorship.
+awp:RecordEntryShape a sh:NodeShape;
+    sh:name "RecordEntry";
+    sh:property shapes:099844aec4957e7524dd393927f3fe5b54dbd7173180f1e46c799d3c83d5e763-RecordEntry-previousEntryHash, shapes:3b74ceb4ad3fc205e74b91cd357db05e82ff011b6fa8f6f1dacef07beddd0e0c-RecordEntry-sequence, shapes:3e84aafae8130d33f9e129ea97becbc13156a524441307a938ace99ec6593b26-RecordEntry-recordDigest, shapes:54bdb681d6788086091d3825fb97067cad72e2866d159d5d1605771eccdc50eb-RecordEntry-generatedAtTime, shapes:61fd81a6fcbcd57e867a595f4627783db4a20c15cb89b5ea6ec7e90e8ede52e2-RecordEntry-record, shapes:7e0dc23ce3795151f1bf24221ba26906dbb89a670136cc4c2811ea9069cbf4a5-RecordEntry-previousEntry, shapes:b434f85d7ec5c80796e91fab116c6cd129eab921da945d2f8bcbfb834e150b74-RecordEntry-entryHash, shapes:bf63876fd7011d2d9eaae839faa87ce51bd198acf8353726b5b6bd1ef1b72ae4-RecordEntry-recordType;
+    sh:targetClass awp:RecordEntry.
+awp:WithheldRecordEntryShape a sh:NodeShape;
+    sh:name "WithheldRecordEntry";
+    sh:property shapes:4373902ac7e6b0ef191cb06361e26fd4f31090da199358ea2ff024537b3a3a43-WithheldRecordEntry-record, shapes:56fdcd470d88e99c329811e229bc2b0cc9ff37182d6d92de53a6c03b89a1e8fd-WithheldRecordEntry-entryHash, shapes:880e6afa9c782f74021b25299adf6a9df036c253f7e78fdc8c15047f7b69d0b2-WithheldRecordEntry-recordDigest, shapes:9eac728165e217c4f5981eb7a2ca6327d7a52ab1c576d7d1c523e378455b6f68-WithheldRecordEntry-sequence, shapes:cfdfe6c047ec332664fd1707d9cf3bc0ac538a8b79de2c6e21a812096f610b3b-WithheldRecordEntry-previousEntry, shapes:f0eda7ca737babe880caee1f7789f176a57236999a6933038b5fab47430bcd91-WithheldRecordEntry-generatedAtTime, shapes:f190eaa6f4c727d6140f88f8a50254689da0e7b46f2b6821769aab81d7f01d99-WithheldRecordEntry-previousEntryHash, shapes:fcde14f7c4d8ed5caf8a5e6980cd0a7bc261cad2eb0187efaf79a54a793b635b-WithheldRecordEntry-recordType;
+    sh:targetClass awp:WithheldRecordEntry.
 shapes:07c0fc29b8ae8de403fbff9ddce0a52e8a4e8a2c16fe8fee8659c745a50c8d7d-n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "model-output";
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
+shapes:099844aec4957e7524dd393927f3fe5b54dbd7173180f1e46c799d3c83d5e763-RecordEntry-previousEntryHash sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "previousEntryHash";
+    sh:path awp:previousEntryHash.
 shapes:12a2e85bac5e61115e3213aa8dde806ddb206d144185263c5b0f1ddaf6619e5d-GrantRecord-grantee sh:maxCount 1;
     sh:minCount 1;
     sh:name "grantee";
@@ -36,29 +49,70 @@ shapes:2b5a97efc6088564259da4d88ee96c3b376218be0fc36bec431400e25f9718a1-n4 <http
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:2ea6a4b3a18072de46d3e0f7f1de273bba80da07281420e7c89f251f1daebbe8-n0.
 shapes:2ea6a4b3a18072de46d3e0f7f1de273bba80da07281420e7c89f251f1daebbe8-n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/data-use>;
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:f7900094687d00c06ebfdb5b954cdf730531f49927f5ee845e82362f6698edd5-n2.
+shapes:3b74ceb4ad3fc205e74b91cd357db05e82ff011b6fa8f6f1dacef07beddd0e0c-RecordEntry-sequence sh:datatype xsd:integer;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "sequence";
+    sh:path awp:sequence.
+shapes:3e84aafae8130d33f9e129ea97becbc13156a524441307a938ace99ec6593b26-RecordEntry-recordDigest sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "recordDigest";
+    sh:path awp:recordDigest.
+shapes:4373902ac7e6b0ef191cb06361e26fd4f31090da199358ea2ff024537b3a3a43-WithheldRecordEntry-record sh:maxCount 0;
+    sh:name "record";
+    sh:nodeKind sh:IRI;
+    sh:path awp:record.
 shapes:49ba705f849e6fd7a782a4b7fc50169468e6e5dc191f4242d5ac883ca6d8abd5-GrantRecord-wasDerivedFrom sh:maxCount 1;
     sh:name "derivedFrom";
     sh:nodeKind sh:IRI;
     sh:path prov:wasDerivedFrom;
     sh:severity sh:Violation.
+shapes:54bdb681d6788086091d3825fb97067cad72e2866d159d5d1605771eccdc50eb-RecordEntry-generatedAtTime sh:datatype xsd:dateTime;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "at";
+    sh:path prov:generatedAtTime.
+shapes:56fdcd470d88e99c329811e229bc2b0cc9ff37182d6d92de53a6c03b89a1e8fd-WithheldRecordEntry-entryHash sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "entryHash";
+    sh:path awp:entryHash.
 shapes:6122e770278ddc72c2c8a482750df46aec38edb89d01a4a7787fe1c4c5ecf445-GrantRecord-grantor sh:maxCount 1;
     sh:minCount 1;
     sh:name "grantor";
     sh:nodeKind sh:IRI;
     sh:path awp:grantor;
     sh:severity sh:Violation.
+shapes:61fd81a6fcbcd57e867a595f4627783db4a20c15cb89b5ea6ec7e90e8ede52e2-RecordEntry-record sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "record";
+    sh:nodeKind sh:IRI;
+    sh:path awp:record.
 shapes:6f71a376fb821a204bb20e11ff2f88e4c59dad5b68567599b22afce56161b5d5-InvokeBodyChallenge-nonce sh:maxCount 1;
     sh:minCount 1;
     sh:name "nonce";
     sh:nodeKind sh:IRI;
     sh:path awp:nonce;
     sh:severity sh:Violation.
+shapes:7e0dc23ce3795151f1bf24221ba26906dbb89a670136cc4c2811ea9069cbf4a5-RecordEntry-previousEntry sh:maxCount 1;
+    sh:name "previousEntry";
+    sh:nodeKind sh:IRI;
+    sh:path awp:previousEntry.
+shapes:880e6afa9c782f74021b25299adf6a9df036c253f7e78fdc8c15047f7b69d0b2-WithheldRecordEntry-recordDigest sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "recordDigest";
+    sh:path awp:recordDigest.
 shapes:958cc0c82273a38e36fdf70ac7371c0cbf29fd11dbda44aba62d33394b137c77-GrantRecord-digest sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "digest";
     sh:path awp:digest;
     sh:severity sh:Violation.
+shapes:9eac728165e217c4f5981eb7a2ca6327d7a52ab1c576d7d1c523e378455b6f68-WithheldRecordEntry-sequence sh:datatype xsd:integer;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "sequence";
+    sh:path awp:sequence.
 shapes:a1317f29c6500a2501673f94d83b3d5978212e567c5ca7e493ea3ef5e0a0ec4e-n5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/onward-use>;
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:a46fa890ab3e6aeeb57d5f7279d874cac4e5b691f75c3ae943cadcf7931a8250-n3.
 shapes:a46fa890ab3e6aeeb57d5f7279d874cac4e5b691f75c3ae943cadcf7931a8250-n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/delegation>;
@@ -76,6 +130,20 @@ shapes:ac2210a4f20b327d753f21756fde157ea18a3296de23541a9063ea127b76d340-GrantRec
     sh:nodeKind sh:IRI;
     sh:path awp:kind;
     sh:severity sh:Violation.
+shapes:b434f85d7ec5c80796e91fab116c6cd129eab921da945d2f8bcbfb834e150b74-RecordEntry-entryHash sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "entryHash";
+    sh:path awp:entryHash.
+shapes:bf63876fd7011d2d9eaae839faa87ce51bd198acf8353726b5b6bd1ef1b72ae4-RecordEntry-recordType sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "recordType";
+    sh:path awp:recordType.
+shapes:cfdfe6c047ec332664fd1707d9cf3bc0ac538a8b79de2c6e21a812096f610b3b-WithheldRecordEntry-previousEntry sh:maxCount 1;
+    sh:name "previousEntry";
+    sh:nodeKind sh:IRI;
+    sh:path awp:previousEntry.
 shapes:d1f994c4f5a32b35e4d996e56a69057b6ecda3cb74cd2a97dc6f9c567c6c7aca-MessageAuthorship-actedOnBehalfOf sh:maxCount 1;
     sh:minCount 1;
     sh:name "onBehalfOf";
@@ -89,5 +157,19 @@ shapes:d441007c8ef9c38f4bf74cfe9c1fcbca34ed9f1bf34e635a7dfbf954eeab1d13-MessageA
     sh:name "method";
     sh:path awp:method;
     sh:severity sh:Violation.
+shapes:f0eda7ca737babe880caee1f7789f176a57236999a6933038b5fab47430bcd91-WithheldRecordEntry-generatedAtTime sh:datatype xsd:dateTime;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "at";
+    sh:path prov:generatedAtTime.
+shapes:f190eaa6f4c727d6140f88f8a50254689da0e7b46f2b6821769aab81d7f01d99-WithheldRecordEntry-previousEntryHash sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "previousEntryHash";
+    sh:path awp:previousEntryHash.
 shapes:f7900094687d00c06ebfdb5b954cdf730531f49927f5ee845e82362f6698edd5-n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/awp#grant-kind/access>;
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:a1317f29c6500a2501673f94d83b3d5978212e567c5ca7e493ea3ef5e0a0ec4e-n5.
+shapes:fcde14f7c4d8ed5caf8a5e6980cd0a7bc261cad2eb0187efaf79a54a793b635b-WithheldRecordEntry-recordType sh:datatype xsd:string;
+    sh:maxCount 0;
+    sh:name "recordType";
+    sh:path awp:recordType.

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 /**
- * The evidence ledger: an append-only, hash-chained JSONL log of the separate records
+ * The evidence ledger: an append-only, hash-chained log of the separate records
  * (verification, representation, source authority, authorisation, agreement, grant,
  * activity, outcome, rejection, message digests).
  *
@@ -29,9 +29,12 @@ import {
   rmSync,
   // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 } from "fs";
+import { DataFactory } from "n3";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join } from "path";
 import { digestOf } from "../core/canonical.js";
+import { recordEntryDataset, recordEntryFrom } from "../model/store/record.js";
+import { readNQuads, writeNQuads } from "../wire/store-quads.js";
 import { fsyncDir, writeFileDurable } from "./state.js";
 
 /** Any record with a `type`; stored as its JSON form. */
@@ -145,17 +148,73 @@ export interface LedgerBounds {
 
 export const DEFAULT_LEDGER_BOUNDS: LedgerBounds = { segmentMaxEntries: 5_000, maxSegments: 40 };
 
-function readSegment(path: string): LedgerEntry[] {
-  if (!existsSync(path)) return [];
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .filter((l) => l.trim().length > 0)
-    .map((l) => JSON.parse(l) as LedgerEntry);
+export interface FileLedgerOptions extends Partial<LedgerBounds> {
+  /** Format for segments created by this writer. Existing segments keep their format. */
+  readonly segmentFormat?: "nquads" | "jsonl";
+}
+
+type SegmentFormat = NonNullable<FileLedgerOptions["segmentFormat"]>;
+// Every block ends with the entry's own entryHash statement. Matching the
+// subject and predicate keeps identical text inside a literal from closing a block.
+const ENTRY_BOUNDARY =
+  /^\s*<(urn:awp:record:[a-f0-9]{64})>[ \t]+<https:\/\/w3id\.org\/jeswr\/awp#entryHash>[ \t]+/;
+
+function readLegacyLine(line: string): LedgerEntry {
+  return JSON.parse(line) as LedgerEntry;
+}
+
+function writeLegacyLine(path: string, entry: LedgerEntry): void {
+  appendFileSync(path, `${JSON.stringify(entry)}\n`, { encoding: "utf8" });
+}
+
+function writeRecordBlock(path: string, entry: LedgerEntry): void {
+  const lines = writeNQuads(recordEntryDataset(entry)).split("\n");
+  const index = lines.findIndex((line) => ENTRY_BOUNDARY.test(line));
+  if (index < 0) throw new TypeError("Missing record entry hash");
+  const [hashLine] = lines.splice(index, 1);
+  lines.splice(-1, 0, hashLine!);
+  appendFileSync(path, lines.join("\n"), { encoding: "utf8" });
+}
+
+function readSegment(path: string) {
+  const text = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const first = text.trimStart()[0];
+  const format: SegmentFormat | undefined = first === "{" ? "jsonl" : first ? "nquads" : undefined;
+  const rows: { entry: LedgerEntry; end: number }[] = [];
+  let end = 0;
+  let start = 0;
+  for (const line of text.split("\n")) {
+    end += line.length + 1;
+    if (!line.trim()) continue;
+    if (format === "jsonl") {
+      rows.push({ entry: readLegacyLine(line), end });
+      continue;
+    }
+    const match = ENTRY_BOUNDARY.exec(line);
+    if (!match?.[1]) continue;
+    if (end > text.length) throw new TypeError("Incomplete record block");
+    const graph = match[1];
+    const dataset = readNQuads(text.slice(start, end));
+    if (dataset.countQuads(null, null, null, DataFactory.namedNode(graph)) !== dataset.size)
+      throw new TypeError("Record block contains another graph");
+    const entry = recordEntryFrom(dataset, graph);
+    if (entry.record === null) throw new TypeError("Stored ledger entries require a record");
+    rows.push({ entry: entry as LedgerEntry, end });
+    start = end;
+  }
+  if (format === "nquads" && text.slice(start).trim())
+    throw new TypeError("Incomplete record block");
+  return { format, rows, text };
+}
+
+/** Read one retained segment, choosing its durable format from the first non-blank byte. */
+export function readLedgerSegment(path: string): LedgerEntry[] {
+  return readSegment(path).rows.map(({ entry }) => entry);
 }
 
 /**
- * File-backed ledger: each append is one fsync'd JSONL line in the current segment. Only
- * the tail (last entry, current count) is kept in memory.
+ * File-backed ledger: each append writes and fsyncs one block in the current segment.
+ * Only the tail (last entry, current count and format) is kept in memory.
  */
 export class FileLedger implements EvidenceLedger {
   readonly requiresTrustedCheckpoint = true;
@@ -164,15 +223,20 @@ export class FileLedger implements EvidenceLedger {
   private committed = false;
   private pruningDeferred = false;
   private readonly bounds: LedgerBounds;
+  private readonly segmentFormat: SegmentFormat;
+  private currentFormat?: SegmentFormat;
 
   constructor(
     private readonly path: string,
-    bounds: Partial<LedgerBounds> = {},
+    bounds: FileLedgerOptions = {},
   ) {
     this.bounds = { ...DEFAULT_LEDGER_BOUNDS, ...bounds };
+    this.segmentFormat = bounds.segmentFormat ?? "nquads";
     const current = readSegment(path);
-    this.currentCount = current.length;
-    this.last = current.at(-1) ?? readSegment(this.segments().at(-1) ?? "").at(-1);
+    this.currentFormat = current.format;
+    this.currentCount = current.rows.length;
+    this.last =
+      current.rows.at(-1)?.entry ?? readLedgerSegment(this.segments().at(-1) ?? "").at(-1);
     this.committed = this.last?.recordDigest !== undefined;
   }
 
@@ -190,28 +254,46 @@ export class FileLedger implements EvidenceLedger {
 
   recoverUncommittedSuffix(head: LedgerHead): void {
     const paths = [...this.segments(), this.path];
-    const segments = paths.map((path) => ({
-      path,
-      entries: readSegment(path).filter((entry) => entry.seq <= head.seq),
-    }));
-    const prefix = segments.flatMap(({ entries }) => entries);
+    const prefix: LedgerEntry[] = [];
+    let suffixStarted = false;
+    const segments = paths.map((path) => {
+      const segment = readSegment(path);
+      const kept = [];
+      for (const row of segment.rows) {
+        if (row.entry.seq > head.seq) {
+          suffixStarted = true;
+        } else {
+          if (suffixStarted)
+            throw new Error("Cannot resume the evidence ledger at an invalid saved head");
+          kept.push(row);
+          prefix.push(row.entry);
+        }
+      }
+      return { path, ...segment, kept };
+    });
     if (!verifyLedgerAtHead(prefix, head).ok)
       throw new Error("Cannot resume the evidence ledger at an invalid saved head");
     // Drop the newest segments first. Every intermediate state retains the saved head.
     this.currentCount = 0;
-    for (const segment of segments.reverse()) {
-      const { path, entries } = segment;
-      if (entries.length === 0) {
+    this.currentFormat = undefined;
+    for (const { path, kept, rows, text, format } of segments.reverse()) {
+      const tail = kept.at(-1);
+      if (!tail) {
         rmSync(path, { force: true });
         fsyncDir(dirname(this.path));
         continue;
       }
-      const tmp = `${this.path}.recovery-tmp`;
-      rmSync(tmp, { force: true });
-      writeFileDurable(tmp, entries.map((entry) => `${JSON.stringify(entry)}\n`).join(""), "wx");
-      renameSync(tmp, path);
-      fsyncDir(dirname(this.path));
-      this.currentCount = path === this.path ? entries.length : 0;
+      if (kept.length !== rows.length) {
+        const tmp = `${this.path}.recovery-tmp`;
+        rmSync(tmp, { force: true });
+        writeFileDurable(tmp, text.slice(0, tail.end), "wx");
+        renameSync(tmp, path);
+        fsyncDir(dirname(this.path));
+      }
+      if (path === this.path) {
+        this.currentCount = kept.length;
+        this.currentFormat = format;
+      }
       break;
     }
     this.last = prefix.at(-1);
@@ -231,7 +313,9 @@ export class FileLedger implements EvidenceLedger {
 
   private writeLine(entry: LedgerEntry): void {
     const existed = existsSync(this.path);
-    appendFileSync(this.path, `${JSON.stringify(entry)}\n`, { encoding: "utf8" });
+    const format = this.currentFormat ?? this.segmentFormat;
+    if (format === "jsonl") writeLegacyLine(this.path, entry);
+    else writeRecordBlock(this.path, entry);
     const fd = openSync(this.path, "r");
     try {
       fsyncSync(fd);
@@ -240,6 +324,7 @@ export class FileLedger implements EvidenceLedger {
     }
     if (!existed) fsyncDir(dirname(this.path));
     this.last = entry;
+    this.currentFormat = format;
     this.currentCount++;
   }
 
@@ -268,6 +353,7 @@ export class FileLedger implements EvidenceLedger {
     renameSync(this.path, `${this.path}.seg-${String(next).padStart(6, "0")}`);
     fsyncDir(dirname(this.path));
     this.currentCount = 0;
+    this.currentFormat = undefined;
     if (!this.pruningDeferred) this.preparePruning(at)?.();
   }
 
@@ -278,7 +364,7 @@ export class FileLedger implements EvidenceLedger {
     const pruned = archived.slice(0, excess);
     // Every possible retained prefix needs a checkpoint if deletion is interrupted.
     for (const path of pruned) {
-      const lastPruned = readSegment(path).at(-1);
+      const lastPruned = readLedgerSegment(path).at(-1);
       if (!lastPruned) throw Error("Cannot checkpoint an empty ledger segment");
       this.writeLine(
         this.sealNext(
@@ -303,7 +389,7 @@ export class FileLedger implements EvidenceLedger {
 
   /** All retained entries (archived segments + current), oldest first. Bounded by policy. */
   entries(): readonly LedgerEntry[] {
-    return [...this.segments().flatMap(readSegment), ...readSegment(this.path)];
+    return [...this.segments().flatMap(readLedgerSegment), ...readLedgerSegment(this.path)];
   }
 }
 

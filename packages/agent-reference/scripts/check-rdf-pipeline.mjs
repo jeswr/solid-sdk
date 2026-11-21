@@ -19,6 +19,28 @@ const objectModels = new Set([
 const jsonNames = new Set(["Json", "JsonObject"]);
 const checkedAreas = /^(gates|mechanisms|derive|runtime)\//;
 
+// Exact write scopes for lock records, the v1 state snapshot, and legacy JSONL.
+const storeJsonWrites = new Map([
+  ["src/store/state.ts/FileStateStore.acquire", 1],
+  ["src/store/state.ts/FileStateStore.recoverIfStale", 1],
+  ["src/store/state.ts/FileStateStore.save", 1],
+  ["src/store/ledger.ts/writeLegacyLine", 1],
+]);
+const storeJsonReaders = new Set([
+  "src/store/state.ts/readLock",
+  "src/store/state.ts/FileStateStore.load",
+  "src/store/state.ts/MemoryStateStore.load",
+  "src/store/ledger.ts/readLegacyLine",
+]);
+const fileWriters = new Set([
+  "writeFile",
+  "writeFileSync",
+  "appendFile",
+  "appendFileSync",
+  "writeSync",
+  "writeFileDurable",
+]);
+
 function sources(directory) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -100,6 +122,45 @@ export function checkRdfPipeline(root = packageRoot, allowlist = []) {
     return found;
   }
 
+  function reference(node) {
+    const symbol = checker.getSymbolAtLocation(node);
+    return symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+  }
+
+  function writerArgument(call) {
+    const callee = call.expression;
+    if (ts.isPropertyAccessExpression(callee))
+      return fileWriters.has(callee.name.text) ? call.arguments[1] : undefined;
+    if (!ts.isIdentifier(callee)) return undefined;
+    const declaration = reference(callee);
+    const name =
+      declaration && ts.isImportSpecifier(declaration)
+        ? (declaration.propertyName ?? declaration.name).text
+        : callee.text;
+    return fileWriters.has(name) ? call.arguments[1] : undefined;
+  }
+
+  function jsonOrigins(node, found, seen, assignments) {
+    if (ts.isIdentifier(node)) {
+      const declaration = reference(node);
+      if (!declaration || !ts.isVariableDeclaration(declaration) || seen.has(declaration)) return;
+      seen.add(declaration);
+      if (declaration.initializer) jsonOrigins(declaration.initializer, found, seen, assignments);
+      for (const expression of assignments.get(declaration) ?? [])
+        jsonOrigins(expression, found, seen, assignments);
+      return;
+    }
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression.getText(node.getSourceFile());
+      if (callee === "JSON.stringify") {
+        found.add(node);
+        return;
+      }
+      if (callee === "JSON.parse") return;
+    }
+    ts.forEachChild(node, (child) => jsonOrigins(child, found, seen, assignments));
+  }
+
   for (const file of files) {
     const source = program.getSourceFile(file);
     if (!source) continue;
@@ -112,7 +173,26 @@ export function checkRdfPipeline(root = packageRoot, allowlist = []) {
         rule,
         detail,
       });
+    const store = path.startsWith("store/");
+    const writePayloads = [];
+    const assignments = new Map();
     function visit(node) {
+      if (store && ts.isCallExpression(node)) {
+        const payload = writerArgument(node);
+        if (payload) writePayloads.push(payload);
+      }
+      if (
+        store &&
+        ts.isBinaryExpression(node) &&
+        ts.isIdentifier(node.left) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        const target = reference(node.left);
+        if (target && ts.isVariableDeclaration(target)) {
+          if (!assignments.has(target)) assignments.set(target, []);
+          assignments.get(target).push(node.right);
+        }
+      }
       if (
         path === "core/types.ts" &&
         (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
@@ -157,7 +237,7 @@ export function checkRdfPipeline(root = packageRoot, allowlist = []) {
             ts.isCallExpression(input) &&
             input.expression.getText(source) === "JSON.stringify";
           const localState =
-            path.startsWith("store/") ||
+            storeJsonReaders.has(`src/${path}/${scopeOf(node, source)}`) ||
             path === "engine/load.ts" ||
             path === "setup.ts" ||
             path === "domains/purpose-store.ts" ||
@@ -171,6 +251,10 @@ export function checkRdfPipeline(root = packageRoot, allowlist = []) {
       ts.forEachChild(node, visit);
     }
     visit(source);
+    const storeWrites = new Set();
+    for (const payload of writePayloads) jsonOrigins(payload, storeWrites, new Set(), assignments);
+    for (const node of storeWrites)
+      report(node, "store-json-write", "store file writes must serialize RDF");
   }
 
   const counts = new Map();
@@ -252,7 +336,11 @@ export function checkRdfPipeline(root = packageRoot, allowlist = []) {
     const key = `${finding.file}/${finding.function}/${finding.rule}`;
     const count = (counts.get(key) ?? 0) + 1;
     counts.set(key, count);
-    if (count > (allowances.get(key)?.count ?? 0)) failures.push(finding);
+    const allowed =
+      finding.rule === "store-json-write" && resolve(root) === resolve(packageRoot)
+        ? storeJsonWrites.get(`${finding.file}/${finding.function}`)
+        : allowances.get(key)?.count;
+    if (count > (allowed ?? 0)) failures.push(finding);
     else exempted++;
   }
   // Reductions must remove/shrink their allowance. A renamed function cannot leave a spare
