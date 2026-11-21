@@ -14,13 +14,18 @@ import { checkedProposalResult, proposalResultKey } from "./proposal-results.js"
 import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
 
 /** Synthetic peers and an in-memory reference gate for offline host tests. */
-export async function createTestGate(now = () => new Date("2026-10-19T08:00:00Z")) {
+export async function createTestGate(
+  now = () => new Date("2026-10-19T08:00:00Z"),
+  identity = {
+    actor: "https://receiver.example/agent#id",
+    party: "https://receiver.example/owner#id",
+  },
+) {
   const cast = new Cast(now);
   const receiver = await cast.add(
     {
       name: "receiver",
-      actor: "https://receiver.example/agent#id",
-      party: "https://receiver.example/owner#id",
+      ...identity,
     },
     denyAllMandate,
     [],

@@ -103,14 +103,23 @@ export async function createOutboundGate(rt: Runtime, directory: string, mapping
     return checked.message;
   }
 
-  async function writeReceipt(name: string, receipt: Receipt) {
-    await writePrivate(directory, name, canonicalJson(receipt));
+  async function writeReceipt(
+    name: string,
+    receipt: Receipt,
+    prepare?: (digest: string) => Promise<void> | undefined,
+  ) {
+    const text = canonicalJson(receipt);
+    await prepare?.(digestBytes(text));
+    await writePrivate(directory, name, text);
     receipts.set(name, receipt);
   }
 
   return {
     verifyOwn,
-    async release(proposal: ActionProposal): Promise<ProposalRelease> {
+    async release(
+      proposal: ActionProposal,
+      prepare?: (result: ProposalRelease, name: string, digest: string) => Promise<void>,
+    ): Promise<ProposalRelease> {
       const mapped = mapping.plan(proposal);
       if (!mapped) return refused("unsupported-operation");
       const { conversation } = mapped;
@@ -153,8 +162,11 @@ export async function createOutboundGate(rt: Runtime, directory: string, mapping
       const mandate = rt.activeMandateDigest();
       const step = await rt.sendMessage(conversation, plan, { compactJws: true });
       async function recordRefusal(reason: string) {
-        await writeReceipt(name, { state: "refused", proposal: proposalDigest, reason });
-        return refused(reason);
+        const result = refused(reason);
+        await writeReceipt(name, { state: "refused", proposal: proposalDigest, reason }, (digest) =>
+          prepare?.(result, name, digest),
+        );
+        return result;
       }
       const [out] = step.outbound;
       if (step.disposition !== "local" || step.outbound.length !== 1 || !out)
@@ -167,14 +179,18 @@ export async function createOutboundGate(rt: Runtime, directory: string, mapping
         return recordRefusal("mandate-invalid");
       const result = render(out);
       if (!result.ok) return recordRefusal(result.reason);
-      await writeReceipt(name, {
-        state: "released",
-        proposal: proposalDigest,
-        conversation: out.conversation,
-        id: out.id,
-        wire: digestBytes(result.renderable.compactJws),
-        mandate,
-      });
+      await writeReceipt(
+        name,
+        {
+          state: "released",
+          proposal: proposalDigest,
+          conversation: out.conversation,
+          id: out.id,
+          wire: digestBytes(result.renderable.compactJws),
+          mandate,
+        },
+        (digest) => prepare?.(result, name, digest),
+      );
       return result;
     },
   };

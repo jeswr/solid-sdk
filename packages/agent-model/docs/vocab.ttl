@@ -482,3 +482,8 @@ agent:wireFormat rdfs:comment "Protection format of a signed message envelope.";
     rdfs:label "wireFormat".
 agent:withApproval rdfs:comment "Policy set requiring a matching verified owner approval.";
     rdfs:label "withApproval".
+
+agent:anchoredSeq rdfs:comment "Sequence of the audit entry sealed by a record anchor.".
+agent:anchoredHash rdfs:comment "Hash of the audit entry sealed by a record anchor.".
+agent:gateSeq rdfs:comment "Sequence of the reference ledger head recorded with a gate decision.".
+agent:gateHash rdfs:comment "Hash of the reference ledger head recorded with a gate decision.".

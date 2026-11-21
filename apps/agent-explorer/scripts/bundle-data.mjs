@@ -1,10 +1,20 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // Bundles data/model.json, data/scenarios.json, data/roadmap.json (if present), traces/*.json,
 // tours/*.json and the spec documents in ../../docs/specs/agent/*.md (if present) into
 // data/bundle.js (metadata and summaries), plus one fetchable JSON file per trace.
 // Usage: node scripts/bundle-data.mjs
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import traceData from '../js/trace-data.js';
@@ -167,17 +177,45 @@ const roadmapPath = join(root, 'data/roadmap.json');
 const isPublic = process.env.AX_PUBLIC === '1';
 const roadmap = !isPublic && existsSync(roadmapPath) ? readJson(roadmapPath) : null;
 
-const specsDir = join(root, '../../docs/specs/agent');
-const specs = existsSync(specsDir)
-  ? readdirSync(specsDir)
-      .filter((f) => f.endsWith('.md'))
-      .sort()
-      .map((f) => {
-        const markdown = readFileSync(join(specsDir, f), 'utf8');
-        const h = markdown.match(/^#\s+(.+?)\s*#*\s*$/m);
-        return { id: f.replace(/\.md$/, ''), title: h ? h[1] : f.replace(/\.md$/, ''), markdown };
-      })
-  : [];
+function readSpecs() {
+  const specsDir = join(realpathSync(join(root, '../..')), 'docs/specs/agent');
+  const stats = lstatSync(specsDir, { throwIfNoEntry: false });
+  if (!stats) return [];
+  if (stats.isSymbolicLink() || (stats.isDirectory() && realpathSync(specsDir) !== specsDir)) {
+    console.warn(`skip ${specsDir}: symlink or directory resolves outside the specs path`);
+    return [];
+  }
+  if (!stats.isDirectory()) {
+    console.warn(`skip ${specsDir}: expected a directory`);
+    return [];
+  }
+
+  const specs = [];
+  for (const file of readdirSync(specsDir).sort()) {
+    if (!file.endsWith('.md')) continue;
+    const path = join(specsDir, file);
+    const entry = lstatSync(path);
+    if (entry.isSymbolicLink()) {
+      console.warn(`skip ${path}: symlink`);
+      continue;
+    }
+    if (!entry.isFile()) {
+      console.warn(`skip ${path}: expected a regular file`);
+      continue;
+    }
+    const resolved = realpathSync(path);
+    if (dirname(resolved) !== specsDir) {
+      console.warn(`skip ${path}: resolves outside the specs directory`);
+      continue;
+    }
+    const markdown = readFileSync(resolved, 'utf8');
+    const heading = markdown.match(/^#\s+(.+?)\s*#*\s*$/m);
+    const id = file.slice(0, -3);
+    specs.push({ id, title: heading?.[1] ?? id, markdown });
+  }
+  return specs;
+}
+const specs = readSpecs();
 
 const payload = { model, scenarios, traces, tours, specs };
 if (roadmap) payload.roadmap = roadmap;

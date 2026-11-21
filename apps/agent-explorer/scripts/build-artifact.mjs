@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Fable 5.2
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // Builds a copy of the explorer that can be published as a hosted page whose host wraps the
 // file in its own document skeleton: the output index.html has no doctype, html, head or body
 // tags, only the title, metas, stylesheet link and the body content. All other files are
@@ -25,7 +26,14 @@ const keep = head
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'index.html'), `${keep}\n${body.trim()}\n`);
-for (const f of ['styles.css', 'js', 'data/bundle.js', 'data/traces']) {
+for (const f of [
+  'styles.css',
+  'js',
+  'data/bundle.js',
+  'data/traces',
+  'paper/index.html',
+  'paper/figure-1.svg',
+]) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }
 // The walkthrough video is not committed (see media/README.md); copy it when present.

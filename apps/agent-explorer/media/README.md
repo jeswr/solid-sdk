@@ -2,8 +2,9 @@
 # Walkthrough video
 
 The home page plays `answerable-walkthrough.mp4` from this folder, with the captions in
-`answerable-walkthrough.vtt`. The video is not committed. It is a 1280-pixel re-encode of the
-narrated walkthrough, kept under 15 MB so the hosted preview can carry it:
+`answerable-walkthrough.vtt`. The 1280-pixel re-encode of the narrated walkthrough is committed, because the deploy
+workflow (`.github/workflows/answerable-explorer.yml`) builds the public site from the
+repository. Keep it under 15 MB, and replace the file rather than adding another:
 
 ```sh
 ffmpeg -i answerable-walkthrough-source.mp4 -map 0:v:0 -vf scale=1280:-2 -c:v libx264 \
@@ -13,5 +14,4 @@ ffmpeg -i answerable-walkthrough-source.mp4 -map 0:v:0 -map 0:a:0 -vf scale=1280
   -movflags +faststart answerable-walkthrough.mp4
 ```
 
-The build scripts copy this folder when it exists. Without the video the page shows an empty
-player.
+The build scripts copy this folder. The source recordings stay out of the repository.
