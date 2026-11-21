@@ -53,7 +53,7 @@ and TDD is possible: write the failing test (unit or e2e), implement, go green, 
 (Install the `test-driven-development` skill from `obra/superpowers` for the discipline; this
 skill is the Solid-specific machinery.)
 
-Two layers, per [`AGENTS.md`](../../AGENTS.md) Part 2 §Testing:
+Two layers (see also [guide chapter 9](../../docs/guide/09-testing.md)):
 
 | Layer | Tool | Scope |
 |---|---|---|
