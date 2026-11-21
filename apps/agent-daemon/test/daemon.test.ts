@@ -2,8 +2,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { AuditWriter, auditArtifact, MemoryLedger, PodMirror } from "@jeswr/agent-audit";
-import { type BridgeMessage, ChannelParseError, DIRECT } from "@jeswr/agent-channels";
+import {
+  type BridgeMessage,
+  ChannelParseError,
+  DIRECT,
+  encodeEnvelope,
+  type InboundRawMessage,
+  readEnvelope,
+} from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
+import { inspectEmail } from "@jeswr/agent-channels/email-mime";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import {
   type ApprovalContext,
@@ -31,6 +39,9 @@ import {
 } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
+import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
+import { Cast, craftSigned, mandateOf } from "@jeswr/agent-reference/scenarios/common";
+import { parseEmail } from "@jeswr/agentic-legacy-bridge";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
   buildBitstringStatusListCredential,
@@ -46,8 +57,10 @@ import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createCliHost, runCli } from "../src/cli.js";
 import { createDaemon, pollInterval } from "../src/daemon.js";
+import { createInboundGate } from "../src/gate.js";
+import { initGate } from "../src/gate-setup.js";
 import { createLocalState } from "../src/local.js";
-import { createMemoryPod, createMemoryState } from "../src/testing.js";
+import { createMemoryPod, createMemoryState, createTestGate } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
 
@@ -116,7 +129,7 @@ function harness() {
       items: [{ id: "seed", raw: text }],
       next: "one",
     })),
-    parse: vi.fn(() => message),
+    parse: vi.fn((_item: InboundRawMessage) => message),
   };
   const reader = createGateway({
     provider: "openai",
@@ -130,6 +143,17 @@ function harness() {
     account: "fixture",
   }).reader;
   const options: DaemonOptions = {
+    gate: {
+      async check({ message }) {
+        const digest = `sha-256:${message.rawSha256}`;
+        try {
+          readEnvelope(message.jsonLdBlocks?.[0] ?? "");
+          return { outcome: "admitted", digest };
+        } catch {
+          return { outcome: "unstructured", digest };
+        }
+      },
+    },
     workspace,
     notifications,
     executor,
@@ -1033,12 +1057,317 @@ it("executes and audits daemon proposal evidence using the same signed approval"
     breaches: [],
   });
 });
-it("proposes only for structured or independently owner-flagged messages", async () => {
-  for (const flagged of [false, true]) {
+it("requires an inbound gate", () => {
+  const h = harness();
+  expect(() => createDaemon({ ...h.options, gate: undefined } as unknown as DaemonOptions)).toThrow(
+    "Missing inbound gate",
+  );
+});
+
+it("opens the durable gate under the process lease and closes it after executor drain", async () => {
+  const h = harness();
+  const root = await mkdtemp(join(tmpdir(), "awp-gate-lease-"));
+  const directory = join(root, "gate");
+  try {
+    await initGate({
+      directory,
+      ownerDir: join(root, "owner"),
+      agentWebId: AGENT_ID,
+      ownerWebId: OWNER,
+      now: () => new Date(AT),
+      confirm: async () => true,
+    });
+    const gate = createInboundGate({ directory, now: () => new Date(AT) });
+    const open = gate.open?.bind(gate);
+    if (!open) throw new Error("Missing durable gate open");
+    let closed = false;
+    vi.spyOn(gate, "open").mockImplementation(async (identity) => {
+      expect(h.state.held()).toBe(true);
+      const runtime = await open(identity);
+      const close = runtime.close.bind(runtime);
+      vi.spyOn(runtime, "close").mockImplementation(async () => {
+        expect(h.state.held()).toBe(true);
+        expect(h.executor.drain).toHaveBeenCalledOnce();
+        await close();
+        closed = true;
+      });
+      return runtime;
+    });
+    await createDaemon({ ...h.options, gate, accounts: [] }).once();
+    expect(gate.open).toHaveBeenCalledExactlyOnceWith({ actor: AGENT_ID, party: OWNER });
+    expect(closed).toBe(true);
+    expect(h.state.held()).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "admitted",
+  "unstructured",
+  "refused",
+] as const)("routes a structured message with a %s verdict", async (outcome) => {
+  const h = harness();
+  const verdict = { outcome, digest: `sha-256:${h.message.rawSha256}` };
+  const gate = { check: vi.fn(async () => verdict) };
+  const reader = vi.spyOn(h.options.gateway.reader, "extract");
+  await createDaemon({ ...h.options, gate }).once();
+  expect(h.ingest.parse).toHaveBeenCalledOnce();
+  expect(gate.check).toHaveBeenCalledExactlyOnceWith({
+    account: "fixture",
+    binding: "direct",
+    message: h.message,
+  });
+  expect(reader).toHaveBeenCalledTimes(outcome === "refused" ? 0 : 1);
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(outcome === "admitted" ? 1 : 0);
+  if (outcome === "admitted") {
+    expect(h.options.gateway.proposer.propose).toHaveBeenCalledWith(
+      [expect.objectContaining({ gate: verdict })],
+      h.options.proposerContext,
+    );
+  }
+  const resources = [...h.pod.resources.keys()];
+  expect(resources.some((path) => path.endsWith(".txt"))).toBe(outcome !== "refused");
+  expect(h.ledger.entries().some(({ record }) => record.type === "ingest")).toBe(
+    outcome !== "refused",
+  );
+  expect(h.state.cursors.get("fixture")).toBe("one");
+});
+
+it("rolls back the entire batch before any inbox write when a gate check throws", async () => {
+  const h = harness();
+  h.ingest.list.mockResolvedValue({
+    items: [
+      { id: "first", raw: h.message.textBody },
+      { id: "second", raw: h.message.textBody },
+    ],
+    next: "one",
+  });
+  const gate = {
+    check: vi
+      .fn()
+      .mockResolvedValueOnce({ outcome: "admitted", digest: `sha-256:${h.message.rawSha256}` })
+      .mockRejectedValueOnce(new Error("Gate unavailable")),
+  };
+  const reader = vi.spyOn(h.options.gateway.reader, "extract");
+  await expect(createDaemon({ ...h.options, gate }).once()).rejects.toThrow("Gate unavailable");
+  expect(h.ingest.parse).toHaveBeenCalledTimes(2);
+  expect(
+    h.pod.requests.some(({ url, method }) => method === "PUT" && url.includes("/direct/")),
+  ).toBe(false);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.ledger.entries()).toHaveLength(0);
+  expect(reader).not.toHaveBeenCalled();
+  expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["bad-signature", {}],
+  ["unknown-key", {}],
+  ["expired", { expiresAt: "2026-10-19T07:50:00Z", createdAt: "2026-10-19T07:00:00Z" }],
+  ["not-yet-valid", { createdAt: "2026-10-19T08:10:00Z" }],
+  ["wrong-audience", { to: { actor: "https://other.example/agent#id" } }],
+  ["unsupported-configuration", { configuration: "urn:example:unsupported-configuration" }],
+  ["replay-conflict", {}],
+  ["conflicting-structured-copies", {}],
+  ["human-parity-mismatch", {}],
+  ["malformed", {}],
+  ["bounds-exceeded", {}],
+] as const)("refuses %s through the daemon's inbound gate", async (reason, changes) => {
+  const { gate, peer, receiver, sign, now } = await createTestGate();
+  try {
+    const message = {
+      profile: PILOT_PROFILE,
+      configuration: CONFIG_ED25519,
+      id: "urn:uuid:00000000-0000-4000-8000-000000000001",
+      conversation: "urn:uuid:00000000-0000-4000-8000-100000000001",
+      kind: "describe",
+      from: { actor: peer.identity.actor },
+      to: { actor: receiver.identity.actor },
+      createdAt: now().toISOString(),
+      expiresAt: new Date(now().getTime() + 3_600_000).toISOString(),
+      body: {},
+    };
+    function input(blocks: string[], warnings: string[] = []) {
+      const raw = blocks.join("\n");
+      return {
+        account: "fixture",
+        binding: "direct",
+        message: {
+          channel: "direct",
+          textBody: raw,
+          signals: {},
+          rawSha256: digestBytes(raw).slice(8),
+          rawByteLength: Buffer.byteLength(raw),
+          rawMediaType: "application/json",
+          warnings,
+          jsonLdBlocks: blocks,
+        },
+      };
+    }
+    const jws = await sign({ ...message, ...changes });
+    let blocks = [encodeEnvelope(jws)];
+    const warnings = [];
+    switch (reason) {
+      case "bad-signature": {
+        const [header, payload, signature] = jws.split(".") as [string, string, string];
+        const bytes = Buffer.from(signature, "base64url");
+        bytes[0] = (bytes[0] as number) ^ 1;
+        blocks = [encodeEnvelope(`${header}.${payload}.${bytes.toString("base64url")}`)];
+        break;
+      }
+      case "unknown-key": {
+        const stranger = await new Cast(now).add(
+          { ...peer.identity, name: "unpinned" },
+          mandateOf("deny-all", []),
+          [],
+        );
+        blocks = [encodeEnvelope((await craftSigned(stranger, message)).jws)];
+        break;
+      }
+      case "replay-conflict":
+        expect(await gate.check(input(blocks))).toMatchObject({ outcome: "admitted" });
+        blocks = [encodeEnvelope(await sign({ ...message, expiresAt: "2026-10-19T09:01:00Z" }))];
+        break;
+      case "conflicting-structured-copies":
+        blocks.push(encodeEnvelope("abc.def.ghi"));
+        break;
+      case "human-parity-mismatch":
+        warnings.push("human-parity-unverified");
+        break;
+      case "malformed":
+        blocks = ['{"@type":"agent:SignedMessage"}'];
+        break;
+      case "bounds-exceeded":
+        blocks = [blocks[0]?.replace(jws, `${"a".repeat(65_536)}.b.c`) as string];
+        break;
+    }
     const h = harness();
-    delete (h.message as { jsonLdBlocks?: readonly string[] }).jsonLdBlocks;
-    await createDaemon({ ...h.options, isFlagged: vi.fn(async () => flagged) }).once();
+    const checked = input(blocks, warnings);
+    h.ingest.parse.mockReturnValue(checked.message);
+    h.ingest.list.mockResolvedValue({
+      items: [{ id: "rejected", raw: checked.message.textBody }],
+      next: "one",
+    });
+    const extract = vi.spyOn(h.options.gateway.reader, "extract");
+    const check = vi.spyOn(gate, "check");
+    await createDaemon({ ...h.options, gate, isFlagged: async () => true }).once();
+    expect(await check.mock.results[0]?.value).toMatchObject({ outcome: "refused", reason });
+    expect(extract).not.toHaveBeenCalled();
+    expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+    expect(h.pod.requests.some(({ url }) => url.includes("/inbox/direct/"))).toBe(false);
+    expect(h.ledger.entries().some(({ record }) => record.type === "ingest")).toBe(false);
+    expect(h.state.cursors.get("fixture")).toBe("one");
+    expect((await gate.status()).ledger.ok).toBe(true);
+  } finally {
+    await gate.close();
+  }
+});
+
+it("drops a genuinely bad signature and admits the valid signed message down the same reader", async () => {
+  const h = harness();
+  const { gate, sign, peer, receiver, now } = await createTestGate();
+  try {
+    const messageId = "urn:uuid:00000000-0000-4000-8000-000000000051";
+    const jws = await sign({
+      profile: PILOT_PROFILE,
+      configuration: CONFIG_ED25519,
+      id: messageId,
+      conversation: "urn:uuid:00000000-0000-4000-8000-100000000051",
+      kind: "describe",
+      from: { actor: peer.identity.actor },
+      to: { actor: receiver.identity.actor },
+      createdAt: now().toISOString(),
+      expiresAt: "2026-10-19T09:00:00Z",
+      body: {},
+    });
+    const [header, payload, proof] = jws.split(".") as [string, string, string];
+    const signature = Buffer.from(proof, "base64url");
+    signature[0] = (signature[0] as number) ^ 1;
+    const bad = encodeEnvelope(`${header}.${payload}.${signature.toString("base64url")}`);
+    const good = encodeEnvelope(jws);
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    h.ingest.parse.mockImplementation(reader.ingest.parse);
+    const extracted = vi.spyOn(h.options.gateway.reader, "extract");
+    const gateCheck = vi.spyOn(gate, "check");
+    const daemon = createDaemon({ ...h.options, gate });
+    h.ingest.list.mockResolvedValue({ items: [{ id: "bad", raw: bad }], next: "one" });
+    await daemon.once();
+    expect(await gateCheck.mock.results[0]?.value).toMatchObject({
+      outcome: "refused",
+      reason: "bad-signature",
+    });
+    expect(extracted).not.toHaveBeenCalled();
+    expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+    expect(h.pod.requests.some(({ url }) => url.includes("/inbox/direct/"))).toBe(false);
+    expect(h.ledger.entries()).toHaveLength(0);
+
+    const batch = { items: [{ id: "good", raw: good }], next: "two" };
+    h.ingest.list.mockResolvedValue(batch);
+    await daemon.once();
+    await daemon.once();
+    const verdict = await gateCheck.mock.results[1]?.value;
+    expect(verdict).toMatchObject({ outcome: "admitted", messageId });
+    expect(await gateCheck.mock.results[2]?.value).toEqual(verdict);
+    expect(extracted).toHaveBeenCalledWith(
+      expect.objectContaining({ gate: verdict }),
+      expect.anything(),
+    );
+    expect(h.options.gateway.proposer.propose).toHaveBeenCalledExactlyOnceWith(
+      [expect.objectContaining({ gate: verdict })],
+      h.options.proposerContext,
+    );
+    expect([...h.pod.resources.values()].filter(({ body }) => body === good)).toHaveLength(1);
+    expect(h.ledger.entries().filter(({ record }) => record.type === "ingest")).toHaveLength(1);
+    expect((await gate.status()).ledger.ok).toBe(true);
+  } finally {
+    await gate.close();
+  }
+});
+
+it.each([false, true])("stores and triages plain email with owner flag %s", async (flagged) => {
+  const h = harness();
+  const { gate } = await createTestGate();
+  const raw = [
+    "From: peer@example.test",
+    "To: receiver@example.test",
+    "Message-ID: <fictional-message@example.test>",
+    "Subject: A fictional invitation",
+    "",
+    "Can you reply today?",
+  ].join("\r\n");
+  const accounts = [
+    {
+      id: "fixture",
+      enabled: true,
+      category: "email" as const,
+      binding: { id: "email-mime", ingest: h.ingest },
+    },
+  ];
+  h.ingest.list.mockResolvedValue({ items: [{ id: "email", raw }], next: "one" });
+  h.ingest.parse.mockImplementation(
+    (item) =>
+      inspectEmail(item.raw, {
+        parseEmail,
+        recipient: "receiver@example.test",
+        ownAccounts: new Set(["receiver@example.test"]),
+      }).message,
+  );
+  const extract = vi.spyOn(h.options.gateway.reader, "extract");
+  try {
+    await createDaemon({ ...h.options, gate, accounts, isFlagged: async () => flagged }).once();
+    expect(extract).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ gate: expect.objectContaining({ outcome: "unstructured" }) }),
+      expect.anything(),
+    );
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(flagged ? 1 : 0);
+    expect([...h.pod.resources.values()].filter(({ body }) => body === raw)).toHaveLength(1);
+    expect((await gate.status()).verdicts.unstructured).toBe(1);
+  } finally {
+    await gate.close();
   }
 });
 it.each([

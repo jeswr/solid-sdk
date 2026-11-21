@@ -7,7 +7,7 @@
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
   "sideEffects": false,
-  "securityCritical": false,
+  "securityCritical": true,
   "engines": {
     "node": ">=24"
   },
@@ -41,6 +41,7 @@
     "@jeswr/agent-executor": "workspace:*",
     "@jeswr/agent-model": "workspace:*",
     "@jeswr/agent-model-gateway": "workspace:*",
+    "@jeswr/agent-reference": "workspace:*",
     "@jeswr/agentic-legacy-bridge": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",

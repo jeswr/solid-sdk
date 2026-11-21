@@ -1,0 +1,287 @@
+// biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+// AUTHORED-BY Codex GPT-6.2 Sol
+import { type BridgeMessage, DIRECT, readEnvelope } from "@jeswr/agent-channels";
+import {
+  AgentRuntime,
+  CONFIG_ED25519,
+  FileLedger,
+  FileStateStore,
+  readAgent,
+  type StepResult,
+  TrustStore,
+  type TrustStoreData,
+  verifyLedger,
+} from "@jeswr/agent-reference";
+import { lstat, readdir } from "fs/promises";
+import { basename, dirname, join, resolve } from "path";
+import { z } from "zod";
+import { readPrivate, writePrivate } from "./local.js";
+
+export type GateOutcome = "admitted" | "unstructured" | "refused";
+export interface GateVerdict {
+  readonly outcome: GateOutcome;
+  readonly reason?: string;
+  readonly messageId?: string;
+  readonly conversation?: string;
+  readonly digest: string;
+}
+type GateIdentity = { actor: string; party: string };
+export interface InboundGatePort {
+  check(input: { binding: string; account: string; message: BridgeMessage }): Promise<GateVerdict>;
+  /** Durable ports open only inside the daemon's process lease. */
+  open?(identity: GateIdentity): Promise<Gate>;
+}
+type CheckInput = Parameters<InboundGatePort["check"]>[0];
+type GateOptions = { directory: string; now?: () => Date };
+const filePattern = /^verdict-([a-f0-9]{64})\.json$/;
+const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
+const time = z.iso.datetime();
+const storedVerdict = z.discriminatedUnion("outcome", [
+  z.strictObject({ outcome: z.literal("checking"), time }),
+  z.strictObject({
+    outcome: z.literal("admitted"),
+    messageId: z.string(),
+    conversation: z.string(),
+    time,
+  }),
+  z.strictObject({ outcome: z.literal("unstructured"), time }),
+  z.strictObject({ outcome: z.literal("refused"), reason: reasonCode, time }),
+]);
+export type StoredVerdict = z.infer<typeof storedVerdict>;
+type Decision =
+  | { outcome: "admitted"; messageId: string; conversation: string }
+  | { outcome: "unstructured" }
+  | { outcome: "refused"; reason: string };
+type VerdictStore = {
+  get(hex: string): Promise<StoredVerdict | undefined>;
+  put(hex: string, verdict: StoredVerdict): Promise<void>;
+  digests(): Promise<string[]>;
+};
+
+function fileVerdicts(directory: string): VerdictStore {
+  return {
+    async get(hex) {
+      const text = await readPrivate(join(directory, `verdict-${hex}.json`));
+      return text === undefined ? undefined : storedVerdict.parse(JSON.parse(text));
+    },
+    put: (hex, verdict) => writePrivate(directory, `verdict-${hex}.json`, JSON.stringify(verdict)),
+    async digests() {
+      return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
+    },
+  };
+}
+
+function collectCarriers(message: BridgeMessage) {
+  const copies = new Set<string>();
+  for (const block of message.jsonLdBlocks ?? []) {
+    try {
+      copies.add(readEnvelope(block).compactJws);
+    } catch {
+      if (block.includes('"agent:SignedMessage"')) {
+        return {
+          copies,
+          failure: Buffer.byteLength(block) > DIRECT.maxBytes ? "bounds-exceeded" : "malformed",
+        };
+      }
+    }
+  }
+  return { copies, failure: copies.size > 1 ? "conflicting-structured-copies" : undefined };
+}
+
+function refused(reason: string): Extract<Decision, { outcome: "refused" }> {
+  return { outcome: "refused", reason };
+}
+
+function inboundDecision(step: StepResult): Decision {
+  switch (step.disposition) {
+    case "accepted":
+      // The runtime also reports "accepted" when it processed an inbound refusal
+      // or challenge. A reason in that result cannot grant access to suite models.
+      if (step.reason) return refused(reasonCode.safeParse(step.reason).data ?? "indeterminate");
+      if (step.messageId && step.conversation)
+        return { outcome: "admitted", messageId: step.messageId, conversation: step.conversation };
+      return refused("indeterminate");
+    case "rejected":
+      return refused(reasonCode.safeParse(step.reason).data ?? "indeterminate");
+    case "pending-approval":
+      return refused("ask-principal");
+    case "duplicate":
+      return refused("replay-conflict");
+    default:
+      return refused("indeterminate");
+  }
+}
+
+type GateRuntime = Pick<AgentRuntime, "receive" | "commitBindingEvent" | "close">;
+
+export function createGate(
+  rt: GateRuntime,
+  verdicts: VerdictStore,
+  ledger: { entries(): Parameters<typeof verifyLedger>[0] },
+  peers: readonly { subject: string; thumbprint: string }[],
+  now: () => Date,
+) {
+  let pending: Promise<unknown> = Promise.resolve();
+  let closed = false;
+  async function check({ binding, message }: CheckInput): Promise<GateVerdict> {
+    const hex = message.rawSha256;
+    const digest = `sha-256:${hex}`;
+    const event = (type: string, reason: string) =>
+      rt.commitBindingEvent({ type, binding, digest, reason });
+    const write = (decision: Decision | { outcome: "checking" }) =>
+      verdicts.put(hex, { ...decision, time: now().toISOString() });
+    try {
+      if (!/^[a-f0-9]{64}$/.test(hex)) {
+        await rt.commitBindingEvent({ type: "binding-rejection", binding, reason: "malformed" });
+        return { ...refused("malformed"), digest };
+      }
+      const { copies, failure } = collectCarriers(message);
+      if (failure) {
+        await event("binding-rejection", failure);
+        await write(refused(failure));
+        return { ...refused(failure), digest };
+      }
+      const jws = copies.values().next().value;
+      if (jws === undefined) {
+        await event("channel-observation", "no-structured-content");
+        await write({ outcome: "unstructured" });
+        return { outcome: "unstructured", digest };
+      }
+      const previous = await verdicts.get(hex);
+      if (previous?.outcome === "checking") {
+        await event("binding-rejection", "result-uncertain");
+        return { ...refused("result-uncertain"), digest };
+      }
+      if (previous) {
+        await event("channel-observation", "cached-verdict");
+        const { time: _time, ...decision } = previous;
+        return { ...decision, digest };
+      }
+      await write({ outcome: "checking" });
+      const step = await rt.receive(
+        { format: "awp-jws-compact/0.1", jws },
+        {
+          binding,
+          checkEmailParity: () =>
+            message.warnings.includes("human-parity-unverified")
+              ? "The readable channel copy does not match the structured message."
+              : undefined,
+        },
+      );
+      const decision = inboundDecision(step);
+      await write(decision);
+      return { ...decision, digest };
+    } catch {
+      return { ...refused("indeterminate"), digest };
+    }
+  }
+  return {
+    check(input: CheckInput): Promise<GateVerdict> {
+      if (closed) return Promise.reject(new Error("Inbound gate is closed"));
+      const result = pending.then(() => check(input));
+      pending = result.catch(() => undefined);
+      return result;
+    },
+    async status() {
+      await pending;
+      return gateStatus(verdicts, ledger, peers);
+    },
+    async close() {
+      closed = true;
+      await pending;
+      rt.close();
+    },
+  };
+}
+
+export type Gate = ReturnType<typeof createGate>;
+
+export async function readGate(directory: string) {
+  const path = resolve(directory);
+  const stat = await lstat(path);
+  if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700 || stat.uid !== process.getuid?.())
+    throw new Error("Unsafe gate directory");
+  const stored = await readAgent(dirname(path), basename(path));
+  if (stored.ownerCustody !== "separate") throw new Error("Unsafe gate owner custody");
+  return stored;
+}
+
+function pinnedPeers(data: TrustStoreData) {
+  return data.keys
+    .filter(({ role, subject }) => role === "actor" || (role === "party" && subject !== data.owner))
+    .map(({ subject, kid }) => ({ subject, thumbprint: kid }));
+}
+
+async function gateStatus(
+  verdicts: VerdictStore,
+  ledger: { entries(): Parameters<typeof verifyLedger>[0] },
+  peers: readonly { subject: string; thumbprint: string }[],
+) {
+  const counts = { admitted: 0, unstructured: 0, refused: 0 };
+  const uncertainDigests: string[] = [];
+  for (const hex of await verdicts.digests()) {
+    const verdict = await verdicts.get(hex);
+    if (verdict?.outcome === "checking") uncertainDigests.push(`sha-256:${hex}`);
+    else if (verdict) counts[verdict.outcome]++;
+  }
+  return { peers, ledger: verifyLedger(ledger.entries()), verdicts: counts, uncertainDigests };
+}
+
+/** Inspect retained public pins, verdict counts and the ledger without opening the runtime. */
+export async function readGateStatus(directory: string) {
+  const stored = await readGate(directory);
+  await TrustStore.load(stored.trust);
+  return gateStatus(
+    fileVerdicts(stored.dir),
+    new FileLedger(join(stored.dir, "ledger.jsonl")),
+    pinnedPeers(stored.trust),
+  );
+}
+
+export async function openGate({ directory, now = () => new Date() }: GateOptions): Promise<Gate> {
+  return openStoredGate(await readGate(directory), now);
+}
+
+async function openStoredGate(
+  stored: Awaited<ReturnType<typeof readGate>>,
+  now = () => new Date(),
+): Promise<Gate> {
+  const trust = await TrustStore.load(stored.trust);
+  const store = new FileStateStore(join(stored.dir, "state.json"));
+  try {
+    const ledger = new FileLedger(join(stored.dir, "ledger.jsonl"));
+    if (!verifyLedger(ledger.entries()).ok)
+      throw new Error("Inbound gate ledger failed verification");
+    const runtime = await AgentRuntime.create({
+      identity: stored.identity,
+      actorKeys: [stored.actorKey],
+      trust,
+      mandateJws: stored.mandateJws,
+      representationJws: stored.representationJws,
+      accepted: [CONFIG_ED25519],
+      handlers: [],
+      store,
+      ledger,
+      now,
+    });
+    return createGate(runtime, fileVerdicts(stored.dir), ledger, pinnedPeers(stored.trust), now);
+  } catch (error) {
+    store.close();
+    throw error;
+  }
+}
+
+/** The daemon opens the durable gate under its existing process lease. */
+export function createInboundGate(options: GateOptions): InboundGatePort {
+  return {
+    async check() {
+      throw new Error("Inbound gate requires an active daemon lease");
+    },
+    async open(identity) {
+      const stored = await readGate(options.directory);
+      if (stored.identity.actor !== identity.actor || stored.identity.party !== identity.party)
+        throw new Error("Inbound gate identity does not match daemon configuration");
+      return openStoredGate(stored, options.now);
+    },
+  };
+}

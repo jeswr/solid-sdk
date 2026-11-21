@@ -52,8 +52,24 @@ requires operator recovery after establishing quiescence; it must never block Ha
 
 Keep owner-only ACLs before content, bounded ingestion, per-account cursor commits
 after persistence, deterministic-first Reader extraction, and Proposer eligibility
-restricted to owner flags or structured envelopes. Proposals remain proposed and
+restricted to owner flags or admitted messages. Supply the gate label to both models.
+Proposals remain proposed and
 inside proposals/; conflicting rewrites fail. The model never writes audit.
+
+Every host supplies an inbound gate. Use `createInboundGate` for a durable
+`<stateDirectory>/gate/` runtime under the process lease. Open after acquiring
+the lease and close after executor drain. Batch-check all parsed messages before
+the importer can write an ACL. A failed startup/check prevents inbox writes,
+model calls and cursor advancement. Store verdicts locally and keep pod inbox
+identity unverified. Plain observations may be triaged and require an owner flag
+for Proposer access. Preserve the independent executor mandate and keep the
+reference mandate deny-all in Phase 1.
+
+`awp gate init --owner-dir <dir>` confirms creation and keeps the owner key in
+separate custody. `awp gate pin <card.json>` checks both declared thumbprints and
+requires an out-of-band comparison through the operator. Only the operator
+can add peers. `awp gate status` displays pins, ledger integrity, counts and
+interrupted digests without message content or signing material.
 
 Maintain 30-second authority reconciliation independent of ingest and 60-second
 heartbeat writes. Every detected approval/control availability change must invoke

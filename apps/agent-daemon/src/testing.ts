@@ -1,11 +1,59 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { Cast, craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import type { PodAuth } from "@jeswr/pod-auth";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import { createAt } from "@jeswr/storage-client/helpers";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createGate, type StoredVerdict } from "./gate.js";
+import { denyAllMandate } from "./gate-setup.js";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
 import type { Checkpoints, ProcessLease, ProposalResult, ProposalResults } from "./types.js";
+
+/** Synthetic peers and an in-memory reference gate for offline host tests. */
+export async function createTestGate(now = () => new Date("2026-10-19T08:00:00Z")) {
+  const cast = new Cast(now);
+  const receiver = await cast.add(
+    {
+      name: "receiver",
+      actor: "https://receiver.example/agent#id",
+      party: "https://receiver.example/owner#id",
+    },
+    denyAllMandate,
+    [],
+  );
+  const peer = await cast.add(
+    {
+      name: "peer",
+      actor: "https://peer.example/agent#id",
+      party: "https://peer.example/owner#id",
+    },
+    denyAllMandate,
+    [],
+  );
+  cast.pin("receiver", "peer");
+  async function open() {
+    const { runtime, ledger } = await cast.runtime("receiver", []);
+    const verdicts = new Map<string, StoredVerdict>();
+    const gate = createGate(
+      runtime,
+      {
+        get: async (hex) => verdicts.get(hex),
+        put: async (hex, verdict) => void verdicts.set(hex, verdict),
+        digests: async () => [...verdicts.keys()],
+      },
+      ledger,
+      [
+        { subject: peer.identity.actor, thumbprint: peer.actorKey.kid },
+        { subject: peer.identity.party, thumbprint: peer.ownerKey.kid },
+      ],
+      now,
+    );
+    return { gate, ledger };
+  }
+  const sign = async (message: object) => (await craftSigned(peer, message)).jws;
+  return { ...(await open()), open, peer, receiver, sign, now };
+}
 
 /** Ephemeral test state; never substitutes for a durable deployment lease. */
 export function createMemoryState() {

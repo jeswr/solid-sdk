@@ -18,7 +18,7 @@ async function syncDirectory(directory: string) {
     await file.close();
   }
 }
-async function readPrivate(path: string): Promise<string | undefined> {
+export async function readPrivate(path: string): Promise<string | undefined> {
   let file: Awaited<ReturnType<typeof open>>;
   try {
     file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -42,7 +42,7 @@ async function readPrivate(path: string): Promise<string | undefined> {
 }
 /** HALT records its stop time so Resume freshness doesn't rest on the file's mtime alone. */
 const haltRecord = () => `halted ${new Date().toISOString()}\n`;
-async function writePrivate(directory: string, name: string, text: string) {
+export async function writePrivate(directory: string, name: string, text: string) {
   const temporary = join(directory, `${randomUUID()}.tmp`);
   const file = await open(temporary, "wx", 0o600);
   try {

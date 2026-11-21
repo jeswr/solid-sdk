@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { ChannelParseError, readEnvelope } from "@jeswr/agent-channels";
+import {
+  type BridgeMessage,
+  ChannelParseError,
+  type InboundRawMessage,
+} from "@jeswr/agent-channels";
 import { proposalApprovalTerms } from "@jeswr/agent-executor";
 import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
@@ -9,6 +13,7 @@ import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
+import type { Gate, GateVerdict, InboundGatePort } from "./gate.js";
 import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
@@ -35,18 +40,6 @@ const triageSchema = z.object({
   urgency: z.enum(["urgent", "not_urgent"]),
   confidence: z.number().min(0).max(1),
 });
-function hasStructuredEnvelope(blocks: readonly string[] | undefined): boolean {
-  if (!blocks || blocks.length > 512) return false;
-  return blocks.some((block) => {
-    try {
-      readEnvelope(block);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-}
-
 /** pod-auth retains credentials and supplies every authenticated pod request. */
 export async function composeDaemon(options: {
   credentials: ClientCredentialsOptions;
@@ -83,6 +76,7 @@ export async function composeDaemon(options: {
 
 /** Serial account passes keep shared bindings and durable cursors ordered. */
 export function createDaemon(o: DaemonOptions): Daemon {
+  if (!o.gate || typeof o.gate.check !== "function") throw new Error("Missing inbound gate");
   const now = o.now ?? Date.now;
   const timers = o.timers ?? systemTimers;
   const accounts = o.accounts.map((account) => ({ ...account }));
@@ -149,10 +143,43 @@ export function createDaemon(o: DaemonOptions): Daemon {
           (record.type === "proposal" && proposals.has(record.id)),
       );
   }
-  async function accountPass(account: DaemonAccount) {
+  async function accountPass(account: DaemonAccount, gate: InboundGatePort) {
     const cursor = await o.checkpoints.get(account.id);
-    let next: string | undefined;
-    const parsed: { message: ReturnType<typeof account.binding.ingest.parse>; id: string }[] = [];
+    const batch = await account.binding.ingest.list({ id: account.id }, cursor, limits);
+    if (
+      batch.items.length > limits.maxItems ||
+      batch.items.reduce((n, item) => n + Buffer.byteLength(item.raw), 0) > limits.maxBytes
+    )
+      throw new Error("Ingest bound exceeded");
+    if (batch.next === undefined) throw new Error("Missing ingest cursor");
+    const cache = new Map<InboundRawMessage, BridgeMessage | ChannelParseError>();
+    const parsed: { message: BridgeMessage; id: string; verdict: GateVerdict }[] = [];
+    // importInbound prepares its ACL before pulling. Complete all checks before invoking it.
+    for (const item of batch.items) {
+      let message: BridgeMessage;
+      try {
+        message = account.binding.ingest.parse(item);
+      } catch (error) {
+        if (!(error instanceof ChannelParseError)) throw new Error("Reader parse failed");
+        cache.set(item, error);
+        continue;
+      }
+      const verdict = await gate.check({
+        binding: account.binding.id,
+        account: account.id,
+        message,
+      });
+      if (verdict.outcome === "admitted" || verdict.outcome === "unstructured") {
+        cache.set(item, message);
+        parsed.push({ message, id: item.id, verdict });
+      } else if (verdict.outcome !== "refused" || verdict.reason === "indeterminate") {
+        throw new Error("Inbound gate could not check the batch");
+      }
+    }
+    if (cache.size === 0) {
+      await o.checkpoints.put(account.id, batch.next);
+      return;
+    }
     const inbox = await o.workspace.inbox(account.binding.id, account.id);
     await importInbound({
       container: inbox,
@@ -164,28 +191,17 @@ export function createDaemon(o: DaemonOptions): Daemon {
       adapter: {
         channel: account.binding.id,
         async pullInbound() {
-          const batch = await account.binding.ingest.list({ id: account.id }, cursor, limits);
-          if (
-            batch.items.length > limits.maxItems ||
-            batch.items.reduce((n, item) => n + Buffer.byteLength(item.raw), 0) > limits.maxBytes
-          )
-            throw new Error("Ingest bound exceeded");
-          next = batch.next;
-          return batch.items;
+          return [...cache.keys()];
         },
         parse(item) {
-          try {
-            const message = account.binding.ingest.parse(item);
-            parsed.push({ message, id: item.id });
-            return message;
-          } catch (error) {
-            if (error instanceof ChannelParseError) throw error;
-            throw new Error("Reader parse failed");
-          }
+          const observed = cache.get(item);
+          if (observed instanceof ChannelParseError) throw observed;
+          if (!observed) throw new Error("Missing checked message");
+          return observed;
         },
       },
     });
-    for (const { message, id } of parsed) {
+    for (const { message, id, verdict } of parsed) {
       const source = o.workspace.messageUrl(inbox, id);
       const thread =
         account.binding.ingest.threadKey?.(message) ?? message.threadId ?? message.messageId ?? id;
@@ -208,7 +224,8 @@ export function createDaemon(o: DaemonOptions): Daemon {
         ReturnType<typeof o.gateway.reader.extract<z.infer<typeof triageSchema>>>
       >;
       try {
-        extraction = await o.gateway.reader.extract(message, triageSchema);
+        const labelled = { ...message, gate: verdict };
+        extraction = await o.gateway.reader.extract(labelled, triageSchema);
       } catch (error) {
         if (error instanceof GatewayError) await calls(error.calls, task);
         throw new Error("Reader extraction failed");
@@ -250,12 +267,11 @@ export function createDaemon(o: DaemonOptions): Daemon {
         }
       } else {
         const flagged = await o.isFlagged(account.id, thread);
-        // A structured part is a processing hint; it never authenticates a sender.
-        if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;
+        if (!flagged && verdict.outcome !== "admitted") continue;
         let generated: Awaited<ReturnType<DaemonOptions["gateway"]["proposer"]["propose"]>>;
         try {
           generated = await o.gateway.proposer.propose(
-            [{ source, message, triage }],
+            [{ source, message, triage, gate: verdict }],
             o.proposerContext,
           );
         } catch (error) {
@@ -314,14 +330,14 @@ export function createDaemon(o: DaemonOptions): Daemon {
         });
       }
     }
-    if (next === undefined) throw new Error("Missing ingest cursor");
-    await o.checkpoints.put(account.id, next);
+    await o.checkpoints.put(account.id, batch.next);
   }
   let active = false;
   async function session(repeat: boolean, signal?: AbortSignal) {
     if (active) throw new Error("Daemon already running");
     active = true;
     let release: (() => Promise<void>) | undefined;
+    let gateSession: Gate | undefined;
     let subscription: Subscription | undefined;
     let fault = false;
     let authority: Promise<unknown> = Promise.resolve();
@@ -367,6 +383,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
     try {
       signal?.throwIfAborted();
       release = await o.lease.acquire();
+      gateSession = await o.gate.open?.({ actor: o.agentWebId, party: o.ownerWebId });
       await o.workspace.initialize();
       await o.workspace.introduce(o.agentWebId);
       if (signal) {
@@ -409,7 +426,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
         for (const account of accounts) {
           if (signal?.aborted || fault) break;
           if (!account.enabled || at < (due.get(account.id) ?? -Infinity)) continue;
-          await accountPass(account);
+          await accountPass(account, gateSession ?? o.gate);
           due.set(account.id, now() + pollInterval(account.category));
         }
         await authority;
@@ -439,7 +456,11 @@ export function createDaemon(o: DaemonOptions): Daemon {
         } finally {
           await maintenance;
           await authority;
-          if (release) await o.executor.drain();
+          try {
+            if (release) await o.executor.drain();
+          } finally {
+            await gateSession?.close();
+          }
         }
       } finally {
         await release?.();

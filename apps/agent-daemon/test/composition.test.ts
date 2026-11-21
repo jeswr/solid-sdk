@@ -49,6 +49,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
       expect(workspace.storage).toBe((await mocks.storage.mock.results.at(-1)?.value)?.storage);
       return {
         accounts: [],
+        gate: { check: vi.fn() },
         ...state,
         agentWebId: "https://pod.example/agent#me",
         executor: {

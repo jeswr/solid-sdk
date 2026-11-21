@@ -149,7 +149,7 @@ export function parseMatrixMessage(item: InboundRawMessage): import("./message.j
     rawSha256: digestBytes(bytes).slice(8),
     rawByteLength: bytes.byteLength,
     rawMediaType: "application/json",
-    warnings: [],
+    warnings: blocks === undefined ? [] : ["signature-unverified"],
     ...(blocks === undefined ? {} : { jsonLdBlocks: blocks }),
   };
 }
